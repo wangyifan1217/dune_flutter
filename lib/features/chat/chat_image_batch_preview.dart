@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// 待发送的聊天图片（可多次编辑；可选原图上传）。
 class ChatImageDraft {
@@ -203,10 +204,18 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
     final canEdit = !chatImageShouldSkipEditor(fileName: draft.fileName);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.black,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          context,
+          Colors.black,
+          role: DunesColorRole.surface,
+        ),
+        foregroundColor: DunesColors.resolve(context, Colors.white),
         elevation: 0,
         leading: IconButton(icon: const Icon(Icons.close), onPressed: _cancel),
         title: Text(_drafts.length == 1 ? '预览' : '预览 (${_drafts.length})'),
@@ -217,8 +226,8 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
             onPressed: _confirmSend,
             child: Text(
               _drafts.length == 1 ? '发送' : '发送(${_drafts.length})',
-              style: const TextStyle(
-                color: Color(0xFF07C160),
+              style: TextStyle(
+                color: DunesColors.resolveNullable(context, Color(0xFF07C160)),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -246,7 +255,11 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
           SafeArea(
             top: false,
             child: Container(
-              color: const Color(0xFF161616),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFF161616),
+                role: DunesColorRole.surface,
+              ),
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -261,8 +274,17 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
                             width: 24,
                             child: Checkbox(
                               value: _sendAsOriginal,
-                              activeColor: const Color(0xFF07C160),
-                              side: const BorderSide(color: Colors.white54),
+                              activeColor: DunesColors.resolve(
+                                context,
+                                const Color(0xFF07C160),
+                              ),
+                              side: BorderSide(
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white54,
+                                  role: DunesColorRole.border,
+                                ),
+                              ),
                               onChanged: _toggleOriginal,
                             ),
                           ),
@@ -273,8 +295,11 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
                               _sendAsOriginal
                                   ? '原图 ($_originalSizeLabel)'
                                   : '原图',
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -282,10 +307,13 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
                           ),
                           if (_sendAsOriginal) ...[
                             const SizedBox(width: 8),
-                            const Text(
+                            Text(
                               '将上传未压缩原图',
                               style: TextStyle(
-                                color: Colors.white54,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white54,
+                                ),
                                 fontSize: 12,
                               ),
                             ),
@@ -314,8 +342,16 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
                                     borderRadius: BorderRadius.circular(6),
                                     border: Border.all(
                                       color: selected
-                                          ? const Color(0xFF07C160)
-                                          : Colors.white24,
+                                          ? DunesColors.resolve(
+                                              context,
+                                              const Color(0xFF07C160),
+                                              role: DunesColorRole.border,
+                                            )
+                                          : DunesColors.resolve(
+                                              context,
+                                              Colors.white24,
+                                              role: DunesColorRole.border,
+                                            ),
                                       width: selected ? 2 : 1,
                                     ),
                                   ),
@@ -329,13 +365,19 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
                                         gaplessPlayback: true,
                                       ),
                                       if (item.sendAsOriginal && !item.edited)
-                                        const Align(
+                                        Align(
                                           alignment: Alignment.topLeft,
                                           child: Padding(
                                             padding: EdgeInsets.all(4),
                                             child: DecoratedBox(
                                               decoration: BoxDecoration(
-                                                color: Color(0x99000000),
+                                                color:
+                                                    DunesColors.resolveNullable(
+                                                      context,
+                                                      Color(0x99000000),
+                                                      role: DunesColorRole
+                                                          .surface,
+                                                    ),
                                                 borderRadius: BorderRadius.all(
                                                   Radius.circular(4),
                                                 ),
@@ -348,7 +390,10 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
                                                 child: Text(
                                                   '原图',
                                                   style: TextStyle(
-                                                    color: Colors.white,
+                                                    color: DunesColors.resolve(
+                                                      context,
+                                                      Colors.white,
+                                                    ),
                                                     fontSize: 10,
                                                     fontWeight: FontWeight.w600,
                                                   ),
@@ -358,14 +403,18 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
                                           ),
                                         ),
                                       if (selected)
-                                        const Align(
+                                        Align(
                                           alignment: Alignment.bottomRight,
                                           child: Padding(
                                             padding: EdgeInsets.all(4),
                                             child: Icon(
                                               Icons.check_circle,
                                               size: 16,
-                                              color: Color(0xFF07C160),
+                                              color:
+                                                  DunesColors.resolveNullable(
+                                                    context,
+                                                    Color(0xFF07C160),
+                                                  ),
                                             ),
                                           ),
                                         ),
@@ -380,9 +429,9 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
                       IconButton(
                         tooltip: '删除当前',
                         onPressed: _removeCurrent,
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.delete_outline,
-                          color: Colors.white70,
+                          color: DunesColors.resolve(context, Colors.white70),
                         ),
                       ),
                     ],

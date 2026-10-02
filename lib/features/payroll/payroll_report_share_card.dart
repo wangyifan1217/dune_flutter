@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../auth/auth_session.dart';
 import 'payroll_report_service.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 const _payrollShareAccent = Color(0xFF7B5CD8);
 
@@ -86,7 +87,11 @@ class PayrollReportShareCard extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 380),
       child: Material(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: onTap,
@@ -95,7 +100,13 @@ class PayrollReportShareCard extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE6DCF0)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE6DCF0),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,12 +117,19 @@ class PayrollReportShareCard extends StatelessWidget {
                       width: 38,
                       height: 38,
                       decoration: BoxDecoration(
-                        color: _payrollShareAccent.withValues(alpha: .12),
+                        color: DunesColors.resolve(
+                          context,
+                          _payrollShareAccent,
+                          role: DunesColorRole.surface,
+                        ).withValues(alpha: .12),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.receipt_long_rounded,
-                        color: _payrollShareAccent,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _payrollShareAccent,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -124,9 +142,12 @@ class PayrollReportShareCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.chevron_right_rounded,
-                      color: Color(0xFF93899E),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF93899E),
+                      ),
                     ),
                   ],
                 ),
@@ -145,16 +166,22 @@ class PayrollReportShareCard extends StatelessWidget {
                   '$month · ${data.sheetName} · ${data.rowCount} 条明细',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF898394),
+                  style: TextStyle(
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF898394),
+                    ),
                     fontSize: 12,
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
+                Text(
                   '点击查看授权明细',
                   style: TextStyle(
-                    color: _payrollShareAccent,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      _payrollShareAccent,
+                    ),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -176,7 +203,11 @@ Future<void> showPayrollReportShareDetails({
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: const Color(0xFFF8F5FC),
+    backgroundColor: DunesColors.resolve(
+      context,
+      const Color(0xFFF8F5FC),
+      role: DunesColorRole.surface,
+    ),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
     ),
@@ -223,9 +254,12 @@ class _PayrollReportShareDetailsSheetState
               padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.receipt_long_rounded,
-                    color: _payrollShareAccent,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      _payrollShareAccent,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -241,8 +275,11 @@ class _PayrollReportShareDetailsSheetState
                         ),
                         Text(
                           '${share.yearmo} · ${share.sheetName}',
-                          style: const TextStyle(
-                            color: Color(0xFF898394),
+                          style: TextStyle(
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFF898394),
+                            ),
                             fontSize: 12,
                           ),
                         ),
@@ -276,7 +313,12 @@ class _PayrollReportShareDetailsSheetState
                               ? '工资明细仅对拥有工资报表权限的人员开放'
                               : '无法读取工资名片：${snapshot.error}',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Color(0xFF777180)),
+                          style: TextStyle(
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFF777180),
+                            ),
+                          ),
                         ),
                       ),
                     );
@@ -296,12 +338,15 @@ class _PayrollReportShareDetailsSheetState
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
                         child: Text(
                           '人员明细（字段与工资报表导出一致）',
                           style: TextStyle(
-                            color: Color(0xFF777180),
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFF777180),
+                            ),
                             fontSize: 12,
                           ),
                         ),
@@ -315,10 +360,18 @@ class _PayrollReportShareDetailsSheetState
                           itemBuilder: (context, index) => Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: DunesColors.resolve(
+                                context,
+                                Colors.white,
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: const Color(0xFFE6DCF0),
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFFE6DCF0),
+                                  role: DunesColorRole.border,
+                                ),
                               ),
                             ),
                             child: Column(
@@ -337,8 +390,12 @@ class _PayrollReportShareDetailsSheetState
                                           width: 110,
                                           child: Text(
                                             '${column['name'] ?? column['key']}',
-                                            style: const TextStyle(
-                                              color: Color(0xFF898394),
+                                            style: TextStyle(
+                                              color:
+                                                  DunesColors.resolveNullable(
+                                                    context,
+                                                    Color(0xFF898394),
+                                                  ),
                                               fontSize: 12,
                                             ),
                                           ),

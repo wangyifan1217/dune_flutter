@@ -224,9 +224,9 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('打开私聊失败：${friendlyErrorText(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('打开私聊失败：${friendlyErrorText(e)}')));
     } finally {
       if (mounted) setState(() => _resolvingContact = false);
     }
@@ -275,6 +275,7 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                           style: DunesTypography.sans(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
+                            context: context,
                           ),
                         ),
                       ),
@@ -284,7 +285,10 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                             context,
                           ).pop(Set<int>.from(_selected)),
                           style: TextButton.styleFrom(
-                            foregroundColor: DunesColors.brandPurple,
+                            foregroundColor: DunesColors.resolve(
+                              context,
+                              DunesColors.brandPurple,
+                            ),
                           ),
                           child: Text('完成(${_selected.length})'),
                         ),
@@ -300,7 +304,11 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                       hintText: '搜索会话或联系人',
                       prefixIcon: const Icon(Icons.search_rounded, size: 20),
                       filled: true,
-                      fillColor: DunesColors.bgSoft,
+                      fillColor: DunesColors.resolve(
+                        context,
+                        DunesColors.bgSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       contentPadding: const EdgeInsets.symmetric(vertical: 0),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -316,7 +324,11 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                             showContacts ? '无匹配的会话或联系人' : '暂无可选会话',
                             style: DunesTypography.sans(
                               fontSize: 14,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
                             ),
                           ),
                         )
@@ -332,9 +344,13 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                                     _conversationTile(c),
                                     if (index != filtered.length - 1 ||
                                         hasContactBlock)
-                                      const Divider(
+                                      Divider(
                                         height: 1,
-                                        color: DunesColors.borderSoft,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.borderSoft,
+                                          role: DunesColorRole.border,
+                                        ),
                                       ),
                                   ],
                                 );
@@ -343,7 +359,7 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                             if (hasContactBlock) ...[
                               const _PickerSectionHeader(label: '联系人'),
                               if (_contactSearching && _contactHits.isEmpty)
-                                const Padding(
+                                Padding(
                                   padding: EdgeInsets.symmetric(
                                     horizontal: 16,
                                     vertical: 14,
@@ -352,7 +368,10 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                                     '正在搜索联系人…',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: DunesColors.text3,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text3,
+                                      ),
                                     ),
                                   ),
                                 )
@@ -363,9 +382,13 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                                     children: [
                                       _contactTile(contact),
                                       if (index != _contactHits.length - 1)
-                                        const Divider(
+                                        Divider(
                                           height: 1,
-                                          color: DunesColors.borderSoft,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.borderSoft,
+                                            role: DunesColorRole.border,
+                                          ),
                                         ),
                                     ],
                                   );
@@ -378,9 +401,13 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
             ),
           ),
           if (_resolvingContact)
-            const Positioned.fill(
+            Positioned.fill(
               child: ColoredBox(
-                color: Color(0x33FFFFFF),
+                color: DunesColors.resolve(
+                  context,
+                  Color(0x33FFFFFF),
+                  role: DunesColorRole.surface,
+                ),
                 child: Center(
                   child: SizedBox(
                     width: 28,
@@ -400,34 +427,34 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
     final checked = _selected.contains(c.id);
     return ListTile(
       selected: widget.multiSelect && checked,
-      selectedTileColor: DunesColors.brandPurpleSoft,
+      selectedTileColor: DunesColors.resolve(
+        context,
+        DunesColors.brandPurpleSoft,
+        role: DunesColorRole.surface,
+      ),
       leading: _ConversationPickerAvatar(
         conversation: c,
         service: widget.service,
       ),
-      title: Text(
-        c.displayTitle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      title: Text(c.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: subtitle.isEmpty
           ? null
-          : Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+          : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: widget.multiSelect
           ? Icon(
               checked ? Icons.check_circle_rounded : Icons.circle_outlined,
               size: 22,
-              color: checked ? DunesColors.brandPurple : DunesColors.text3,
+              color: checked
+                  ? DunesColors.resolve(context, DunesColors.brandPurple)
+                  : DunesColors.resolve(context, DunesColors.text3),
             )
           : (widget.highlightConversationId != null &&
                     c.id == widget.highlightConversationId
-                ? const Text(
+                ? Text(
                     '当前',
-                    style: TextStyle(color: DunesColors.text3),
+                    style: TextStyle(
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   )
                 : null),
       onTap: () {
@@ -478,14 +505,13 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: Text(
-        preview,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing: const Text(
+      subtitle: Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: Text(
         '联系人',
-        style: TextStyle(fontSize: 12, color: DunesColors.text3),
+        style: TextStyle(
+          fontSize: 12,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
       ),
       onTap: () => unawaited(_pickContact(contact)),
     );
@@ -503,10 +529,10 @@ class _PickerSectionHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: DunesColors.text3,
+          color: DunesColors.resolve(context, DunesColors.text3),
         ),
       ),
     );
@@ -541,13 +567,16 @@ class _ConversationPickerAvatar extends StatelessWidget {
           height: size,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
-            gradient: const LinearGradient(
-              colors: [Color(0xFF9079C2), Color(0xFF6A4FA0)],
+            gradient: LinearGradient(
+              colors: [
+                DunesColors.resolve(context, Color(0xFF9079C2)),
+                DunesColors.resolve(context, Color(0xFF6A4FA0)),
+              ],
             ),
           ),
           child: Icon(
             Icons.assignment_outlined,
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
             size: size * 0.39,
           ),
         );
@@ -557,13 +586,16 @@ class _ConversationPickerAvatar extends StatelessWidget {
         height: size,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(radius),
-          gradient: const LinearGradient(
-            colors: [Color(0xFFCABCEB), Color(0xFFA88CD8)],
+          gradient: LinearGradient(
+            colors: [
+              DunesColors.resolve(context, Color(0xFFCABCEB)),
+              DunesColors.resolve(context, Color(0xFFA88CD8)),
+            ],
           ),
         ),
         child: Icon(
           Icons.groups_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: size * 0.39,
         ),
       );

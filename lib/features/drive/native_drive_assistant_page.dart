@@ -126,7 +126,10 @@ class _NativeDriveAssistantPageState extends State<NativeDriveAssistantPage> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFC44949),
+              foregroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFC44949),
+              ),
             ),
             child: const Text('清空'),
           ),
@@ -159,7 +162,11 @@ class _NativeDriveAssistantPageState extends State<NativeDriveAssistantPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -205,10 +212,12 @@ class _NativeDriveAssistantPageState extends State<NativeDriveAssistantPage> {
       );
     }
     if (_messages.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           '共享空间中的文件变化会在这里提醒你',
-          style: TextStyle(color: DunesColors.text3),
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       );
     }
@@ -257,10 +266,18 @@ class DriveAssistantAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: const Color(0xFF3B82F6),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFF3B82F6),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(size * .18),
       ),
-      child: Icon(Icons.cloud_outlined, color: Colors.white, size: size * .48),
+      child: Icon(
+        Icons.cloud_outlined,
+        color: DunesColors.resolve(context, Colors.white),
+        size: size * .48,
+      ),
     );
   }
 }
@@ -277,18 +294,28 @@ class _DriveEventCard extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 340),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             event.displayText,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
               height: 1.4,
             ),
           ),
@@ -308,7 +335,9 @@ class _DriveEventCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: event.deleted ? DunesColors.text3 : DunesColors.text,
+                    color: event.deleted
+                        ? DunesColors.resolve(context, DunesColors.text3)
+                        : DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
               ),
@@ -318,8 +347,8 @@ class _DriveEventCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   color: event.deleted
-                      ? DunesColors.text3
-                      : const Color(0xFF3B82F6),
+                      ? DunesColors.resolve(context, DunesColors.text3)
+                      : DunesColors.resolve(context, const Color(0xFF3B82F6)),
                 ),
               ),
             ],

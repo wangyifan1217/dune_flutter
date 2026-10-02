@@ -222,7 +222,11 @@ class _NativeWorkProfileManagementPageState
     final person = _person;
     final people = _visiblePeople;
     return ColoredBox(
-      color: const Color(0xFFF8F6FA),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF8F6FA),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -293,22 +297,44 @@ class _NativeWorkProfileManagementPageState
                 )
               : null,
           filled: true,
-          fillColor: Colors.white,
+          fillColor: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 12,
             vertical: 10,
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _profilePurple),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                _profilePurple,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ),
       ),
@@ -338,20 +364,20 @@ class _NativeWorkProfileManagementPageState
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 '部门筛选',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 _viewAll ? '全部门' : '管辖范围',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: _profilePurple,
+                  color: DunesColors.resolveNullable(context, _profilePurple),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -387,9 +413,21 @@ class _NativeWorkProfileManagementPageState
   Widget _header(String title, bool viewingPerson) => Container(
     height: 56,
     padding: const EdgeInsets.symmetric(horizontal: 8),
-    decoration: const BoxDecoration(
-      color: Colors.white,
-      border: Border(bottom: BorderSide(color: Color(0xFFE9E2EF))),
+    decoration: BoxDecoration(
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
+      border: Border(
+        bottom: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            Color(0xFFE9E2EF),
+            role: DunesColorRole.border,
+          ),
+        ),
+      ),
     ),
     child: Row(
       children: [
@@ -398,7 +436,10 @@ class _NativeWorkProfileManagementPageState
           onPressed: viewingPerson
               ? () => setState(() => _person = null)
               : widget.onBack,
-          icon: const Icon(Icons.arrow_back_rounded, color: _profileInk),
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            color: DunesColors.resolveNullable(context, _profileInk),
+          ),
         ),
         Expanded(
           child: Text(
@@ -407,6 +448,7 @@ class _NativeWorkProfileManagementPageState
               fontSize: 17,
               fontWeight: FontWeight.w700,
               color: _profileInk,
+              context: context,
             ),
           ),
         ),
@@ -416,18 +458,21 @@ class _NativeWorkProfileManagementPageState
             onPressed: _loading || _person == null
                 ? null
                 : () => unawaited(_sharePerson(_person!)),
-            icon: const Icon(
+            icon: Icon(
               Icons.ios_share_rounded,
-              color: _profilePurple,
+              color: DunesColors.resolveNullable(context, _profilePurple),
               size: 20,
             ),
           ),
         if (viewingPerson)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(right: 12),
             child: Text(
               '管理参考',
-              style: TextStyle(fontSize: 11, color: _profileMuted),
+              style: TextStyle(
+                fontSize: 11,
+                color: DunesColors.resolveNullable(context, _profileMuted),
+              ),
             ),
           ),
       ],
@@ -437,13 +482,21 @@ class _NativeWorkProfileManagementPageState
   Widget _managementNotice() => Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
-      color: const Color(0xFFF0EAF8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF0EAF8),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(16),
     ),
-    child: const Row(
+    child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(Icons.shield_outlined, size: 18, color: _profilePurple),
+        Icon(
+          Icons.shield_outlined,
+          size: 18,
+          color: DunesColors.resolveNullable(context, _profilePurple),
+        ),
         SizedBox(width: 9),
         Expanded(
           child: Text(
@@ -451,7 +504,7 @@ class _NativeWorkProfileManagementPageState
             style: TextStyle(
               fontSize: 12,
               height: 1.5,
-              color: Color(0xFF5D536B),
+              color: DunesColors.resolveNullable(context, Color(0xFF5D536B)),
             ),
           ),
         ),
@@ -517,7 +570,10 @@ class _NativeWorkProfileManagementPageState
       const SizedBox(height: 12),
       Text(
         '统计来源：任务、审批、提案、会议、知识库记录。绩效仅在已发布且有权限时显示。${person.updatedAt.isEmpty ? '' : ' · 查询于 ${person.updatedAt}'}',
-        style: const TextStyle(fontSize: 10.5, color: _profileMuted),
+        style: TextStyle(
+          fontSize: 10.5,
+          color: DunesColors.resolveNullable(context, _profileMuted),
+        ),
       ),
     ],
   );
@@ -525,8 +581,11 @@ class _NativeWorkProfileManagementPageState
   Widget _personIdentity(WorkProfileSafePerson person) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        colors: [Color(0xFF604084), Color(0xFF8E6BBC)],
+      gradient: LinearGradient(
+        colors: [
+          DunesColors.resolve(context, Color(0xFF604084)),
+          DunesColors.resolve(context, Color(0xFF8E6BBC)),
+        ],
       ),
       borderRadius: BorderRadius.circular(20),
     ),
@@ -534,11 +593,15 @@ class _NativeWorkProfileManagementPageState
       children: [
         CircleAvatar(
           radius: 25,
-          backgroundColor: Colors.white24,
+          backgroundColor: DunesColors.resolve(
+            context,
+            Colors.white24,
+            role: DunesColorRole.surface,
+          ),
           child: Text(
             person.name.isEmpty ? '员' : person.name.characters.first,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: DunesColors.resolve(context, Colors.white),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -550,9 +613,9 @@ class _NativeWorkProfileManagementPageState
             children: [
               Text(
                 person.name,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -562,7 +625,10 @@ class _NativeWorkProfileManagementPageState
                   person.departmentName,
                   person.title,
                 ].where((part) => part.trim().isNotEmpty).join(' · '),
-                style: const TextStyle(fontSize: 12, color: Colors.white70),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, Colors.white70),
+                ),
               ),
             ],
           ),
@@ -612,7 +678,11 @@ class _NativeWorkProfileManagementPageState
   ];
 
   Widget _employeeRow(WorkProfileSafePerson person) => Material(
-    color: Colors.white,
+    color: DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    ),
     borderRadius: BorderRadius.circular(16),
     child: InkWell(
       onTap: _loading ? null : () => _openPerson(person),
@@ -621,7 +691,13 @@ class _NativeWorkProfileManagementPageState
         padding: const EdgeInsets.all(13),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE9E2EF)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE9E2EF),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -630,11 +706,18 @@ class _NativeWorkProfileManagementPageState
               children: [
                 CircleAvatar(
                   radius: 20,
-                  backgroundColor: const Color(0xFFF0EAF8),
+                  backgroundColor: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF0EAF8),
+                    role: DunesColorRole.surface,
+                  ),
                   child: Text(
                     person.name.isEmpty ? '员' : person.name.characters.first,
-                    style: const TextStyle(
-                      color: _profilePurple,
+                    style: TextStyle(
+                      color: DunesColors.resolveNullable(
+                        context,
+                        _profilePurple,
+                      ),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -646,10 +729,13 @@ class _NativeWorkProfileManagementPageState
                     children: [
                       Text(
                         person.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: _profileInk,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _profileInk,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -660,9 +746,12 @@ class _NativeWorkProfileManagementPageState
                         ].where((part) => part.trim().isNotEmpty).join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10.5,
-                          color: _profileMuted,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _profileMuted,
+                          ),
                         ),
                       ),
                     ],
@@ -674,16 +763,16 @@ class _NativeWorkProfileManagementPageState
                   onPressed: _loading
                       ? null
                       : () => unawaited(_sharePerson(person)),
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.ios_share_rounded,
                     size: 19,
-                    color: _profilePurple,
+                    color: DunesColors.resolveNullable(context, _profilePurple),
                   ),
                 ),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
-                  color: _profileMuted,
+                  color: DunesColors.resolveNullable(context, _profileMuted),
                 ),
               ],
             ),
@@ -711,14 +800,26 @@ class _NativeWorkProfileManagementPageState
   Widget _employeeMetric(String label, {bool primary = false}) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
     decoration: BoxDecoration(
-      color: primary ? const Color(0xFFF0EAF8) : const Color(0xFFF7F5F9),
+      color: primary
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EAF8),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF7F5F9),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(9),
     ),
     child: Text(
       label,
       style: TextStyle(
         fontSize: 10.5,
-        color: primary ? _profilePurple : _profileMuted,
+        color: primary
+            ? DunesColors.resolve(context, _profilePurple)
+            : DunesColors.resolve(context, _profileMuted),
         fontWeight: primary ? FontWeight.w600 : FontWeight.w400,
       ),
     ),
@@ -727,19 +828,29 @@ class _NativeWorkProfileManagementPageState
   Widget _section(String title, List<Widget> children) => Container(
     padding: const EdgeInsets.all(15),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: const Color(0xFFE9E2EF)),
+      border: Border.all(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFE9E2EF),
+          role: DunesColorRole.border,
+        ),
+      ),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: _profileInk,
+            color: DunesColors.resolveNullable(context, _profileInk),
           ),
         ),
         const SizedBox(height: 8),
@@ -763,21 +874,30 @@ class _NativeWorkProfileManagementPageState
             children: [
               Text(
                 label,
-                style: const TextStyle(fontSize: 12, color: _profileMuted),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolveNullable(context, _profileMuted),
+                ),
               ),
               const SizedBox(height: 2),
               Text(
                 '来源 $source · ${period ?? _periodLabel}',
-                style: const TextStyle(fontSize: 9.5, color: Color(0xFFAAA0B2)),
+                style: TextStyle(
+                  fontSize: 9.5,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFAAA0B2),
+                  ),
+                ),
               ),
             ],
           ),
         ),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
-            color: _profileInk,
+            color: DunesColors.resolveNullable(context, _profileInk),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -788,13 +908,27 @@ class _NativeWorkProfileManagementPageState
   Widget _errorCard(String message) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: const Color(0xFFE9E2EF)),
+      border: Border.all(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFE9E2EF),
+          role: DunesColorRole.border,
+        ),
+      ),
     ),
     child: Text(
       message,
-      style: const TextStyle(fontSize: 12, height: 1.5, color: _profileMuted),
+      style: TextStyle(
+        fontSize: 12,
+        height: 1.5,
+        color: DunesColors.resolveNullable(context, _profileMuted),
+      ),
     ),
   );
 }
@@ -813,7 +947,17 @@ class _ProfileChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFF0EAF8) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EAF8),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -823,7 +967,17 @@ class _ProfileChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? _profilePurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _profilePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -831,7 +985,9 @@ class _ProfileChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: selected ? _profilePurple : const Color(0xFF5C5566),
+              color: selected
+                  ? DunesColors.resolve(context, _profilePurple)
+                  : DunesColors.resolve(context, const Color(0xFF5C5566)),
             ),
           ),
         ),

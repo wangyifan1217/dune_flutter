@@ -120,7 +120,8 @@ class ReconDetailList extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
         );

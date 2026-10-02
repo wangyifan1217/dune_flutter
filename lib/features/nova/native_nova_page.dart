@@ -565,10 +565,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         setState(() {
           _novaReady = false;
           _conversationId = 0;
-        _messages = [_welcomeMessage()];
-        _analysisSources = const <NovaAnalysisSource>[];
-        _busyHint = readiness.message ?? 'NOVA账号尚未开通，请稍后再试';
-        _loading = false;
+          _messages = [_welcomeMessage()];
+          _analysisSources = const <NovaAnalysisSource>[];
+          _busyHint = readiness.message ?? 'NOVA账号尚未开通，请稍后再试';
+          _loading = false;
         });
         return;
       }
@@ -1668,7 +1668,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         if (idx >= 0) {
           final copy = [..._messages];
           final cur = copy[idx];
-          final keepReply = cur.text.trim().isNotEmpty &&
+          final keepReply =
+              cur.text.trim().isNotEmpty &&
               !cur.streaming &&
               !isNovaTransientErrorReply(cur.text);
           if (keepReply) {
@@ -2140,10 +2141,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     }
     var sources = [..._analysisSources];
     try {
-      sources = await _resolveScopedSources(sources).timeout(
-        const Duration(seconds: 8),
-        onTimeout: () => sources,
-      );
+      sources = await _resolveScopedSources(
+        sources,
+      ).timeout(const Duration(seconds: 8), onTimeout: () => sources);
       if (mounted) _replaceAnalysisSources(sources);
     } catch (_) {}
     final ids = novaSourceDocumentIds(sources);
@@ -2161,10 +2161,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       chunks: chunks,
     );
     if (prompt.isEmpty) {
-      prompt = composeNovaAnalysisPrompt(
-        userText: userText,
-        sources: sources,
-      );
+      prompt = composeNovaAnalysisPrompt(userText: userText, sources: sources);
     }
     if (prompt.isEmpty) {
       prompt = userText.trim().isEmpty ? '请分析这些材料' : userText.trim();
@@ -2763,8 +2760,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   Future<void> _openConversationFromDrawer(int targetConvId) async {
     _showNovaChatTab();
     if (targetConvId <= 0) return;
-    if (targetConvId == _conversationId &&
-        _messages.any((m) => !m.isWelcome)) {
+    if (targetConvId == _conversationId && _messages.any((m) => !m.isWelcome)) {
       return;
     }
     _loadToken += 1;
@@ -2808,7 +2804,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       if (!mounted || _loadToken != token) return;
       setState(() {
         _conversationId = convId;
-        _messages = repairNovaConversationMessages(_withWelcome(history.messages));
+        _messages = repairNovaConversationMessages(
+          _withWelcome(history.messages),
+        );
         _analysisSources = sources;
         _loading = false;
       });
@@ -3881,7 +3879,11 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       },
       child: Scaffold(
         key: _scaffoldKey,
-        backgroundColor: const Color(0xFFF6F8FC),
+        backgroundColor: DunesColors.resolve(
+          context,
+          const Color(0xFFF6F8FC),
+          role: DunesColorRole.surface,
+        ),
         drawer: SizedBox(
           width: MediaQuery.sizeOf(context).width < 450
               ? MediaQuery.sizeOf(context).width * 0.82
@@ -4089,10 +4091,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           name: '小饕',
           subtitle: '你在沙丘上的AI全能伙伴',
           onSelectPrompt: _handlePromptCardTapped,
-          onSubmitFeedback: (kind, content) => _service.submitFeedback(
-            kind: kind,
-            content: content,
-          ),
+          onSubmitFeedback: (kind, content) =>
+              _service.submitFeedback(kind: kind, content: content),
         ),
       ],
     );
@@ -4163,7 +4163,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       if (n.isWelcome) continue;
       if (n.role == 'user') return true;
       if (n.role == 'assistant') {
-        final hasBody = n.text.trim().isNotEmpty ||
+        final hasBody =
+            n.text.trim().isNotEmpty ||
             n.thinkText.trim().isNotEmpty ||
             n.streaming ||
             n.attachments.isNotEmpty;
@@ -4242,26 +4243,37 @@ class _NovaJumpToLatestButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       elevation: 3,
       shadowColor: const Color(0x3318274B),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        child: const Padding(
+        child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.arrow_downward_rounded, size: 15, color: Color(0xFF6B3FE2)),
+              Icon(
+                Icons.arrow_downward_rounded,
+                size: 15,
+                color: DunesColors.resolveNullable(context, Color(0xFF6B3FE2)),
+              ),
               SizedBox(width: 4),
               Text(
                 '回到最新',
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF6B3FE2),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF6B3FE2),
+                  ),
                 ),
               ),
             ],

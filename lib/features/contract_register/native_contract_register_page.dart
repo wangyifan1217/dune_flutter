@@ -1006,7 +1006,10 @@ class _NativeContractRegisterPageState
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
             '暂无知识库文件',
-            style: const TextStyle(fontSize: 13, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ),
       ]);
@@ -1035,10 +1038,10 @@ class _NativeContractRegisterPageState
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.picture_as_pdf_outlined,
             size: 18,
-            color: _themePurple,
+            color: DunesColors.resolveNullable(context, _themePurple),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1049,17 +1052,17 @@ class _NativeContractRegisterPageState
                   fileName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
                 Text(
                   statusLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ],
@@ -1117,8 +1120,16 @@ class _NativeContractRegisterPageState
   Widget _buildFilePicker() {
     final zone = Material(
       color: _fileDragging
-          ? _themePurple.withValues(alpha: 0.08)
-          : const Color(0xFFF8F8FA),
+          ? DunesColors.resolve(
+              context,
+              _themePurple,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.08)
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF8F8FA),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -1130,15 +1141,25 @@ class _NativeContractRegisterPageState
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: _fileDragging
-                  ? _themePurple.withValues(alpha: 0.45)
-                  : const Color(0xFFE8EAED),
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    ).withValues(alpha: 0.45)
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Column(
             children: [
               Icon(
                 Icons.upload_file_outlined,
-                color: _fileDragging ? _themePurple : DunesColors.text3,
+                color: _fileDragging
+                    ? DunesColors.resolve(context, _themePurple)
+                    : DunesColors.resolve(context, DunesColors.text3),
               ),
               const SizedBox(height: 6),
               Text(
@@ -1150,14 +1171,19 @@ class _NativeContractRegisterPageState
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
-                  color: _fileDragging ? _themePurple : DunesColors.text2,
+                  color: _fileDragging
+                      ? DunesColors.resolve(context, _themePurple)
+                      : DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'PDF / Word / Excel / PPT / 图片 · 仅 1 个文件 · ≤ 20MB',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ],
           ),
@@ -1192,14 +1218,22 @@ class _NativeContractRegisterPageState
       decoration: BoxDecoration(
         border: last
             ? null
-            : const Border(bottom: BorderSide(color: Color(0xFFF0F1F3))),
+            : Border(
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFF0F1F3),
+                    role: DunesColorRole.border,
+                  ),
+                ),
+              ),
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.insert_drive_file_outlined,
             size: 18,
-            color: _themePurple,
+            color: DunesColors.resolveNullable(context, _themePurple),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1212,18 +1246,18 @@ class _NativeContractRegisterPageState
                     file.fileName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                   if (size.isNotEmpty)
                     Text(
                       size,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                 ],
@@ -1234,16 +1268,20 @@ class _NativeContractRegisterPageState
             IconButton(
               tooltip: '移除',
               onPressed: onRemove,
-              icon: const Icon(Icons.close, size: 16, color: DunesColors.text3),
+              icon: Icon(
+                Icons.close,
+                size: 16,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             )
           else if (onTap != null)
             IconButton(
               tooltip: '打开',
               onPressed: onTap,
-              icon: const Icon(
+              icon: Icon(
                 Icons.open_in_new,
                 size: 16,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
             ),
         ],
@@ -1257,7 +1295,11 @@ class _NativeContractRegisterPageState
       onTap: _dismissKeyboard,
       behavior: HitTestBehavior.translucent,
       child: ColoredBox(
-        color: const Color(0xFFF5F6F8),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF5F6F8),
+          role: DunesColorRole.surface,
+        ),
         child: PageView(
           controller: _pageController,
           physics: const NeverScrollableScrollPhysics(),
@@ -1293,18 +1335,34 @@ class _NativeContractRegisterPageState
                       icon: const Icon(Icons.close, size: 18),
                     ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 8,
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+                borderSide: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFE8EAED),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+                borderSide: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFE8EAED),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1357,9 +1415,9 @@ class _NativeContractRegisterPageState
                     _kbSyncHint.isEmpty ? '同步「台账合同」知识库状态' : _kbSyncHint,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 ),
@@ -1368,7 +1426,7 @@ class _NativeContractRegisterPageState
                   onPressed: _kbSyncing ? null : () => unawaited(_runKbSync()),
                   style: FilledButton.styleFrom(
                     backgroundColor: _themePurple,
-                    foregroundColor: Colors.white,
+                    foregroundColor: DunesColors.resolve(context, Colors.white),
                     visualDensity: VisualDensity.compact,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
@@ -1383,7 +1441,10 @@ class _NativeContractRegisterPageState
             children: [
               Text(
                 '$_total 条',
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               if (_hasListFilters) ...[
                 const SizedBox(width: 8),
@@ -1429,7 +1490,9 @@ class _NativeContractRegisterPageState
           Text(
             friendlyErrorText(_error, fallback: '加载失败，请稍后重试'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -1449,7 +1512,10 @@ class _NativeContractRegisterPageState
           Center(
             child: Text(
               _hasListFilters ? '没有符合筛选条件的合同' : '暂无合同归集',
-              style: const TextStyle(color: DunesColors.text3, fontSize: 14),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -1488,8 +1554,13 @@ class _NativeContractRegisterPageState
   Widget _buildDetail() {
     final row = _selected;
     if (row == null) {
-      return const Center(
-        child: Text('请选择合同', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '请选择合同',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     return SingleChildScrollView(
@@ -1620,7 +1691,7 @@ class _NativeContractRegisterPageState
             onPressed: (_saving || _uploadingFile) ? null : _confirmCreate,
             style: FilledButton.styleFrom(
               backgroundColor: _themePurple,
-              foregroundColor: Colors.white,
+              foregroundColor: DunesColors.resolve(context, Colors.white),
               minimumSize: const Size.fromHeight(44),
             ),
             child: Text(
@@ -1652,15 +1723,31 @@ class _NativeContractRegisterPageState
                 icon: const Icon(Icons.close, size: 16),
               ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
       ),
     );
@@ -1670,19 +1757,29 @@ class _NativeContractRegisterPageState
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: _themePurple,
+              color: DunesColors.resolveNullable(context, _themePurple),
             ),
           ),
           const SizedBox(height: 6),
@@ -1712,10 +1809,10 @@ class _NativeContractRegisterPageState
             children: [
               Text(
                 entry.key,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               ...items,
@@ -1745,17 +1842,23 @@ class _NativeContractRegisterPageState
             padding: const EdgeInsets.only(bottom: 6),
             child: Text(
               hint,
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         if (anyValue)
           ...groups
         else
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 8, bottom: 4),
             child: Text(
               '暂无提案关联相关内容',
-              style: TextStyle(fontSize: 13, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
       ],
@@ -1780,7 +1883,7 @@ class _NativeContractRegisterPageState
       label: Text(busy ? '识别中…' : 'AI 重新识别'),
       style: FilledButton.styleFrom(
         backgroundColor: _themePurple,
-        foregroundColor: Colors.white,
+        foregroundColor: DunesColors.resolve(context, Colors.white),
         visualDensity: VisualDensity.compact,
         padding: const EdgeInsets.symmetric(horizontal: 10),
       ),
@@ -1814,10 +1917,10 @@ class _NativeContractRegisterPageState
           padding: const EdgeInsets.only(top: 4, bottom: 6),
           child: Text(
             entry.key,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -1847,9 +1950,19 @@ class _NativeContractRegisterPageState
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 4, 8, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1864,16 +1977,19 @@ class _NativeContractRegisterPageState
                   Expanded(
                     child: Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     ),
                   ),
                   Icon(
                     expanded ? Icons.expand_less : Icons.expand_more,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ],
               ),
@@ -1900,7 +2016,15 @@ class _NativeContractRegisterPageState
       decoration: BoxDecoration(
         border: last
             ? null
-            : const Border(bottom: BorderSide(color: Color(0xFFF0F1F3))),
+            : Border(
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFF0F1F3),
+                    role: DunesColorRole.border,
+                  ),
+                ),
+              ),
       ),
       child: long ? _kvLong(label, text) : _kvShort(label, text),
     );
@@ -1914,18 +2038,21 @@ class _NativeContractRegisterPageState
           width: 108,
           child: Text(
             label,
-            style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+            style: TextStyle(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
         ),
         Expanded(
           child: SelectableText(
             text,
             textAlign: TextAlign.right,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               height: 1.45,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
         ),
@@ -1939,17 +2066,20 @@ class _NativeContractRegisterPageState
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+          style: TextStyle(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
         ),
         const SizedBox(height: 6),
         SelectableText(
           text,
           textAlign: TextAlign.left,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             height: 1.7,
             fontWeight: FontWeight.w500,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
           ),
         ),
       ],
@@ -1976,14 +2106,30 @@ class _NativeContractRegisterPageState
           labelText: requiredField ? '$label *' : label,
           isDense: true,
           filled: true,
-          fillColor: const Color(0xFFF8F8FA),
+          fillColor: DunesColors.resolve(
+            context,
+            const Color(0xFFF8F8FA),
+            role: DunesColorRole.surface,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ),
       ),
@@ -2004,22 +2150,40 @@ class _NativeContractRegisterPageState
             labelText: label,
             isDense: true,
             filled: true,
-            fillColor: const Color(0xFFF8F8FA),
+            fillColor: DunesColors.resolve(
+              context,
+              const Color(0xFFF8F8FA),
+              role: DunesColorRole.surface,
+            ),
             suffixIcon: const Icon(Icons.calendar_today_outlined, size: 16),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+              borderSide: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+              borderSide: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
           ),
           child: Text(
             value == null ? '请选择' : _fmtDate(value),
             style: TextStyle(
               fontSize: 14,
-              color: value == null ? DunesColors.text3 : DunesColors.text,
+              color: value == null
+                  ? DunesColors.resolve(context, DunesColors.text3)
+                  : DunesColors.resolve(context, DunesColors.text),
             ),
           ),
         ),
@@ -2062,7 +2226,11 @@ class _ContractCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = _kbStyle(row.kbStatus);
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -2071,7 +2239,13 @@ class _ContractCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Row(
             children: [
@@ -2081,10 +2255,13 @@ class _ContractCard extends StatelessWidget {
                   children: [
                     Text(
                       row.contractNo.isEmpty ? '—' : row.contractNo,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -2092,10 +2269,10 @@ class _ContractCard extends StatelessWidget {
                       row.contractName.isEmpty ? '未命名合同' : row.contractName,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                     if (row.partyA.isNotEmpty || row.partyB.isNotEmpty) ...[
@@ -2107,9 +2284,12 @@ class _ContractCard extends StatelessWidget {
                         ].join('  ·  '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
@@ -2117,9 +2297,12 @@ class _ContractCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         '${row.files.length} 个附件',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
@@ -2130,7 +2313,11 @@ class _ContractCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: status.bg,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    status.bg,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -2138,11 +2325,14 @@ class _ContractCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: status.fg,
+                    color: DunesColors.resolveNullable(context, status.fg),
                   ),
                 ),
               ),
-              const Icon(Icons.chevron_right, color: DunesColors.text3),
+              Icon(
+                Icons.chevron_right,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ],
           ),
         ),
@@ -2165,7 +2355,17 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: active ? _themePurple : Colors.white,
+      color: active
+          ? DunesColors.resolve(
+              context,
+              _themePurple,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -2175,7 +2375,17 @@ class _FilterChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: active ? _themePurple : const Color(0xFFE8EAED),
+              color: active
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -2183,7 +2393,9 @@ class _FilterChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: active ? Colors.white : DunesColors.text2,
+              color: active
+                  ? DunesColors.resolve(context, Colors.white)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),

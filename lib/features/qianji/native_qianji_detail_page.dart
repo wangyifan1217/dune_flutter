@@ -22,17 +22,17 @@ class NativeQianjiDetailPage extends StatelessWidget {
     final detail = QianjiStaticCatalog.detailFor(entity);
 
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            QianjiCrumbBar(
-              backLabel: '返回',
-              crumb: '产品/能力',
-              onBack: onBack,
-            ),
+            QianjiCrumbBar(backLabel: '返回', crumb: '产品/能力', onBack: onBack),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
@@ -56,7 +56,11 @@ class NativeQianjiDetailPage extends StatelessWidget {
                           '产品说明',
                           style: DunesTypography.sans(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -65,7 +69,11 @@ class NativeQianjiDetailPage extends StatelessWidget {
                           style: DunesTypography.sans(
                             fontSize: 13,
                             height: 1.45,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
+                            context: context,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -75,7 +83,11 @@ class NativeQianjiDetailPage extends StatelessWidget {
                               'demo演示',
                               style: DunesTypography.sans(
                                 fontSize: 12,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                                context: context,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -84,8 +96,12 @@ class NativeQianjiDetailPage extends StatelessWidget {
                                 detail.demoLabel,
                                 style: DunesTypography.sans(
                                   fontSize: 13,
-                                  color: DunesColors.accent,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.accent,
+                                  ),
                                   fontWeight: FontWeight.w500,
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -98,7 +114,11 @@ class NativeQianjiDetailPage extends StatelessWidget {
                               '状态',
                               style: DunesTypography.sans(
                                 fontSize: 12,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                                context: context,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -116,7 +136,11 @@ class NativeQianjiDetailPage extends StatelessWidget {
                     title: '系统关联',
                     child: Column(
                       children: [
-                        for (var i = 0; i < detail.capabilities.length; i++) ...[
+                        for (
+                          var i = 0;
+                          i < detail.capabilities.length;
+                          i++
+                        ) ...[
                           if (i > 0) const SizedBox(height: 8),
                           _CapabilityTile(detail.capabilities[i]),
                         ],
@@ -136,8 +160,7 @@ class NativeQianjiDetailPage extends StatelessWidget {
                           if (i > 0) const SizedBox(height: 10),
                           _IterationCard(
                             iteration: detail.iterations[i],
-                            onOpen: () =>
-                                onOpenIteration(detail.iterations[i]),
+                            onOpen: () => onOpenIteration(detail.iterations[i]),
                           ),
                         ],
                       ],
@@ -165,7 +188,11 @@ class _CapabilityTile extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -177,10 +204,18 @@ class _CapabilityTile extends StatelessWidget {
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: DunesColors.accentSoft,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.accentSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(cap.icon, size: 16, color: DunesColors.accentDeep),
+                child: Icon(
+                  cap.icon,
+                  size: 16,
+                  color: DunesColors.resolve(context, DunesColors.accentDeep),
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -189,7 +224,8 @@ class _CapabilityTile extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
               ),
@@ -202,7 +238,8 @@ class _CapabilityTile extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12,
               height: 1.4,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
         ],
@@ -212,10 +249,7 @@ class _CapabilityTile extends StatelessWidget {
 }
 
 class _IterationCard extends StatelessWidget {
-  const _IterationCard({
-    required this.iteration,
-    required this.onOpen,
-  });
+  const _IterationCard({required this.iteration, required this.onOpen});
 
   final QianjiIteration iteration;
   final VoidCallback onOpen;
@@ -225,8 +259,16 @@ class _IterationCard extends StatelessWidget {
     final active = iteration.active;
     return Material(
       color: active
-          ? DunesColors.accentSoft.withValues(alpha: 0.35)
-          : DunesColors.bgApp,
+          ? DunesColors.resolve(
+              context,
+              DunesColors.accentSoft,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.35)
+          : DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onOpen,
@@ -237,7 +279,17 @@ class _IterationCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: active ? DunesColors.accentLine : DunesColors.borderSoft,
+              color: active
+                  ? DunesColors.resolve(
+                      context,
+                      DunesColors.accentLine,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Column(
@@ -250,7 +302,8 @@ class _IterationCard extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -261,7 +314,8 @@ class _IterationCard extends StatelessWidget {
                       iteration.phase,
                       style: DunesTypography.sans(
                         fontSize: 12,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
                       ),
                     ),
                   ],
@@ -272,7 +326,8 @@ class _IterationCard extends StatelessWidget {
                 iteration.meta,
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 10),
@@ -300,9 +355,19 @@ class _IterationCard extends StatelessWidget {
                       width: double.infinity,
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: DunesColors.borderSoft),
+                        border: Border.all(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.borderSoft,
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -311,7 +376,11 @@ class _IterationCard extends StatelessWidget {
                             r.code,
                             style: DunesTypography.mono(
                               fontSize: 11,
-                              color: DunesColors.accent,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.accent,
+                              ),
+                              context: context,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -319,7 +388,11 @@ class _IterationCard extends StatelessWidget {
                             r.name,
                             style: DunesTypography.sans(
                               fontSize: 12,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
+                              context: context,
                             ),
                           ),
                         ],
@@ -339,14 +412,25 @@ class _IterationCard extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
                       children: [
-                        Icon(f.icon, size: 16, color: DunesColors.text2),
+                        Icon(
+                          f.icon,
+                          size: 16,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             f.name,
                             style: DunesTypography.sans(
                               fontSize: 12,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -354,7 +438,11 @@ class _IterationCard extends StatelessWidget {
                           f.size,
                           style: DunesTypography.sans(
                             fontSize: 11,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],
@@ -369,16 +457,26 @@ class _IterationCard extends StatelessWidget {
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: DunesColors.borderSoft),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.arrow_circle_right_outlined,
                       size: 18,
-                      color: DunesColors.accent,
+                      color: DunesColors.resolve(context, DunesColors.accent),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -387,13 +485,17 @@ class _IterationCard extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.accentDeep,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.accentDeep,
+                          ),
+                          context: context,
                         ),
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.chevron_right_rounded,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ],
                 ),

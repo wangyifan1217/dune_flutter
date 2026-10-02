@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../shell/dunes_toast.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 enum NovaFeedbackKind { suggestion, complaint }
 
@@ -59,26 +60,28 @@ class _NovaFeedbackDialogState extends State<NovaFeedbackDialog> {
         ),
         content: Text(
           '即将提交一条「${_kind.label}」：\n\n$text',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13.5,
             height: 1.5,
-            color: Color(0xFF4E5969),
+            color: DunesColors.resolveNullable(ctx, Color(0xFF4E5969)),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(
+            child: Text(
               '返回修改',
-              style: TextStyle(color: Color(0xFF86909C)),
+              style: TextStyle(
+                color: DunesColors.resolveNullable(ctx, Color(0xFF86909C)),
+              ),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text(
+            child: Text(
               '确认提交',
               style: TextStyle(
-                color: Color(0xFF6B3FE2),
+                color: DunesColors.resolveNullable(ctx, Color(0xFF6B3FE2)),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -107,9 +110,13 @@ class _NovaFeedbackDialogState extends State<NovaFeedbackDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.edit_note_rounded, color: Color(0xFF6B3FE2), size: 22),
+          Icon(
+            Icons.edit_note_rounded,
+            color: DunesColors.resolveNullable(context, Color(0xFF6B3FE2)),
+            size: 22,
+          ),
           SizedBox(width: 8),
           Text(
             '反馈与投诉',
@@ -123,12 +130,12 @@ class _NovaFeedbackDialogState extends State<NovaFeedbackDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               '类型',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF4E5969),
+                color: DunesColors.resolveNullable(context, Color(0xFF4E5969)),
               ),
             ),
             const SizedBox(height: 8),
@@ -140,30 +147,47 @@ class _NovaFeedbackDialogState extends State<NovaFeedbackDialog> {
                     label: Text(kind.label),
                     selected: _kind == kind,
                     onSelected: (_) => setState(() => _kind = kind),
-                    selectedColor: const Color(0xFFF1EBFA),
+                    selectedColor: DunesColors.resolve(
+                      context,
+                      const Color(0xFFF1EBFA),
+                    ),
                     labelStyle: TextStyle(
                       color: _kind == kind
-                          ? const Color(0xFF6B3FE2)
-                          : const Color(0xFF4E5969),
+                          ? DunesColors.resolve(
+                              context,
+                              const Color(0xFF6B3FE2),
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFF4E5969),
+                            ),
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
                     side: BorderSide(
                       color: _kind == kind
-                          ? const Color(0xFF6B3FE2)
-                          : const Color(0xFFE5E6EB),
+                          ? DunesColors.resolve(
+                              context,
+                              const Color(0xFF6B3FE2),
+                              role: DunesColorRole.border,
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFFE5E6EB),
+                              role: DunesColorRole.border,
+                            ),
                     ),
                     showCheckmark: false,
                   ),
               ],
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               '具体内容',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF4E5969),
+                color: DunesColors.resolveNullable(context, Color(0xFF4E5969)),
               ),
             ),
             const SizedBox(height: 8),
@@ -177,23 +201,48 @@ class _NovaFeedbackDialogState extends State<NovaFeedbackDialog> {
                 hintText: _kind == NovaFeedbackKind.complaint
                     ? '请描述遇到的问题、发生时间和影响，便于我们核查'
                     : '请填写建议或改进点，越具体越好',
-                hintStyle: const TextStyle(
+                hintStyle: TextStyle(
                   fontSize: 13,
-                  color: Color(0xFFC2C7D0),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFC2C7D0),
+                  ),
                 ),
                 filled: true,
-                fillColor: const Color(0xFFF7F8FA),
+                fillColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF7F8FA),
+                  role: DunesColorRole.surface,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFEEF0F5)),
+                  borderSide: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      Color(0xFFEEF0F5),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFEEF0F5)),
+                  borderSide: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      Color(0xFFEEF0F5),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF6B3FE2)),
+                  borderSide: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      Color(0xFF6B3FE2),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -203,14 +252,19 @@ class _NovaFeedbackDialogState extends State<NovaFeedbackDialog> {
       actions: [
         TextButton(
           onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('取消', style: TextStyle(color: Color(0xFF86909C))),
+          child: Text(
+            '取消',
+            style: TextStyle(
+              color: DunesColors.resolveNullable(context, Color(0xFF86909C)),
+            ),
+          ),
         ),
         TextButton(
           onPressed: _submitting ? null : _onSubmit,
           child: Text(
             _submitting ? '提交中…' : '提交',
-            style: const TextStyle(
-              color: Color(0xFF6B3FE2),
+            style: TextStyle(
+              color: DunesColors.resolveNullable(context, Color(0xFF6B3FE2)),
               fontWeight: FontWeight.w700,
             ),
           ),

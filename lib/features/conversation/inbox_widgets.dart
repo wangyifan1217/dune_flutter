@@ -65,7 +65,11 @@ class ChatInboxHeader extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF1C1C1C),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF1C1C1C),
+                    ),
+                    context: context,
                   ),
                 ),
                 if (showStatusBadge) ...[
@@ -86,7 +90,11 @@ class ChatInboxHeader extends StatelessWidget {
                         '正在思考',
                         style: DunesTypography.sans(
                           fontSize: 10.5,
-                          color: const Color(0xFF07A957),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF07A957),
+                          ),
+                          context: context,
                         ),
                       ),
                   ],
@@ -127,7 +135,9 @@ class _QuickMeetingButton extends StatelessWidget {
     return ValueListenableBuilder<bool>(
       valueListenable: MeetingLiveController.instance.active,
       builder: (context, live, _) {
-        final fg = live ? const Color(0xFFBC5C40) : const Color(0xFF7B5CD8);
+        final fg = live
+            ? DunesColors.resolve(context, const Color(0xFFBC5C40))
+            : DunesColors.resolve(context, const Color(0xFF7B5CD8));
         return Semantics(
           button: true,
           label: live ? '回到进行中的会议' : '快速开会',
@@ -144,12 +154,24 @@ class _QuickMeetingButton extends StatelessWidget {
                 height: 30,
                 padding: const EdgeInsets.fromLTRB(4, 0, 10, 0),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
                     color: live
-                        ? const Color(0xFFF1C9BC)
-                        : const Color(0xFFE4DCF4),
+                        ? DunesColors.resolve(
+                            context,
+                            const Color(0xFFF1C9BC),
+                            role: DunesColorRole.border,
+                          )
+                        : DunesColors.resolve(
+                            context,
+                            const Color(0xFFE4DCF4),
+                            role: DunesColorRole.border,
+                          ),
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -171,15 +193,33 @@ class _QuickMeetingButton extends StatelessWidget {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: live
-                              ? const [Color(0xFFE07A5F), Color(0xFFBC5C40)]
-                              : const [Color(0xFF9D84EC), Color(0xFF6E52CC)],
+                              ? [
+                                  DunesColors.resolve(
+                                    context,
+                                    Color(0xFFE07A5F),
+                                  ),
+                                  DunesColors.resolve(
+                                    context,
+                                    Color(0xFFBC5C40),
+                                  ),
+                                ]
+                              : [
+                                  DunesColors.resolve(
+                                    context,
+                                    Color(0xFF9D84EC),
+                                  ),
+                                  DunesColors.resolve(
+                                    context,
+                                    Color(0xFF6E52CC),
+                                  ),
+                                ],
                         ),
                       ),
                       alignment: Alignment.center,
                       child: Icon(
                         live ? Icons.graphic_eq_rounded : Icons.mic_rounded,
                         size: 13,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -189,6 +229,7 @@ class _QuickMeetingButton extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: fg,
+                        context: context,
                       ),
                     ),
                   ],
@@ -425,14 +466,22 @@ class _InboxActionsDropdown extends StatelessWidget {
         children: [
           if (showSetStatus && onSetStatus != null)
             _DropdownItem(
-              leading: Icon(statusDef.icon, size: 20, color: statusDef.color),
+              leading: Icon(
+                statusDef.icon,
+                size: 20,
+                color: DunesColors.resolveNullable(context, statusDef.color),
+              ),
               label: '设置状态',
               trailing: selfImStatus.showsBadge
                   ? Text(
                       statusDef.label,
                       style: DunesTypography.sans(
                         fontSize: 12,
-                        color: const Color(0xFF9CA3AF),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF9CA3AF),
+                        ),
+                        context: context,
                       ),
                     )
                   : null,
@@ -440,29 +489,29 @@ class _InboxActionsDropdown extends StatelessWidget {
             ),
           if (showNewChat && onNewChat != null)
             _DropdownItem(
-              leading: const Icon(
+              leading: Icon(
                 Icons.group_add_outlined,
                 size: 20,
-                color: Color(0xFF4B5563),
+                color: DunesColors.resolveNullable(context, Color(0xFF4B5563)),
               ),
               label: '发起群聊',
               onTap: onNewChat!,
             ),
           _DropdownItem(
-            leading: const Icon(
+            leading: Icon(
               Icons.people_outline_rounded,
               size: 20,
-              color: Color(0xFF4B5563),
+              color: DunesColors.resolveNullable(context, Color(0xFF4B5563)),
             ),
             label: '通讯录',
             onTap: onContacts,
           ),
           if (showDailyReport && onDailyReport != null)
             _DropdownItem(
-              leading: const Icon(
+              leading: Icon(
                 Icons.edit_note_outlined,
                 size: 20,
-                color: Color(0xFF4B5563),
+                color: DunesColors.resolveNullable(context, Color(0xFF4B5563)),
               ),
               label: '填写日报',
               onTap: onDailyReport!,
@@ -485,10 +534,10 @@ class _InboxActionsDropdown extends StatelessWidget {
             ),
           if (showFavorites && onFavorites != null)
             _DropdownItem(
-              leading: const Icon(
+              leading: Icon(
                 Icons.bookmark_border_rounded,
                 size: 20,
-                color: Color(0xFF4B5563),
+                color: DunesColors.resolveNullable(context, Color(0xFF4B5563)),
               ),
               label: '我的收藏',
               onTap: onFavorites!,
@@ -592,23 +641,30 @@ class _InboxStatusPickerState extends State<_InboxStatusPicker> {
       children: [
         if (current.showsBadge)
           _DropdownItem(
-            leading: const Icon(
+            leading: Icon(
               Icons.remove_circle_outline,
               size: 20,
-              color: Color(0xFF6B7280),
+              color: DunesColors.resolveNullable(context, Color(0xFF6B7280)),
             ),
             label: '取消状态',
             onTap: () => widget.onSelect(ImUserStatusValue.online),
           ),
         for (final item in ImUserStatusCatalog.all)
           _DropdownItem(
-            leading: Icon(item.icon, size: 20, color: item.color),
+            leading: Icon(
+              item.icon,
+              size: 20,
+              color: DunesColors.resolveNullable(context, item.color),
+            ),
             label: item.label,
             trailing: item.key == current.key
-                ? const Icon(
+                ? Icon(
                     Icons.check_rounded,
                     size: 18,
-                    color: Color(0xFF07A957),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF07A957),
+                    ),
                   )
                 : null,
             onTap: () => widget.onSelect(ImUserStatusValue(key: item.key)),
@@ -621,21 +677,27 @@ class _InboxStatusPickerState extends State<_InboxStatusPicker> {
             size: 20,
             color: current.key == ImUserStatusCatalog.custom
                 ? current.def.color
-                : DunesColors.brandPurple,
+                : DunesColors.resolve(context, DunesColors.brandPurple),
           ),
           label: current.key == ImUserStatusCatalog.custom
               ? current.def.label
               : '自定义',
           trailing: current.key == ImUserStatusCatalog.custom
-              ? const Icon(
+              ? Icon(
                   Icons.check_rounded,
                   size: 18,
-                  color: Color(0xFF07A957),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF07A957),
+                  ),
                 )
-              : const Icon(
+              : Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
-                  color: Color(0xFF9CA3AF),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF9CA3AF),
+                  ),
                 ),
           onTap: () => setState(() => _customizing = true),
         ),
@@ -651,7 +713,8 @@ class _InboxStatusPickerState extends State<_InboxStatusPicker> {
         ImUserStatusCatalog.clampText(committed).isNotEmpty &&
         _customIcon.isNotEmpty;
     final iconColor =
-        ImUserStatusCatalog.colorOf(_customColor) ?? DunesColors.brandPurple;
+        ImUserStatusCatalog.colorOf(_customColor) ??
+        DunesColors.resolve(context, DunesColors.brandPurple);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       child: Column(
@@ -665,10 +728,13 @@ class _InboxStatusPickerState extends State<_InboxStatusPicker> {
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.chevron_left_rounded,
                     size: 20,
-                    color: Color(0xFF4B5563),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF4B5563),
+                    ),
                   ),
                   const SizedBox(width: 4),
                   Text(
@@ -676,7 +742,11 @@ class _InboxStatusPickerState extends State<_InboxStatusPicker> {
                     style: DunesTypography.sans(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: const Color(0xFF1C1C1C),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF1C1C1C),
+                      ),
+                      context: context,
                     ),
                   ),
                 ],
@@ -728,10 +798,20 @@ class _InboxStatusPickerState extends State<_InboxStatusPicker> {
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                borderSide: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFE5E7EB),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
             ),
-            style: DunesTypography.sans(fontSize: 14, color: DunesColors.text),
+            style: DunesTypography.sans(
+              fontSize: 14,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
+            ),
             onSubmitted: (_) {
               if (canSubmit) _submitCustom();
             },
@@ -740,8 +820,16 @@ class _InboxStatusPickerState extends State<_InboxStatusPicker> {
           FilledButton(
             onPressed: canSubmit ? _submitCustom : null,
             style: FilledButton.styleFrom(
-              backgroundColor: DunesColors.brandPurple,
-              disabledBackgroundColor: const Color(0xFFE5E7EB),
+              backgroundColor: DunesColors.resolve(
+                context,
+                DunesColors.brandPurple,
+                role: DunesColorRole.surface,
+              ),
+              disabledBackgroundColor: DunesColors.resolve(
+                context,
+                const Color(0xFFE5E7EB),
+                role: DunesColorRole.surface,
+              ),
               minimumSize: const Size.fromHeight(36),
             ),
             child: const Text('完成'),
@@ -770,7 +858,13 @@ class _StatusIconChip extends StatelessWidget {
     final icon = ImUserStatusCatalog.iconData[iconKey];
     if (icon == null) return const SizedBox.shrink();
     return Material(
-      color: selected ? color.withValues(alpha: 0.14) : const Color(0xFFF5F5F5),
+      color: selected
+          ? color.withValues(alpha: 0.14)
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF5F5F5),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
@@ -781,7 +875,10 @@ class _StatusIconChip extends StatelessWidget {
           child: Icon(
             icon,
             size: 18,
-            color: selected ? color : color.withValues(alpha: 0.72),
+            color: DunesColors.resolveNullable(
+              context,
+              selected ? color : color.withValues(alpha: 0.72),
+            ),
           ),
         ),
       ),
@@ -811,10 +908,24 @@ class _StatusColorChip extends StatelessWidget {
           width: 22,
           height: 22,
           decoration: BoxDecoration(
-            color: color,
+            color: DunesColors.resolveNullable(
+              context,
+              color,
+              role: DunesColorRole.surface,
+            ),
             shape: BoxShape.circle,
             border: Border.all(
-              color: selected ? const Color(0xFF111827) : Colors.white,
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0xFF111827),
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.border,
+                    ),
               width: selected ? 2 : 1.5,
             ),
             boxShadow: const [
@@ -842,7 +953,11 @@ class _InboxMenuCard extends StatelessWidget {
       color: Colors.transparent,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
           boxShadow: const [
             BoxShadow(
@@ -851,7 +966,13 @@ class _InboxMenuCard extends StatelessWidget {
               offset: Offset(0, 8),
             ),
           ],
-          border: Border.all(color: const Color(0xFFECECEC)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFECECEC),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: IntrinsicWidth(child: child),
       ),
@@ -889,7 +1010,8 @@ class _DropdownItem extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: const Color(0xFF1C1C1C),
+                  color: DunesColors.resolve(context, const Color(0xFF1C1C1C)),
+                  context: context,
                 ),
               ),
             ),
@@ -921,68 +1043,94 @@ class ChatInboxSearchBar extends StatelessWidget {
     // 与顶栏动画隔离，避免 Web 合成层把搜索栏一起带动。
     return RepaintBoundary(
       child: Container(
-        color: const Color(0xFFF5F5F5),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF5F5F5),
+          role: DunesColorRole.surface,
+        ),
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
         child: Container(
           height: 34,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(6),
           ),
           child: onTap != null
               ? _InboxSearchTapTarget(hint: hint, onTap: onTap!)
               : Row(
-            children: [
-              const Icon(Icons.search, size: 17, color: Color(0xFFB2B2B2)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  onChanged: onChanged,
-                  style: DunesTypography.sans(
-                    fontSize: 13,
-                    color: DunesColors.text,
-                  ),
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    border: InputBorder.none,
-                    hintText: hint,
-                    hintStyle: DunesTypography.sans(
-                      fontSize: 13,
-                      color: const Color(0xFFB2B2B2),
+                  children: [
+                    Icon(
+                      Icons.search,
+                      size: 17,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFB2B2B2),
+                      ),
                     ),
-                    contentPadding: EdgeInsets.zero,
-                  ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        onChanged: onChanged,
+                        style: DunesTypography.sans(
+                          fontSize: 13,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
+                        ),
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          border: InputBorder.none,
+                          hintText: hint,
+                          hintStyle: DunesTypography.sans(
+                            fontSize: 13,
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFB2B2B2),
+                            ),
+                            context: context,
+                          ),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                    if (controller != null)
+                      ListenableBuilder(
+                        listenable: controller!,
+                        builder: (context, _) {
+                          if (controller!.text.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+                          return IconButton(
+                            tooltip: '清除',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 28,
+                              minHeight: 28,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            iconSize: 16,
+                            onPressed: () {
+                              controller!.clear();
+                              onChanged?.call('');
+                            },
+                            icon: Icon(
+                              Icons.close,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                Color(0xFFB2B2B2),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
                 ),
-              ),
-              if (controller != null)
-              ListenableBuilder(
-                listenable: controller!,
-                builder: (context, _) {
-                  if (controller!.text.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
-                  return IconButton(
-                    tooltip: '清除',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    iconSize: 16,
-                    onPressed: () {
-                      controller!.clear();
-                      onChanged?.call('');
-                    },
-                    icon: const Icon(Icons.close, color: Color(0xFFB2B2B2)),
-                  );
-                },
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -1004,14 +1152,19 @@ class _InboxSearchTapTarget extends StatelessWidget {
         onTap: onTap,
         child: Row(
           children: [
-            const Icon(Icons.search, size: 17, color: Color(0xFFB2B2B2)),
+            Icon(
+              Icons.search,
+              size: 17,
+              color: DunesColors.resolveNullable(context, Color(0xFFB2B2B2)),
+            ),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
                 hint,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: const Color(0xFFB2B2B2),
+                  color: DunesColors.resolve(context, const Color(0xFFB2B2B2)),
+                  context: context,
                 ),
               ),
             ),
@@ -1057,7 +1210,9 @@ class ChatInboxSectionHeader extends StatelessWidget {
                 Icon(
                   pinned ? Icons.push_pin_outlined : Icons.more_horiz,
                   size: 11,
-                  color: pinned ? DunesColors.accent : DunesColors.text3,
+                  color: pinned
+                      ? DunesColors.resolve(context, DunesColors.accent)
+                      : DunesColors.resolve(context, DunesColors.text3),
                 ),
               const SizedBox(width: 6),
               Expanded(
@@ -1067,7 +1222,8 @@ class ChatInboxSectionHeader extends StatelessWidget {
                     fontSize: 9.5,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.08 * 9.5,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -1077,7 +1233,8 @@ class ChatInboxSectionHeader extends StatelessWidget {
                   fontSize: 9.5,
                   fontWeight: FontWeight.w500,
                   letterSpacing: 0.04 * 9.5,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
               if (onTap != null) ...[
@@ -1087,7 +1244,7 @@ class ChatInboxSectionHeader extends StatelessWidget {
                       ? Icons.keyboard_arrow_down_rounded
                       : Icons.keyboard_arrow_up_rounded,
                   size: 16,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ],
             ],
@@ -1223,12 +1380,16 @@ class ChatInboxRow extends StatelessWidget {
             kind == ChatInboxRowKind.duneAnnouncement ||
             kind == ChatInboxRowKind.selfMemo ||
             kind == ChatInboxRowKind.robot
-        ? const Color(0xFF7B5CD8)
-        : DunesColors.coral;
+        ? DunesColors.resolve(context, const Color(0xFF7B5CD8))
+        : DunesColors.resolve(context, DunesColors.coral);
     return Column(
       children: [
         Material(
-          color: _rowBg,
+          color: DunesColors.resolveNullable(
+            context,
+            _rowBg,
+            role: DunesColorRole.surface,
+          ),
           child: InkWell(
             onTap: onTap,
             child: Padding(
@@ -1303,7 +1464,11 @@ class ChatInboxRow extends StatelessWidget {
                                         fontSize: 15,
                                         fontWeight: FontWeight.w500,
                                         letterSpacing: -0.01 * 15,
-                                        color: DunesColors.text,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text,
+                                        ),
+                                        context: context,
                                       ),
                                     ),
                                   ),
@@ -1330,7 +1495,11 @@ class ChatInboxRow extends StatelessWidget {
                                         vertical: 1,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: DunesColors.accent,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.accent,
+                                          role: DunesColorRole.surface,
+                                        ),
                                         borderRadius: BorderRadius.circular(3),
                                       ),
                                       child: Text(
@@ -1338,8 +1507,12 @@ class ChatInboxRow extends StatelessWidget {
                                         style: DunesTypography.mono(
                                           fontSize: 8.5,
                                           fontWeight: FontWeight.w700,
-                                          color: Colors.white,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            Colors.white,
+                                          ),
                                           letterSpacing: 0.04 * 8.5,
+                                          context: context,
                                         ),
                                       ),
                                     ),
@@ -1351,7 +1524,11 @@ class ChatInboxRow extends StatelessWidget {
                                       '($memberCount)',
                                       style: DunesTypography.sans(
                                         fontSize: 11,
-                                        color: DunesColors.text3,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text3,
+                                        ),
+                                        context: context,
                                       ),
                                     ),
                                   ],
@@ -1363,7 +1540,11 @@ class ChatInboxRow extends StatelessWidget {
                                         fontSize: 8.5,
                                         fontWeight: FontWeight.w500,
                                         letterSpacing: 0.06 * 8.5,
-                                        color: DunesColors.text3,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text3,
+                                        ),
+                                        context: context,
                                       ),
                                     ),
                                   ],
@@ -1375,7 +1556,11 @@ class ChatInboxRow extends StatelessWidget {
                                 timeLabel,
                                 style: DunesTypography.sans(
                                   fontSize: 11,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                           ],
@@ -1396,10 +1581,13 @@ class ChatInboxRow extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.notifications_off_outlined,
                             size: 14,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ],
                       ),
@@ -1411,13 +1599,21 @@ class ChatInboxRow extends StatelessWidget {
         ),
         if (showDivider)
           ColoredBox(
-            color: _rowBg,
-            child: const Padding(
+            color: DunesColors.resolve(
+              context,
+              _rowBg,
+              role: DunesColorRole.surface,
+            ),
+            child: Padding(
               padding: EdgeInsets.only(left: 80, right: 16),
               child: Divider(
                 height: 1,
                 thickness: 1,
-                color: DunesColors.borderSoft,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
               ),
             ),
           ),
@@ -1435,9 +1631,20 @@ class _MarkedUnreadDot extends StatelessWidget {
       width: 10,
       height: 10,
       decoration: BoxDecoration(
-        color: const Color(0xFFFA5151),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFFA5151),
+          role: DunesColorRole.surface,
+        ),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 1.5),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.border,
+          ),
+          width: 1.5,
+        ),
       ),
     );
   }
@@ -1469,10 +1676,18 @@ class _UnreadBadge extends StatelessWidget {
       ),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: color,
+        color: DunesColors.resolveNullable(
+          context,
+          color,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.9),
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.border,
+          ).withValues(alpha: 0.9),
           width: mini ? 1.0 : 1.5,
         ),
         boxShadow: [
@@ -1489,10 +1704,11 @@ class _UnreadBadge extends StatelessWidget {
         textAlign: TextAlign.center,
         style: DunesTypography.sans(
           fontSize: mini ? 9 : 11,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           fontWeight: FontWeight.w700,
           letterSpacing: mini ? 0 : -0.02 * 11,
           height: 1,
+          context: context,
         ),
       ),
     );
@@ -1528,7 +1744,8 @@ class _PreviewLine extends StatelessWidget {
               preview.isEmpty ? '正在生成…' : preview,
               style: DunesTypography.sans(
                 fontSize: 12.5,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1546,7 +1763,8 @@ class _PreviewLine extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFFE4554D),
+              color: DunesColors.resolve(context, const Color(0xFFE4554D)),
+              context: context,
             ),
           ),
           const SizedBox(width: 4),
@@ -1561,14 +1779,16 @@ class _PreviewLine extends StatelessWidget {
                     style: DunesTypography.mono(
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.accent,
+                      color: DunesColors.resolve(context, DunesColors.accent),
+                      context: context,
                     ),
                   ),
                 TextSpan(
                   text: preview.isEmpty ? '暂无消息' : preview,
                   style: DunesTypography.sans(
                     fontSize: 12.5,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ],
@@ -1622,7 +1842,14 @@ class _Avatar extends StatelessWidget {
           height: _inboxAvatarSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFFEBF0FA), width: 1),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFEBF0FA),
+                role: DunesColorRole.border,
+              ),
+              width: 1,
+            ),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x182E75FF),
@@ -1641,131 +1868,175 @@ class _Avatar extends StatelessWidget {
       case ChatInboxRowKind.approvalAssistant:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [DunesColors.brandPurple, DunesColors.brandPurpleDeep],
+            colors: [
+              DunesColors.resolve(context, DunesColors.brandPurple),
+              DunesColors.resolve(context, DunesColors.brandPurpleDeep),
+            ],
           ),
         );
-        child = const Icon(
+        child = Icon(
           Icons.fact_check_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 20,
         );
       case ChatInboxRowKind.taskAssistant:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF2F8F7E), Color(0xFF5EAEDE)],
+            colors: [
+              DunesColors.resolve(context, Color(0xFF2F8F7E)),
+              DunesColors.resolve(context, Color(0xFF5EAEDE)),
+            ],
           ),
         );
-        child = const Icon(
+        child = Icon(
           Icons.assignment_turned_in_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 20,
         );
       case ChatInboxRowKind.kpiAssistant:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF8C5A91), Color(0xFFC17B7B)],
+            colors: [
+              DunesColors.resolve(context, Color(0xFF8C5A91)),
+              DunesColors.resolve(context, Color(0xFFC17B7B)),
+            ],
           ),
         );
-        child = const Icon(
+        child = Icon(
           Icons.insights_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 20,
         );
       case ChatInboxRowKind.driveAssistant:
         decoration = BoxDecoration(
-          color: const Color(0xFF3B82F6),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFF3B82F6),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: borderRadius,
         );
-        child = const Icon(Icons.cloud_outlined, color: Colors.white, size: 21);
+        child = Icon(
+          Icons.cloud_outlined,
+          color: DunesColors.resolve(context, Colors.white),
+          size: 21,
+        );
       case ChatInboxRowKind.xrxsAssistant:
         decoration = BoxDecoration(
-          color: const Color(0xFF0F766E),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFF0F766E),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: borderRadius,
         );
-        child = const Icon(Icons.badge_outlined, color: Colors.white, size: 21);
+        child = Icon(
+          Icons.badge_outlined,
+          color: DunesColors.resolve(context, Colors.white),
+          size: 21,
+        );
       case ChatInboxRowKind.weeklySummary:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFC4A574), Color(0xFF8B6A3F)],
+            colors: [
+              DunesColors.resolve(context, Color(0xFFC4A574)),
+              DunesColors.resolve(context, Color(0xFF8B6A3F)),
+            ],
           ),
         );
-        child = const Icon(
+        child = Icon(
           Icons.auto_stories_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 20,
         );
       case ChatInboxRowKind.reconciliationAssistant:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF5B6FC4), Color(0xFF7652B8)],
+            colors: [
+              DunesColors.resolve(context, Color(0xFF5B6FC4)),
+              DunesColors.resolve(context, Color(0xFF7652B8)),
+            ],
           ),
         );
-        child = const Icon(
+        child = Icon(
           Icons.sync_alt_rounded,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 20,
         );
       case ChatInboxRowKind.administrativeNotice:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF3D7A8C), Color(0xFF5DA7A2)],
+            colors: [
+              DunesColors.resolve(context, Color(0xFF3D7A8C)),
+              DunesColors.resolve(context, Color(0xFF5DA7A2)),
+            ],
           ),
         );
-        child = const Icon(
+        child = Icon(
           Icons.campaign_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 20,
         );
       case ChatInboxRowKind.duneAnnouncement:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
-          gradient: const LinearGradient(
-            colors: [Color(0xFFC2AEE7), Color(0xFF9C82CE)],
+          gradient: LinearGradient(
+            colors: [
+              DunesColors.resolve(context, Color(0xFFC2AEE7)),
+              DunesColors.resolve(context, Color(0xFF9C82CE)),
+            ],
           ),
         );
-        child = const Icon(
+        child = Icon(
           Icons.campaign_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 20,
         );
       case ChatInboxRowKind.selfMemo:
         decoration = BoxDecoration(
-          color: const Color(0xFF7B5CD8),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFF7B5CD8),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: borderRadius,
         );
-        child = const Icon(
+        child = Icon(
           Icons.folder_copy_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 21,
         );
       case ChatInboxRowKind.robot:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
-          gradient: const LinearGradient(
-            colors: [Color(0xFFB8A4E8), Color(0xFF7B5CD8)],
+          gradient: LinearGradient(
+            colors: [
+              DunesColors.resolve(context, Color(0xFFB8A4E8)),
+              DunesColors.resolve(context, Color(0xFF7B5CD8)),
+            ],
           ),
         );
-        child = const Icon(
+        child = Icon(
           Icons.smart_toy_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 20,
         );
       case ChatInboxRowKind.aiSummary:
@@ -1773,25 +2044,31 @@ class _Avatar extends StatelessWidget {
       case ChatInboxRowKind.systemNotification:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
-          gradient: const LinearGradient(
-            colors: [Color(0xFFC2AEE7), Color(0xFF9C82CE)],
+          gradient: LinearGradient(
+            colors: [
+              DunesColors.resolve(context, Color(0xFFC2AEE7)),
+              DunesColors.resolve(context, Color(0xFF9C82CE)),
+            ],
           ),
         );
-        child = const Icon(
+        child = Icon(
           Icons.notifications_none_rounded,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 17,
         );
       case ChatInboxRowKind.broadcast:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
-          gradient: const LinearGradient(
-            colors: [Color(0xFFD9C9F0), Color(0xFFB89FE2)],
+          gradient: LinearGradient(
+            colors: [
+              DunesColors.resolve(context, Color(0xFFD9C9F0)),
+              DunesColors.resolve(context, Color(0xFFB89FE2)),
+            ],
           ),
         );
-        child = const Icon(
+        child = Icon(
           Icons.campaign_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 17,
         );
       case ChatInboxRowKind.group:
@@ -1806,25 +2083,31 @@ class _Avatar extends StatelessWidget {
         if (kind == ChatInboxRowKind.workgroupApproval) {
           decoration = BoxDecoration(
             borderRadius: borderRadius,
-            gradient: const LinearGradient(
-              colors: [Color(0xFF9079C2), Color(0xFF6A4FA0)],
+            gradient: LinearGradient(
+              colors: [
+                DunesColors.resolve(context, Color(0xFF9079C2)),
+                DunesColors.resolve(context, Color(0xFF6A4FA0)),
+              ],
             ),
           );
-          child = const Icon(
+          child = Icon(
             Icons.assignment_outlined,
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
             size: 17,
           );
         } else {
           decoration = BoxDecoration(
             borderRadius: borderRadius,
-            gradient: const LinearGradient(
-              colors: [Color(0xFFCABCEB), Color(0xFFA88CD8)],
+            gradient: LinearGradient(
+              colors: [
+                DunesColors.resolve(context, Color(0xFFCABCEB)),
+                DunesColors.resolve(context, Color(0xFFA88CD8)),
+              ],
             ),
           );
-          child = const Icon(
+          child = Icon(
             Icons.groups_outlined,
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
             size: 17,
           );
         }
@@ -1854,7 +2137,7 @@ class _Avatar extends StatelessWidget {
         child = Text(
           (initial == null || initial!.isEmpty) ? '?' : initial!,
           style: TextStyle(
-            color: style.textColor,
+            color: DunesColors.resolveNullable(context, style.textColor),
             fontSize: 15,
             fontWeight: FontWeight.w500,
           ),
@@ -1879,9 +2162,20 @@ class _Avatar extends StatelessWidget {
               width: 11,
               height: 11,
               decoration: BoxDecoration(
-                color: DunesColors.green,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.green,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(99),
-                border: Border.all(color: DunesColors.bgApp, width: 2),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.bgApp,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 2,
+                ),
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x22000000),
@@ -1913,7 +2207,11 @@ class _IconBtn extends StatelessWidget {
         child: SizedBox(
           width: 36,
           height: 36,
-          child: Icon(icon, size: 20, color: DunesColors.text2),
+          child: Icon(
+            icon,
+            size: 20,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
         ),
       ),
     );
@@ -1949,7 +2247,14 @@ class _NovaEyesButton extends StatelessWidget {
                       height: 34,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
+                        border: Border.all(
+                          color: DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.border,
+                          ),
+                          width: 1.5,
+                        ),
                         boxShadow: const [
                           BoxShadow(
                             color: Color(0x222E75FF),
@@ -1972,8 +2277,12 @@ class _NovaEyesButton extends StatelessWidget {
                       width: 16,
                       height: 16,
                       alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFF5B61),
+                      decoration: BoxDecoration(
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFFFF5B61),
+                          role: DunesColorRole.surface,
+                        ),
                         shape: BoxShape.circle,
                       ),
                       child: Text(
@@ -1981,7 +2290,8 @@ class _NovaEyesButton extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
+                          context: context,
                         ),
                       ),
                     ),
@@ -2045,7 +2355,11 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
     return SizedBox(
       width: _actionWidth,
       child: Material(
-        color: color,
+        color: DunesColors.resolveNullable(
+          context,
+          color,
+          role: DunesColorRole.surface,
+        ),
         child: InkWell(
           onTap: () {
             _close();
@@ -2057,7 +2371,8 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
               style: DunesTypography.sans(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.white,
+                color: DunesColors.resolve(context, Colors.white),
+                context: context,
               ),
             ),
           ),
@@ -2082,13 +2397,16 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
                     if (widget.onMarkUnread != null)
                       _swipeAction(
                         label: widget.markUnreadLabel,
-                        color: const Color(0xFF3478F6),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF3478F6),
+                        ),
                         onTap: widget.onMarkUnread!,
                       ),
                     if (widget.onDelete != null)
                       _swipeAction(
                         label: '删除',
-                        color: DunesColors.coral,
+                        color: DunesColors.resolve(context, DunesColors.coral),
                         onTap: widget.onDelete!,
                       ),
                   ],
@@ -2102,7 +2420,10 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
               : (details) {
                   if (details.delta.dx.abs() < details.delta.dy.abs()) return;
                   setState(() {
-                    _offset = (_offset + details.delta.dx).clamp(-_openWidth, 0);
+                    _offset = (_offset + details.delta.dx).clamp(
+                      -_openWidth,
+                      0,
+                    );
                   });
                 },
           onHorizontalDragEnd: _actionCount == 0
@@ -2137,15 +2458,26 @@ class WorkgroupTag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: DunesColors.accent.withValues(alpha: 0.5)),
-        color: DunesColors.accentSoft,
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.accent,
+            role: DunesColorRole.border,
+          ).withValues(alpha: 0.5),
+        ),
+        color: DunesColors.resolve(
+          context,
+          DunesColors.accentSoft,
+          role: DunesColorRole.surface,
+        ),
       ),
       child: Text(
         '工作群',
         style: DunesTypography.sans(
           fontSize: fontSize,
           fontWeight: FontWeight.w600,
-          color: DunesColors.accent,
+          color: DunesColors.resolve(context, DunesColors.accent),
+          context: context,
         ),
       ),
     );

@@ -3,6 +3,7 @@ import '../auth/auth_session.dart';
 import '../lighthouse/lighthouse_shared_card_data.dart';
 import '../lighthouse/lighthouse_message_card_layout.dart';
 import '../lighthouse/native_lighthouse_page.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// A real business card: identical lighthouse builders, gestures and charts.
 class ChatLighthouseCard extends StatelessWidget {
@@ -23,15 +24,21 @@ class ChatLighthouseCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.bar_chart_rounded,
                 size: 13,
-                color: Color(0xFF7565C7),
+                color: DunesColors.resolveNullable(context, Color(0xFF7565C7)),
               ),
               const SizedBox(width: 5),
-              const Text(
+              Text(
                 '灯塔',
-                style: TextStyle(fontSize: 10, color: Color(0xFF6750A4)),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF6750A4),
+                  ),
+                ),
               ),
               const Spacer(),
               Flexible(
@@ -39,9 +46,12 @@ class ChatLighthouseCard extends StatelessWidget {
                   data.range,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
-                    color: Color(0xFF696474),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF696474),
+                    ),
                   ),
                 ),
               ),
@@ -67,19 +77,29 @@ class ChatLighthouseLegacyImageCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(8),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: const Color(0xFFE6E0F1)),
+      border: Border.all(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFE6E0F1),
+          role: DunesColorRole.border,
+        ),
+      ),
     ),
     child: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '灯塔 · 卡片快照',
           style: TextStyle(
             fontSize: 10,
-            color: Color(0xFF6750A4),
+            color: DunesColors.resolveNullable(context, Color(0xFF6750A4)),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -95,7 +115,10 @@ class ChatLighthouseLegacyImageCard extends StatelessWidget {
         ),
         Text(
           metadata['range']?.toString() ?? '',
-          style: const TextStyle(fontSize: 10, color: Color(0xFF696474)),
+          style: TextStyle(
+            fontSize: 10,
+            color: DunesColors.resolveNullable(context, Color(0xFF696474)),
+          ),
         ),
         const SizedBox(height: 8),
         child,

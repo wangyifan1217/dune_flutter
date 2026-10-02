@@ -32,9 +32,11 @@ class NovaPrdPendingJob {
   final int userMsgId;
   final int assistantMsgId;
   final String messageText;
+
   /// 知识库中的会议纪要文件名（NOVA 通过 RAG 引用）。
   final String kbFileName;
   final String kbTitle;
+
   /// NOVA 生成后落盘的 PRD 文件名。
   final String prdFileName;
   final String meetingTitle;
@@ -42,6 +44,7 @@ class NovaPrdPendingJob {
   final String minutesMarkdown;
   @Deprecated('Legacy PRD flow: inline markdown attachment')
   final String minutesFileName;
+
   /// 已对 NOVA/`/ai/assistant/messages` 发起请求；再进会话不得重发。
   final bool sendStarted;
 
@@ -89,18 +92,18 @@ class NovaPrdPendingJob {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'at': at,
-        'meetingId': meetingId,
-        'prdModel': prdModel,
-        'userMsgId': userMsgId,
-        'assistantMsgId': assistantMsgId,
-        'messageText': messageText,
-        'kbFileName': kbFileName,
-        'kbTitle': kbTitle,
-        'prdFileName': prdFileName,
-        'meetingTitle': meetingTitle,
-        'sendStarted': sendStarted,
-      };
+    'at': at,
+    'meetingId': meetingId,
+    'prdModel': prdModel,
+    'userMsgId': userMsgId,
+    'assistantMsgId': assistantMsgId,
+    'messageText': messageText,
+    'kbFileName': kbFileName,
+    'kbTitle': kbTitle,
+    'prdFileName': prdFileName,
+    'meetingTitle': meetingTitle,
+    'sendStarted': sendStarted,
+  };
 }
 
 Future<void> persistNovaPrdPendingJob({
@@ -176,8 +179,12 @@ Future<T?> _showNovaPrdBottomSheet<T>({
       return SafeArea(
         top: false,
         child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              ctx,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
@@ -188,7 +195,11 @@ Future<T?> _showNovaPrdBottomSheet<T>({
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: DunesColors.borderSoft,
+                  color: DunesColors.resolve(
+                    ctx,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(99),
                 ),
               ),
@@ -201,7 +212,8 @@ Future<T?> _showNovaPrdBottomSheet<T>({
                     style: DunesTypography.sans(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(ctx, DunesColors.text),
+                      context: ctx,
                     ),
                   ),
                 ),
@@ -236,13 +248,17 @@ Future<NativeMeetingSummary?> showMeetingMinutesPickerDialog(
                   height: 52,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: DunesColors.bgApp,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.bgApp,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(
                     Icons.cloud_off_outlined,
                     size: 26,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -251,7 +267,8 @@ Future<NativeMeetingSummary?> showMeetingMinutesPickerDialog(
                   style: DunesTypography.sans(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -260,8 +277,9 @@ Future<NativeMeetingSummary?> showMeetingMinutesPickerDialog(
                   textAlign: TextAlign.center,
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                     height: 1.5,
+                    context: context,
                   ),
                 ),
               ],
@@ -299,13 +317,20 @@ Future<NativeMeetingSummary?> showMeetingMinutesPickerDialog(
                             height: 40,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: DunesColors.bgApp,
+                              color: DunesColors.resolve(
+                                ctx,
+                                DunesColors.bgApp,
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
                               Icons.description_outlined,
                               size: 18,
-                              color: DunesColors.accent,
+                              color: DunesColors.resolve(
+                                ctx,
+                                DunesColors.accent,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -320,8 +345,12 @@ Future<NativeMeetingSummary?> showMeetingMinutesPickerDialog(
                                   style: DunesTypography.sans(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: DunesColors.text,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      DunesColors.text,
+                                    ),
                                     height: 1.35,
+                                    context: ctx,
                                   ),
                                 ),
                                 const SizedBox(height: 3),
@@ -329,7 +358,11 @@ Future<NativeMeetingSummary?> showMeetingMinutesPickerDialog(
                                   row.displayTime,
                                   style: DunesTypography.sans(
                                     fontSize: 11,
-                                    color: DunesColors.text3,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      DunesColors.text3,
+                                    ),
+                                    context: ctx,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
@@ -337,7 +370,11 @@ Future<NativeMeetingSummary?> showMeetingMinutesPickerDialog(
                                   '知识库已索引',
                                   style: DunesTypography.sans(
                                     fontSize: 10,
-                                    color: DunesColors.accentDeep,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      DunesColors.accentDeep,
+                                    ),
+                                    context: ctx,
                                   ),
                                 ),
                               ],
@@ -346,7 +383,10 @@ Future<NativeMeetingSummary?> showMeetingMinutesPickerDialog(
                           Icon(
                             Icons.chevron_right,
                             size: 20,
-                            color: DunesColors.text3.withValues(alpha: 0.7),
+                            color: DunesColors.resolve(
+                              ctx,
+                              DunesColors.text3,
+                            ).withValues(alpha: 0.7),
                           ),
                         ],
                       ),
@@ -363,7 +403,7 @@ Future<NativeMeetingSummary?> showMeetingMinutesPickerDialog(
         child: TextButton(
           onPressed: () => Navigator.pop(context),
           style: TextButton.styleFrom(
-            foregroundColor: DunesColors.text2,
+            foregroundColor: DunesColors.resolve(context, DunesColors.text2),
             padding: const EdgeInsets.symmetric(vertical: 12),
           ),
           child: const Text('取消'),
@@ -395,13 +435,17 @@ Future<NativeKbDocument?> showKbDocumentPickerDialog(
                   height: 52,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: DunesColors.bgApp,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.bgApp,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(
                     Icons.cloud_off_outlined,
                     size: 26,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -410,7 +454,8 @@ Future<NativeKbDocument?> showKbDocumentPickerDialog(
                   style: DunesTypography.sans(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -419,8 +464,9 @@ Future<NativeKbDocument?> showKbDocumentPickerDialog(
                   textAlign: TextAlign.center,
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                     height: 1.5,
+                    context: context,
                   ),
                 ),
               ],
@@ -442,7 +488,8 @@ Future<NativeKbDocument?> showKbDocumentPickerDialog(
                     : (row.fileName.trim().isNotEmpty
                           ? row.fileName.trim()
                           : '未命名文档');
-                final subtitle = row.fileName.trim().isNotEmpty &&
+                final subtitle =
+                    row.fileName.trim().isNotEmpty &&
                         row.fileName.trim() != title
                     ? row.fileName.trim()
                     : row.statusLabel;
@@ -464,13 +511,20 @@ Future<NativeKbDocument?> showKbDocumentPickerDialog(
                             height: 40,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: DunesColors.bgApp,
+                              color: DunesColors.resolve(
+                                ctx,
+                                DunesColors.bgApp,
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
                               Icons.menu_book_outlined,
                               size: 18,
-                              color: DunesColors.accent,
+                              color: DunesColors.resolve(
+                                ctx,
+                                DunesColors.accent,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -485,7 +539,11 @@ Future<NativeKbDocument?> showKbDocumentPickerDialog(
                                   style: DunesTypography.sans(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: DunesColors.text,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      DunesColors.text,
+                                    ),
+                                    context: ctx,
                                   ),
                                 ),
                                 if (subtitle.isNotEmpty) ...[
@@ -496,7 +554,11 @@ Future<NativeKbDocument?> showKbDocumentPickerDialog(
                                     overflow: TextOverflow.ellipsis,
                                     style: DunesTypography.sans(
                                       fontSize: 12,
-                                      color: DunesColors.text3,
+                                      color: DunesColors.resolve(
+                                        ctx,
+                                        DunesColors.text3,
+                                      ),
+                                      context: ctx,
                                     ),
                                   ),
                                 ],
@@ -505,7 +567,7 @@ Future<NativeKbDocument?> showKbDocumentPickerDialog(
                           ),
                           Icon(
                             Icons.chevron_right_rounded,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(ctx, DunesColors.text3),
                           ),
                         ],
                       ),
@@ -536,9 +598,19 @@ Future<bool> showMeetingPrdConfirmDialog(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: DunesColors.bgApp,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.bgApp,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: DunesColors.borderSoft),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -548,21 +620,30 @@ Future<bool> showMeetingPrdConfirmDialog(
                   style: DunesTypography.sans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                     height: 1.4,
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    Icon(Icons.memory, size: 14, color: DunesColors.accent),
+                    Icon(
+                      Icons.memory,
+                      size: 14,
+                      color: DunesColors.resolve(context, DunesColors.accent),
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       modelName,
                       style: DunesTypography.mono(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.accentDeep,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.accentDeep,
+                        ),
+                        context: context,
                       ),
                     ),
                   ],
@@ -575,8 +656,9 @@ Future<bool> showMeetingPrdConfirmDialog(
             '将基于已上传且完成索引的知识库文档，由 NOVA 生成可下载的 PRD 文件。',
             style: DunesTypography.sans(
               fontSize: 13,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
               height: 1.55,
+              context: context,
             ),
           ),
         ],
@@ -590,8 +672,17 @@ Future<bool> showMeetingPrdConfirmDialog(
             child: OutlinedButton(
               onPressed: () => Navigator.pop(context, false),
               style: OutlinedButton.styleFrom(
-                foregroundColor: DunesColors.text2,
-                side: const BorderSide(color: DunesColors.borderSoft),
+                foregroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.text2,
+                ),
+                side: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -604,8 +695,11 @@ Future<bool> showMeetingPrdConfirmDialog(
           Expanded(
             child: DecoratedBox(
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF553B96), Color(0xFF7B5CB8)],
+                gradient: LinearGradient(
+                  colors: [
+                    DunesColors.resolve(context, Color(0xFF553B96)),
+                    DunesColors.resolve(context, Color(0xFF7B5CB8)),
+                  ],
                 ),
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -622,7 +716,8 @@ Future<bool> showMeetingPrdConfirmDialog(
                         style: DunesTypography.sans(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
+                          context: context,
                         ),
                       ),
                     ),

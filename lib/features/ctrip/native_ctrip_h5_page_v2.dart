@@ -123,7 +123,7 @@ class _NativeCtripH5PageState extends State<NativeCtripH5Page> {
           tooltip: '刷新携程商旅',
           onPressed: _loading ? null : () => unawaited(_openCtrip()),
           icon: const Icon(Icons.refresh_rounded, size: 20),
-          color: DunesColors.text2,
+          color: DunesColors.resolve(context, DunesColors.text2),
         ),
       ),
     );
@@ -284,7 +284,11 @@ class _NativeCtripH5PageState extends State<NativeCtripH5Page> {
     }
     final topInset = MediaQuery.paddingOf(context).top;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(52 + topInset),
         child: _buildAppTopBar(),
@@ -295,13 +299,25 @@ class _NativeCtripH5PageState extends State<NativeCtripH5Page> {
 
   Widget _buildAppTopBar() {
     return Material(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Container(
           height: 52,
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
+            ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
@@ -309,7 +325,10 @@ class _NativeCtripH5PageState extends State<NativeCtripH5Page> {
               TextButton.icon(
                 onPressed: _exitToApp,
                 style: TextButton.styleFrom(
-                  foregroundColor: DunesColors.accentDeep,
+                  foregroundColor: DunesColors.resolve(
+                    context,
+                    DunesColors.accentDeep,
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
                 icon: const Icon(Icons.arrow_back_ios_new, size: 16),
@@ -318,7 +337,8 @@ class _NativeCtripH5PageState extends State<NativeCtripH5Page> {
                   style: DunesTypography.sans(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.accentDeep,
+                    color: DunesColors.resolve(context, DunesColors.accentDeep),
+                    context: context,
                   ),
                 ),
               ),
@@ -329,7 +349,8 @@ class _NativeCtripH5PageState extends State<NativeCtripH5Page> {
                   style: DunesTypography.sans(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
               ),
@@ -337,7 +358,7 @@ class _NativeCtripH5PageState extends State<NativeCtripH5Page> {
                 tooltip: '刷新',
                 onPressed: _loading ? null : () => unawaited(_openCtrip()),
                 icon: const Icon(Icons.refresh_rounded, size: 22),
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             ],
           ),
@@ -416,8 +437,12 @@ class _NativeCtripH5PageState extends State<NativeCtripH5Page> {
           onPermissionRequest: (_, request) => _allowWebResources(request),
         ),
         if (_loading)
-          const ColoredBox(
-            color: Colors.white,
+          ColoredBox(
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
           ),
         if (_error != null && !_pageReady) _buildErrorBody(_error!),
@@ -427,32 +452,40 @@ class _NativeCtripH5PageState extends State<NativeCtripH5Page> {
 
   Widget _buildWebFallback() {
     if (_error != null) return _buildErrorBody(_error!);
-    return const ColoredBox(
-      color: Colors.white,
+    return ColoredBox(
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
     );
   }
 
   Widget _buildErrorBody(String message) {
     return ColoredBox(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.info_outline_rounded,
-                color: Color(0xFFE38B24),
+                color: DunesColors.resolveNullable(context, Color(0xFFE38B24)),
                 size: 36,
               ),
               const SizedBox(height: 12),
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: DunesColors.text2,
+                style: TextStyle(
+                  color: DunesColors.resolve(context, DunesColors.text2),
                   height: 1.45,
                   fontSize: 14,
                 ),

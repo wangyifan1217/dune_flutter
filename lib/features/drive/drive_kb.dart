@@ -15,9 +15,7 @@ import 'native_drive_service.dart';
 
 bool driveItemSupportsKbUpload(DriveItem item) {
   if (item.isFolder) return false;
-  return chatFileSupportsKbUpload(item.name, {
-    'mimeType': item.mimeType,
-  });
+  return chatFileSupportsKbUpload(item.name, {'mimeType': item.mimeType});
 }
 
 /// 将微盘文件存入当前用户知识库（沿用 IM 上传逻辑 + 二次确认 + 服务端标记）。
@@ -47,7 +45,7 @@ Future<bool> saveDriveItemToKb({
             : (item.kbSaved
                   ? '「$title」知识库中有旧版本。是否将当前版本存入你的知识库？\n\n上传后可检索引用。'
                   : '将把「$title」存入你的知识库，上传后可检索引用。\n\n是否继续？'),
-        style: DunesTypography.sans(fontSize: 14, height: 1.55),
+        style: DunesTypography.sans(fontSize: 14, height: 1.55, context: ctx),
       ),
       actions: [
         TextButton(
@@ -86,11 +84,7 @@ Future<bool> saveDriveItemToKb({
     }
     final bytes = Uint8List.fromList(await response.stream.toBytes());
     if (bytes.isEmpty) throw Exception('文件内容为空');
-    await kb.uploadDocument(
-      bytes: bytes,
-      fileName: title,
-      title: title,
-    );
+    await kb.uploadDocument(bytes: bytes, fileName: title, title: title);
     await service.markKbSaved(item.id, version: item.version);
     KbDocumentCoordinator.instance.notifyChanged();
     if (!context.mounted) return true;

@@ -49,7 +49,11 @@ Future<TaskItem?> openTaskQuickCreate(
   return showModalBottomSheet<TaskItem>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: DunesColors.bgApp,
+    backgroundColor: DunesColors.resolve(
+      context,
+      DunesColors.bgApp,
+      role: DunesColorRole.surface,
+    ),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
     ),
@@ -211,7 +215,11 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: DunesColors.border,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.border,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -238,7 +246,10 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
               widget.asGroup
                   ? '只需名称和周期。负责人就是创建人，分类默认「业务 · 销售」，保存后可以再完善。'
                   : '给自己记一条要做的子目标。',
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -247,7 +258,11 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
               decoration: InputDecoration(
                 hintText: widget.asGroup ? '例如：产品周会跟进' : '例如：周五前给客户闭环方案',
                 filled: true,
-                fillColor: const Color(0xFFF5F6F8),
+                fillColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF5F6F8),
+                  role: DunesColorRole.surface,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide.none,
@@ -261,7 +276,11 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
               decoration: InputDecoration(
                 hintText: widget.asGroup ? '这组事要达成什么（可选）' : '补充背景或做法（可选）',
                 filled: true,
-                fillColor: const Color(0xFFF5F6F8),
+                fillColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF5F6F8),
+                  role: DunesColorRole.surface,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide.none,
@@ -271,7 +290,7 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
             const SizedBox(height: 10),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text.rich(
+              title: Text.rich(
                 TextSpan(
                   text: '开始时间',
                   style: TextStyle(fontSize: 13),
@@ -280,7 +299,10 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
                       text: ' *',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFFE35D6A),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFFE35D6A),
+                        ),
                       ),
                     ),
                   ],
@@ -290,15 +312,15 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
                 _dateValue(_startAt),
                 style: TextStyle(
                   color: _startAt == null
-                      ? DunesColors.text3
-                      : DunesColors.text2,
+                      ? DunesColors.resolve(context, DunesColors.text3)
+                      : DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               onTap: () => _pickDate(isStart: true),
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text.rich(
+              title: Text.rich(
                 TextSpan(
                   text: '结束时间',
                   style: TextStyle(fontSize: 13),
@@ -307,7 +329,10 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
                       text: ' *',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFFE35D6A),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFFE35D6A),
+                        ),
                       ),
                     ),
                   ],
@@ -316,7 +341,9 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
               trailing: Text(
                 _dateValue(_dueAt),
                 style: TextStyle(
-                  color: _dueAt == null ? DunesColors.text3 : DunesColors.text2,
+                  color: _dueAt == null
+                      ? DunesColors.resolve(context, DunesColors.text3)
+                      : DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               onTap: () => _pickDate(isStart: false),
@@ -326,9 +353,12 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   _dateError!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFFE35D6A),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFFE35D6A),
+                    ),
                   ),
                 ),
               ),
@@ -336,12 +366,12 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  Text(
                     '属于哪一组（可选）',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -361,12 +391,12 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
               style: FilledButton.styleFrom(backgroundColor: kTaskPurple),
               onPressed: _saving ? null : _submit,
               child: _saving
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                       ),
                     )
                   : const Text('创建'),

@@ -106,8 +106,10 @@ Future<void> showChatFilePreview({
       builder: (ctx) {
         final size = MediaQuery.sizeOf(ctx);
         return Dialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 48, vertical: 36),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 48,
+            vertical: 36,
+          ),
           backgroundColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -117,7 +119,11 @@ Future<void> showChatFilePreview({
               minHeight: 420,
             ),
             child: Material(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
               clipBehavior: Clip.antiAlias,
               child: SelectionArea(child: page),
@@ -127,9 +133,9 @@ Future<void> showChatFilePreview({
       },
     );
   }
-  return Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(builder: (_) => page),
-  );
+  return Navigator.of(
+    context,
+  ).push<void>(MaterialPageRoute<void>(builder: (_) => page));
 }
 
 /// 微信风格：应用内无法预览的文件页（下载 / 用其他应用打开）。
@@ -152,8 +158,10 @@ class ChatFilePreviewPage extends StatefulWidget {
   final int? conversationId;
   final String? initialLocalPath;
   final VoidCallback? onDownloaded;
+
   /// 非空时提供「存入我的知识库」（IM 普通附件 / 知识库转发文档）。
   final AuthSession? saveToKbSession;
+
   /// 非空时提供「存入微盘」。
   final AuthSession? saveToDriveSession;
 
@@ -242,7 +250,8 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
             setState(() => _progress = p.clamp(0.0, 1.0));
           },
         );
-        path = await file_dl.saveBytesAsCachedFile(
+        path =
+            await file_dl.saveBytesAsCachedFile(
               bytes,
               _cacheKey,
               widget.fileName,
@@ -252,7 +261,8 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
       } else {
         final url = ConversationService.mediaDirectUrl(widget.payload);
         if (url.isEmpty) throw Exception('附件地址为空');
-        path = await file_dl.openUrlAsFile(
+        path =
+            await file_dl.openUrlAsFile(
               url,
               widget.fileName,
               onProgress: (p) {
@@ -284,9 +294,9 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
   Future<void> _downloadOnly() async {
     final path = await _ensureDownloaded(force: _localPath != null);
     if (!mounted || path == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已保存 ${widget.fileName}')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('已保存 ${widget.fileName}')));
   }
 
   Future<void> _openWithOtherApp() async {
@@ -297,9 +307,7 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e, fallback: '无法打开文件')),
-        ),
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '无法打开文件'))),
       );
     }
   }
@@ -346,8 +354,7 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
       }
       if (bytes.isEmpty) throw Exception('文件内容为空');
       if (!mounted) return;
-      final mimeType =
-          (widget.payload?['mimeType'] ?? '').toString().trim();
+      final mimeType = (widget.payload?['mimeType'] ?? '').toString().trim();
       final ok = await uploadBytesToDriveLocation(
         context: context,
         session: session,
@@ -361,9 +368,7 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试')),
-        ),
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试'))),
       );
     } finally {
       if (mounted) setState(() => _savingToDrive = false);
@@ -388,7 +393,7 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
         title: const Text('存入我的知识库'),
         content: Text(
           '将把「$title」存入你的知识库，上传后可检索引用。\n\n是否继续？',
-          style: DunesTypography.sans(fontSize: 14, height: 1.55),
+          style: DunesTypography.sans(fontSize: 14, height: 1.55, context: ctx),
         ),
         actions: [
           TextButton(
@@ -425,9 +430,9 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
       );
       KbDocumentCoordinator.instance.notifyChanged();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已存入你的知识库，正在后台解析入库')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已存入你的知识库，正在后台解析入库')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -443,19 +448,31 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
   @override
   Widget build(BuildContext context) {
     final downloaded = _localPath != null && _localPath!.isNotEmpty;
-    final canSaveToKb = widget.saveToKbSession != null &&
+    final canSaveToKb =
+        widget.saveToKbSession != null &&
         chatFileSupportsKbUpload(widget.fileName, widget.payload);
     final canSaveToDrive = widget.saveToDriveSession != null;
     final actionBusy = _busy || _savingToKb || _savingToDrive;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
           onPressed: () => Navigator.of(context).maybePop(),
-          icon: const Icon(Icons.chevron_left_rounded, color: Color(0xFF191919)),
+          icon: Icon(
+            Icons.chevron_left_rounded,
+            color: DunesColors.resolveNullable(context, Color(0xFF191919)),
+          ),
         ),
         actions: [
           if (canSaveToKb)
@@ -468,14 +485,20 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(
+                  : Icon(
                       Icons.cloud_upload_outlined,
-                      color: Color(0xFF191919),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF191919),
+                      ),
                     ),
             ),
           PopupMenuButton<String>(
             tooltip: '更多',
-            icon: const Icon(Icons.more_horiz_rounded, color: Color(0xFF191919)),
+            icon: Icon(
+              Icons.more_horiz_rounded,
+              color: DunesColors.resolveNullable(context, Color(0xFF191919)),
+            ),
             onSelected: (value) {
               if (value == 'download') unawaited(_downloadOnly());
               if (value == 'saveToKb') unawaited(_saveToKb());
@@ -486,9 +509,7 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
                 value: 'download',
                 enabled: !actionBusy && (_canRedownload || !downloaded),
                 child: Text(
-                  downloaded
-                      ? (_canRedownload ? '重新下载' : '已下载')
-                      : '下载',
+                  downloaded ? (_canRedownload ? '重新下载' : '已下载') : '下载',
                 ),
               ),
               if (canSaveToDrive)
@@ -517,15 +538,28 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
                 width: 72,
                 height: 88,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF2F2F2),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF2F2F2),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE5E5E5)),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFE5E5E5),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
                 alignment: Alignment.center,
-                child: const Icon(
+                child: Icon(
                   Icons.question_mark_rounded,
                   size: 36,
-                  color: Color(0xFFB0B0B0),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFB0B0B0),
+                  ),
                 ),
               ),
               const SizedBox(height: 22),
@@ -535,8 +569,9 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
                 style: DunesTypography.sans(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFF191919),
+                  color: DunesColors.resolve(context, const Color(0xFF191919)),
                   height: 1.35,
+                  context: context,
                 ),
               ),
               const SizedBox(height: 12),
@@ -545,8 +580,9 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 14,
-                  color: const Color(0xFF888888),
+                  color: DunesColors.resolve(context, const Color(0xFF888888)),
                   height: 1.45,
+                  context: context,
                 ),
               ),
               if (_status != null) ...[
@@ -558,7 +594,11 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
                   textAlign: TextAlign.center,
                   style: DunesTypography.sans(
                     fontSize: 12.5,
-                    color: const Color(0xFFAAAAAA),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFAAAAAA),
+                    ),
+                    context: context,
                   ),
                 ),
               ],
@@ -570,8 +610,12 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
                   onPressed: _busy ? null : _openWithOtherApp,
                   style: FilledButton.styleFrom(
                     backgroundColor: _wechatGreen,
-                    disabledBackgroundColor: _wechatGreen.withValues(alpha: 0.45),
-                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: DunesColors.resolve(
+                      context,
+                      _wechatGreen,
+                      role: DunesColorRole.surface,
+                    ).withValues(alpha: 0.45),
+                    foregroundColor: DunesColors.resolve(context, Colors.white),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -581,7 +625,8 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
                     style: DunesTypography.sans(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
+                      context: context,
                     ),
                   ),
                 ),

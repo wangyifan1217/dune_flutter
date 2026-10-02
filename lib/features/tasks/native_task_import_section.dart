@@ -64,7 +64,17 @@ class _KindChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? kTaskPurple : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              kTaskPurple,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -74,7 +84,17 @@ class _KindChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: selected ? kTaskPurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      kTaskPurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -82,7 +102,9 @@ class _KindChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: selected ? Colors.white : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, Colors.white)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -123,7 +145,17 @@ class TaskImportDropZone extends StatelessWidget {
               ? '点击选择，或拖拽 Excel 到此处'
               : '点击选择 Excel 文件');
     return Material(
-      color: dragging ? kTaskPurple.withValues(alpha: 0.08) : Colors.white,
+      color: dragging
+          ? DunesColors.resolve(
+              context,
+              kTaskPurple,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.08)
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -135,8 +167,16 @@ class TaskImportDropZone extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: dragging
-                  ? kTaskPurple.withValues(alpha: 0.45)
-                  : const Color(0xFFE8EAED),
+                  ? DunesColors.resolve(
+                      context,
+                      kTaskPurple,
+                      role: DunesColorRole.border,
+                    ).withValues(alpha: 0.45)
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Row(
@@ -145,7 +185,9 @@ class TaskImportDropZone extends StatelessWidget {
                 selected
                     ? Icons.table_chart_outlined
                     : Icons.upload_file_outlined,
-                color: dragging || selected ? kTaskPurple : DunesColors.text3,
+                color: dragging || selected
+                    ? DunesColors.resolve(context, kTaskPurple)
+                    : DunesColors.resolve(context, DunesColors.text3),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -159,13 +201,18 @@ class TaskImportDropZone extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: dragging ? kTaskPurple : DunesColors.text,
+                        color: dragging
+                            ? DunesColors.resolve(context, kTaskPurple)
+                            : DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                     const SizedBox(height: 3),
-                    const Text(
+                    Text(
                       '支持 .xlsx / .csv · 导入前会预览校验，不会直接修改现有任务',
-                      style: TextStyle(fontSize: 11, color: DunesColors.text3),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
                   ],
                 ),
@@ -195,7 +242,7 @@ class TaskImportPreviewStats extends StatelessWidget {
           child: _StatCard(
             label: '可导入',
             value: '${preview.valid}',
-            color: const Color(0xFF15803D),
+            color: DunesColors.resolve(context, const Color(0xFF15803D)),
           ),
         ),
         const SizedBox(width: 8),
@@ -203,7 +250,9 @@ class TaskImportPreviewStats extends StatelessWidget {
           child: _StatCard(
             label: '错误',
             value: '${preview.invalid}',
-            color: preview.invalid > 0 ? const Color(0xFFBE123C) : null,
+            color: preview.invalid > 0
+                ? DunesColors.resolve(context, const Color(0xFFBE123C))
+                : null,
           ),
         ),
       ],
@@ -223,9 +272,19 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,13 +294,16 @@ class _StatCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
-              color: color ?? DunesColors.text,
+              color: color ?? DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -265,7 +327,11 @@ class TaskImportEmployeeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = employee;
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -275,7 +341,13 @@ class TaskImportEmployeeCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Row(
             children: [
@@ -290,10 +362,17 @@ class TaskImportEmployeeCard extends StatelessWidget {
                   size: 36,
                 )
               else
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 18,
-                  backgroundColor: Color(0xFFF3EEFA),
-                  child: Icon(Icons.person_outline, color: kTaskPurple),
+                  backgroundColor: DunesColors.resolve(
+                    context,
+                    Color(0xFFF3EEFA),
+                    role: DunesColorRole.surface,
+                  ),
+                  child: Icon(
+                    Icons.person_outline,
+                    color: DunesColors.resolveNullable(context, kTaskPurple),
+                  ),
                 ),
               const SizedBox(width: 10),
               Expanded(
@@ -316,9 +395,9 @@ class TaskImportEmployeeCard extends StatelessWidget {
                               if (selected.periodLabel.isNotEmpty)
                                 '试用期 ${selected.periodLabel}',
                             ].join(' · '),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],
@@ -326,8 +405,8 @@ class TaskImportEmployeeCard extends StatelessWidget {
               ),
               Text(
                 selected == null ? '选择' : '更换',
-                style: const TextStyle(
-                  color: kTaskPurple,
+                style: TextStyle(
+                  color: DunesColors.resolveNullable(context, kTaskPurple),
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -425,7 +504,11 @@ class _TaskImportEmployeeDialogState extends State<_TaskImportEmployeeDialog> {
                   icon: const Icon(Icons.arrow_forward, size: 18),
                 ),
                 filled: true,
-                fillColor: const Color(0xFFF5F6F8),
+                fillColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF5F6F8),
+                  role: DunesColorRole.surface,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide.none,
@@ -436,7 +519,11 @@ class _TaskImportEmployeeDialogState extends State<_TaskImportEmployeeDialog> {
             Expanded(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF5F6F8),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF5F6F8),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: _loading
@@ -447,14 +534,24 @@ class _TaskImportEmployeeDialogState extends State<_TaskImportEmployeeDialog> {
                     ? Center(
                         child: Text(
                           _error!,
-                          style: const TextStyle(color: Color(0xFFE35D6A)),
+                          style: TextStyle(
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFFE35D6A),
+                            ),
+                          ),
                         ),
                       )
                     : _items.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           '没有匹配的员工',
-                          style: TextStyle(color: DunesColors.text3),
+                          style: TextStyle(
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                          ),
                         ),
                       )
                     : ListView.builder(

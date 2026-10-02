@@ -36,8 +36,9 @@ class ContactMemberPickerPanel extends StatefulWidget {
 
 class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
   late final ContactService _contacts = ContactService(session: widget.session);
-  late final ConversationService _avatarService =
-      ConversationService(session: widget.session);
+  late final ConversationService _avatarService = ConversationService(
+    session: widget.session,
+  );
   final _search = TextEditingController();
   final _selected = <int>{};
   final _contactById = <int, NativeContact>{};
@@ -45,7 +46,8 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
   List<NativeContact> _rows = const <NativeContact>[];
   List<NativeDepartment> _departments = const <NativeDepartment>[];
 
-  Map<int, NativeContact> get contactById => Map<int, NativeContact>.from(_contactById);
+  Map<int, NativeContact> get contactById =>
+      Map<int, NativeContact>.from(_contactById);
   Set<int> get selectedIds => Set<int>.from(_selected);
 
   bool _isEligible(NativeContact c) {
@@ -193,8 +195,13 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
     final searching = _search.text.trim().isNotEmpty;
     if (searching) {
       if (_rows.isEmpty) {
-        return const Center(
-          child: Text('无匹配联系人', style: TextStyle(color: DunesColors.text3)),
+        return Center(
+          child: Text(
+            '无匹配联系人',
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
+          ),
         );
       }
       return ListView(
@@ -202,18 +209,26 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
         children: [
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
               children: [
                 for (var i = 0; i < _rows.length; i++) ...[
                   if (i > 0)
-                    const Divider(
+                    Divider(
                       height: 1,
                       thickness: 1,
                       indent: 66,
-                      color: Color(0xFFF0F1F3),
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFF0F1F3),
+                        role: DunesColorRole.border,
+                      ),
                     ),
                   ContactRowTile(
                     contact: _rows[i],
@@ -233,8 +248,13 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
       );
     }
     if (_departments.isEmpty) {
-      return const Center(
-        child: Text('暂无可添加的同事', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '暂无可添加的同事',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     return ListView(
@@ -244,7 +264,11 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
           Container(
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0F1F3),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF0F1F3),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
             clipBehavior: Clip.antiAlias,
@@ -270,25 +294,32 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
       children: [
         if (widget.showHeaderActions)
           Container(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
             child: Row(
               children: [
                 TextButton(
                   onPressed: widget.onCancel,
-                  child: const Text(
+                  child: Text(
                     '取消',
-                    style: TextStyle(fontSize: 16, color: DunesColors.text2),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
                   ),
                 ),
                 Expanded(
                   child: Text(
                     widget.title,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                 ),
@@ -300,9 +331,9 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
                   onPressed: () => widget.onConfirm(_selected.toList()),
                   child: Text(
                     _selected.isEmpty ? '完成' : '完成（${_selected.length}）',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
-                      color: _driveAccent,
+                      color: DunesColors.resolveNullable(context, _driveAccent),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -314,7 +345,11 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -346,14 +381,21 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
                                   child: Container(
                                     width: 16,
                                     height: 16,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF9CA3AF),
+                                    decoration: BoxDecoration(
+                                      color: DunesColors.resolveNullable(
+                                        context,
+                                        Color(0xFF9CA3AF),
+                                        role: DunesColorRole.surface,
+                                      ),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.close,
                                       size: 11,
-                                      color: Colors.white,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        Colors.white,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -367,9 +409,12 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
                                 ),
                               ),
                             ),
@@ -389,7 +434,11 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
               hintText: '搜索姓名 / 部门',
               isDense: true,
               filled: true,
-              fillColor: const Color(0xFFEDEEF1),
+              fillColor: DunesColors.resolve(
+                context,
+                const Color(0xFFEDEEF1),
+                role: DunesColorRole.surface,
+              ),
               prefixIcon: const Icon(Icons.search, size: 20),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -424,10 +473,18 @@ class ContactMemberPickerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6F8),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: DunesColors.text,
+        backgroundColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        foregroundColor: DunesColors.resolve(context, DunesColors.text),
         elevation: 0,
         title: Text(
           title,

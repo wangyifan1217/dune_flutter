@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 enum DunesToastKind { normal, error }
 
@@ -29,11 +30,8 @@ void showDunesToast(
 
   late OverlayEntry entry;
   entry = OverlayEntry(
-    builder: (ctx) => _DunesToastOverlay(
-      message: message,
-      kind: kind,
-      alignment: alignment,
-    ),
+    builder: (ctx) =>
+        _DunesToastOverlay(message: message, kind: kind, alignment: alignment),
   );
 
   _activeDunesToast = entry;
@@ -61,7 +59,8 @@ void showDunesCenterToast(
   showDunesToast(
     context,
     message,
-    kind: kind ??
+    kind:
+        kind ??
         (dunesToastLooksLikeError(message)
             ? DunesToastKind.error
             : DunesToastKind.normal),
@@ -180,11 +179,22 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
                   color: Colors.transparent,
                   child: Container(
                     constraints: const BoxConstraints(maxWidth: 320),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: widget.kind == DunesToastKind.error
-                          ? const Color(0xF0B43228)
-                          : const Color(0xE6141414),
+                          ? DunesColors.resolve(
+                              context,
+                              const Color(0xF0B43228),
+                              role: DunesColorRole.surface,
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xE6141414),
+                              role: DunesColorRole.surface,
+                            ),
                       borderRadius: BorderRadius.circular(10),
                       boxShadow: const [
                         BoxShadow(
@@ -197,8 +207,8 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
                     child: Text(
                       widget.message,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: DunesColors.resolve(context, Colors.white),
                         fontSize: 12,
                         height: 1.45,
                         fontWeight: FontWeight.w500,
@@ -235,7 +245,8 @@ class _DunesActionToastOverlay extends StatefulWidget {
   final Duration? autoDismiss;
 
   @override
-  State<_DunesActionToastOverlay> createState() => _DunesActionToastOverlayState();
+  State<_DunesActionToastOverlay> createState() =>
+      _DunesActionToastOverlayState();
 }
 
 class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
@@ -291,7 +302,9 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
   Widget build(BuildContext context) {
     final topInset = MediaQuery.paddingOf(context).top;
     final isError = widget.kind == DunesToastKind.error;
-    final bg = isError ? const Color(0xF0B43228) : const Color(0xF21D2024);
+    final bg = isError
+        ? DunesColors.resolve(context, const Color(0xF0B43228))
+        : DunesColors.resolve(context, const Color(0xF21D2024));
     return Positioned(
       top: topInset + 10,
       left: 16,
@@ -308,7 +321,11 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
               child: Container(
                 padding: const EdgeInsets.fromLTRB(14, 11, 8, 11),
                 decoration: BoxDecoration(
-                  color: bg,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    bg,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: const [
                     BoxShadow(
@@ -320,13 +337,17 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
                 ),
                 child: Row(
                   children: [
-                    Icon(widget.icon, color: Colors.white, size: 18),
+                    Icon(
+                      widget.icon,
+                      color: DunesColors.resolve(context, Colors.white),
+                      size: 18,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         widget.message,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: DunesColors.resolve(context, Colors.white),
                           fontSize: 13,
                           height: 1.4,
                           fontWeight: FontWeight.w500,
@@ -335,15 +356,22 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.16),
+                        color: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ).withOpacity(0.16),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         widget.actionLabel,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: DunesColors.resolve(context, Colors.white),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -356,7 +384,13 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
                       constraints: const BoxConstraints(),
                       iconSize: 18,
                       splashRadius: 18,
-                      icon: const Icon(Icons.close_rounded, color: Color(0xCCFFFFFF)),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xCCFFFFFF),
+                        ),
+                      ),
                     ),
                   ],
                 ),

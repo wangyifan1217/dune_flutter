@@ -199,7 +199,7 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
           data: base.copyWith(
             colorScheme: base.colorScheme.copyWith(
               primary: _themePurple,
-              onPrimary: Colors.white,
+              onPrimary: DunesColors.resolve(ctx, Colors.white),
             ),
           ),
           child: child!,
@@ -273,8 +273,7 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
         _page = nextPage;
         _total = result.total;
         _hasMore =
-            result.items.length >= _pageSize &&
-            _items.length < result.total;
+            result.items.length >= _pageSize && _items.length < result.total;
       });
     } catch (e) {
       if (!mounted) return;
@@ -558,14 +557,22 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
     final hint = _uploading
         ? '处理中…'
         : (_supportsDesktopDrop || isDesktopCommOnly
-            ? '点击选择，或拖拽携程 Excel 到此处'
-            : '点击选择携程 Excel');
+              ? '点击选择，或拖拽携程 Excel 到此处'
+              : '点击选择携程 Excel');
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Material(
         color: _fileDragging
-            ? _themePurple.withValues(alpha: 0.08)
-            : Colors.white,
+            ? DunesColors.resolve(
+                context,
+                _themePurple,
+                role: DunesColorRole.surface,
+              ).withValues(alpha: 0.08)
+            : DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
@@ -577,15 +584,25 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: _fileDragging
-                    ? _themePurple.withValues(alpha: 0.45)
-                    : const Color(0xFFE8EAED),
+                    ? DunesColors.resolve(
+                        context,
+                        _themePurple,
+                        role: DunesColorRole.border,
+                      ).withValues(alpha: 0.45)
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFFE8EAED),
+                        role: DunesColorRole.border,
+                      ),
               ),
             ),
             child: Row(
               children: [
                 Icon(
                   Icons.upload_file_outlined,
-                  color: _fileDragging ? _themePurple : DunesColors.text3,
+                  color: _fileDragging
+                      ? DunesColors.resolve(context, _themePurple)
+                      : DunesColors.resolve(context, DunesColors.text3),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -597,12 +614,20 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: _fileDragging ? _themePurple : DunesColors.text2,
+                          color: _fileDragging
+                              ? DunesColors.resolve(context, _themePurple)
+                              : DunesColors.resolve(context, DunesColors.text2),
                         ),
                       ),
-                      const Text(
+                      Text(
                         '仅 .xlsx · 机票 / 酒店 / 火车 / 用车',
-                        style: TextStyle(fontSize: 11, color: DunesColors.text3),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -619,209 +644,262 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
   Widget build(BuildContext context) {
     return _wrapDrop(
       GestureDetector(
-      onTap: _dismissKeyboard,
-      behavior: HitTestBehavior.translucent,
-      child: ColoredBox(
-        color: const Color(0xFFF5F6F8),
-        child: Stack(
-          children: [
-            Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-              child: Row(
+        onTap: _dismissKeyboard,
+        behavior: HitTestBehavior.translucent,
+        child: ColoredBox(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFF5F6F8),
+            role: DunesColorRole.surface,
+          ),
+          child: Stack(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _keywordCtrl,
-                      onTapOutside: (_) => _dismissKeyboard(),
-                      textInputAction: TextInputAction.search,
-                      decoration: InputDecoration(
-                        hintText: '搜索出行人、组织用户或订单号',
-                        isDense: true,
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        suffixIcon: _keywordCtrl.text.isEmpty
-                            ? null
-                            : IconButton(
-                                onPressed: _keywordCtrl.clear,
-                                icon: const Icon(Icons.close, size: 18),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _keywordCtrl,
+                            onTapOutside: (_) => _dismissKeyboard(),
+                            textInputAction: TextInputAction.search,
+                            decoration: InputDecoration(
+                              hintText: '搜索出行人、组织用户或订单号',
+                              isDense: true,
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              suffixIcon: _keywordCtrl.text.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      onPressed: _keywordCtrl.clear,
+                                      icon: const Icon(Icons.close, size: 18),
+                                    ),
+                              filled: true,
+                              fillColor: DunesColors.resolve(
+                                context,
+                                Colors.white,
+                                role: DunesColorRole.surface,
                               ),
-                        filled: true,
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Color(0xFFE8EAED),
+                                    role: DunesColorRole.border,
+                                  ),
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Color(0xFFE8EAED),
+                                    role: DunesColorRole.border,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE8EAED)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE8EAED)),
-                        ),
+                        const SizedBox(width: 8),
+                        if (_desktop)
+                          FilledButton.icon(
+                            onPressed: _exporting
+                                ? null
+                                : () => unawaited(_export()),
+                            icon: Icon(
+                              _exporting
+                                  ? Icons.hourglass_top
+                                  : Icons.file_download_outlined,
+                              size: 18,
+                            ),
+                            label: Text(_exporting ? '导出中…' : '导出'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _themePurple,
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                            ),
+                          )
+                        else
+                          FilledButton.icon(
+                            onPressed: _uploading ? null : _pickAndPreview,
+                            icon: const Icon(Icons.upload_file, size: 18),
+                            label: Text(_uploading ? '处理中…' : '上传'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _themePurple,
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (var i = 0; i < _kinds.length; i++) ...[
+                            if (i > 0) const SizedBox(width: 8),
+                            _FilterChip(
+                              label: _kinds[i].$2,
+                              active: _kind == _kinds[i].$1,
+                              onTap: () => _selectKind(_kinds[i].$1),
+                            ),
+                          ],
+                          const SizedBox(width: 8),
+                          _FilterChip(
+                            label: '仅未关联',
+                            active: _match == 'unmatched',
+                            emphasize: true,
+                            onTap: () =>
+                                _toggleUnmatched(_match != 'unmatched'),
+                          ),
+                          const SizedBox(width: 8),
+                          _FilterChip(
+                            label: '仅重名',
+                            active: _match == 'ambiguous',
+                            emphasize: true,
+                            onTap: () {
+                              _keywordDebounce?.cancel();
+                              setState(
+                                () => _match = _match == 'ambiguous'
+                                    ? ''
+                                    : 'ambiguous',
+                              );
+                              _reloadFromTop();
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          _FilterChip(
+                            label: _rangeLabel,
+                            active: _from != null && _to != null,
+                            onTap: () => unawaited(_pickRange()),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  if (_desktop)
-                    FilledButton.icon(
-                      onPressed: _exporting ? null : () => unawaited(_export()),
-                      icon: Icon(
-                        _exporting ? Icons.hourglass_top : Icons.file_download_outlined,
-                        size: 18,
-                      ),
-                      label: Text(_exporting ? '导出中…' : '导出'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _themePurple,
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                      ),
-                    )
-                  else
-                    FilledButton.icon(
-                      onPressed: _uploading ? null : _pickAndPreview,
-                      icon: const Icon(Icons.upload_file, size: 18),
-                      label: Text(_uploading ? '处理中…' : '上传'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _themePurple,
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (var i = 0; i < _kinds.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 8),
-                      _FilterChip(
-                        label: _kinds[i].$2,
-                        active: _kind == _kinds[i].$1,
-                        onTap: () => _selectKind(_kinds[i].$1),
-                      ),
-                    ],
-                    const SizedBox(width: 8),
-                    _FilterChip(
-                      label: '仅未关联',
-                      active: _match == 'unmatched',
-                      emphasize: true,
-                      onTap: () => _toggleUnmatched(_match != 'unmatched'),
-                    ),
-                    const SizedBox(width: 8),
-                    _FilterChip(
-                      label: '仅重名',
-                      active: _match == 'ambiguous',
-                      emphasize: true,
-                      onTap: () {
-                        _keywordDebounce?.cancel();
-                        setState(() =>
-                            _match = _match == 'ambiguous' ? '' : 'ambiguous');
-                        _reloadFromTop();
+                  _buildDropZone(),
+                  if (_preview != null)
+                    _PreviewBanner(
+                      preview: _preview!,
+                      assignments: _assignments,
+                      onAssign: (name) => unawaited(_pickPerson(name)),
+                      onToggleAlias: (name, save) {
+                        final cur = _assignments[name];
+                        if (cur == null) return;
+                        setState(() {
+                          _assignments[name] = TravelNameAssignment(
+                            travelerName: cur.travelerName,
+                            userId: cur.userId,
+                            displayName: cur.displayName,
+                            dept: cur.dept,
+                            saveAlias: save,
+                          );
+                        });
                       },
+                      onCommit: _commit,
+                      onDismiss: () => setState(() {
+                        _preview = null;
+                        _assignments.clear();
+                      }),
                     ),
-                    const SizedBox(width: 8),
-                    _FilterChip(
-                      label: _rangeLabel,
-                      active: _from != null && _to != null,
-                      onTap: () => unawaited(_pickRange()),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          '$_total 条',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                          ),
+                        ),
+                        if (_hasFilters) ...[
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: _clearFilters,
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              foregroundColor: _themePurple,
+                            ),
+                            child: const Text('清除筛选'),
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-            _buildDropZone(),
-            if (_preview != null)
-              _PreviewBanner(
-                preview: _preview!,
-                assignments: _assignments,
-                onAssign: (name) => unawaited(_pickPerson(name)),
-                onToggleAlias: (name, save) {
-                  final cur = _assignments[name];
-                  if (cur == null) return;
-                  setState(() {
-                    _assignments[name] = TravelNameAssignment(
-                      travelerName: cur.travelerName,
-                      userId: cur.userId,
-                      displayName: cur.displayName,
-                      dept: cur.dept,
-                      saveAlias: save,
-                    );
-                  });
-                },
-                onCommit: _commit,
-                onDismiss: () => setState(() {
-                  _preview = null;
-                  _assignments.clear();
-                }),
-              ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
-              child: Row(
-                children: [
-                  Text(
-                    '$_total 条',
-                    style: const TextStyle(fontSize: 12, color: DunesColors.text3),
                   ),
-                  if (_hasFilters) ...[
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: _clearFilters,
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        foregroundColor: _themePurple,
+                  if (_error != null && _items.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Text(
+                        _error!,
+                        style: TextStyle(
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFFB42318),
+                          ),
+                          fontSize: 12,
+                        ),
                       ),
-                      child: const Text('清除筛选'),
                     ),
-                  ],
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: () => _load(reset: true),
+                      child: _buildListBody(),
+                    ),
+                  ),
                 ],
               ),
-            ),
-            if (_error != null && _items.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(
-                  _error!,
-                  style: const TextStyle(color: Color(0xFFB42318), fontSize: 12),
-                ),
-              ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: () => _load(reset: true),
-                child: _buildListBody(),
-              ),
-            ),
-          ],
-        ),
-            if (_fileDragging)
-              const Positioned.fill(
-                child: IgnorePointer(
-                  child: ColoredBox(
-                    color: Color(0x337B5CD8),
-                    child: Center(
-                      child: Text(
-                        '松开以上传携程 Excel',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: _themePurple,
+              if (_fileDragging)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: ColoredBox(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0x337B5CD8),
+                        role: DunesColorRole.surface,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '松开以上传携程 Excel',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _themePurple,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 
@@ -844,7 +922,9 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
           Text(
             _error!,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -867,7 +947,10 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
               _hasFilters
                   ? '没有符合筛选条件的订单'
                   : (_desktop ? '暂无差旅订单' : '暂无导入数据，点击上传或拖入携程 Excel'),
-              style: const TextStyle(color: DunesColors.text3, fontSize: 14),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -919,9 +1002,17 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = emphasize && active ? const Color(0xFFB42318) : _themePurple;
+    final color = emphasize && active
+        ? DunesColors.resolve(context, const Color(0xFFB42318))
+        : DunesColors.resolve(context, _themePurple);
     return Material(
-      color: active ? color : Colors.white,
+      color: active
+          ? color
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -931,7 +1022,13 @@ class _FilterChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: active ? color : const Color(0xFFE8EAED),
+              color: active
+                  ? color
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -939,7 +1036,9 @@ class _FilterChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: active ? Colors.white : DunesColors.text2,
+              color: active
+                  ? DunesColors.resolve(context, Colors.white)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -974,14 +1073,26 @@ class _PreviewBanner extends StatelessWidget {
     for (final n in preview.ambiguousNames) {
       if (seen.add(n)) pending.add((n, 'ambiguous'));
     }
-    final assignedCount = pending.where((e) => assignments.containsKey(e.$1)).length;
+    final assignedCount = pending
+        .where((e) => assignments.containsKey(e.$1))
+        .length;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -994,7 +1105,10 @@ class _PreviewBanner extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               '需手工指定 $assignedCount / ${pending.length}',
-              style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
             const SizedBox(height: 6),
             ConstrainedBox(
@@ -1024,15 +1138,26 @@ class _PreviewBanner extends StatelessWidget {
                               ),
                               Text(
                                 a == null
-                                    ? (kind == 'ambiguous' ? '重名未指定' : '未关联组织用户')
+                                    ? (kind == 'ambiguous'
+                                          ? '重名未指定'
+                                          : '未关联组织用户')
                                     : '${a.displayName}${a.dept.isEmpty ? '' : ' · ${a.dept}'}',
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: a == null
                                       ? (kind == 'ambiguous'
-                                          ? const Color(0xFFB54708)
-                                          : const Color(0xFFB42318))
-                                      : DunesColors.text2,
+                                            ? DunesColors.resolve(
+                                                context,
+                                                const Color(0xFFB54708),
+                                              )
+                                            : DunesColors.resolve(
+                                                context,
+                                                const Color(0xFFB42318),
+                                              ))
+                                      : DunesColors.resolve(
+                                          context,
+                                          DunesColors.text2,
+                                        ),
                                 ),
                               ),
                               if (a != null && a.displayName != name)
@@ -1049,9 +1174,12 @@ class _PreviewBanner extends StatelessWidget {
                                     ),
                                     Text(
                                       '记住别名（${a.displayName}）',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 11,
-                                        color: DunesColors.text3,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text3,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -1096,7 +1224,11 @@ class _OrderTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -1105,7 +1237,13 @@ class _OrderTile extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1117,19 +1255,19 @@ class _OrderTile extends StatelessWidget {
                       row.travelerName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ),
                   Text(
                     row.amountLabel,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: _themePurple,
+                      color: DunesColors.resolveNullable(context, _themePurple),
                     ),
                   ),
                 ],
@@ -1139,7 +1277,10 @@ class _OrderTile extends StatelessWidget {
                 '${row.origin} → ${row.destination}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
               ),
               const SizedBox(height: 6),
               Wrap(
@@ -1147,19 +1288,33 @@ class _OrderTile extends StatelessWidget {
                 runSpacing: 4,
                 children: [
                   if (row.unmatched)
-                    const _Tag(text: '未关联组织用户', color: Color(0xFFB42318)),
+                    _Tag(
+                      text: '未关联组织用户',
+                      color: DunesColors.resolve(context, Color(0xFFB42318)),
+                    ),
                   if (row.ambiguous)
-                    const _Tag(text: '重名未指定', color: Color(0xFFB54708)),
+                    _Tag(
+                      text: '重名未指定',
+                      color: DunesColors.resolve(context, Color(0xFFB54708)),
+                    ),
                   if (onAssign != null)
                     const _Tag(text: '点此指定', color: _themePurple),
-                  if (row.shared)
-                    const _Tag(text: '分摊', color: _themePurple),
+                  if (row.shared) const _Tag(text: '分摊', color: _themePurple),
                   if (row.userDisplayName.isNotEmpty)
-                    _Tag(text: row.userDisplayName, color: DunesColors.text2),
+                    _Tag(
+                      text: row.userDisplayName,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
                   if (row.startAt.isNotEmpty)
-                    _Tag(text: row.startAt, color: DunesColors.text3),
+                    _Tag(
+                      text: row.startAt,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   if (row.orderId.isNotEmpty)
-                    _Tag(text: row.orderId, color: DunesColors.text3),
+                    _Tag(
+                      text: row.orderId,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                 ],
               ),
             ],
@@ -1180,12 +1335,20 @@ class _Tag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: DunesColors.resolveNullable(
+          context,
+          color.withValues(alpha: 0.1),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         text,
-        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 11,
+          color: DunesColors.resolveNullable(context, color),
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -1304,9 +1467,12 @@ class _TravelUserPickerBodyState extends State<_TravelUserPickerBody> {
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             '搜索组织用户。别名不会自动写入，需在指定后确认。',
-            style: TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 10),
           TextField(
@@ -1345,10 +1511,12 @@ class _TravelUserPickerBodyState extends State<_TravelUserPickerBody> {
 
   Widget _buildResults() {
     if (_q.text.trim().isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           '输入关键词后搜索',
-          style: TextStyle(color: DunesColors.text3),
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       );
     }
@@ -1357,14 +1525,21 @@ class _TravelUserPickerBodyState extends State<_TravelUserPickerBody> {
     }
     if (_error != null && _items.isEmpty) {
       return Center(
-        child: Text(_error!, style: const TextStyle(color: Color(0xFFB42318))),
+        child: Text(
+          _error!,
+          style: TextStyle(
+            color: DunesColors.resolveNullable(context, Color(0xFFB42318)),
+          ),
+        ),
       );
     }
     if (_items.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           '没有匹配的组织用户',
-          style: TextStyle(color: DunesColors.text3),
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       );
     }
@@ -1405,7 +1580,11 @@ class NativeQianjiTravelImportHost extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1418,7 +1597,7 @@ class NativeQianjiTravelImportHost extends StatelessWidget {
                   InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: onBack,
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1426,14 +1605,20 @@ class NativeQianjiTravelImportHost extends StatelessWidget {
                           Icon(
                             Icons.arrow_back_ios_new,
                             size: 14,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
                           ),
                           SizedBox(width: 2),
                           Text(
                             '差旅管理',
                             style: TextStyle(
                               fontSize: 13,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
                             ),
                           ),
                         ],
@@ -1441,13 +1626,16 @@ class NativeQianjiTravelImportHost extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       '差旅列表',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     ),
                   ),
@@ -1455,9 +1643,7 @@ class NativeQianjiTravelImportHost extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(
-            child: NativeTravelImportPage(session: session),
-          ),
+          Expanded(child: NativeTravelImportPage(session: session)),
         ],
       ),
     );

@@ -36,10 +36,9 @@ class _DesktopLoginPageState extends State<DesktopLoginPage> {
     // 预缓存桌面登录 Logo，避免首帧资源未就绪落到错误占位。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(precacheImage(
-        const AssetImage('assets/images/app_logo.png'),
-        context,
-      ));
+      unawaited(
+        precacheImage(const AssetImage('assets/images/app_logo.png'), context),
+      );
     });
   }
 
@@ -57,8 +56,9 @@ class _DesktopLoginPageState extends State<DesktopLoginPage> {
             style: DunesTypography.sans(
               fontSize: 26,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
               letterSpacing: -0.02 * 26,
+              context: context,
             ),
           ),
           const SizedBox(height: 8),
@@ -67,15 +67,13 @@ class _DesktopLoginPageState extends State<DesktopLoginPage> {
             textAlign: TextAlign.center,
             style: DunesTypography.sans(
               fontSize: 14,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
               height: 1.5,
+              context: context,
             ),
           ),
           const SizedBox(height: 28),
-          _ModeTabs(
-            mode: _mode,
-            onChanged: (m) => setState(() => _mode = m),
-          ),
+          _ModeTabs(mode: _mode, onChanged: (m) => setState(() => _mode = m)),
           const SizedBox(height: 24),
           if (_mode == 'qr')
             _DesktopQrLoginPane(
@@ -111,7 +109,13 @@ class _ModeTabs extends StatelessWidget {
             height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected ? const Color(0xFF1A6FDB) : Colors.transparent,
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0xFF1A6FDB),
+                      role: DunesColorRole.surface,
+                    )
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -119,7 +123,10 @@ class _ModeTabs extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : DunesColors.text2,
+                color: selected
+                    ? DunesColors.resolve(context, Colors.white)
+                    : DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
           ),
@@ -130,24 +137,20 @@ class _ModeTabs extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0EEE8),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF0EEE8),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
-        children: [
-          tab('qr', 'App 扫码登录'),
-          tab('sms', '手机号登录'),
-        ],
-      ),
+      child: Row(children: [tab('qr', 'App 扫码登录'), tab('sms', '手机号登录')]),
     );
   }
 }
 
 class _DesktopSmsLoginPane extends StatefulWidget {
-  const _DesktopSmsLoginPane({
-    required this.auth,
-    required this.onSignedIn,
-  });
+  const _DesktopSmsLoginPane({required this.auth, required this.onSignedIn});
 
   final AuthService auth;
   final ValueChanged<AuthSession> onSignedIn;
@@ -211,8 +214,9 @@ class _DesktopSmsLoginPaneState extends State<_DesktopSmsLoginPane> {
           style: DunesTypography.sans(
             fontSize: 18,
             fontWeight: FontWeight.w500,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
             letterSpacing: 1.2,
+            context: context,
           ),
           decoration: authInputDecoration(hintText: '请输入手机号', errorText: _error)
               .copyWith(
@@ -336,10 +340,7 @@ class _DesktopCodeStepState extends State<_DesktopCodeStep> {
 }
 
 class _DesktopQrLoginPane extends StatefulWidget {
-  const _DesktopQrLoginPane({
-    required this.auth,
-    required this.onSignedIn,
-  });
+  const _DesktopQrLoginPane({required this.auth, required this.onSignedIn});
 
   final AuthService auth;
   final ValueChanged<AuthSession> onSignedIn;
@@ -476,7 +477,8 @@ class _DesktopQrLoginPaneState extends State<_DesktopQrLoginPane> {
   @override
   Widget build(BuildContext context) {
     final qrPayload = _session?.qrCode ?? '';
-    final showQr = qrPayload.isNotEmpty &&
+    final showQr =
+        qrPayload.isNotEmpty &&
         (_uiState == 'waiting' || _uiState == 'confirming');
 
     return Column(
@@ -486,9 +488,19 @@ class _DesktopQrLoginPaneState extends State<_DesktopQrLoginPane> {
           height: 220,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE8E4DC)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8E4DC),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: showQr
               ? QrImageView(
@@ -498,16 +510,16 @@ class _DesktopQrLoginPaneState extends State<_DesktopQrLoginPane> {
                   backgroundColor: Colors.white,
                 )
               : (_uiState == 'loading'
-                  ? const SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      Icons.qr_code_2_rounded,
-                      size: 64,
-                      color: DunesColors.text3,
-                    )),
+                    ? const SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        Icons.qr_code_2_rounded,
+                        size: 64,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      )),
         ),
         const SizedBox(height: 16),
         Text(
@@ -515,8 +527,9 @@ class _DesktopQrLoginPaneState extends State<_DesktopQrLoginPane> {
           textAlign: TextAlign.center,
           style: DunesTypography.sans(
             fontSize: 13,
-            color: DunesColors.text2,
+            color: DunesColors.resolve(context, DunesColors.text2),
             height: 1.45,
+            context: context,
           ),
         ),
         if (_countdown > 0 && _uiState == 'waiting') ...[
@@ -525,7 +538,8 @@ class _DesktopQrLoginPaneState extends State<_DesktopQrLoginPane> {
             '$_countdown 秒后过期',
             style: DunesTypography.sans(
               fontSize: 12,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
             ),
           ),
         ],
@@ -554,7 +568,9 @@ Future<AuthSession> _finalizeDesktopSession(AuthSession session) async {
         dunesToken: session.token,
         phone: session.phone,
       );
-      session = session.copyWith(novaLocalStorage: nova.toLocalStorageEntries());
+      session = session.copyWith(
+        novaLocalStorage: nova.toLocalStorageEntries(),
+      );
     } catch (_) {}
   }
   return session;

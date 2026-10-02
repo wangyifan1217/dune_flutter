@@ -146,8 +146,12 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
     final height = MediaQuery.sizeOf(context).height * 0.78;
     return Container(
       height: height,
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Column(
@@ -157,7 +161,11 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
             width: 36,
             height: 4,
             decoration: BoxDecoration(
-              color: DunesColors.borderSoft,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(999),
             ),
           ),
@@ -171,6 +179,7 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
                     style: DunesTypography.sans(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
+                      context: context,
                     ),
                   ),
                 ),
@@ -199,9 +208,15 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
             controller: _tabs,
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            labelColor: DunesColors.accentDeep,
-            unselectedLabelColor: DunesColors.text3,
-            indicatorColor: DunesColors.accentDeep,
+            labelColor: DunesColors.resolve(context, DunesColors.accentDeep),
+            unselectedLabelColor: DunesColors.resolve(
+              context,
+              DunesColors.text3,
+            ),
+            indicatorColor: DunesColors.resolve(
+              context,
+              DunesColors.accentDeep,
+            ),
             tabs: const [
               Tab(text: '我审批的'),
               Tab(text: '我发起的'),
@@ -230,15 +245,16 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
     );
   }
 
-  Widget _list(
-    List<XflowProposalItem> rows, {
-    String emptyText = '暂无可转发的审批',
-  }) {
+  Widget _list(List<XflowProposalItem> rows, {String emptyText = '暂无可转发的审批'}) {
     if (rows.isEmpty) {
       return Center(
         child: Text(
           emptyText,
-          style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       );
     }
@@ -257,7 +273,11 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
             : '—';
         final typeLabel = _typeLabel(item, kind);
         return Material(
-          color: DunesColors.bgSoft,
+          color: DunesColors.resolve(
+            ctx,
+            DunesColors.bgSoft,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
@@ -279,6 +299,7 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             height: 1.35,
+                            context: ctx,
                           ),
                         ),
                       ),
@@ -316,7 +337,8 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
             label,
             style: DunesTypography.sans(
               fontSize: 12,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
             ),
           ),
         ),
@@ -327,7 +349,8 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
             overflow: TextOverflow.ellipsis,
             style: DunesTypography.sans(
               fontSize: 12,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
         ),
@@ -353,7 +376,8 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
   String _displayTitle(XflowProposalItem item, String kind) {
     final raw = item.title.trim();
     final bt = item.businessType.trim();
-    final generic = raw.isEmpty ||
+    final generic =
+        raw.isEmpty ||
         raw == bt ||
         raw.toUpperCase() == bt.toUpperCase() ||
         raw.startsWith('$bt #') ||
@@ -398,50 +422,54 @@ class _StatusChip extends StatelessWidget {
     late final Color fg;
     late final String label;
     if (st == 'OPEN' || st == 'PENDING') {
-      bg = DunesColors.amberSoft;
-      fg = const Color(0xFF5D3508);
+      bg = DunesColors.resolve(context, DunesColors.amberSoft);
+      fg = DunesColors.resolve(context, const Color(0xFF5D3508));
       label = '审批中';
     } else if (st == 'APPROVED' || st == 'DONE' || st == 'LIVE') {
-      bg = DunesColors.greenSoft;
-      fg = const Color(0xFF085041);
+      bg = DunesColors.resolve(context, DunesColors.greenSoft);
+      fg = DunesColors.resolve(context, const Color(0xFF085041));
       label = '已通过';
     } else if (st == 'REJECTED') {
-      bg = DunesColors.coralSoft;
-      fg = const Color(0xFF993C1D);
+      bg = DunesColors.resolve(context, DunesColors.coralSoft);
+      fg = DunesColors.resolve(context, const Color(0xFF993C1D));
       label = '已驳回';
     } else if (st == 'FILLING') {
-      bg = DunesColors.blueSoft;
-      fg = DunesColors.blue;
+      bg = DunesColors.resolve(context, DunesColors.blueSoft);
+      fg = DunesColors.resolve(context, DunesColors.blue);
       label = '填写中';
     } else if (st == 'REVIEWING') {
-      bg = DunesColors.amberSoft;
-      fg = const Color(0xFF5D3508);
+      bg = DunesColors.resolve(context, DunesColors.amberSoft);
+      fg = DunesColors.resolve(context, const Color(0xFF5D3508));
       label = '复核中';
     } else if (st == 'PENDING_PRESIDENT') {
-      bg = DunesColors.amberSoft;
-      fg = const Color(0xFF5D3508);
+      bg = DunesColors.resolve(context, DunesColors.amberSoft);
+      fg = DunesColors.resolve(context, const Color(0xFF5D3508));
       label = '待最终确认';
     } else if (st == 'DRAFT' || st == 'PENDING_INITIATE') {
-      bg = DunesColors.blueSoft;
-      fg = DunesColors.blue;
+      bg = DunesColors.resolve(context, DunesColors.blueSoft);
+      fg = DunesColors.resolve(context, DunesColors.blue);
       label = st == 'PENDING_INITIATE' ? '待发起' : '草稿';
     } else if (st == 'VOIDED') {
-      bg = const Color(0xFFF0F0F0);
-      fg = DunesColors.text3;
+      bg = DunesColors.resolve(context, const Color(0xFFF0F0F0));
+      fg = DunesColors.resolve(context, DunesColors.text3);
       label = '已作废';
     } else if (st == 'SUPERSEDED') {
-      bg = DunesColors.bgSoft;
-      fg = DunesColors.text2;
+      bg = DunesColors.resolve(context, DunesColors.bgSoft);
+      fg = DunesColors.resolve(context, DunesColors.text2);
       label = '已替代';
     } else {
-      bg = DunesColors.bgSoft;
-      fg = DunesColors.text2;
+      bg = DunesColors.resolve(context, DunesColors.bgSoft);
+      fg = DunesColors.resolve(context, DunesColors.text2);
       label = st.isEmpty ? '未知' : st;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: bg,
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -450,6 +478,7 @@ class _StatusChip extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.w600,
           color: fg,
+          context: context,
         ),
       ),
     );

@@ -17,6 +17,7 @@ import 'tau_voice_call_barge_in.dart';
 import 'tau_voice_call_client.dart';
 import 'tau_voice_call_playback.dart';
 import '../nova_welcome_view.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 enum TauVoiceCallMode { professional, casual }
 
@@ -490,7 +491,11 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
     final thinking = _state == TauVoiceCallState.thinking;
     final activeCall = _recording || speaking || thinking;
     return Scaffold(
-      backgroundColor: const Color(0xFF12101B),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFF12101B),
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -501,7 +506,11 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
                 child: Column(
                   children: [
                     Material(
-                      color: const Color(0xFF242033),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF242033),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(22),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(22),
@@ -511,19 +520,25 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
                             horizontal: 14,
                             vertical: 8,
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
                                 Icons.tune_rounded,
                                 size: 18,
-                                color: Colors.white,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
                               ),
                               SizedBox(width: 6),
                               Text(
                                 '情景设置',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Colors.white,
+                                  ),
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -535,8 +550,11 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
                     const SizedBox(height: 5),
                     Text(
                       '女生声音 · ${_languageLabels[_lang] ?? _lang}',
-                      style: const TextStyle(
-                        color: Color(0xFF9A93B4),
+                      style: TextStyle(
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF9A93B4),
+                        ),
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -563,9 +581,13 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
               child: Container(
                 width: 168,
                 height: 168,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Color(0xFF30294B),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF30294B),
+                    role: DunesColorRole.surface,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Color(0x667C5CFF),
@@ -579,21 +601,27 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
                   children: [
                     const NovaBlinkingAvatar(size: 168),
                     if (thinking)
-                      const Positioned(
+                      Positioned(
                         right: 20,
                         top: 21,
                         child: _CallStateBadge(
                           icon: Icons.auto_awesome_rounded,
-                          color: Color(0xFFFFD580),
+                          color: DunesColors.resolve(
+                            context,
+                            Color(0xFFFFD580),
+                          ),
                         ),
                       ),
                     if (speaking)
-                      const Positioned(
+                      Positioned(
                         right: 20,
                         top: 21,
                         child: _CallStateBadge(
                           icon: Icons.graphic_eq_rounded,
-                          color: Color(0xFFB4A7FF),
+                          color: DunesColors.resolve(
+                            context,
+                            Color(0xFFB4A7FF),
+                          ),
                         ),
                       ),
                   ],
@@ -606,8 +634,8 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
             Text(
               _status,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: DunesColors.resolve(context, Colors.white),
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -615,7 +643,10 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
             const SizedBox(height: 6),
             Text(
               _formatElapsed(_elapsed),
-              style: const TextStyle(color: Color(0xFFB8B1CC), fontSize: 13),
+              style: TextStyle(
+                color: DunesColors.resolveNullable(context, Color(0xFFB8B1CC)),
+                fontSize: 13,
+              ),
             ),
             const Spacer(),
             _controls(),
@@ -685,9 +716,17 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
                 style: FilledButton.styleFrom(
                   shape: const CircleBorder(),
                   backgroundColor: callEngaged
-                      ? const Color(0xFF7C5CFF)
-                      : const Color(0xFF242033),
-                  foregroundColor: Colors.white,
+                      ? DunesColors.resolve(
+                          context,
+                          const Color(0xFF7C5CFF),
+                          role: DunesColorRole.surface,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          const Color(0xFF242033),
+                          role: DunesColorRole.surface,
+                        ),
+                  foregroundColor: DunesColors.resolve(context, Colors.white),
                   elevation: 0,
                 ),
                 onPressed: _state == TauVoiceCallState.thinking
@@ -700,7 +739,7 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
             _roundControl(
               tooltip: '挂断',
               icon: Icons.call_end_rounded,
-              iconColor: const Color(0xFFFF2323),
+              iconColor: DunesColors.resolve(context, const Color(0xFFFF2323)),
               onPressed: _hangup,
             ),
           ],
@@ -718,7 +757,11 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: const Color(0xFF242033),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFF242033),
+          role: DunesColorRole.surface,
+        ),
         shape: const CircleBorder(),
         elevation: 0,
         child: SizedBox(
@@ -726,7 +769,10 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
           height: 80,
           child: IconButton(
             onPressed: onPressed,
-            icon: Icon(icon, color: iconColor),
+            icon: Icon(
+              icon,
+              color: DunesColors.resolveNullable(context, iconColor),
+            ),
             iconSize: 31,
             padding: const EdgeInsets.all(20),
           ),
@@ -753,24 +799,44 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
           decoration: BoxDecoration(
             color: isSelected
-                ? const Color(0xFF6F55F6)
-                : const Color(0xFF242033),
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFF6F55F6),
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    const Color(0xFF242033),
+                    role: DunesColorRole.surface,
+                  ),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isSelected
-                  ? const Color(0xFFB4A7FF)
-                  : const Color(0xFF3C3651),
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0xFFB4A7FF),
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFF3C3651),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 17, color: Colors.white),
+              Icon(
+                icon,
+                size: 17,
+                color: DunesColors.resolve(context, Colors.white),
+              ),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
@@ -782,8 +848,8 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
                     : Icons.radio_button_unchecked_rounded,
                 size: 16,
                 color: isSelected
-                    ? const Color(0xFFFFFFFF)
-                    : const Color(0xFF9A93B4),
+                    ? DunesColors.resolve(context, const Color(0xFFFFFFFF))
+                    : DunesColors.resolve(context, const Color(0xFF9A93B4)),
               ),
             ],
           ),
@@ -795,7 +861,11 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
   void _showCallSettings(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF1D192A),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFF1D192A),
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -810,10 +880,10 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     '情景设置',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                     ),
@@ -825,18 +895,31 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF29233B),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF29233B),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF3B3454)),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF3B3454),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Row(
+                        Row(
                           children: [
                             Icon(
                               Icons.language_rounded,
-                              color: Color(0xFFC8BBFF),
+                              color: DunesColors.resolveNullable(
+                                context,
+                                Color(0xFFC8BBFF),
+                              ),
                             ),
                             SizedBox(width: 13),
                             Column(
@@ -845,7 +928,10 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
                                 Text(
                                   '回答语言',
                                   style: TextStyle(
-                                    color: Colors.white,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ),
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
@@ -853,7 +939,10 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
                                 Text(
                                   '设置 τ 电话的默认回答语言',
                                   style: TextStyle(
-                                    color: Color(0xFFAEA6C3),
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      Color(0xFFAEA6C3),
+                                    ),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -870,15 +959,33 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
                             return ChoiceChip(
                               label: Text(entry.value),
                               selected: selected,
-                              selectedColor: const Color(0xFF7C5CFF),
-                              backgroundColor: const Color(0xFF211C31),
+                              selectedColor: DunesColors.resolve(
+                                context,
+                                const Color(0xFF7C5CFF),
+                              ),
+                              backgroundColor: DunesColors.resolve(
+                                context,
+                                const Color(0xFF211C31),
+                                role: DunesColorRole.surface,
+                              ),
                               side: BorderSide(
                                 color: selected
-                                    ? const Color(0xFFB4A7FF)
-                                    : const Color(0xFF4B4267),
+                                    ? DunesColors.resolve(
+                                        context,
+                                        const Color(0xFFB4A7FF),
+                                        role: DunesColorRole.border,
+                                      )
+                                    : DunesColors.resolve(
+                                        context,
+                                        const Color(0xFF4B4267),
+                                        role: DunesColorRole.border,
+                                      ),
                               ),
                               labelStyle: TextStyle(
-                                color: Colors.white,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
                                 fontWeight: selected
                                     ? FontWeight.w700
                                     : FontWeight.w500,
@@ -988,11 +1095,19 @@ class _CallStateBadge extends StatelessWidget {
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         shape: BoxShape.circle,
         boxShadow: const [BoxShadow(color: Color(0x180E1633), blurRadius: 10)],
       ),
-      child: Icon(icon, size: 19, color: color),
+      child: Icon(
+        icon,
+        size: 19,
+        color: DunesColors.resolveNullable(context, color),
+      ),
     );
   }
 }
@@ -1015,7 +1130,17 @@ class _CallStatusDots extends StatelessWidget {
           width: selected ? 10 + pulse * 4 : 8,
           height: selected ? 10 + pulse * 4 : 8,
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFF716D80) : const Color(0xFFB2B3BD),
+            color: selected
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFF716D80),
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    const Color(0xFFB2B3BD),
+                    role: DunesColorRole.surface,
+                  ),
             shape: BoxShape.circle,
           ),
         );

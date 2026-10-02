@@ -22,6 +22,7 @@ class NativeKbDocPage extends StatefulWidget {
   final DunesNavigationController? navigation;
   final String docId;
   final NativeKbDocument? initialDoc;
+
   /// 从会话卡片打开时用 Navigator.pop；知识库内仍走 navigation.popTo('K1')。
   final VoidCallback? onBack;
 
@@ -80,17 +81,23 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         child: Column(
           children: [
             _buildHeader(),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : _error != null
-                      ? _buildError()
-                      : _buildBody(),
+                  ? _buildError()
+                  : _buildBody(),
             ),
           ],
         ),
@@ -102,9 +109,21 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
     final doc = _doc;
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 12, 10),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -132,12 +151,12 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '知识库 · 文档预览',
                   style: TextStyle(
                     fontFamily: 'Noto Sans SC',
                     fontSize: 9.5,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                     decoration: TextDecoration.none,
                   ),
                 ),
@@ -182,12 +201,14 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
     if (md.isNotEmpty) {
       // 渲染 Markdown（勿用 NovaMarkdownBody.documentPreview，那会退化成纯文本）。
       return ColoredBox(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
-          children: [
-            MeetingMinutesMarkdown(markdown: md),
-          ],
+          children: [MeetingMinutesMarkdown(markdown: md)],
         ),
       );
     }
@@ -200,7 +221,10 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
             Icon(
               Icons.description_outlined,
               size: 48,
-              color: DunesColors.text3.withValues(alpha: 0.6),
+              color: DunesColors.resolve(
+                context,
+                DunesColors.text3,
+              ).withValues(alpha: 0.6),
             ),
             const SizedBox(height: 12),
             Text(
@@ -209,10 +233,13 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               '暂无法预览此文档',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ],
         ),

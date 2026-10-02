@@ -32,8 +32,9 @@ class NativeQianjiFundSecondmentDetailPage extends StatefulWidget {
 
 class _NativeQianjiFundSecondmentDetailPageState
     extends State<NativeQianjiFundSecondmentDetailPage> {
-  late final FundSecondmentService _service =
-      FundSecondmentService(session: widget.session);
+  late final FundSecondmentService _service = FundSecondmentService(
+    session: widget.session,
+  );
 
   bool _loading = true;
   String? _error;
@@ -79,7 +80,11 @@ class _NativeQianjiFundSecondmentDetailPageState
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -92,7 +97,7 @@ class _NativeQianjiFundSecondmentDetailPageState
                   InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: widget.onBack,
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -100,12 +105,21 @@ class _NativeQianjiFundSecondmentDetailPageState
                           Icon(
                             Icons.arrow_back_ios_new,
                             size: 14,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
                           ),
                           SizedBox(width: 2),
                           Text(
                             '资金借调',
-                            style: TextStyle(fontSize: 13, color: DunesColors.text2),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -117,10 +131,13 @@ class _NativeQianjiFundSecondmentDetailPageState
                       _data?.row.code.isNotEmpty == true
                           ? _data!.row.code
                           : '还款明细',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     ),
                   ),
@@ -147,7 +164,9 @@ class _NativeQianjiFundSecondmentDetailPageState
           Text(
             friendlyErrorText(_error, fallback: '加载失败，请稍后重试'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -161,8 +180,13 @@ class _NativeQianjiFundSecondmentDetailPageState
     }
     final detail = _data;
     if (detail == null) {
-      return const Center(
-        child: Text('暂无数据', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '暂无数据',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     final row = detail.row;
@@ -176,9 +200,19 @@ class _NativeQianjiFundSecondmentDetailPageState
           Container(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE8EAED)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Column(
               children: [
@@ -190,7 +224,11 @@ class _NativeQianjiFundSecondmentDetailPageState
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: status.bg,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          status.bg,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -198,23 +236,29 @@ class _NativeQianjiFundSecondmentDetailPageState
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
-                          color: status.fg,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            status.fg,
+                          ),
                         ),
                       ),
                     ),
                     const Spacer(),
                     Text(
                       '${_amountText(row.borrowAmountWan)}万',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                _kv('借款主体', row.borrowSubject.isEmpty ? '—' : row.borrowSubject),
+                _kv(
+                  '借款主体',
+                  row.borrowSubject.isEmpty ? '—' : row.borrowSubject,
+                ),
                 _kv('付款主体', row.paySubject.isEmpty ? '—' : row.paySubject),
                 _kv(
                   '通过日期',
@@ -235,8 +279,18 @@ class _NativeQianjiFundSecondmentDetailPageState
               label: const Text('查看相关审批'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: _themePurple,
-                side: const BorderSide(color: Color(0xFFC2AEE7)),
-                backgroundColor: Colors.white,
+                side: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFC2AEE7),
+                    role: DunesColorRole.border,
+                  ),
+                ),
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 textStyle: const TextStyle(
                   fontSize: 14,
@@ -246,19 +300,23 @@ class _NativeQianjiFundSecondmentDetailPageState
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             '还款明细',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0EEF7),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF0EEF7),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Row(
@@ -276,42 +334,61 @@ class _NativeQianjiFundSecondmentDetailPageState
           ),
           const SizedBox(height: 6),
           if (detail.repayments.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(
                 child: Text(
                   '暂无解析到的还款记录',
-                  style: TextStyle(color: DunesColors.text3, fontSize: 14),
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    fontSize: 14,
+                  ),
                 ),
               ),
             )
           else
             for (final it in detail.repayments) ...[
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 9,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE8EAED)),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
                         it.date.isEmpty ? '—' : it.date,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
                         ),
                       ),
                     ),
                     Text(
                       _amountText(it.amountWan),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     ),
                   ],
@@ -323,19 +400,29 @@ class _NativeQianjiFundSecondmentDetailPageState
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE8EAED)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     '已还 ${_amountText(row.repaidTotalWan)} 万',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                 ),
@@ -346,7 +433,9 @@ class _NativeQianjiFundSecondmentDetailPageState
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: row.isCleared ? DunesColors.green : _themePurple,
+                    color: row.isCleared
+                        ? DunesColors.resolve(context, DunesColors.green)
+                        : DunesColors.resolve(context, _themePurple),
                   ),
                 ),
               ],
@@ -363,24 +452,35 @@ class _NativeQianjiFundSecondmentDetailPageState
       decoration: BoxDecoration(
         border: last
             ? null
-            : const Border(bottom: BorderSide(color: Color(0xFFF0F1F3))),
+            : Border(
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFF0F1F3),
+                    role: DunesColorRole.border,
+                  ),
+                ),
+              ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+            style: TextStyle(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
               ),
             ),
           ),

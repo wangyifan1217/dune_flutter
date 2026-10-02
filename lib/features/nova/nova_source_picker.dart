@@ -58,7 +58,11 @@ class NovaSourceChipTray extends StatelessWidget {
     if (sources.isEmpty) return const SizedBox.shrink();
     return Container(
       width: double.infinity,
-      color: const Color(0xFFF7F8FC),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF7F8FC),
+        role: DunesColorRole.surface,
+      ),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
       child: Theme(
         data: Theme.of(context).copyWith(
@@ -72,10 +76,7 @@ class NovaSourceChipTray extends StatelessWidget {
           runSpacing: 8,
           children: [
             for (final source in sources)
-              _NovaSourceChip(
-                source: source,
-                onRemove: () => onRemove(source),
-              ),
+              _NovaSourceChip(source: source, onRemove: () => onRemove(source)),
           ],
         ),
       ),
@@ -84,10 +85,7 @@ class NovaSourceChipTray extends StatelessWidget {
 }
 
 class _NovaSourceChip extends StatelessWidget {
-  const _NovaSourceChip({
-    required this.source,
-    required this.onRemove,
-  });
+  const _NovaSourceChip({required this.source, required this.onRemove});
 
   final NovaAnalysisSource source;
   final VoidCallback onRemove;
@@ -96,14 +94,34 @@ class _NovaSourceChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final meeting = source.isMeeting;
     return Material(
-      color: meeting ? const Color(0xFFEEF4FF) : const Color(0xFFF4F0FB),
+      color: meeting
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFEEF4FF),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF4F0FB),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.fromLTRB(8, 5, 4, 5),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: meeting ? const Color(0xFFD4E2F7) : const Color(0xFFE3D8F5),
+            color: meeting
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFD4E2F7),
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    const Color(0xFFE3D8F5),
+                    role: DunesColorRole.border,
+                  ),
           ),
         ),
         child: Row(
@@ -118,7 +136,9 @@ class _NovaSourceChip extends StatelessWidget {
                         ? Icons.folder_outlined
                         : Icons.menu_book_outlined),
               size: 16,
-              color: meeting ? const Color(0xFF3B6BB5) : const Color(0xFF6B3FE2),
+              color: meeting
+                  ? DunesColors.resolve(context, const Color(0xFF3B6BB5))
+                  : DunesColors.resolve(context, const Color(0xFF6B3FE2)),
             ),
             const SizedBox(width: 6),
             ConstrainedBox(
@@ -132,7 +152,8 @@ class _NovaSourceChip extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
             ),
@@ -140,12 +161,12 @@ class _NovaSourceChip extends StatelessWidget {
               customBorder: const CircleBorder(),
               overlayColor: const WidgetStatePropertyAll(Colors.transparent),
               onTap: onRemove,
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.all(4),
                 child: Icon(
                   Icons.close_rounded,
                   size: 14,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
             ),
@@ -174,9 +195,19 @@ class NovaConversationScopeCard extends StatelessWidget {
       margin: margin,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,7 +217,8 @@ class NovaConversationScopeCard extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           const SizedBox(height: 2),
@@ -194,7 +226,8 @@ class NovaConversationScopeCard extends StatelessWidget {
             '后续提问只会检索这些内容',
             style: DunesTypography.sans(
               fontSize: 11,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
             ),
           ),
           const SizedBox(height: 10),
@@ -224,7 +257,17 @@ class _NovaConversationScopeRow extends StatelessWidget {
           width: 28,
           height: 28,
           decoration: BoxDecoration(
-            color: meeting ? DunesColors.blueSoft : DunesColors.brandPurpleSoft,
+            color: meeting
+                ? DunesColors.resolve(
+                    context,
+                    DunesColors.blueSoft,
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurpleSoft,
+                    role: DunesColorRole.surface,
+                  ),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(
@@ -236,7 +279,9 @@ class _NovaConversationScopeRow extends StatelessWidget {
                       ? Icons.folder_outlined
                       : Icons.menu_book_outlined),
             size: 16,
-            color: meeting ? DunesColors.blue : DunesColors.brandPurple,
+            color: meeting
+                ? DunesColors.resolve(context, DunesColors.blue)
+                : DunesColors.resolve(context, DunesColors.brandPurple),
           ),
         ),
         const SizedBox(width: 10),
@@ -249,7 +294,8 @@ class _NovaConversationScopeRow extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
               if (preview.isNotEmpty) ...[
@@ -260,7 +306,8 @@ class _NovaConversationScopeRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
                 ),
               ],
@@ -288,8 +335,12 @@ Future<T?> _showNovaSourceSheet<T>(
           constraints: BoxConstraints(
             maxHeight: MediaQuery.sizeOf(ctx).height * 0.78,
           ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              ctx,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
@@ -299,7 +350,11 @@ Future<T?> _showNovaSourceSheet<T>(
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: DunesColors.borderSoft,
+                  color: DunesColors.resolve(
+                    ctx,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(99),
                 ),
               ),
@@ -312,7 +367,8 @@ Future<T?> _showNovaSourceSheet<T>(
                     style: DunesTypography.sans(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(ctx, DunesColors.text),
+                      context: ctx,
                     ),
                   ),
                 ),
@@ -362,7 +418,9 @@ class _NovaKbSourcePickerState extends State<_NovaKbSourcePicker> {
     try {
       final folders = await widget.kbService.listFolders();
       final docs = await _loadKbDocuments(widget.kbService);
-      final meetingKbIds = await _loadMeetingKbDocumentIds(widget.meetingService);
+      final meetingKbIds = await _loadMeetingKbDocumentIds(
+        widget.meetingService,
+      );
       if (!mounted) return;
       setState(() {
         _folders = folders;
@@ -388,10 +446,12 @@ class _NovaKbSourcePickerState extends State<_NovaKbSourcePicker> {
   List<NativeKbDocument> get _visibleDocs {
     final q = _keyword.trim().toLowerCase();
     if (q.isEmpty) return _docs;
-    return _docs.where((doc) {
-      return novaKbDocumentDisplayName(doc).toLowerCase().contains(q) ||
-          doc.fileName.toLowerCase().contains(q);
-    }).toList(growable: false);
+    return _docs
+        .where((doc) {
+          return novaKbDocumentDisplayName(doc).toLowerCase().contains(q) ||
+              doc.fileName.toLowerCase().contains(q);
+        })
+        .toList(growable: false);
   }
 
   List<OrgFolderItem> get _visibleFolders {
@@ -409,12 +469,14 @@ class _NovaKbSourcePickerState extends State<_NovaKbSourcePicker> {
 
   void _pickFolder(OrgFolderItem folder) {
     final folderId = folder.id <= 0 ? null : folder.id;
-    final docs = _docs.where((doc) {
-      if (folderId == null) {
-        return doc.folderId == null || doc.folderId! <= 0;
-      }
-      return doc.folderId == folderId;
-    }).toList(growable: false);
+    final docs = _docs
+        .where((doc) {
+          if (folderId == null) {
+            return doc.folderId == null || doc.folderId! <= 0;
+          }
+          return doc.folderId == folderId;
+        })
+        .toList(growable: false);
     final names = docs.map(novaKbDocumentDisplayName).toList(growable: false);
     HapticFeedback.selectionClick();
     Navigator.pop(
@@ -467,7 +529,9 @@ class _NovaKbSourcePickerState extends State<_NovaKbSourcePicker> {
             _NovaSourceTile(
               icon: Icons.folder_outlined,
               title: folder.name,
-              subtitle: folder.itemCount > 0 ? '${folder.itemCount} 项' : '用此目录分析',
+              subtitle: folder.itemCount > 0
+                  ? '${folder.itemCount} 项'
+                  : '用此目录分析',
               onTap: () => _pickFolder(folder),
             ),
         ],
@@ -559,12 +623,14 @@ class _NovaMeetingSourcePickerState extends State<_NovaMeetingSourcePicker> {
 
   void _pickFolder(OrgFolderItem folder) {
     final folderId = folder.id <= 0 ? null : folder.id;
-    final meetings = _meetings.where((item) {
-      if (folderId == null) {
-        return item.folderId == null || item.folderId! <= 0;
-      }
-      return item.folderId == folderId;
-    }).toList(growable: false);
+    final meetings = _meetings
+        .where((item) {
+          if (folderId == null) {
+            return item.folderId == null || item.folderId! <= 0;
+          }
+          return item.folderId == folderId;
+        })
+        .toList(growable: false);
     final names = meetings.map(novaMeetingDisplayName).toList(growable: false);
     HapticFeedback.selectionClick();
     Navigator.pop(
@@ -617,7 +683,9 @@ class _NovaMeetingSourcePickerState extends State<_NovaMeetingSourcePicker> {
             _NovaSourceTile(
               icon: Icons.folder_outlined,
               title: folder.name,
-              subtitle: folder.itemCount > 0 ? '${folder.itemCount} 项' : '用此目录分析',
+              subtitle: folder.itemCount > 0
+                  ? '${folder.itemCount} 项'
+                  : '用此目录分析',
               onTap: () => _pickFolder(folder),
             ),
         ],
@@ -676,7 +744,11 @@ class _NovaSourcePickerScaffold extends StatelessWidget {
               hintText: hint,
               prefixIcon: const Icon(Icons.search_rounded, size: 20),
               filled: true,
-              fillColor: const Color(0xFFF6F7FB),
+              fillColor: DunesColors.resolve(
+                context,
+                const Color(0xFFF6F7FB),
+                role: DunesColorRole.surface,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide.none,
@@ -690,8 +762,9 @@ class _NovaSourcePickerScaffold extends StatelessWidget {
             notice,
             style: DunesTypography.sans(
               fontSize: 12,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
               height: 1.4,
+              context: context,
             ),
           ),
         ),
@@ -763,7 +836,8 @@ class _NovaSourceSectionTitle extends StatelessWidget {
         style: DunesTypography.sans(
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          color: DunesColors.text3,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
         ),
       ),
     );
@@ -800,10 +874,18 @@ class _NovaSourceTile extends StatelessWidget {
                 height: 40,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF6F7FB),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF6F7FB),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, size: 18, color: const Color(0xFF6B3FE2)),
+                child: Icon(
+                  icon,
+                  size: 18,
+                  color: DunesColors.resolve(context, const Color(0xFF6B3FE2)),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -817,7 +899,8 @@ class _NovaSourceTile extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                     ),
                     if (subtitle.isNotEmpty) ...[
@@ -828,14 +911,21 @@ class _NovaSourceTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: Color(0xFFC9CDD4)),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: DunesColors.resolveNullable(context, Color(0xFFC9CDD4)),
+              ),
             ],
           ),
         ),
@@ -856,7 +946,9 @@ Future<List<NativeKbDocument>> _loadKbDocuments(NativeKbService service) async {
   return all;
 }
 
-Future<Set<int>> _loadMeetingKbDocumentIds(NativeMeetingService? service) async {
+Future<Set<int>> _loadMeetingKbDocumentIds(
+  NativeMeetingService? service,
+) async {
   if (service == null) return const <int>{};
   try {
     final page = await service.fetchListPage(page: 0, size: 80);

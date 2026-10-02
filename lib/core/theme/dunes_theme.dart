@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+enum DunesColorRole { foreground, surface, border }
+
 /// 与 index.html :root CSS 变量一一对应的设计令牌。
 abstract final class DunesColors {
   static const bgPage = Color(0xFFF4F1EA);
@@ -34,6 +36,131 @@ abstract final class DunesColors {
   static const coralSoft = Color(0xFFF5E5DC);
   static const pink = Color(0xFFA05670);
   static const stageBg = Color(0xFFE8E4DC);
+
+  static final Map<(int, DunesColorRole), Color> _nightColors = {};
+
+  static Color? resolveNullable(
+    BuildContext context,
+    Color? light, {
+    DunesColorRole role = DunesColorRole.foreground,
+  }) => light == null ? null : resolve(context, light, role: role);
+
+  /// Resolve legacy page colors through the inherited app theme. Calling this
+  /// in a widget build also subscribes that widget to theme changes.
+  static Color resolve(
+    BuildContext context,
+    Color light, {
+    DunesColorRole role = DunesColorRole.foreground,
+  }) {
+    if (Theme.of(context).brightness != Brightness.dark) return light;
+    final value = light.toARGB32();
+    final key = (value, role);
+    final cached = _nightColors[key];
+    if (cached != null) return cached;
+    final resolved = _resolveNight(light, role);
+    // Color literals dominate the cache; do not retain unbounded animated values.
+    if (_nightColors.length >= 1024) _nightColors.clear();
+    _nightColors[key] = resolved;
+    return resolved;
+  }
+
+  static Color _resolveNight(Color light, DunesColorRole role) {
+    if (light.a == 0) return light;
+    const palette = DunesPalette.night;
+    final rgb = light.toARGB32() & 0x00ffffff;
+    // Styles may receive an already-resolved color from their parent. Keep the
+    // night text hierarchy stable when typography resolves the color again.
+    if (role == DunesColorRole.foreground &&
+        (rgb == (palette.text.toARGB32() & 0x00ffffff) ||
+            rgb == (palette.textSecondary.toARGB32() & 0x00ffffff) ||
+            rgb == (palette.textMuted.toARGB32() & 0x00ffffff))) {
+      return light;
+    }
+    const solidAccents = {
+      0x2f5d62,
+      0x1b3a3f,
+      0x7b5cd8,
+      0x6a4fa0,
+      0x5d8a4e,
+      0x2e7544,
+      0x3b6e96,
+      0xb07a2b,
+      0xbc5c40,
+      0xa05670,
+    };
+    if (role == DunesColorRole.surface && solidAccents.contains(rgb)) {
+      return light;
+    }
+    const semantic = <int, Color>{
+      0xf4f1ea: Color(0xFF171722),
+      0xfbfaf6: Color(0xFF1D1D29),
+      0xf2efe7: Color(0xFF292736),
+      0xedeae0: Color(0xFF302D3C),
+      0xdad5c7: Color(0xFF45404F),
+      0xe5e1d3: Color(0xFF383746),
+      0x1f2421: Color(0xFFF1EFF8),
+      0x5a5c56: Color(0xFFD0C9D9),
+      0x94938a: Color(0xFFA59CAF),
+      0x2f5d62: Color(0xFF8BC9CE),
+      0x1b3a3f: Color(0xFFA8D8DB),
+      0xe4eceb: Color(0xFF23383A),
+      0xb8cecd: Color(0xFF466566),
+      0x7b5cd8: Color(0xFFB69BFF),
+      0x6a4fa0: Color(0xFFCCB8F1),
+      0xf3eefa: Color(0xFF30283E),
+      0xc2aee7: Color(0xFF66527F),
+      0x5d8a4e: Color(0xFF9BCD88),
+      0xeaefdf: Color(0xFF293726),
+      0x2e7544: Color(0xFF88CE9C),
+      0x3b6e96: Color(0xFF95C4EB),
+      0xe2ecf4: Color(0xFF253343),
+      0xb07a2b: Color(0xFFE7BA72),
+      0xf4e8d2: Color(0xFF3C3124),
+      0xbc5c40: Color(0xFFF09B80),
+      0xf5e5dc: Color(0xFF402C29),
+      0xa05670: Color(0xFFE0A0BA),
+      0xe8e4dc: Color(0xFF292736),
+    };
+    final mapped = semantic[rgb];
+    if (mapped != null) return mapped.withValues(alpha: light.a);
+    final hsl = HSLColor.fromColor(light);
+    if (role == DunesColorRole.surface) {
+      // White/near-white cards and softly tinted pages become dark surfaces.
+      // Saturated action buttons, charts and dark media canvases retain their colors.
+      if (hsl.lightness < .78) return light;
+      final surface = hsl.saturation < .22
+          ? (hsl.lightness > .97 ? palette.surface : palette.surfaceRaised)
+          : hsl
+                .withLightness(.18)
+                .withSaturation(hsl.saturation.clamp(.18, .38))
+                .toColor();
+      return surface.withValues(alpha: light.a);
+    }
+    if (role == DunesColorRole.border) {
+      if (hsl.lightness > .66) {
+        return (hsl.saturation < .2
+                ? palette.border
+                : hsl.withLightness(.36).withSaturation(.28).toColor())
+            .withValues(alpha: light.a);
+      }
+      return light;
+    }
+    // Preserve white foregrounds on filled buttons. Lift dark ink and low-
+    // contrast accent foregrounds without changing their semantic hue.
+    if (hsl.lightness > .88) return light;
+    if (hsl.saturation < .18) {
+      final ink = hsl.lightness < .22
+          ? palette.text
+          : hsl.lightness < .49
+          ? palette.textSecondary
+          : palette.textMuted;
+      return ink.withValues(alpha: light.a);
+    }
+    if (hsl.lightness < .55) {
+      return hsl.withLightness(.74).toColor().withValues(alpha: light.a);
+    }
+    return light;
+  }
 }
 
 /// 与 index.html `--sans` / `--mono` 一致；字体文件见 assets/fonts/。
@@ -52,6 +179,7 @@ abstract final class DunesTypography {
   static const monoFallback = ['SF Mono', 'Menlo', 'Consolas', 'monospace'];
 
   static TextStyle sans({
+    BuildContext? context,
     double? fontSize,
     FontWeight? fontWeight,
     double? letterSpacing,
@@ -64,12 +192,15 @@ abstract final class DunesTypography {
       fontSize: fontSize,
       fontWeight: fontWeight,
       letterSpacing: letterSpacing,
-      color: color,
+      color: context == null
+          ? color
+          : DunesColors.resolveNullable(context, color),
       height: height,
     );
   }
 
   static TextStyle mono({
+    BuildContext? context,
     double? fontSize,
     FontWeight? fontWeight,
     double? letterSpacing,
@@ -82,7 +213,9 @@ abstract final class DunesTypography {
       fontSize: fontSize,
       fontWeight: fontWeight,
       letterSpacing: letterSpacing,
-      color: color,
+      color: context == null
+          ? color
+          : DunesColors.resolveNullable(context, color),
       height: height,
     );
   }
@@ -158,13 +291,13 @@ class DunesPalette extends ThemeExtension<DunesPalette> {
   );
 
   static const night = DunesPalette(
-    page: Color(0xFF111015),
-    app: Color(0xFF17151D),
-    surface: Color(0xFF201D27),
-    surfaceRaised: Color(0xFF292531),
+    page: Color(0xFF171722),
+    app: Color(0xFF1D1D29),
+    surface: Color(0xFF232331),
+    surfaceRaised: Color(0xFF292736),
     border: Color(0xFF45404F),
     borderSubtle: Color(0xFF37323F),
-    text: Color(0xFFF5F0FF),
+    text: Color(0xFFF1EFF8),
     textSecondary: Color(0xFFD0C9D9),
     textMuted: Color(0xFFA59CAF),
   );
@@ -210,7 +343,40 @@ class DunesPalette extends ThemeExtension<DunesPalette> {
 }
 
 abstract final class DunesTheme {
-  static ThemeData light() => _build(DunesPalette.day, Brightness.light);
+  // Keep the original day theme intact. Global dark input/card/menu styling
+  // must not change existing custom controls such as the Nova pill composer.
+  static ThemeData light() {
+    final base = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: DunesColors.bgApp,
+      colorScheme: ColorScheme.light(
+        primary: DunesColors.accent,
+        onPrimary: Colors.white,
+        secondary: DunesColors.accentDeep,
+        surface: DunesColors.bgApp,
+        onSurface: DunesColors.text,
+        outline: DunesColors.border,
+      ),
+      dividerColor: DunesColors.borderSoft,
+    );
+    return base.copyWith(
+      extensions: const <ThemeExtension<dynamic>>[DunesPalette.day],
+      textTheme: _textTheme(base.textTheme, DunesPalette.day),
+      appBarTheme: AppBarTheme(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: DunesColors.bgApp,
+        foregroundColor: DunesColors.text,
+        titleTextStyle: DunesTypography.sans(
+          fontSize: 17,
+          fontWeight: FontWeight.w500,
+          letterSpacing: -0.015 * 17,
+          color: DunesColors.text,
+        ),
+      ),
+    );
+  }
 
   static ThemeData dark() => _build(DunesPalette.night, Brightness.dark);
 
@@ -223,7 +389,7 @@ abstract final class DunesTheme {
       colorScheme: ColorScheme(
         brightness: brightness,
         primary: dark ? const Color(0xFFB69BFF) : DunesColors.accent,
-        onPrimary: Colors.white,
+        onPrimary: dark ? const Color(0xFF211936) : Colors.white,
         secondary: dark ? const Color(0xFFD2C2FF) : DunesColors.accentDeep,
         onSecondary: dark ? const Color(0xFF211936) : Colors.white,
         error: const Color(0xFFBA1A1A),
@@ -294,9 +460,10 @@ abstract final class DunesTheme {
   }
 
   static TextTheme _textTheme(TextTheme base, DunesPalette palette) {
-    final sans = DunesTypography.applySans(
-      base,
-    ).apply(bodyColor: palette.text, displayColor: palette.text);
+    final original = DunesTypography.applySans(base);
+    final sans = palette == DunesPalette.day
+        ? original
+        : original.apply(bodyColor: palette.text, displayColor: palette.text);
     return sans.copyWith(
       headlineLarge: DunesTypography.sans(
         fontSize: 28,

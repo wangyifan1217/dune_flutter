@@ -144,7 +144,11 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFE35D6A),
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFE35D6A),
+                role: DunesColorRole.surface,
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('解除'),
@@ -203,7 +207,11 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
     return showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -228,7 +236,11 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
             decoration: InputDecoration(
               hintText: '写清楚任务内容与目标，AI 会自动关联相关会议纪要',
               filled: true,
-              fillColor: const Color(0xFFF5F6F8),
+              fillColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFF5F6F8),
+                role: DunesColorRole.surface,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
@@ -309,7 +321,11 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
                 minHeight: 420,
               ),
               child: Material(
-                color: DunesColors.bgApp,
+                color: DunesColors.resolve(
+                  ctx,
+                  DunesColors.bgApp,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(14),
                 clipBehavior: Clip.antiAlias,
                 child: SelectionArea(
@@ -325,7 +341,11 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (ctx) => Scaffold(
-          backgroundColor: DunesColors.bgApp,
+          backgroundColor: DunesColors.resolve(
+            ctx,
+            DunesColors.bgApp,
+            role: DunesColorRole.surface,
+          ),
           body: SafeArea(child: pageFor(() => Navigator.of(ctx).pop())),
         ),
       ),
@@ -359,7 +379,7 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
               ),
             ),
             if (running)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(right: 8),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -375,7 +395,10 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
                     SizedBox(width: 6),
                     Text(
                       'AI 匹配中…',
-                      style: TextStyle(fontSize: 12, color: _purple),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: DunesColors.resolveNullable(context, _purple),
+                      ),
                     ),
                   ],
                 ),
@@ -387,10 +410,10 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
                 tooltip: '重新匹配',
                 visualDensity: VisualDensity.compact,
                 onPressed: _busy ? null : _rematch,
-                icon: const Icon(
+                icon: Icon(
                   Icons.autorenew,
                   size: 19,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
             if (widget.canEdit)
@@ -398,10 +421,10 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
                 tooltip: '添加关联',
                 visualDensity: VisualDensity.compact,
                 onPressed: _busy ? null : _openPicker,
-                icon: const Icon(
+                icon: Icon(
                   Icons.add_link,
                   size: 20,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
           ],
@@ -412,7 +435,10 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
               '自动匹配未完成${widget.canEdit ? '，可点右上角重新匹配' : ''}',
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         if (!_loaded)
@@ -434,9 +460,19 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE8EAED)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -447,9 +483,9 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
                       : widget.task.description.trim().isEmpty && widget.canEdit
                       ? '还没有任务描述。写清楚任务内容，AI 会自动关联相关会议。'
                       : '暂无关联。AI 会根据描述匹配相关会议，也可手动添加会议或知识库文档。',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                     height: 1.5,
                   ),
                 ),
@@ -480,7 +516,11 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -491,8 +531,16 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isNew
-                    ? _purple.withValues(alpha: 0.55)
-                    : const Color(0xFFE8EAED),
+                    ? DunesColors.resolve(
+                        context,
+                        _purple,
+                        role: DunesColorRole.border,
+                      ).withValues(alpha: 0.55)
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFFE8EAED),
+                        role: DunesColorRole.border,
+                      ),
               ),
             ),
             child: Row(
@@ -502,7 +550,9 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
                       ? Icons.event_note_outlined
                       : Icons.menu_book_outlined,
                   size: 20,
-                  color: link.isMeeting ? _purple : const Color(0xFF2D8A5E),
+                  color: link.isMeeting
+                      ? DunesColors.resolve(context, _purple)
+                      : DunesColors.resolve(context, const Color(0xFF2D8A5E)),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -527,11 +577,22 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
                           const SizedBox(width: 6),
                           _TagChip(
                             text: _linkKindLabel(link),
-                            color: link.isAuto ? _purple : DunesColors.text3,
+                            color: link.isAuto
+                                ? DunesColors.resolve(context, _purple)
+                                : DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
                           ),
                           if (isNew) ...[
                             const SizedBox(width: 4),
-                            const _TagChip(text: '新', color: Color(0xFFE35D6A)),
+                            _TagChip(
+                              text: '新',
+                              color: DunesColors.resolve(
+                                context,
+                                Color(0xFFE35D6A),
+                              ),
+                            ),
                           ],
                         ],
                       ),
@@ -541,9 +602,12 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
                           subtitle,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                             height: 1.35,
                           ),
                         ),
@@ -556,10 +620,10 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
                     tooltip: '解除关联',
                     visualDensity: VisualDensity.compact,
                     onPressed: _busy ? null : () => _deleteLink(link),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.link_off,
                       size: 18,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
               ],
@@ -582,7 +646,11 @@ class _TagChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: DunesColors.resolveNullable(
+          context,
+          color.withValues(alpha: 0.1),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
@@ -590,7 +658,7 @@ class _TagChip extends StatelessWidget {
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w700,
-          color: color,
+          color: DunesColors.resolveNullable(context, color),
         ),
       ),
     );
@@ -740,10 +808,10 @@ class _TaskLinkPickerState extends State<_TaskLinkPicker> {
                 tooltip: '关闭',
                 visualDensity: VisualDensity.compact,
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(
+                icon: Icon(
                   Icons.close,
                   size: 20,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
             ],
@@ -757,7 +825,11 @@ class _TaskLinkPickerState extends State<_TaskLinkPicker> {
               prefixIcon: const Icon(Icons.search, size: 18),
               isDense: true,
               filled: true,
-              fillColor: const Color(0xFFF5F6F8),
+              fillColor: DunesColors.resolve(
+                context,
+                const Color(0xFFF5F6F8),
+                role: DunesColorRole.surface,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
@@ -806,7 +878,9 @@ class _TaskLinkPickerState extends State<_TaskLinkPicker> {
       leading: Icon(
         Icons.event_note_outlined,
         size: 20,
-        color: highlight ? _purple : DunesColors.text3,
+        color: highlight
+            ? DunesColors.resolve(context, _purple)
+            : DunesColors.resolve(context, DunesColors.text3),
       ),
       title: Text(
         m.title.isEmpty ? '会议 ${m.meetingId}' : m.title,
@@ -818,9 +892,12 @@ class _TaskLinkPickerState extends State<_TaskLinkPicker> {
           ? null
           : Text(m.meetingDate, style: const TextStyle(fontSize: 12)),
       trailing: m.linked
-          ? const Text(
+          ? Text(
               '已关联',
-              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             )
           : null,
       enabled: !m.linked,
@@ -838,10 +915,10 @@ class _TaskLinkPickerState extends State<_TaskLinkPicker> {
     return ListTile(
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-      leading: const Icon(
+      leading: Icon(
         Icons.menu_book_outlined,
         size: 20,
-        color: Color(0xFF2D8A5E),
+        color: DunesColors.resolveNullable(context, Color(0xFF2D8A5E)),
       ),
       title: Text(
         doc.title.isEmpty ? '文档 ${doc.kbDocumentId}' : doc.title,
@@ -850,9 +927,12 @@ class _TaskLinkPickerState extends State<_TaskLinkPicker> {
         style: const TextStyle(fontSize: 14),
       ),
       trailing: doc.linked
-          ? const Text(
+          ? Text(
               '已关联',
-              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             )
           : null,
       enabled: !doc.linked,
@@ -887,10 +967,10 @@ class _PickerGroupLabel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          color: DunesColors.text3,
+          color: DunesColors.resolve(context, DunesColors.text3),
         ),
       ),
     );
@@ -908,7 +988,10 @@ class _PickerEmptyHint extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
       child: Text(
         text,
-        style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+        style: TextStyle(
+          fontSize: 12,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
       ),
     );
   }

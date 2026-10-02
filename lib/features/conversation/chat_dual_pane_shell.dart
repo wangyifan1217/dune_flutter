@@ -22,19 +22,24 @@ class ChatDualPaneShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           sideRail,
-          SizedBox(
-            width: listPaneWidth,
-            child: listPane,
-          ),
-          const VerticalDivider(
+          SizedBox(width: listPaneWidth, child: listPane),
+          VerticalDivider(
             width: 1,
             thickness: 1,
-            color: DunesColors.borderSoft,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
           ),
           Expanded(child: chatPane),
         ],
@@ -50,7 +55,11 @@ class ChatDualPaneEmpty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: DunesColors.bgSoft,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgSoft,
+        role: DunesColorRole.surface,
+      ),
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -60,7 +69,10 @@ class ChatDualPaneEmpty extends StatelessWidget {
               Icon(
                 Icons.forum_outlined,
                 size: 52,
-                color: DunesColors.text3.withValues(alpha: 0.45),
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.text3,
+                ).withValues(alpha: 0.45),
               ),
               const SizedBox(height: 16),
               Text(
@@ -68,7 +80,8 @@ class ChatDualPaneEmpty extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 8),
@@ -77,7 +90,8 @@ class ChatDualPaneEmpty extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ],

@@ -218,7 +218,11 @@ class _NativeQianjiDailyReportSupervisePageState
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -261,23 +265,26 @@ class _NativeQianjiDailyReportSupervisePageState
         IconButton(
           onPressed: widget.onBack,
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 17),
-          color: DunesColors.text2,
+          color: DunesColors.resolve(context, DunesColors.text2),
           tooltip: '返回',
         ),
         const SizedBox(width: 2),
-        const Expanded(
+        Expanded(
           child: Text(
             '日报监控',
             style: TextStyle(
               fontSize: 19,
               fontWeight: FontWeight.w700,
-              color: _purple,
+              color: DunesColors.resolveNullable(context, _purple),
             ),
           ),
         ),
         Text(
           '${_calendar?.users.length ?? 0} 位员工',
-          style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+          style: TextStyle(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
         ),
       ],
     ),
@@ -292,18 +299,34 @@ class _NativeQianjiDailyReportSupervisePageState
         hintText: '搜索员工姓名',
         prefixIcon: const Icon(Icons.search_rounded, size: 20),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 11,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE7E8EC)),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE7E8EC),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE7E8EC)),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE7E8EC),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
       ),
     ),
@@ -316,14 +339,20 @@ class _NativeQianjiDailyReportSupervisePageState
       children: [
         Row(
           children: [
-            const Text(
+            Text(
               '部门筛选',
-              style: TextStyle(fontSize: 12, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
             const SizedBox(width: 8),
             Text(
               '当前范围 ${_visibleUsers.length} 人',
-              style: const TextStyle(fontSize: 11, color: _purple),
+              style: TextStyle(
+                fontSize: 11,
+                color: DunesColors.resolveNullable(context, _purple),
+              ),
             ),
           ],
         ),
@@ -346,7 +375,17 @@ class _NativeQianjiDailyReportSupervisePageState
   Widget _departmentChip(String label, String? value) {
     final selected = _department == value;
     return Material(
-      color: selected ? const Color(0xFFF0EBFC) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EBFC),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -356,13 +395,25 @@ class _NativeQianjiDailyReportSupervisePageState
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: selected ? _purple : const Color(0xFFE5E6EB),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _purple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE5E6EB),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? _purple : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, _purple)
+                  : DunesColors.resolve(context, DunesColors.text2),
               fontSize: 12,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
@@ -429,16 +480,42 @@ class _NativeQianjiDailyReportSupervisePageState
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: const Color(0xFFE8E8ED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8E8ED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         children: [
-          _summaryValue('本月应填', expected, DunesColors.text),
-          _summaryValue('已提交', submitted, const Color(0xFF23866B)),
-          _summaryValue('漏交', missing, const Color(0xFFBE123C)),
-          _summaryValue('待填', pending, const Color(0xFFB7791F)),
+          _summaryValue(
+            '本月应填',
+            expected,
+            DunesColors.resolve(context, DunesColors.text),
+          ),
+          _summaryValue(
+            '已提交',
+            submitted,
+            DunesColors.resolve(context, const Color(0xFF23866B)),
+          ),
+          _summaryValue(
+            '漏交',
+            missing,
+            DunesColors.resolve(context, const Color(0xFFBE123C)),
+          ),
+          _summaryValue(
+            '待填',
+            pending,
+            DunesColors.resolve(context, const Color(0xFFB7791F)),
+          ),
         ],
       ),
     );
@@ -452,13 +529,16 @@ class _NativeQianjiDailyReportSupervisePageState
           style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w800,
-            color: color,
+            color: DunesColors.resolveNullable(context, color),
           ),
         ),
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(fontSize: 10, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 10,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       ],
     ),
@@ -474,9 +554,19 @@ class _NativeQianjiDailyReportSupervisePageState
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 12, 10, 13),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE8E8ED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8E8ED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -516,23 +606,29 @@ class _NativeQianjiDailyReportSupervisePageState
               final complete = expected > 0 && submitted == expected;
               final partial = submitted > 0 && submitted < expected;
               final color = expected == 0
-                  ? const Color(0xFF8290A5)
+                  ? DunesColors.resolve(context, const Color(0xFF8290A5))
                   : complete
-                  ? const Color(0xFF168567)
+                  ? DunesColors.resolve(context, const Color(0xFF168567))
                   : partial
-                  ? const Color(0xFFB7791F)
+                  ? DunesColors.resolve(context, const Color(0xFFB7791F))
                   : counts['missing']! > 0
-                  ? const Color(0xFFBE123C)
-                  : const Color(0xFFD97706);
+                  ? DunesColors.resolve(context, const Color(0xFFBE123C))
+                  : DunesColors.resolve(context, const Color(0xFFD97706));
               final background = expected == 0
                   ? (selected
-                        ? const Color(0xFFEFE9FF)
-                        : const Color(0xFFF9F8FB))
+                        ? DunesColors.resolve(context, const Color(0xFFEFE9FF))
+                        : DunesColors.resolve(context, const Color(0xFFF9F8FB)))
                   : Color.alphaBlend(
                       color.withValues(alpha: complete ? 0.13 : 0.09),
                       selected
-                          ? const Color(0xFFEFE9FF)
-                          : const Color(0xFFF9F8FB),
+                          ? DunesColors.resolve(
+                              context,
+                              const Color(0xFFEFE9FF),
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFFF9F8FB),
+                            ),
                     );
               final noDueLabel = counts['leave']! > 0
                   ? '请假'
@@ -547,14 +643,26 @@ class _NativeQianjiDailyReportSupervisePageState
                 },
                 child: Container(
                   decoration: BoxDecoration(
-                    color: background,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      background,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(11),
                     border: Border.all(
                       color: selected
-                          ? _purple
+                          ? DunesColors.resolve(
+                              context,
+                              _purple,
+                              role: DunesColorRole.border,
+                            )
                           : expected > 0
                           ? color.withValues(alpha: 0.42)
-                          : const Color(0xFFEDEBF1),
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFFEDEBF1),
+                              role: DunesColorRole.border,
+                            ),
                       width: selected ? 1.4 : 1,
                     ),
                   ),
@@ -566,7 +674,9 @@ class _NativeQianjiDailyReportSupervisePageState
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
-                          color: selected ? _purple : DunesColors.text,
+                          color: selected
+                              ? DunesColors.resolve(context, _purple)
+                              : DunesColors.resolve(context, DunesColors.text),
                         ),
                       ),
                       if (expected > 0) ...[
@@ -575,7 +685,7 @@ class _NativeQianjiDailyReportSupervisePageState
                           '${counts['submitted']}/$expected',
                           style: TextStyle(
                             fontSize: 8,
-                            color: color,
+                            color: DunesColors.resolveNullable(context, color),
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -586,7 +696,10 @@ class _NativeQianjiDailyReportSupervisePageState
                             noDueLabel,
                             style: TextStyle(
                               fontSize: 8,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
                         ),
@@ -597,16 +710,25 @@ class _NativeQianjiDailyReportSupervisePageState
             },
           ),
           const SizedBox(height: 10),
-          const Wrap(
+          Wrap(
             spacing: 12,
             runSpacing: 5,
             children: [
-              _LegendDot('全部提交', Color(0xFF168567)),
-              _LegendDot('部分提交', Color(0xFFB7791F)),
-              _LegendDot('待填', Color(0xFFD97706)),
-              _LegendDot('漏交', Color(0xFFBE123C)),
-              _LegendDot('未到', Color(0xFF8290A5)),
-              _LegendDot('请假 / 休息', Color(0xFF8290A5)),
+              _LegendDot(
+                '全部提交',
+                DunesColors.resolve(context, Color(0xFF168567)),
+              ),
+              _LegendDot(
+                '部分提交',
+                DunesColors.resolve(context, Color(0xFFB7791F)),
+              ),
+              _LegendDot('待填', DunesColors.resolve(context, Color(0xFFD97706))),
+              _LegendDot('漏交', DunesColors.resolve(context, Color(0xFFBE123C))),
+              _LegendDot('未到', DunesColors.resolve(context, Color(0xFF8290A5))),
+              _LegendDot(
+                '请假 / 休息',
+                DunesColors.resolve(context, Color(0xFF8290A5)),
+              ),
             ],
           ),
         ],
@@ -646,7 +768,10 @@ class _NativeQianjiDailyReportSupervisePageState
             ),
             Text(
               '已填 ${counts['submitted']} / 应填 ${counts['submitted']! + counts['missing']! + counts['pending']!}',
-              style: const TextStyle(fontSize: 11, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 11,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
           ],
         ),
@@ -826,7 +951,11 @@ class _DailyReportPersonRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _statusColor(status);
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(15),
       child: InkWell(
         onTap: status == 'submitted' ? onOpen : null,
@@ -835,7 +964,13 @@ class _DailyReportPersonRow extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(13, 12, 8, 11),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: const Color(0xFFE8E8ED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8E8ED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -873,14 +1008,21 @@ class _DailyReportPersonRow extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: color.withValues(alpha: .10),
+                            color: DunesColors.resolveNullable(
+                              context,
+                              color.withValues(alpha: .10),
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(15),
                           ),
                           child: Text(
                             _statusLabel(status),
                             style: TextStyle(
                               fontSize: 10,
-                              color: color,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                color,
+                              ),
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -891,9 +1033,12 @@ class _DailyReportPersonRow extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         user.departmentName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
@@ -914,10 +1059,10 @@ class _DailyReportPersonRow extends StatelessWidget {
                           : '非工作日',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         height: 1.35,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -926,9 +1071,12 @@ class _DailyReportPersonRow extends StatelessWidget {
                         Expanded(
                           child: Text(
                             date,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 10,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
                         ),
@@ -936,16 +1084,22 @@ class _DailyReportPersonRow extends StatelessWidget {
                           onPressed: onForward,
                           visualDensity: VisualDensity.compact,
                           tooltip: '转发日报名片',
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.forward_to_inbox_rounded,
-                            color: _purple,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _purple,
+                            ),
                             size: 19,
                           ),
                         ),
                         if (status == 'submitted')
-                          const Icon(
+                          Icon(
                             Icons.chevron_right_rounded,
-                            color: Color(0xFF9A95A3),
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFF9A95A3),
+                            ),
                             size: 20,
                           ),
                       ],
@@ -969,7 +1123,10 @@ class _WeekLabel extends StatelessWidget {
     child: Center(
       child: Text(
         value,
-        style: const TextStyle(fontSize: 10, color: DunesColors.text3),
+        style: TextStyle(
+          fontSize: 10,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
       ),
     ),
   );
@@ -986,12 +1143,22 @@ class _LegendDot extends StatelessWidget {
       Container(
         width: 7,
         height: 7,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        decoration: BoxDecoration(
+          color: DunesColors.resolveNullable(
+            context,
+            color,
+            role: DunesColorRole.surface,
+          ),
+          shape: BoxShape.circle,
+        ),
       ),
       const SizedBox(width: 4),
       Text(
         label,
-        style: const TextStyle(fontSize: 9, color: DunesColors.text3),
+        style: TextStyle(
+          fontSize: 9,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
       ),
     ],
   );
@@ -1000,10 +1167,15 @@ class _LegendDot extends StatelessWidget {
 class _EmptyReportPeople extends StatelessWidget {
   const _EmptyReportPeople();
   @override
-  Widget build(BuildContext context) => const Padding(
+  Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.all(22),
     child: Center(
-      child: Text('当前筛选下没有员工记录', style: TextStyle(color: DunesColors.text3)),
+      child: Text(
+        '当前筛选下没有员工记录',
+        style: TextStyle(
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
+      ),
     ),
   );
 }
@@ -1023,8 +1195,12 @@ Future<void> showQianjiDailyReportDetail({
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(sheetContext).height * .86,
       ),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF5F4F8),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFF5F4F8),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
@@ -1034,7 +1210,11 @@ Future<void> showQianjiDailyReportDetail({
             width: 38,
             height: 4,
             decoration: BoxDecoration(
-              color: const Color(0xFFD6D2DC),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFD6D2DC),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(9),
             ),
           ),
@@ -1056,9 +1236,12 @@ Future<void> showQianjiDailyReportDetail({
                       if (departmentName.isNotEmpty)
                         Text(
                           departmentName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                       const SizedBox(height: 4),
@@ -1066,7 +1249,10 @@ Future<void> showQianjiDailyReportDetail({
                         _statusLabel(report.status),
                         style: TextStyle(
                           fontSize: 11,
-                          color: _statusColor(report.status),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _statusColor(report.status),
+                          ),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -1241,7 +1427,11 @@ class QianjiDailyReportShareCard extends StatelessWidget {
     final status = '${payload['status'] ?? 'pending'}';
     final color = _statusColor(status);
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -1251,7 +1441,13 @@ class QianjiDailyReportShareCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE8E3F4)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8E3F4),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1268,12 +1464,12 @@ class QianjiDailyReportShareCard extends StatelessWidget {
                     size: 36,
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       '沙丘日报',
                       style: TextStyle(
                         fontSize: 11,
-                        color: _purple,
+                        color: DunesColors.resolveNullable(context, _purple),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1282,7 +1478,7 @@ class QianjiDailyReportShareCard extends StatelessWidget {
                     _statusLabel(status),
                     style: TextStyle(
                       fontSize: 10,
-                      color: color,
+                      color: DunesColors.resolveNullable(context, color),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1300,9 +1496,9 @@ class QianjiDailyReportShareCard extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   '${payload['departmentName']}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ],
@@ -1312,23 +1508,30 @@ class QianjiDailyReportShareCard extends StatelessWidget {
                   '${payload['summary']}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     height: 1.4,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                 ),
               ],
               const SizedBox(height: 8),
-              const Row(
+              Row(
                 children: [
                   Expanded(
                     child: Text(
                       '点击查看日报明细',
-                      style: TextStyle(fontSize: 10, color: DunesColors.text3),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
                   ),
-                  Icon(Icons.chevron_right_rounded, size: 16, color: _purple),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 16,
+                    color: DunesColors.resolveNullable(context, _purple),
+                  ),
                 ],
               ),
             ],

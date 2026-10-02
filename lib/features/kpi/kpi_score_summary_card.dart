@@ -500,9 +500,19 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: DunesColors.brandPurpleDeep.withValues(alpha: 0.07),
@@ -546,9 +556,16 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
               child: Container(
                 height: 38,
                 alignment: Alignment.center,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: DunesColors.borderSoft, width: 0.7),
+                    top: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.borderSoft,
+                        role: DunesColorRole.border,
+                      ),
+                      width: 0.7,
+                    ),
                   ),
                 ),
                 child: Row(
@@ -559,8 +576,12 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                       style: DunesTypography.sans(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.brandPurpleDeep,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurpleDeep,
+                        ),
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                     Icon(
@@ -568,7 +589,10 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                           ? Icons.keyboard_arrow_up_rounded
                           : Icons.keyboard_arrow_down_rounded,
                       size: 16,
-                      color: DunesColors.brandPurpleDeep,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurpleDeep,
+                      ),
                     ),
                   ],
                 ),
@@ -593,8 +617,12 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
               Container(
                 width: 5,
                 height: 5,
-                decoration: const BoxDecoration(
-                  color: DunesColors.brandPurple,
+                decoration: BoxDecoration(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurple,
+                    role: DunesColorRole.surface,
+                  ),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -604,9 +632,13 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                 style: DunesTypography.sans(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w500,
-                  color: DunesColors.brandPurpleDeep,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurpleDeep,
+                  ),
                   letterSpacing: 0.3,
                   height: 1.0,
+                  context: context,
                 ),
               ),
             ],
@@ -619,9 +651,10 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
             style: DunesTypography.sans(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
               letterSpacing: -0.2,
               height: 1.25,
+              context: context,
             ),
           ),
         ],
@@ -648,9 +681,10 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
               caption,
               style: DunesTypography.sans(
                 fontSize: 10,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
                 letterSpacing: 0.3,
                 height: 1.0,
+                context: context,
               ),
             ),
             const SizedBox(height: 6),
@@ -666,9 +700,10 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                     style: DunesTypography.mono(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                       letterSpacing: -0.6,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ),
@@ -678,8 +713,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                     unit,
                     style: DunesTypography.sans(
                       fontSize: 10.5,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ],
@@ -693,8 +729,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                 overflow: TextOverflow.ellipsis,
                 style: DunesTypography.sans(
                   fontSize: 9.5,
-                  color: DunesColors.amber,
+                  color: DunesColors.resolve(context, DunesColors.amber),
                   height: 1.0,
+                  context: context,
                 ),
               ),
             ],
@@ -707,16 +744,23 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
       width: 1,
       height: 30,
       margin: const EdgeInsets.symmetric(horizontal: 10),
-      color: DunesColors.brandPurpleLine.withValues(alpha: 0.35),
+      color: DunesColors.resolve(
+        context,
+        DunesColors.brandPurpleLine,
+        role: DunesColorRole.surface,
+      ).withValues(alpha: 0.35),
     );
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFF8F5FD), DunesColors.brandPurpleSoft],
+          colors: [
+            DunesColors.resolve(context, Color(0xFFF8F5FD)),
+            DunesColors.resolve(context, DunesColors.brandPurpleSoft),
+          ],
         ),
         borderRadius: BorderRadius.circular(11),
       ),
@@ -769,8 +813,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
               style: DunesTypography.sans(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
                 height: 1.0,
+                context: context,
               ),
             ),
             const Spacer(),
@@ -778,8 +823,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
               '已评 $total 人',
               style: DunesTypography.sans(
                 fontSize: 10,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
                 height: 1.0,
+                context: context,
               ),
             ),
           ],
@@ -796,7 +842,11 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                   Expanded(
                     flex: counts[i].value,
                     child: Container(
-                      color: kpiSummaryGradeColors(counts[i].key).$1,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        kpiSummaryGradeColors(counts[i].key).$1,
+                        role: DunesColorRole.surface,
+                      ),
                     ),
                   ),
                 ],
@@ -817,7 +867,11 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                     width: 7,
                     height: 7,
                     decoration: BoxDecoration(
-                      color: kpiSummaryGradeColors(e.key).$1,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        kpiSummaryGradeColors(e.key).$1,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -826,8 +880,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                     '${e.key} ${e.value}人',
                     style: DunesTypography.sans(
                       fontSize: 10.5,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ],
@@ -842,15 +897,19 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
-        color: DunesColors.amberSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.amberSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.info_outline_rounded,
             size: 12,
-            color: DunesColors.amber,
+            color: DunesColors.resolve(context, DunesColors.amber),
           ),
           const SizedBox(width: 5),
           Expanded(
@@ -858,8 +917,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
               text,
               style: DunesTypography.sans(
                 fontSize: 10.5,
-                color: DunesColors.amber,
+                color: DunesColors.resolve(context, DunesColors.amber),
                 height: 1.3,
+                context: context,
               ),
             ),
           ),
@@ -898,14 +958,22 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
         Container(
           margin: const EdgeInsets.only(top: 4),
           padding: const EdgeInsets.fromLTRB(14, 7, 14, 7),
-          color: DunesColors.bgSoft,
+          color: DunesColors.resolve(
+            context,
+            DunesColors.bgSoft,
+            role: DunesColorRole.surface,
+          ),
           child: Row(
             children: [
               Container(
                 width: 3,
                 height: 12,
                 decoration: BoxDecoration(
-                  color: DunesColors.brandPurple,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurple,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -918,8 +986,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                   style: DunesTypography.sans(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                     height: 1.2,
+                    context: context,
                   ),
                 ),
               ),
@@ -934,8 +1003,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                 ].join(' · '),
                 style: DunesTypography.sans(
                   fontSize: 10.5,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                   height: 1.2,
+                  context: context,
                 ),
               ),
             ],
@@ -967,9 +1037,13 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
           decoration: BoxDecoration(
             border: last
                 ? null
-                : const Border(
+                : Border(
                     bottom: BorderSide(
-                      color: DunesColors.borderSoft,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.borderSoft,
+                        role: DunesColorRole.border,
+                      ),
                       width: 0.6,
                     ),
                   ),
@@ -982,8 +1056,16 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: topThree
-                      ? DunesColors.brandPurple
-                      : DunesColors.bgSoft,
+                      ? DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                          role: DunesColorRole.surface,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          DunesColors.bgSoft,
+                          role: DunesColorRole.surface,
+                        ),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -991,8 +1073,11 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                   style: DunesTypography.mono(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
-                    color: topThree ? Colors.white : DunesColors.text3,
+                    color: topThree
+                        ? DunesColors.resolve(context, Colors.white)
+                        : DunesColors.resolve(context, DunesColors.text3),
                     height: 1.0,
+                    context: context,
                   ),
                 ),
               ),
@@ -1009,8 +1094,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                       style: DunesTypography.sans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                         height: 1.25,
+                        context: context,
                       ),
                     ),
                     if (r.position.isNotEmpty) ...[
@@ -1021,8 +1107,12 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 10.5,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                           height: 1.25,
+                          context: context,
                         ),
                       ),
                     ],
@@ -1036,8 +1126,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                   style: DunesTypography.sans(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                     height: 1.0,
+                    context: context,
                   ),
                 )
               else if (r.pending)
@@ -1046,8 +1137,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                   style: DunesTypography.sans(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: DunesColors.amber,
+                    color: DunesColors.resolve(context, DunesColors.amber),
                     height: 1.0,
+                    context: context,
                   ),
                 )
               else ...[
@@ -1060,9 +1152,10 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                       style: DunesTypography.mono(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                         letterSpacing: -0.4,
                         height: 1.1,
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1070,8 +1163,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                       '系数 ${_fmtCoef(r.coefficient)}',
                       style: DunesTypography.sans(
                         fontSize: 10,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                         height: 1.1,
+                        context: context,
                       ),
                     ),
                   ],
@@ -1084,7 +1178,11 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                     height: 26,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: gradeBg,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        gradeBg,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: gradeFg.withValues(alpha: 0.25),
@@ -1097,6 +1195,7 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                         fontWeight: FontWeight.w700,
                         color: gradeFg,
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                   ),
@@ -1104,10 +1203,10 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
               ],
               if (tappable) ...[
                 const SizedBox(width: 4),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ],
             ],

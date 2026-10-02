@@ -129,13 +129,25 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
                 Container(
                   width: 150,
                   height: 150,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        Color(0xFFE5EEFC),
-                        Color(0xFFEDE4FB),
-                        Color(0x00F8F7FF),
+                        DunesColors.resolve(
+                          context,
+                          Color(0xFFE5EEFC),
+                          role: DunesColorRole.surface,
+                        ),
+                        DunesColors.resolve(
+                          context,
+                          Color(0xFFEDE4FB),
+                          role: DunesColorRole.surface,
+                        ),
+                        DunesColors.resolve(
+                          context,
+                          Color(0x00F8F7FF),
+                          role: DunesColorRole.surface,
+                        ),
                       ],
                       stops: [0.25, 0.70, 1.0],
                     ),
@@ -158,8 +170,9 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
               style: DunesTypography.sans(
                 fontSize: 25,
                 fontWeight: FontWeight.w800,
-                color: const Color(0xFF191D24),
+                color: DunesColors.resolve(context, const Color(0xFF191D24)),
                 letterSpacing: -0.3,
+                context: context,
               ),
             ),
           ),
@@ -181,7 +194,11 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
                     style: DunesTypography.sans(
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
-                      color: const Color(0xFF7E8695),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF7E8695),
+                      ),
+                      context: context,
                     ),
                   ),
                 ),
@@ -199,8 +216,12 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
                           horizontal: 10,
                           vertical: 5,
                         ),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF32363D),
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF32363D),
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.horizontal(
                             left: Radius.circular(16),
                           ),
@@ -212,19 +233,22 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
                             ),
                           ],
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               Icons.edit_note_rounded,
-                              color: Colors.white,
+                              color: DunesColors.resolve(context, Colors.white),
                               size: 14,
                             ),
                             SizedBox(width: 3),
                             Text(
                               '反馈与投诉',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -271,7 +295,8 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
                 '内容由 AI 生成',
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: const Color(0xFFC2C7D0),
+                  color: DunesColors.resolve(context, const Color(0xFFC2C7D0)),
+                  context: context,
                 ),
               ),
             ),
@@ -339,9 +364,20 @@ class _PromptCardState extends State<_PromptCard> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: const Color(0xFFEEF0F5), width: 1),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFEEF0F5),
+                  role: DunesColorRole.border,
+                ),
+                width: 1,
+              ),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x0A2B3B60),
@@ -357,11 +393,19 @@ class _PromptCardState extends State<_PromptCard> {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: item.iconBg,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      item.iconBg,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(13),
                   ),
                   alignment: Alignment.center,
-                  child: Icon(item.icon, size: 21, color: item.iconColor),
+                  child: Icon(
+                    item.icon,
+                    size: 21,
+                    color: DunesColors.resolveNullable(context, item.iconColor),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -375,8 +419,12 @@ class _PromptCardState extends State<_PromptCard> {
                         style: DunesTypography.sans(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: const Color(0xFF191D24),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF191D24),
+                          ),
                           letterSpacing: -0.2,
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -386,17 +434,24 @@ class _PromptCardState extends State<_PromptCard> {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 12,
-                          color: const Color(0xFF86909C),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF86909C),
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 6),
-                const Icon(
+                Icon(
                   Icons.arrow_forward_ios_rounded,
                   size: 13,
-                  color: Color(0xFFCFD5DF),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFCFD5DF),
+                  ),
                 ),
               ],
             ),
@@ -420,7 +475,14 @@ class NovaBlinkingAvatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 3.5),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.border,
+          ),
+          width: 3.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF6B3FE2).withValues(alpha: 0.16),
@@ -431,11 +493,7 @@ class NovaBlinkingAvatar extends StatelessWidget {
         ],
       ),
       child: ClipOval(
-        child: NovaPersonAvatarImage(
-          width: size,
-          height: size,
-          wink: true,
-        ),
+        child: NovaPersonAvatarImage(width: size, height: size, wink: true),
       ),
     );
   }

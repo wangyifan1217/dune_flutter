@@ -63,7 +63,11 @@ class AppSoftwareUpdateScaffold extends StatelessWidget {
     return PopScope(
       canPop: canPop,
       child: Material(
-        color: _pageBg,
+        color: DunesColors.resolveNullable(
+          context,
+          _pageBg,
+          role: DunesColorRole.surface,
+        ),
         child: Column(
           children: [
             SafeArea(
@@ -73,11 +77,15 @@ class AppSoftwareUpdateScaffold extends StatelessWidget {
                 child: NavigationToolbar(
                   leading: canPop
                       ? IconButton(
-                          onPressed: onBack ?? () => Navigator.of(context).maybePop(),
-                          icon: const Icon(
+                          onPressed:
+                              onBack ?? () => Navigator.of(context).maybePop(),
+                          icon: Icon(
                             Icons.chevron_left_rounded,
                             size: 28,
-                            color: Color(0xFF1A1A1A),
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFF1A1A1A),
+                            ),
                           ),
                         )
                       : const SizedBox(width: 48),
@@ -86,7 +94,11 @@ class AppSoftwareUpdateScaffold extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
-                      color: const Color(0xFF1A1A1A),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF1A1A1A),
+                      ),
+                      context: context,
                     ),
                   ),
                 ),
@@ -131,7 +143,11 @@ class AppSoftwareUpdateActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: _pageBg,
+      color: DunesColors.resolveNullable(
+        context,
+        _pageBg,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -145,7 +161,11 @@ class AppSoftwareUpdateActionBar extends StatelessWidget {
                   minHeight: 4,
                   borderRadius: BorderRadius.circular(99),
                   color: _actionBlue,
-                  backgroundColor: const Color(0xFFD6E6FA),
+                  backgroundColor: DunesColors.resolve(
+                    context,
+                    const Color(0xFFD6E6FA),
+                    role: DunesColorRole.surface,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 if (progressLabel != null)
@@ -153,7 +173,8 @@ class AppSoftwareUpdateActionBar extends StatelessWidget {
                     progressLabel!,
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 const SizedBox(height: 10),
@@ -164,14 +185,21 @@ class AppSoftwareUpdateActionBar extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: const Color(0xFFC62828),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFC62828),
+                    ),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 10),
               ],
               Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 280, minWidth: 200),
+                  constraints: const BoxConstraints(
+                    maxWidth: 280,
+                    minWidth: 200,
+                  ),
                   child: SizedBox(
                     width: double.infinity,
                     height: 44,
@@ -179,8 +207,15 @@ class AppSoftwareUpdateActionBar extends StatelessWidget {
                       onPressed: onPressed,
                       style: FilledButton.styleFrom(
                         backgroundColor: _actionBlue,
-                        disabledBackgroundColor: _actionBlue.withValues(alpha: 0.45),
-                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: DunesColors.resolve(
+                          context,
+                          _actionBlue,
+                          role: DunesColorRole.surface,
+                        ).withValues(alpha: 0.45),
+                        foregroundColor: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                        ),
                         shape: const StadiumBorder(),
                         elevation: 0,
                       ),
@@ -189,7 +224,8 @@ class AppSoftwareUpdateActionBar extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
+                          context: context,
                         ),
                       ),
                     ),
@@ -204,7 +240,8 @@ class AppSoftwareUpdateActionBar extends StatelessWidget {
                     secondaryLabel!,
                     style: DunesTypography.sans(
                       fontSize: 14,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ),
@@ -241,13 +278,13 @@ class _HeroCard extends StatelessWidget {
       height: 188,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(_cardRadius),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFFF7F4FC),
-            Color(0xFFE8E6F6),
-            Color(0xFFD9E4F6),
+            DunesColors.resolve(context, Color(0xFFF7F4FC)),
+            DunesColors.resolve(context, Color(0xFFE8E6F6)),
+            DunesColors.resolve(context, Color(0xFFD9E4F6)),
           ],
         ),
       ),
@@ -262,7 +299,11 @@ class _HeroCard extends StatelessWidget {
               height: 168,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.42),
+                color: DunesColors.resolveNullable(
+                  context,
+                  Colors.white.withValues(alpha: 0.42),
+                  role: DunesColorRole.surface,
+                ),
               ),
             ),
           ),
@@ -274,7 +315,11 @@ class _HeroCard extends StatelessWidget {
               height: 140,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFFB8C8E8).withValues(alpha: 0.28),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFB8C8E8),
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.28),
               ),
             ),
           ),
@@ -287,8 +332,12 @@ class _HeroCard extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 34,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF2A2A2A),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF2A2A2A),
+                    ),
                     letterSpacing: 1.2,
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -296,7 +345,11 @@ class _HeroCard extends StatelessWidget {
                   width: 72,
                   height: 2,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2A2A2A).withValues(alpha: 0.18),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF2A2A2A),
+                      role: DunesColorRole.surface,
+                    ).withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -306,7 +359,11 @@ class _HeroCard extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 12,
                     letterSpacing: 3.2,
-                    color: const Color(0xFF6B6B76),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF6B6B76),
+                    ),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -314,7 +371,11 @@ class _HeroCard extends StatelessWidget {
                   meta,
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: const Color(0xFF6B6B76),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF6B6B76),
+                    ),
+                    context: context,
                   ),
                 ),
               ],
@@ -336,7 +397,11 @@ class _NotesCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(_cardRadius),
       ),
       child: SelectionArea(
@@ -348,7 +413,8 @@ class _NotesCard extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: const Color(0xFF1A1A1A),
+                color: DunesColors.resolve(context, const Color(0xFF1A1A1A)),
+                context: context,
               ),
             ),
             const SizedBox(height: 10),
@@ -357,7 +423,8 @@ class _NotesCard extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 14,
                 height: 1.65,
-                color: const Color(0xFF4A4A4A),
+                color: DunesColors.resolve(context, const Color(0xFF4A4A4A)),
+                context: context,
               ),
             ),
             const SizedBox(height: 22),
@@ -366,7 +433,8 @@ class _NotesCard extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: const Color(0xFF1A1A1A),
+                color: DunesColors.resolve(context, const Color(0xFF1A1A1A)),
+                context: context,
               ),
             ),
             const SizedBox(height: 10),
@@ -377,7 +445,8 @@ class _NotesCard extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 14,
                   height: 1.65,
-                  color: const Color(0xFF4A4A4A),
+                  color: DunesColors.resolve(context, const Color(0xFF4A4A4A)),
+                  context: context,
                 ),
               ),
             ],

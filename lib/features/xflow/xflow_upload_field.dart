@@ -231,8 +231,9 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
     } finally {
       for (final bookmark in accessed) {
         try {
-          await DesktopDrop.instance
-              .stopAccessingSecurityScopedResource(bookmark: bookmark);
+          await DesktopDrop.instance.stopAccessingSecurityScopedResource(
+            bookmark: bookmark,
+          );
         } catch (_) {}
       }
       if (mounted) setState(() => _picking = false);
@@ -396,16 +397,34 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: isContract
-                  ? const [Color(0xFFF5EBE0), Color(0xFFEFE2D2)]
-                  : const [Color(0xFFF8F1E8), Color(0xFFF3EBE0)],
+                  ? [
+                      DunesColors.resolve(context, Color(0xFFF5EBE0)),
+                      DunesColors.resolve(context, Color(0xFFEFE2D2)),
+                    ]
+                  : [
+                      DunesColors.resolve(context, Color(0xFFF8F1E8)),
+                      DunesColors.resolve(context, Color(0xFFF3EBE0)),
+                    ],
             ),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: _dragging
-                  ? const Color(0xFF3B82F6)
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0xFF3B82F6),
+                      role: DunesColorRole.border,
+                    )
                   : isContract
-                      ? const Color(0x6BBE965A)
-                      : const Color(0x59A0825A),
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0x6BBE965A),
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0x59A0825A),
+                      role: DunesColorRole.border,
+                    ),
               width: _dragging ? 1.5 : 1,
             ),
           ),
@@ -414,7 +433,9 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
               Icon(
                 meta['icon'] as IconData,
                 size: 30,
-                color: _dragging ? const Color(0xFF2563EB) : DunesColors.text3,
+                color: _dragging
+                    ? DunesColors.resolve(context, const Color(0xFF2563EB))
+                    : DunesColors.resolve(context, DunesColors.text3),
               ),
               const SizedBox(height: 10),
               Text(
@@ -423,9 +444,11 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
                 style: DunesTypography.sans(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color:
-                      _dragging ? const Color(0xFF1D4ED8) : DunesColors.text2,
+                  color: _dragging
+                      ? DunesColors.resolve(context, const Color(0xFF1D4ED8))
+                      : DunesColors.resolve(context, DunesColors.text2),
                   height: 1.45,
+                  context: context,
                 ),
               ),
               const SizedBox(height: 5),
@@ -434,9 +457,10 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
                 textAlign: TextAlign.center,
                 style: DunesTypography.mono(
                   fontSize: 9,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                   letterSpacing: 0.03 * 9,
                   height: 1.5,
+                  context: context,
                 ),
               ),
               if (_picking) ...[
@@ -468,7 +492,8 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
                     style: DunesTypography.sans(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                     children: [
                       TextSpan(
@@ -476,7 +501,11 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
                         style: DunesTypography.sans(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -485,9 +514,11 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
               ),
               if (_template != null)
                 TextButton(
-                  onPressed: _downloadingTemplate ? null : () {
-                    unawaited(_downloadTemplate());
-                  },
+                  onPressed: _downloadingTemplate
+                      ? null
+                      : () {
+                          unawaited(_downloadTemplate());
+                        },
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     minimumSize: const Size(0, 28),
@@ -504,7 +535,11 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
                           style: DunesTypography.sans(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: const Color(0xFF2563EB),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFF2563EB),
+                            ),
+                            context: context,
                           ),
                         ),
                 ),
@@ -656,18 +691,24 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
       'uploading' => '上传中 $progress%',
       'error' => (item['error'] ?? '上传失败').toString(),
       _ => [
-          sizeText,
-          if (_statusChecked && _downloaded) '已下载',
-        ].where((e) => e.isNotEmpty).join(' · '),
+        sizeText,
+        if (_statusChecked && _downloaded) '已下载',
+      ].where((e) => e.isNotEmpty).join(' · '),
     };
-    Color borderColor = DunesColors.borderSoft;
-    Color bg = DunesColors.bgSoft;
+    Color borderColor = DunesColors.resolve(context, DunesColors.borderSoft);
+    Color bg = DunesColors.resolve(context, DunesColors.bgSoft);
     if (status == 'uploading') {
-      borderColor = DunesColors.accent.withValues(alpha: 0.25);
-      bg = Colors.white;
+      borderColor = DunesColors.resolve(
+        context,
+        DunesColors.accent,
+      ).withValues(alpha: 0.25);
+      bg = DunesColors.resolve(context, Colors.white);
     } else if (status == 'error') {
-      borderColor = DunesColors.coral.withValues(alpha: 0.35);
-      bg = const Color(0xFFFFF8F7);
+      borderColor = DunesColors.resolve(
+        context,
+        DunesColors.coral,
+      ).withValues(alpha: 0.35);
+      bg = DunesColors.resolve(context, const Color(0xFFFFF8F7));
     }
 
     return Material(
@@ -679,7 +720,11 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
           margin: const EdgeInsets.only(bottom: 6),
           padding: const EdgeInsets.fromLTRB(10, 9, 4, 9),
           decoration: BoxDecoration(
-            color: bg,
+            color: DunesColors.resolveNullable(
+              context,
+              bg,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(11),
             border: Border.all(color: borderColor),
           ),
@@ -698,7 +743,8 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
                       style: DunesTypography.sans(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -706,7 +752,8 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
                       metaText,
                       style: DunesTypography.mono(
                         fontSize: 9.5,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
                       ),
                     ),
                     if (status == 'uploading' || status == 'error')
@@ -717,10 +764,20 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
                           child: LinearProgressIndicator(
                             value: status == 'error' ? 1 : progress / 100,
                             minHeight: 3,
-                            backgroundColor: DunesColors.borderSoft,
+                            backgroundColor: DunesColors.resolve(
+                              context,
+                              DunesColors.borderSoft,
+                              role: DunesColorRole.surface,
+                            ),
                             color: status == 'error'
-                                ? DunesColors.coral
-                                : DunesColors.accent,
+                                ? DunesColors.resolve(
+                                    context,
+                                    DunesColors.coral,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    DunesColors.accent,
+                                  ),
                           ),
                         ),
                       ),
@@ -734,8 +791,8 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
                     Icons.download_outlined,
                     size: 17,
                     color: _downloaded
-                        ? const Color(0xFF3B82F6)
-                        : DunesColors.text3,
+                        ? DunesColors.resolve(context, const Color(0xFF3B82F6))
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                   onPressed: _busy ? null : _download,
                   style: IconButton.styleFrom(
@@ -745,7 +802,11 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
                 ),
               IconButton(
                 tooltip: '移除',
-                icon: const Icon(Icons.close, size: 16, color: DunesColors.text3),
+                icon: Icon(
+                  Icons.close,
+                  size: 16,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
                 onPressed: widget.onRemove,
                 style: IconButton.styleFrom(
                   minimumSize: const Size(28, 28),

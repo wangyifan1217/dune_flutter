@@ -95,7 +95,11 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final latest = person.latest;
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
@@ -104,7 +108,13 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(15, 14, 12, 13),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE8E5EF)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8E5EF),
+                role: DunesColorRole.border,
+              ),
+            ),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x0A252039),
@@ -137,10 +147,13 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
                             person.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
                             ),
                           ),
                         ),
@@ -153,9 +166,12 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
                         person.department,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
@@ -167,27 +183,27 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
                         _metric(
                           '待回复',
                           person.waitingCount,
-                          const Color(0xFFB7791F),
+                          DunesColors.resolve(context, const Color(0xFFB7791F)),
                         ),
                         _metric(
                           '未读',
                           person.unreadCount,
-                          const Color(0xFFCF4C4C),
+                          DunesColors.resolve(context, const Color(0xFFCF4C4C)),
                         ),
                         _metric(
                           '已回复',
                           person.repliedCount,
-                          const Color(0xFF318268),
+                          DunesColors.resolve(context, const Color(0xFF318268)),
                         ),
                         _metric(
                           '未读超1小时',
                           person.unreadOverOneHourCount,
-                          const Color(0xFFCF4C4C),
+                          DunesColors.resolve(context, const Color(0xFFCF4C4C)),
                         ),
                         _metric(
                           '已读未回超1小时',
                           person.readUnrepliedOverOneHourCount,
-                          const Color(0xFFB7791F),
+                          DunesColors.resolve(context, const Color(0xFFB7791F)),
                         ),
                       ],
                     ),
@@ -196,9 +212,9 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
                       '群 ${latest.title}  ·  @${latest.senderName.isEmpty ? '未知成员' : latest.senderName} → ${person.name}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -211,8 +227,11 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         color: latest.status == '已回复'
-                            ? const Color(0xFF318268)
-                            : DunesColors.text2,
+                            ? DunesColors.resolve(
+                                context,
+                                const Color(0xFF318268),
+                              )
+                            : DunesColors.resolve(context, DunesColors.text2),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -223,9 +242,12 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
                             '最近更新 ${latest.time}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
                         ),
@@ -234,16 +256,22 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
                             onPressed: onForward,
                             tooltip: '转发个人名片',
                             visualDensity: VisualDensity.compact,
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.forward_to_inbox_rounded,
-                              color: _purple,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _purple,
+                              ),
                               size: 19,
                             ),
                           ),
-                        const Icon(
+                        Icon(
                           Icons.chevron_right_rounded,
                           size: 20,
-                          color: Color(0xFF9A95A3),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF9A95A3),
+                          ),
                         ),
                       ],
                     ),
@@ -301,8 +329,12 @@ Future<void> showQianjiGroupReplyPersonDetails({
         top: false,
         child: Container(
           constraints: BoxConstraints(maxHeight: maxHeight),
-          decoration: const BoxDecoration(
-            color: Color(0xFFF5F4F8),
+          decoration: BoxDecoration(
+            color: DunesColors.resolveNullable(
+              context,
+              Color(0xFFF5F4F8),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
@@ -312,7 +344,11 @@ Future<void> showQianjiGroupReplyPersonDetails({
                 width: 38,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD6D2DC),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFD6D2DC),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(9),
                 ),
               ),
@@ -336,18 +372,24 @@ Future<void> showQianjiGroupReplyPersonDetails({
                         children: [
                           Text(
                             '${person.name} · 群响应明细',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             '待回复 ${person.waitingCount} · 已回复 ${person.repliedCount} · 未读超1小时 ${person.unreadOverOneHourCount} · 已读未回超1小时 ${person.readUnrepliedOverOneHourCount}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
                         ],
@@ -360,7 +402,14 @@ Future<void> showQianjiGroupReplyPersonDetails({
                   ],
                 ),
               ),
-              const Divider(height: 1, color: Color(0xFFE6E3EB)),
+              Divider(
+                height: 1,
+                color: DunesColors.resolve(
+                  context,
+                  Color(0xFFE6E3EB),
+                  role: DunesColorRole.border,
+                ),
+              ),
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
@@ -369,14 +418,27 @@ Future<void> showQianjiGroupReplyPersonDetails({
                   itemBuilder: (context, index) {
                     final row = person.records[index];
                     final stateColor = switch (row.status) {
-                      '已回复' => const Color(0xFF318268),
-                      '未读' => const Color(0xFFCF4C4C),
-                      _ => const Color(0xFFB7791F),
+                      '已回复' => DunesColors.resolve(
+                        context,
+                        const Color(0xFF318268),
+                      ),
+                      '未读' => DunesColors.resolve(
+                        context,
+                        const Color(0xFFCF4C4C),
+                      ),
+                      _ => DunesColors.resolve(
+                        context,
+                        const Color(0xFFB7791F),
+                      ),
                     };
                     return Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(15),
                       ),
                       child: Column(
@@ -389,10 +451,13 @@ Future<void> showQianjiGroupReplyPersonDetails({
                                   row.title,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w700,
-                                    color: DunesColors.text,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -400,7 +465,10 @@ Future<void> showQianjiGroupReplyPersonDetails({
                                 row.status,
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: stateColor,
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    stateColor,
+                                  ),
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -409,19 +477,25 @@ Future<void> showQianjiGroupReplyPersonDetails({
                           const SizedBox(height: 7),
                           Text(
                             '@${row.senderName.isEmpty ? '未知成员' : row.senderName} → 被@ ${person.name}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
                           if (row.subtitle.isNotEmpty) ...[
                             const SizedBox(height: 5),
                             Text(
                               '原消息：${row.subtitle}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 height: 1.45,
-                                color: DunesColors.text2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
                               ),
                             ),
                           ],
@@ -429,19 +503,25 @@ Future<void> showQianjiGroupReplyPersonDetails({
                             const SizedBox(height: 6),
                             Text(
                               '回复内容：${row.replySummary.isEmpty ? '回复内容暂不可用' : row.replySummary}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 height: 1.45,
-                                color: Color(0xFF318268),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFF318268),
+                                ),
                               ),
                             ),
                           ],
                           const SizedBox(height: 8),
                           Text(
                             row.time,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
                         ],
@@ -521,7 +601,11 @@ class QianjiGroupReplyShareCard extends StatelessWidget {
     final unread = (payload['unreadCount'] as num?)?.toInt() ?? 0;
     final pending = (payload['pendingCount'] as num?)?.toInt() ?? 0;
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -531,7 +615,13 @@ class QianjiGroupReplyShareCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE8E3F4)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8E3F4),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -548,12 +638,12 @@ class QianjiGroupReplyShareCard extends StatelessWidget {
                     size: 38,
                   ),
                   const SizedBox(width: 9),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       '群响应 · 个人名片',
                       style: TextStyle(
                         fontSize: 11,
-                        color: _purple,
+                        color: DunesColors.resolveNullable(context, _purple),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -573,32 +663,45 @@ class QianjiGroupReplyShareCard extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   dept,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ],
               const SizedBox(height: 8),
               Text(
                 '未读 $unread · 已读未回 $pending · 已回复 ${payload['repliedCount'] ?? 0}',
-                style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 '未读超1小时 ${payload['unreadOverOneHourCount'] ?? payload['unreadOverOneDayCount'] ?? 0} · 已读未回超1小时 ${payload['readUnrepliedOverOneHourCount'] ?? 0}',
-                style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               const SizedBox(height: 8),
-              const Row(
+              Row(
                 children: [
                   Expanded(
                     child: Text(
                       '点击查看响应明细',
-                      style: TextStyle(fontSize: 10, color: DunesColors.text3),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
                   ),
-                  Icon(Icons.chevron_right_rounded, size: 16, color: _purple),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 16,
+                    color: DunesColors.resolveNullable(context, _purple),
+                  ),
                 ],
               ),
             ],

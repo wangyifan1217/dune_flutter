@@ -27,15 +27,30 @@ import 'core/util/android_photo_picker_stub.dart'
     if (dart.library.io) 'core/util/android_photo_picker_io.dart';
 
 class DunesApp extends StatelessWidget {
-  const DunesApp({super.key});
+  const DunesApp({super.key, this.home});
+
+  final Widget? home;
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: AppEggThemeController.instance.revision,
+      builder: (context, revision, _) => _buildApp(),
+    );
+  }
+
+  Widget _buildApp() {
+    final mobile =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.android);
     return MaterialApp(
       title: '沙丘 · 统一审批',
       navigatorKey: dunesAppNavigatorKey,
       debugShowCheckedModeBanner: false,
-      theme: DunesTheme.light(),
+      theme: mobile
+          ? AppEggThemeController.instance.theme(DunesTheme.light())
+          : DunesTheme.light(),
       locale: const Locale('zh', 'CN'),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
@@ -45,26 +60,14 @@ class DunesApp extends StatelessWidget {
       supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
       builder: (context, child) {
         return ListenableBuilder(
-          listenable: Listenable.merge([
-            AppTextScaleController.instance,
-            AppEggThemeController.instance.revision,
-          ]),
+          listenable: AppTextScaleController.instance,
           builder: (context, _) {
             final scale = AppTextScaleController.instance.scale;
             final media = MediaQuery.of(context);
-            final mobile =
-                !kIsWeb &&
-                (defaultTargetPlatform == TargetPlatform.iOS ||
-                    defaultTargetPlatform == TargetPlatform.android);
-            if (mobile) unawaited(AppEggThemeController.instance.load());
             Widget wrapped = MobileViewportShell(
               child: AppWatermark(child: child ?? const SizedBox.shrink()),
             );
             if (mobile) {
-              wrapped = Theme(
-                data: AppEggThemeController.instance.theme(DunesTheme.light()),
-                child: wrapped,
-              );
               final night = AppEggThemeController.instance.isNight;
               final palette = night ? DunesPalette.night : DunesPalette.day;
               wrapped = AnnotatedRegion<SystemUiOverlayStyle>(
@@ -73,6 +76,9 @@ class DunesApp extends StatelessWidget {
                   statusBarIconBrightness: night
                       ? Brightness.light
                       : Brightness.dark,
+                  statusBarBrightness: night
+                      ? Brightness.dark
+                      : Brightness.light,
                   systemNavigationBarColor: palette.app,
                   systemNavigationBarIconBrightness: night
                       ? Brightness.light
@@ -101,7 +107,7 @@ class DunesApp extends StatelessWidget {
           },
         );
       },
-      home: _initialHome(),
+      home: home ?? _initialHome(),
     );
   }
 }
@@ -135,6 +141,11 @@ Future<void> main(List<String> args) async {
 
   installWebTextInputGuard();
   await AppTextScaleController.instance.load();
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android)) {
+    await AppEggThemeController.instance.load();
+  }
   if (isDesktopCommOnly) {
     await initWindowsDesktopTray();
     // 全局截图热键依赖 hotkey_manager 初始化。
@@ -143,12 +154,21 @@ Future<void> main(List<String> args) async {
     } catch (_) {}
   }
   if (!kIsWeb) {
+    final night =
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.android) &&
+        AppEggThemeController.instance.isNight;
     SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
+      SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        systemNavigationBarColor: Color(0xFFFBFAF6),
-        systemNavigationBarIconBrightness: Brightness.dark,
+        statusBarIconBrightness: night ? Brightness.light : Brightness.dark,
+        statusBarBrightness: night ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor: night
+            ? DunesPalette.night.app
+            : DunesPalette.day.app,
+        systemNavigationBarIconBrightness: night
+            ? Brightness.light
+            : Brightness.dark,
       ),
     );
     // Windows 的 WinRT Toast 延后到第一条通知，避免登录进会话页时

@@ -415,7 +415,10 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
   void _onRealtime(ConversationRealtimeEvent ev) {
     if (ev.conversationId != _convId) return;
     if (ev.type == 'oil_fund_alert_ack' || ev.type == 'oil_fund_alert_read') {
-      _applyOilFundAlertTiming(ev.raw, confirmed: ev.type == 'oil_fund_alert_ack');
+      _applyOilFundAlertTiming(
+        ev.raw,
+        confirmed: ev.type == 'oil_fund_alert_ack',
+      );
       return;
     }
     if (ev.type != 'message' && ev.type != 'conversation_updated') return;
@@ -539,8 +542,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     _syncPendingConfirmVisible();
   }
 
-  GlobalKey _messageKey(int id) =>
-      _messageKeys.putIfAbsent(id, GlobalKey.new);
+  GlobalKey _messageKey(int id) => _messageKeys.putIfAbsent(id, GlobalKey.new);
 
   int? get _pendingConfirmMessageId {
     if (_robotKey != 'r_oil_fund_alert') return null;
@@ -626,7 +628,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
         child: Container(
           margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           decoration: BoxDecoration(
-            color: DunesColors.bgApp,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
@@ -742,7 +748,10 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFC44949),
+              foregroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFC44949),
+              ),
             ),
             child: const Text('清空'),
           ),
@@ -915,7 +924,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -940,25 +953,28 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                       ),
                       actions: [
                         if (_canClearHistory)
-                        IconButton(
-                          tooltip: '清空会话',
-                          onPressed: (_clearing || _loading)
-                              ? null
-                              : _confirmClearHistory,
-                          icon: _clearing
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                          IconButton(
+                            tooltip: '清空会话',
+                            onPressed: (_clearing || _loading)
+                                ? null
+                                : _confirmClearHistory,
+                            icon: _clearing
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.delete_outline_rounded,
+                                    size: 20,
                                   ),
-                                )
-                              : const Icon(
-                                  Icons.delete_outline_rounded,
-                                  size: 20,
-                                ),
-                          color: DunesColors.text2,
-                        ),
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
+                          ),
                         if (canChat && widget.onOpenConsultList != null)
                           IconButton(
                             tooltip: '咨询明细',
@@ -967,7 +983,10 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                               Icons.receipt_long_rounded,
                               size: 20,
                             ),
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
                           ),
                       ],
                     ),
@@ -999,10 +1018,20 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                  decoration: const BoxDecoration(
-                    color: DunesColors.bgApp,
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.bgApp,
+                      role: DunesColorRole.surface,
+                    ),
                     border: Border(
-                      top: BorderSide(color: DunesColors.borderSoft),
+                      top: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                   ),
                   child: Text(
@@ -1010,7 +1039,8 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                     textAlign: TextAlign.center,
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ),
@@ -1034,7 +1064,8 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 12),
@@ -1051,7 +1082,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
       return Center(
         child: Text(
           canChat ? '向「${role.name}」提问，回复会出现在这里' : '暂无推送消息',
-          style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       );
     }
@@ -1116,7 +1151,10 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                             height: 12,
                             child: CircularProgressIndicator(
                               strokeWidth: 1.6,
-                              color: DunesColors.text3.withValues(alpha: 0.8),
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ).withValues(alpha: 0.8),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -1125,7 +1163,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                             style: DunesTypography.sans(
                               fontSize: 13,
                               height: 1.5,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
                             ),
                           ),
                         ],
@@ -1185,7 +1227,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                                       '[空回复]',
                                       style: DunesTypography.sans(
                                         fontSize: 13,
-                                        color: DunesColors.text3,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text3,
+                                        ),
+                                        context: context,
                                       ),
                                     )
                                   : RepaintBoundary(
@@ -1201,7 +1247,8 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                                 confirming: _confirmingAlertIds.contains(
                                   _oilFundAlertId(m),
                                 ),
-                                onConfirm: () => unawaited(_confirmOilFundAlert(m)),
+                                onConfirm: () =>
+                                    unawaited(_confirmOilFundAlert(m)),
                               ),
                             if (isRobotReply)
                               _RobotReplyQuickActions(
@@ -1228,7 +1275,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                 child: Ink(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(999),
-                    color: const Color(0xFFD4380D),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFD4380D),
+                      role: DunesColorRole.surface,
+                    ),
                   ),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -1237,10 +1288,10 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.keyboard_arrow_up_rounded,
                         size: 16,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                       ),
                       const SizedBox(width: 2),
                       Text(
@@ -1248,7 +1299,8 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                         style: DunesTypography.sans(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
+                          context: context,
                         ),
                       ),
                     ],
@@ -1271,8 +1323,18 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                   child: Ink(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(999),
-                      color: Colors.white,
-                      border: Border.all(color: DunesColors.borderSoft),
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
@@ -1281,10 +1343,13 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.keyboard_arrow_down_rounded,
                           size: 16,
-                          color: DunesColors.accentDeep,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.accentDeep,
+                          ),
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -1292,7 +1357,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                           style: DunesTypography.sans(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.accentDeep,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.accentDeep,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],
@@ -1328,7 +1397,13 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
       final index = _messages.indexWhere((item) => item.id == id);
       if (index < 0) return;
       final next = Map<String, dynamic>.from(_messages[index].payload ?? {});
-      for (final key in ['pushedAt', 'readAt', 'confirmedAt', 'unreadMs', 'confirmWaitMs']) {
+      for (final key in [
+        'pushedAt',
+        'readAt',
+        'confirmedAt',
+        'unreadMs',
+        'confirmWaitMs',
+      ]) {
         if (raw[key] != null) next[key] = raw[key];
       }
       if (confirmed) next['confirmed'] = true;
@@ -1404,8 +1479,18 @@ class _RobotReplyBubble extends StatelessWidget {
             clipBehavior: Clip.hardEdge,
             padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
             decoration: BoxDecoration(
-              color: DunesColors.bgApp,
-              border: Border.all(color: DunesColors.borderSoft),
+              color: DunesColors.resolve(
+                context,
+                DunesColors.bgApp,
+                role: DunesColorRole.surface,
+              ),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(4),
                 topRight: Radius.circular(12),
@@ -1499,14 +1584,16 @@ class _OilFundAlertConfirmState extends State<_OilFundAlertConfirm> {
     Color color;
     if (confirmed) {
       final readPart = readDur == null ? '已读' : '已读 $readDur';
-      status = waitDur == null ? '$readPart · 已确认' : '$readPart · 已确认 用时 $waitDur';
-      color = DunesColors.readReceipt;
+      status = waitDur == null
+          ? '$readPart · 已确认'
+          : '$readPart · 已确认 用时 $waitDur';
+      color = DunesColors.resolve(context, DunesColors.readReceipt);
     } else if (read != null) {
       status = pendingDur == null ? '已读 · 未确认' : '已读 · 未确认 $pendingDur';
-      color = const Color(0xFFD4380D);
+      color = DunesColors.resolve(context, const Color(0xFFD4380D));
     } else {
       status = unreadLive == null ? '未读' : '未读 $unreadLive';
-      color = DunesColors.text3;
+      color = DunesColors.resolve(context, DunesColors.text3);
     }
 
     return Padding(
@@ -1516,13 +1603,21 @@ class _OilFundAlertConfirmState extends State<_OilFundAlertConfirm> {
         children: [
           Text(
             status,
-            style: DunesTypography.sans(fontSize: 12, color: color),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: color,
+              context: context,
+            ),
           ),
           const SizedBox(width: 8),
           FilledButton(
             onPressed: confirmed || widget.confirming ? null : widget.onConfirm,
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFD97706),
+              backgroundColor: DunesColors.resolve(
+                context,
+                const Color(0xFFD97706),
+                role: DunesColorRole.surface,
+              ),
               visualDensity: VisualDensity.compact,
               padding: const EdgeInsets.symmetric(horizontal: 14),
             ),
@@ -1557,7 +1652,7 @@ class _RobotReplyQuickActions extends StatelessWidget {
             onPressed: onCopy,
             visualDensity: VisualDensity.compact,
             iconSize: 17,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
             icon: const Icon(Icons.copy_outlined),
           ),
           IconButton(
@@ -1565,7 +1660,7 @@ class _RobotReplyQuickActions extends StatelessWidget {
             onPressed: onForward,
             visualDensity: VisualDensity.compact,
             iconSize: 17,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
             icon: const Icon(Icons.shortcut_rounded),
           ),
         ],

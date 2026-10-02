@@ -126,7 +126,10 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     return IconButton(
       tooltip: '使用指引',
       onPressed: () => unawaited(_showGuide(force: true)),
-      icon: const Icon(Icons.help_outline, color: DunesColors.text2),
+      icon: Icon(
+        Icons.help_outline,
+        color: DunesColors.resolve(context, DunesColors.text2),
+      ),
     );
   }
 
@@ -579,8 +582,16 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
   }) {
     return Material(
       color: active
-          ? kTaskPurple.withValues(alpha: 0.08)
-          : const Color(0xFFF5F6F8),
+          ? DunesColors.resolve(
+              context,
+              kTaskPurple,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.08)
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF5F6F8),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -594,7 +605,9 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                 Icon(
                   icon,
                   size: 16,
-                  color: active ? kTaskPurple : DunesColors.text3,
+                  color: active
+                      ? DunesColors.resolve(context, kTaskPurple)
+                      : DunesColors.resolve(context, DunesColors.text3),
                 ),
                 const SizedBox(width: 4),
               ],
@@ -606,7 +619,9 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: active ? kTaskPurple : DunesColors.text2,
+                    color: active
+                        ? DunesColors.resolve(context, kTaskPurple)
+                        : DunesColors.resolve(context, DunesColors.text2),
                   ),
                 ),
               ),
@@ -630,9 +645,19 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Wrap(
         spacing: 8,
@@ -653,16 +678,23 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
             onTap: _pickDateRange,
             trailing: InkWell(
               onTap: _resetDateToCurrentMonth,
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.only(left: 2),
-                child: Icon(Icons.restart_alt, size: 14, color: kTaskPurple),
+                child: Icon(
+                  Icons.restart_alt,
+                  size: 14,
+                  color: DunesColors.resolveNullable(context, kTaskPurple),
+                ),
               ),
             ),
           ),
           IconButton(
             tooltip: '刷新',
             onPressed: _reload,
-            icon: const Icon(Icons.refresh_rounded, color: DunesColors.text2),
+            icon: Icon(
+              Icons.refresh_rounded,
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
         ],
       ),
@@ -671,7 +703,11 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
 
   Widget _buildBoard() {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: RefreshIndicator(
         onRefresh: _reload,
         color: kTaskPurple,
@@ -695,7 +731,9 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                     children: [
                       Text(
                         _error!,
-                        style: const TextStyle(color: Colors.redAccent),
+                        style: TextStyle(
+                          color: DunesColors.resolve(context, Colors.redAccent),
+                        ),
                       ),
                       TextButton(onPressed: _reload, child: const Text('重试')),
                     ],
@@ -709,11 +747,14 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
+                      Text(
                         '默认看各部门主目标健康度，进入主目标详情可查看子目标。主、子目标均可独立纳入考核。',
                         style: TextStyle(
                           fontSize: 13,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                           height: 1.35,
                         ),
                       ),
@@ -769,9 +810,19 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -781,17 +832,20 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             '补填截止后生成的记录；已补交的记录会保留并标记为已解决。',
-            style: TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             '选择员工',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
           const SizedBox(height: 8),
@@ -843,14 +897,18 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
               ),
             )
           else if (selected == null)
-            const Text(
+            Text(
               '选择员工后查看漏交日报。',
-              style: TextStyle(color: DunesColors.text3),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             )
           else if (_missingReports.isEmpty)
             Text(
               '${name ?? '该员工'}在所选周期内没有漏交记录。',
-              style: const TextStyle(color: DunesColors.text3),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             )
           else
             ..._missingReports.map(
@@ -858,10 +916,13 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.event_busy_outlined,
                       size: 16,
-                      color: Color(0xFFB45309),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFB45309),
+                      ),
                     ),
                     const SizedBox(width: 7),
                     Expanded(child: Text(report.reportDate)),
@@ -871,8 +932,14 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: report.resolved
-                            ? const Color(0xFF1F9D76)
-                            : const Color(0xFFB45309),
+                            ? DunesColors.resolve(
+                                context,
+                                const Color(0xFF1F9D76),
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFFB45309),
+                              ),
                       ),
                     ),
                   ],
@@ -966,13 +1033,15 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
             ),
           ),
           if (owners.isEmpty)
-            const SliverToBoxAdapter(
+            SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.all(40),
                 child: Center(
                   child: Text(
                     '暂无主目标',
-                    style: TextStyle(color: DunesColors.text3),
+                    style: TextStyle(
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                 ),
               ),
@@ -1029,11 +1098,16 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
               ),
             ),
           ),
-          const SliverToBoxAdapter(
+          SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.all(40),
               child: Center(
-                child: Text('暂无任务', style: TextStyle(color: DunesColors.text3)),
+                child: Text(
+                  '暂无任务',
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
+                ),
               ),
             ),
           ),
@@ -1059,10 +1133,10 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                       minWidth: 40,
                       minHeight: 40,
                     ),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.ios_share_rounded,
                       size: 19,
-                      color: kTaskPurple,
+                      color: DunesColors.resolveNullable(context, kTaskPurple),
                     ),
                   ),
                 TextButton(
@@ -1094,11 +1168,16 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
 
     if (_visibleDepts.isEmpty) {
       return [
-        const SliverToBoxAdapter(
+        SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.all(40),
             child: Center(
-              child: Text('暂无部门数据', style: TextStyle(color: DunesColors.text3)),
+              child: Text(
+                '暂无部门数据',
+                style: TextStyle(
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
+              ),
             ),
           ),
         ),
@@ -1179,9 +1258,19 @@ class _HrbpBarChart extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1194,9 +1283,9 @@ class _HrbpBarChart extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               hint!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
                 height: 1.35,
               ),
             ),
@@ -1208,7 +1297,9 @@ class _HrbpBarChart extends StatelessWidget {
               child: Center(
                 child: Text(
                   emptyText,
-                  style: const TextStyle(color: DunesColors.text3),
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
               ),
             )
@@ -1314,7 +1405,7 @@ class _HrbpVerticalBar extends StatelessWidget {
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           height: 1,
-                          color: tone,
+                          color: DunesColors.resolveNullable(context, tone),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -1337,7 +1428,14 @@ class _HrbpVerticalBar extends StatelessWidget {
                 },
               ),
             ),
-            Container(height: 1, color: const Color(0xFFE6E8EC)),
+            Container(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE6E8EC),
+                role: DunesColorRole.surface,
+              ),
+            ),
             const SizedBox(height: 8),
             SizedBox(
               height: 52,
@@ -1360,10 +1458,10 @@ class _HrbpVerticalBar extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       height: 1.2,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 ],
@@ -1398,9 +1496,19 @@ class _StatStrip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1410,23 +1518,26 @@ class _StatStrip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: color,
+                  color: DunesColors.resolveNullable(context, color),
                   height: 1.05,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 hint,
-                style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ],
           ),
@@ -1438,19 +1549,44 @@ class _StatStrip extends StatelessWidget {
       children: [
         Row(
           children: [
-            cell('$total', '主目标', '默认列表口径', kTaskPurple),
+            cell(
+              '$total',
+              '主目标',
+              '默认列表口径',
+              DunesColors.resolve(context, kTaskPurple),
+            ),
             const SizedBox(width: 8),
-            cell('$completed', '按期完成', '期内按时办结', const Color(0xFF1F9D76)),
+            cell(
+              '$completed',
+              '按期完成',
+              '期内按时办结',
+              DunesColors.resolve(context, const Color(0xFF1F9D76)),
+            ),
             const SizedBox(width: 8),
-            cell('$risk', '进行中风险', '临近无更新或逾期', const Color(0xFFB45309)),
+            cell(
+              '$risk',
+              '进行中风险',
+              '临近无更新或逾期',
+              DunesColors.resolve(context, const Color(0xFFB45309)),
+            ),
           ],
         ),
         const SizedBox(height: 8),
         Row(
           children: [
-            cell('$overdue', '逾期', '过期还未办结', const Color(0xFFB45309)),
+            cell(
+              '$overdue',
+              '逾期',
+              '过期还未办结',
+              DunesColors.resolve(context, const Color(0xFFB45309)),
+            ),
             const SizedBox(width: 8),
-            cell(reportRate, '日报提交率', '工作日按时+补填', const Color(0xFF3D7A8C)),
+            cell(
+              reportRate,
+              '日报提交率',
+              '工作日按时+补填',
+              DunesColors.resolve(context, const Color(0xFF3D7A8C)),
+            ),
             const SizedBox(width: 8),
             const Expanded(child: SizedBox()),
           ],
@@ -1489,7 +1625,11 @@ class _DeptStatCard extends StatelessWidget {
       completed: completed,
     );
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -1498,7 +1638,13 @@ class _DeptStatCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1524,10 +1670,13 @@ class _DeptStatCard extends StatelessWidget {
                         minHeight: 40,
                       ),
                       padding: const EdgeInsets.all(8),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.ios_share_rounded,
                         size: 19,
-                        color: kTaskPurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          kTaskPurple,
+                        ),
                       ),
                     ),
                   Text(
@@ -1535,21 +1684,27 @@ class _DeptStatCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: tone,
+                      color: DunesColors.resolveNullable(context, tone),
                     ),
                   ),
                   const SizedBox(width: 2),
                   Icon(
                     Icons.chevron_right_rounded,
                     size: 20,
-                    color: DunesColors.text3.withValues(alpha: 0.8),
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.text3,
+                    ).withValues(alpha: 0.8),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               Text(
                 summary,
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               const SizedBox(height: 10),
               TaskProgressBar(
@@ -1595,7 +1750,11 @@ class _TaskStatCard extends StatelessWidget {
       progressPct: task.progressPct,
     );
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -1604,7 +1763,13 @@ class _TaskStatCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1632,10 +1797,13 @@ class _TaskStatCard extends StatelessWidget {
                         minHeight: 40,
                       ),
                       padding: const EdgeInsets.all(8),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.ios_share_rounded,
                         size: 19,
-                        color: kTaskPurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          kTaskPurple,
+                        ),
                       ),
                     ),
                   Text(
@@ -1643,7 +1811,7 @@ class _TaskStatCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: tone,
+                      color: DunesColors.resolveNullable(context, tone),
                     ),
                   ),
                 ],
@@ -1656,20 +1824,28 @@ class _TaskStatCard extends StatelessWidget {
                   TaskMetaChip(
                     text: overdueOpen ? '已逾期未办结' : taskStatusLabel(task.status),
                     color: overdueOpen
-                        ? const Color(0xFFB45309)
-                        : (done ? const Color(0xFF1F9D76) : kTaskPurple),
+                        ? DunesColors.resolve(context, const Color(0xFFB45309))
+                        : (done
+                              ? DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF1F9D76),
+                                )
+                              : DunesColors.resolve(context, kTaskPurple)),
                   ),
                   if (task.ownerName.isNotEmpty)
                     TaskMetaChip(
                       text: '负责人 ${task.ownerName}',
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
                     ),
                 ],
               ),
               const SizedBox(height: 6),
               Text(
                 '任务周期 ${_fmtDate(task.startAt)} ~ ${_fmtDate(task.dueAt)}',
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               if (taskCardContextLine(task) != null) ...[
                 const SizedBox(height: 4),
@@ -1677,9 +1853,9 @@ class _TaskStatCard extends StatelessWidget {
                   taskCardContextLine(task)!,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ],
@@ -1687,9 +1863,12 @@ class _TaskStatCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   hint,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFFB45309),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFFB45309),
+                    ),
                     height: 1.35,
                   ),
                 ),

@@ -403,7 +403,10 @@ class TaskGuideHelpButton extends StatelessWidget {
     return IconButton(
       tooltip: '使用指引',
       onPressed: onPressed,
-      icon: Icon(Icons.help_outline, color: color),
+      icon: Icon(
+        Icons.help_outline,
+        color: DunesColors.resolveNullable(context, color),
+      ),
     );
   }
 }
@@ -451,13 +454,20 @@ class _TaskGuideDialogState extends State<_TaskGuideDialog> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: spec.accent.withValues(alpha: 0.12),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        spec.accent.withValues(alpha: 0.12),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       spec.badge,
                       style: TextStyle(
-                        color: spec.accent,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          spec.accent,
+                        ),
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -466,9 +476,9 @@ class _TaskGuideDialogState extends State<_TaskGuideDialog> {
                   const Spacer(),
                   Text(
                     '${_index + 1}/${spec.steps.length}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                   TextButton(
@@ -480,9 +490,9 @@ class _TaskGuideDialogState extends State<_TaskGuideDialog> {
               const SizedBox(height: 14),
               Text(
                 spec.title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -495,19 +505,27 @@ class _TaskGuideDialogState extends State<_TaskGuideDialog> {
                     height: 44,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: spec.accent.withValues(alpha: 0.1),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        spec.accent.withValues(alpha: 0.1),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(step.icon, size: 24, color: spec.accent),
+                    child: Icon(
+                      step.icon,
+                      size: 24,
+                      color: DunesColors.resolveNullable(context, spec.accent),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       step.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                         height: 1.3,
                       ),
                     ),
@@ -517,10 +535,10 @@ class _TaskGuideDialogState extends State<_TaskGuideDialog> {
               const SizedBox(height: 10),
               Text(
                 step.body,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   height: 1.55,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               if (step.actions.isNotEmpty) ...[
@@ -528,7 +546,11 @@ class _TaskGuideDialogState extends State<_TaskGuideDialog> {
                 Container(
                   padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                   decoration: BoxDecoration(
-                    color: spec.accent.withValues(alpha: 0.06),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      spec.accent.withValues(alpha: 0.06),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Column(
@@ -546,7 +568,11 @@ class _TaskGuideDialogState extends State<_TaskGuideDialog> {
                                   width: 6,
                                   height: 6,
                                   decoration: BoxDecoration(
-                                    color: spec.accent,
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      spec.accent,
+                                      role: DunesColorRole.surface,
+                                    ),
                                     shape: BoxShape.circle,
                                   ),
                                 ),
@@ -555,10 +581,13 @@ class _TaskGuideDialogState extends State<_TaskGuideDialog> {
                               Expanded(
                                 child: Text(
                                   action,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
                                     height: 1.45,
-                                    color: DunesColors.text,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -580,7 +609,11 @@ class _TaskGuideDialogState extends State<_TaskGuideDialog> {
                       decoration: BoxDecoration(
                         color: i == _index
                             ? spec.accent
-                            : const Color(0xFFD9DCE3),
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFFD9DCE3),
+                                role: DunesColorRole.surface,
+                              ),
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),

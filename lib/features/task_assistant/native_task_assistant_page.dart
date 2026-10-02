@@ -505,7 +505,11 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFE35D6A),
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFE35D6A),
+                role: DunesColorRole.surface,
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('清空'),
@@ -626,7 +630,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       session: widget.session,
       task: task,
       mode: mode,
-      accentColor: const Color(0xFF2F8F7E),
+      accentColor: DunesColors.resolve(context, const Color(0xFF2F8F7E)),
     );
     if (!changed || !mounted) return;
     if (_detailTaskId != null) {
@@ -650,7 +654,11 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   Widget build(BuildContext context) {
     if (_showDailyReport) {
       return Scaffold(
-        backgroundColor: DunesColors.bgApp,
+        backgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         body: SafeArea(
           bottom: false,
           child: NativeTaskDailyReportPage(
@@ -665,7 +673,11 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     if (detailTaskId != null) {
       // 点通知卡片打开的内嵌任务详情（进度/评价复用上面的三级页）。
       return Scaffold(
-        backgroundColor: DunesColors.bgApp,
+        backgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         body: SafeArea(
           bottom: false,
           child: NativeTaskDetailView(
@@ -683,7 +695,11 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     }
 
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -715,8 +731,14 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
                           _dailyPending ? '日报待填' : '日报',
                           style: TextStyle(
                             color: _dailyPending
-                                ? const Color(0xFFE11D48)
-                                : DunesColors.text2,
+                                ? DunesColors.resolve(
+                                    context,
+                                    const Color(0xFFE11D48),
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    DunesColors.text2,
+                                  ),
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -725,8 +747,12 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
                           Container(
                             width: 8,
                             height: 8,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFE11D48),
+                            decoration: BoxDecoration(
+                              color: DunesColors.resolveNullable(
+                                context,
+                                Color(0xFFE11D48),
+                                role: DunesColorRole.surface,
+                              ),
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -744,10 +770,13 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(
+                        : Icon(
                             Icons.delete_sweep_outlined,
                             size: 22,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
                           ),
                   ),
               ],
@@ -762,14 +791,30 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
                   16,
                   12 + MediaQuery.paddingOf(context).bottom,
                 ),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  border: Border(top: BorderSide(color: Color(0xFFE8EAED))),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
+                  border: Border(
+                    top: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFE8EAED),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                  ),
                 ),
                 child: FilledButton.icon(
                   onPressed: _openActiveTasks,
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF2F8F7E),
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      const Color(0xFF2F8F7E),
+                      role: DunesColorRole.surface,
+                    ),
                     minimumSize: const Size.fromHeight(44),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -793,10 +838,12 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       );
     }
     if (_messages.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           '任务相关的信息会在这里通知你',
-          style: TextStyle(color: DunesColors.text3),
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       );
     }
@@ -945,8 +992,13 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     }
     final tasks = _activeSubtasks;
     if (tasks.isEmpty) {
-      return const Center(
-        child: Text('暂无你负责的进行中子目标', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '暂无你负责的进行中子目标',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     return ListView.separated(
@@ -978,15 +1030,18 @@ class TaskAssistantAvatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(size * .18),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF2F8F7E), Color(0xFF5EAEDE)],
+          colors: [
+            DunesColors.resolve(context, Color(0xFF2F8F7E)),
+            DunesColors.resolve(context, Color(0xFF5EAEDE)),
+          ],
         ),
       ),
       child: Icon(
         Icons.assignment_turned_in_outlined,
-        color: Colors.white,
+        color: DunesColors.resolve(context, Colors.white),
         size: size * .42,
       ),
     );
@@ -1006,7 +1061,11 @@ class _TaskAssignmentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFEAF5F3),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFEAF5F3),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -1023,10 +1082,13 @@ class _TaskAssignmentCard extends StatelessWidget {
               ),
               if (onTap != null) ...[
                 const SizedBox(width: 6),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
-                  color: Color(0xFF2F8F7E),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF2F8F7E),
+                  ),
                 ),
               ],
             ],
@@ -1075,13 +1137,23 @@ class _ActiveSubtaskCard extends StatelessWidget {
     final desc = task.description.trim();
 
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE8EAED)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1094,15 +1166,18 @@ class _ActiveSubtaskCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '主目标：$parentTitle',
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ],
             const SizedBox(height: 8),
             Text(
               meta.join(' · '),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
                 height: 1.35,
               ),
             ),
@@ -1112,9 +1187,9 @@ class _ActiveSubtaskCard extends StatelessWidget {
                 desc,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                   height: 1.4,
                 ),
               ),
@@ -1129,7 +1204,10 @@ class _ActiveSubtaskCard extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: canUpdate ? onUpdate : null,
                 style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF2F8F7E),
+                  foregroundColor: DunesColors.resolve(
+                    context,
+                    const Color(0xFF2F8F7E),
+                  ),
                 ),
                 icon: const Icon(Icons.tune, size: 17),
                 label: const Text('更新进度'),

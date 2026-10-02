@@ -69,8 +69,7 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
   bool get _canAccess =>
       widget.staticPreview || widget.session.effectivePaymentInvoiceAccess;
 
-  int get _totalPages =>
-      math.max(1, (_totalCount / _pageSize).ceil());
+  int get _totalPages => math.max(1, (_totalCount / _pageSize).ceil());
 
   List<PaymentInvoiceRow> get _pagedRows => _rows;
 
@@ -86,13 +85,10 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
   @override
   void initState() {
     super.initState();
-    _service =
-        widget.service ?? PaymentInvoiceService(session: widget.session);
+    _service = widget.service ?? PaymentInvoiceService(session: widget.session);
     _keywordCtrl.addListener(_scheduleLoad);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.onChromeChanged?.call(
-        const TaskShellChrome(lockPageSwipe: true),
-      );
+      widget.onChromeChanged?.call(const TaskShellChrome(lockPageSwipe: true));
     });
     if (_canAccess) unawaited(_load());
   }
@@ -160,10 +156,7 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
         _totalCount = all.length;
         _rows = start >= all.length
             ? const []
-            : all.sublist(
-                start,
-                math.min(start + _pageSize, all.length),
-              );
+            : all.sublist(start, math.min(start + _pageSize, all.length));
       });
       return;
     }
@@ -391,10 +384,12 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
   @override
   Widget build(BuildContext context) {
     if (!_canAccess) {
-      return const Center(
+      return Center(
         child: Text(
           '暂无权限查看付款发票审批',
-          style: TextStyle(color: DunesColors.text2),
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
         ),
       );
     }
@@ -419,18 +414,34 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
                       icon: const Icon(Icons.close, size: 18),
                     ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 8,
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+                borderSide: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFE8EAED),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+                borderSide: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFE8EAED),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
             ),
           ),
@@ -485,7 +496,9 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
                     label: '未完结',
                     active: _completed == 'no',
                     onTap: () {
-                      setState(() => _completed = _completed == 'no' ? '' : 'no');
+                      setState(
+                        () => _completed = _completed == 'no' ? '' : 'no',
+                      );
                       unawaited(_load());
                     },
                   ),
@@ -534,13 +547,19 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
             children: [
               Text(
                 '${_rows.length} 条',
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               if (_hint.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 Text(
                   _hint,
-                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
               ],
               if (_hasFilters) ...[
@@ -607,7 +626,12 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: const TextStyle(color: DunesColors.text2)),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
+            ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () => unawaited(_load()),
@@ -619,10 +643,13 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
       );
     }
     if (_rows.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           '没有符合筛选条件的记录',
-          style: TextStyle(color: DunesColors.text3, fontSize: 14),
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+            fontSize: 14,
+          ),
         ),
       );
     }
@@ -630,7 +657,11 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: _line),
         ),
@@ -698,7 +729,10 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
                       child: Column(
                         children: [
                           _ledgerLine(
-                            color: const Color(0xFFFAFAFA),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFFAFAFA),
+                            ),
                             minHeight: 40,
                             cells: [
                               for (final col in _dataCols)
@@ -709,7 +743,11 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
                                   style: DunesTypography.sans(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: DunesColors.text2,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text2,
+                                    ),
+                                    context: context,
                                   ),
                                 ),
                             ],
@@ -718,7 +756,11 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
                               style: DunesTypography.sans(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: DunesColors.text2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
+                                context: context,
                               ),
                             ),
                           ),
@@ -745,8 +787,20 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
     return Container(
       constraints: BoxConstraints(minHeight: minHeight),
       decoration: BoxDecoration(
-        color: color,
-        border: const Border(bottom: BorderSide(color: _line)),
+        color: DunesColors.resolveNullable(
+          context,
+          color,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _line,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: IntrinsicHeight(
         child: Row(
@@ -813,9 +867,9 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
                     values[i],
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color: _themePurple,
+                      color: DunesColors.resolveNullable(context, _themePurple),
                       decoration: TextDecoration.underline,
                     ),
                   ),
@@ -824,10 +878,10 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
                   values[i],
                   maxLines: _dataCols[i].maxLines,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     height: 1.45,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
       ],
@@ -836,12 +890,16 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
         children: [
           TextButton(
             onPressed: () => unawaited(_openDetail(row)),
-            style: _actionButtonStyle(_themePurple),
+            style: _actionButtonStyle(
+              DunesColors.resolve(context, _themePurple),
+            ),
             child: const Text('查看'),
           ),
           TextButton(
             onPressed: () => unawaited(_printRow(row)),
-            style: _actionButtonStyle(DunesColors.text2),
+            style: _actionButtonStyle(
+              DunesColors.resolve(context, DunesColors.text2),
+            ),
             child: const Text('打印'),
           ),
           if (_kind == PaymentInvoiceKind.invoice && row.invoiceOpen)
@@ -849,7 +907,9 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
               onPressed: _savingId == row.id
                   ? null
                   : () => unawaited(_completeInvoice(row)),
-              style: _actionButtonStyle(_themePurple),
+              style: _actionButtonStyle(
+                DunesColors.resolve(context, _themePurple),
+              ),
               child: Text(_savingId == row.id ? '保存中' : '完结'),
             ),
         ],
@@ -871,14 +931,25 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
     final page = _page.clamp(1, _totalPages);
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: _line)),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _line,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
           Text(
             '共 $_totalCount 条 · 每页 $_pageSize 条',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const Spacer(),
           TextButton(
@@ -889,10 +960,10 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               '$page / $_totalPages',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
               ),
             ),
           ),
@@ -920,7 +991,6 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
     final d = local.day.toString().padLeft(2, '0');
     return '$y-$m-$d';
   }
-
 }
 
 class _LedgerCol {
@@ -945,7 +1015,17 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: active ? _themePurple : Colors.white,
+      color: active
+          ? DunesColors.resolve(
+              context,
+              _themePurple,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -955,7 +1035,17 @@ class _FilterChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: active ? _themePurple : const Color(0xFFE8EAED),
+              color: active
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -963,7 +1053,9 @@ class _FilterChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: active ? Colors.white : DunesColors.text2,
+              color: active
+                  ? DunesColors.resolve(context, Colors.white)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),

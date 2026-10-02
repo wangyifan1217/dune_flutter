@@ -209,13 +209,19 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         IconButton(
           tooltip: '任务功能',
           onPressed: _openManagement,
-          icon: const Icon(Icons.widgets_outlined, color: DunesColors.text2),
+          icon: Icon(
+            Icons.widgets_outlined,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
         ),
         const SizedBox(width: 2),
         IconButton(
           tooltip: '使用指引',
           onPressed: () => unawaited(_showGuide(force: true)),
-          icon: const Icon(Icons.help_outline, color: DunesColors.text2),
+          icon: Icon(
+            Icons.help_outline,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
         ),
         const SizedBox(width: 4),
         if (widget.onOpenSummary != null)
@@ -238,17 +244,30 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     }
     return PopupMenuButton<String>(
       tooltip: '任务操作',
-      icon: const Icon(Icons.more_horiz_rounded, color: DunesColors.text2),
+      icon: Icon(
+        Icons.more_horiz_rounded,
+        color: DunesColors.resolve(context, DunesColors.text2),
+      ),
       offset: const Offset(0, 8),
       position: PopupMenuPosition.under,
-      color: Colors.white,
-      surfaceTintColor: Colors.white,
+      color: DunesColors.resolve(context, Colors.white),
+      surfaceTintColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       elevation: 8,
       shadowColor: const Color(0x1F29203A),
       constraints: const BoxConstraints(minWidth: 204),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFECE8F3)),
+        side: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            Color(0xFFECE8F3),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       onSelected: (value) {
         switch (value) {
@@ -301,26 +320,34 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             width: 30,
             height: 30,
             decoration: BoxDecoration(
-              color: const Color(0xFFF3EFFB),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF3EFFB),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(9),
             ),
             alignment: Alignment.center,
-            child: Icon(icon, size: 17, color: kTaskPurple),
+            child: Icon(
+              icon,
+              size: 17,
+              color: DunesColors.resolveNullable(context, kTaskPurple),
+            ),
           ),
           const SizedBox(width: 11),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const Spacer(),
-          const Icon(
+          Icon(
             Icons.chevron_right_rounded,
             size: 18,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
           ),
         ],
       ),
@@ -338,7 +365,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-      icon: Icon(icon, size: 20, color: DunesColors.text2),
+      icon: Icon(
+        icon,
+        size: 20,
+        color: DunesColors.resolve(context, DunesColors.text2),
+      ),
     );
   }
 
@@ -713,8 +744,16 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     final active = _dateFrom != null || _dateTo != null;
     return Material(
       color: active
-          ? kTaskPurple.withValues(alpha: 0.08)
-          : const Color(0xFFF5F6F8),
+          ? DunesColors.resolve(
+              context,
+              kTaskPurple,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.08)
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF5F6F8),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(10),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -730,7 +769,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   Icon(
                     Icons.date_range_outlined,
                     size: 16,
-                    color: active ? kTaskPurple : DunesColors.text3,
+                    color: active
+                        ? DunesColors.resolve(context, kTaskPurple)
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                   const SizedBox(width: 4),
                   Text(
@@ -738,7 +779,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: active ? kTaskPurple : DunesColors.text2,
+                      color: active
+                          ? DunesColors.resolve(context, kTaskPurple)
+                          : DunesColors.resolve(context, DunesColors.text2),
                     ),
                   ),
                 ],
@@ -749,9 +792,13 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             InkWell(
               borderRadius: BorderRadius.circular(10),
               onTap: _clearDateRange,
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.fromLTRB(2, 10, 10, 10),
-                child: Icon(Icons.close, size: 14, color: kTaskPurple),
+                child: Icon(
+                  Icons.close,
+                  size: 14,
+                  color: DunesColors.resolveNullable(context, kTaskPurple),
+                ),
               ),
             ),
         ],
@@ -875,7 +922,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
 
   Widget _buildList() {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: RefreshIndicator(
         onRefresh: _reload,
         color: kTaskPurple,
@@ -923,9 +974,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                         'actionable' => '今天要执行的子目标、未拆解的主目标和待确认子目标。',
                         _ => '先处理待你决定的事，再看逾期、今天截止和今日执行。',
                       },
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                         height: 1.3,
                       ),
                     ),
@@ -985,7 +1036,17 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   Widget _roleChip(String? value, String label) {
     final on = _goalRole == value;
     return Material(
-      color: on ? kTaskPurple.withValues(alpha: 0.12) : Colors.white,
+      color: on
+          ? DunesColors.resolve(
+              context,
+              kTaskPurple,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.12)
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -1001,7 +1062,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: on ? kTaskPurple : DunesColors.text2,
+              color: on
+                  ? DunesColors.resolve(context, kTaskPurple)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -1011,7 +1074,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
 
   Widget _dailyStatusChip() {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -1024,8 +1091,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                 _dailyPending ? Icons.edit_calendar_outlined : Icons.task_alt,
                 size: 18,
                 color: _dailyPending
-                    ? const Color(0xFFB45309)
-                    : const Color(0xFF1F9D76),
+                    ? DunesColors.resolve(context, const Color(0xFFB45309))
+                    : DunesColors.resolve(context, const Color(0xFF1F9D76)),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -1038,13 +1105,20 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFE11D48),
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFFE11D48),
+                      role: DunesColorRole.surface,
+                    ),
                     shape: BoxShape.circle,
                   ),
                 ),
               const SizedBox(width: 6),
-              const Icon(Icons.chevron_right, color: DunesColors.text3),
+              Icon(
+                Icons.chevron_right,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ],
           ),
         ),
@@ -1056,7 +1130,17 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     final on = _scope == value;
     return Expanded(
       child: Material(
-        color: on ? kTaskPurple : Colors.white,
+        color: on
+            ? DunesColors.resolve(
+                context,
+                kTaskPurple,
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
@@ -1076,7 +1160,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: on ? Colors.white : DunesColors.text2,
+                color: on
+                    ? DunesColors.resolve(context, Colors.white)
+                    : DunesColors.resolve(context, DunesColors.text2),
               ),
             ),
           ),
@@ -1090,22 +1176,41 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       controller: _search,
       decoration: InputDecoration(
         hintText: '搜索标题或负责人',
-        hintStyle: const TextStyle(color: DunesColors.text3, fontSize: 13),
+        hintStyle: TextStyle(
+          color: DunesColors.resolve(context, DunesColors.text3),
+          fontSize: 13,
+        ),
         isDense: true,
         filled: true,
-        fillColor: Colors.white,
-        prefixIcon: const Icon(
+        fillColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        prefixIcon: Icon(
           Icons.search,
           size: 20,
-          color: DunesColors.text3,
+          color: DunesColors.resolve(context, DunesColors.text3),
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
@@ -1119,9 +1224,19 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -1129,17 +1244,21 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             controller: _search,
             decoration: InputDecoration(
               hintText: '搜索标题或负责人',
-              hintStyle: const TextStyle(
-                color: DunesColors.text3,
+              hintStyle: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
                 fontSize: 13,
               ),
               isDense: true,
               filled: true,
-              fillColor: const Color(0xFFF5F6F8),
-              prefixIcon: const Icon(
+              fillColor: DunesColors.resolve(
+                context,
+                const Color(0xFFF5F6F8),
+                role: DunesColorRole.surface,
+              ),
+              prefixIcon: Icon(
                 Icons.search,
                 size: 20,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -1176,9 +1295,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               IconButton(
                 tooltip: '刷新',
                 onPressed: _reload,
-                icon: const Icon(
+                icon: Icon(
                   Icons.refresh_rounded,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
             ],
@@ -1201,7 +1320,17 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   Widget _listFocusChip(String value, String label) {
     final on = _listFocus == value;
     return Material(
-      color: on ? kTaskPurple.withValues(alpha: 0.12) : const Color(0xFFF5F6F8),
+      color: on
+          ? DunesColors.resolve(
+              context,
+              kTaskPurple,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.12)
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF5F6F8),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -1213,7 +1342,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: on ? kTaskPurple : DunesColors.text2,
+              color: on
+                  ? DunesColors.resolve(context, kTaskPurple)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -1261,13 +1392,18 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.error_outline,
-                  color: Colors.redAccent,
+                  color: DunesColors.resolve(context, Colors.redAccent),
                   size: 36,
                 ),
                 const SizedBox(height: 10),
-                Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+                Text(
+                  _error!,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, Colors.redAccent),
+                  ),
+                ),
                 TextButton(onPressed: _reload, child: const Text('重试')),
               ],
             ),
@@ -1290,12 +1426,15 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     if (items.isEmpty) {
       if (hasFilters) {
         return [
-          const SliverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Text(
                 '没有符合条件的结果',
-                style: TextStyle(fontSize: 14, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ),
           ),
@@ -1309,9 +1448,19 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               width: 380,
               padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE8EAED)),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFE8EAED),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1322,15 +1471,21 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          kTaskPurple.withValues(alpha: 0.18),
-                          kTaskPurple.withValues(alpha: 0.06),
+                          DunesColors.resolve(
+                            context,
+                            kTaskPurple,
+                          ).withValues(alpha: 0.18),
+                          DunesColors.resolve(
+                            context,
+                            kTaskPurple,
+                          ).withValues(alpha: 0.06),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(18),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.task_alt_outlined,
-                      color: kTaskPurple,
+                      color: DunesColors.resolveNullable(context, kTaskPurple),
                       size: 30,
                     ),
                   ),
@@ -1338,10 +1493,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   Text(
                     _scope == 'goals' ? '还没有主目标' : '还没有待处理的子目标',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1350,9 +1505,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                         ? '点右上角完整创建，可以同时填写主目标和子任务'
                         : '今天要做的子目标会列在这里',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                       height: 1.4,
                     ),
                   ),
@@ -1431,9 +1586,14 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
 
   Widget _goalCardCompleteAction(TaskItem task) {
     if (task.status == 'completed') {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Text('已完成', style: TextStyle(color: DunesColors.text3)),
+        child: Text(
+          '已完成',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     if (!_canCompleteFromList(task)) {
@@ -1443,7 +1603,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           _completeHint(task) ?? '—',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 11,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       );
     }
@@ -1474,14 +1637,14 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     final out = <Widget>[];
     if (work.isNotEmpty) {
       out.add(
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(bottom: 8),
           child: Text(
             '今天要做',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
           ),
         ),
@@ -1504,14 +1667,14 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     }
     if (pending.isNotEmpty) {
       out.add(
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 4, bottom: 8),
           child: Text(
             '待我审核',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
           ),
         ),
@@ -1548,7 +1711,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           padding: const EdgeInsets.only(bottom: 10),
           child: Text(
             _inboxWarning!,
-            style: const TextStyle(fontSize: 12, color: Color(0xFFB45309)),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolveNullable(context, Color(0xFFB45309)),
+            ),
           ),
         ),
       _inboxCountRow(snapshot),
@@ -1561,7 +1727,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           child: Center(
             child: Text(
               searching ? '没有符合条件的结果' : '现在没有待你处理的事',
-              style: const TextStyle(fontSize: 14, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 14,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         ),
@@ -1619,10 +1788,22 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           final count = snapshot.countOf(bucket);
           return Material(
             color: selected
-                ? kTaskPurple
+                ? DunesColors.resolve(
+                    context,
+                    kTaskPurple,
+                    role: DunesColorRole.surface,
+                  )
                 : emphasis
-                ? const Color(0xFFF3EEFA)
-                : Colors.white,
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFF3EEFA),
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
             borderRadius: BorderRadius.circular(999),
             child: InkWell(
               borderRadius: BorderRadius.circular(999),
@@ -1642,10 +1823,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: selected
-                        ? Colors.white
+                        ? DunesColors.resolve(context, Colors.white)
                         : emphasis
-                        ? kTaskPurple
-                        : DunesColors.text2,
+                        ? DunesColors.resolve(context, kTaskPurple)
+                        : DunesColors.resolve(context, DunesColors.text2),
                   ),
                 ),
               ),
@@ -1671,7 +1852,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(
           taskInboxCardHint(bucket),
-          style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       ),
       for (final task in items) ...[
@@ -1716,7 +1900,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           padding: const EdgeInsets.only(top: 4),
           child: Text(
             '另有 ${snapshot.plannedCount} 项尚未到开始日，不在今日执行里。',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ),
       );
@@ -1746,10 +1933,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       padding: const EdgeInsets.only(top: 4, bottom: 8),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w800,
-          color: DunesColors.text,
+          color: DunesColors.resolve(context, DunesColors.text),
         ),
       ),
     );
@@ -1767,10 +1954,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           Expanded(
             child: Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
             ),
           ),
@@ -1779,10 +1966,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               onTap: onTrailing,
               child: Text(
                 trailing,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: kTaskPurple,
+                  color: DunesColors.resolveNullable(context, kTaskPurple),
                 ),
               ),
             ),

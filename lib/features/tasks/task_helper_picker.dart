@@ -20,7 +20,11 @@ Future<List<TaskAssignee>?> showTaskHelperPicker(
   return showModalBottomSheet<List<TaskAssignee>>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    ),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -178,14 +182,24 @@ class _TaskHelperPickerState extends State<_TaskHelperPicker> {
                   ? Center(
                       child: Text(
                         _error!,
-                        style: const TextStyle(color: DunesColors.text3),
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
                       ),
                     )
                   : _people.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         '没有匹配的同事',
-                        style: TextStyle(color: DunesColors.text3),
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
                       ),
                     )
                   : ListView.builder(

@@ -219,11 +219,7 @@ Future<String?> _downloadDriveFile({
     onProgress?.call(1);
     final bytes = Uint8List.fromList(chunks);
     if (bytes.isEmpty) throw Exception('文件内容为空');
-    return file_dl.saveBytesAsDriveFile(
-      bytes,
-      fileName,
-      cacheKey: cacheKey,
-    );
+    return file_dl.saveBytesAsDriveFile(bytes, fileName, cacheKey: cacheKey);
   } finally {
     client.close();
   }
@@ -249,7 +245,10 @@ Future<void> showDriveFilePreview({
       builder: (ctx) {
         final size = MediaQuery.sizeOf(ctx);
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 48, vertical: 36),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 48,
+            vertical: 36,
+          ),
           backgroundColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -259,7 +258,11 @@ Future<void> showDriveFilePreview({
               minHeight: 420,
             ),
             child: Material(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
               clipBehavior: Clip.antiAlias,
               child: page,
@@ -269,9 +272,9 @@ Future<void> showDriveFilePreview({
       },
     );
   }
-  return Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(builder: (_) => page),
-  );
+  return Navigator.of(
+    context,
+  ).push<void>(MaterialPageRoute<void>(builder: (_) => page));
 }
 
 /// APP：对齐 IM [ChatFilePreviewPage]（下载 / 用其他应用打开）。
@@ -385,14 +388,25 @@ class _DriveFilePreviewPageState extends State<_DriveFilePreviewPage> {
   Widget build(BuildContext context) {
     final downloaded = _localPath != null && _localPath!.isNotEmpty;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
           onPressed: () => Navigator.of(context).maybePop(),
-          icon: const Icon(Icons.chevron_left_rounded, color: Color(0xFF191919)),
+          icon: Icon(
+            Icons.chevron_left_rounded,
+            color: DunesColors.resolveNullable(context, Color(0xFF191919)),
+          ),
         ),
         title: Text(
           widget.fileName,
@@ -401,13 +415,17 @@ class _DriveFilePreviewPageState extends State<_DriveFilePreviewPage> {
           style: DunesTypography.sans(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: const Color(0xFF191919),
+            color: DunesColors.resolve(context, const Color(0xFF191919)),
+            context: context,
           ),
         ),
         actions: [
           PopupMenuButton<String>(
             tooltip: '更多',
-            icon: const Icon(Icons.more_horiz_rounded, color: Color(0xFF191919)),
+            icon: Icon(
+              Icons.more_horiz_rounded,
+              color: DunesColors.resolveNullable(context, Color(0xFF191919)),
+            ),
             onSelected: (value) {
               if (value == 'download') unawaited(_downloadOnly());
             },
@@ -435,8 +453,9 @@ class _DriveFilePreviewPageState extends State<_DriveFilePreviewPage> {
                 style: DunesTypography.sans(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFF191919),
+                  color: DunesColors.resolve(context, const Color(0xFF191919)),
                   height: 1.35,
+                  context: context,
                 ),
               ),
               const SizedBox(height: 12),
@@ -445,8 +464,9 @@ class _DriveFilePreviewPageState extends State<_DriveFilePreviewPage> {
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 14,
-                  color: const Color(0xFF888888),
+                  color: DunesColors.resolve(context, const Color(0xFF888888)),
                   height: 1.45,
+                  context: context,
                 ),
               ),
               if (_status != null) ...[
@@ -458,7 +478,11 @@ class _DriveFilePreviewPageState extends State<_DriveFilePreviewPage> {
                   textAlign: TextAlign.center,
                   style: DunesTypography.sans(
                     fontSize: 12.5,
-                    color: const Color(0xFFAAAAAA),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFAAAAAA),
+                    ),
+                    context: context,
                   ),
                 ),
               ],
@@ -470,8 +494,12 @@ class _DriveFilePreviewPageState extends State<_DriveFilePreviewPage> {
                   onPressed: _busy ? null : _openWithOtherApp,
                   style: FilledButton.styleFrom(
                     backgroundColor: _driveBlue,
-                    disabledBackgroundColor: _driveBlue.withValues(alpha: 0.45),
-                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: DunesColors.resolve(
+                      context,
+                      _driveBlue,
+                      role: DunesColorRole.surface,
+                    ).withValues(alpha: 0.45),
+                    foregroundColor: DunesColors.resolve(context, Colors.white),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -481,7 +509,8 @@ class _DriveFilePreviewPageState extends State<_DriveFilePreviewPage> {
                     style: DunesTypography.sans(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
+                      context: context,
                     ),
                   ),
                 ),

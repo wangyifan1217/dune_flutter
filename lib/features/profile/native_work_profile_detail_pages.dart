@@ -467,7 +467,11 @@ class _ProfileDetailScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFF8F5FC),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF8F5FC),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -475,23 +479,42 @@ class _ProfileDetailScaffold extends StatelessWidget {
             Container(
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: const BoxDecoration(
-                color: Color(0xFFFCFAFF),
-                border: Border(bottom: BorderSide(color: Color(0xFFE7DFF0))),
+              decoration: BoxDecoration(
+                color: DunesColors.resolveNullable(
+                  context,
+                  Color(0xFFFCFAFF),
+                  role: DunesColorRole.surface,
+                ),
+                border: Border(
+                  bottom: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      Color(0xFFE7DFF0),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
+                ),
               ),
               child: Row(
                 children: [
                   IconButton(
                     onPressed: onBack,
                     icon: const Icon(Icons.arrow_back_rounded),
-                    color: const Color(0xFF4A3866),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF4A3866),
+                    ),
                   ),
                   Text(
                     title,
                     style: DunesTypography.sans(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
-                      color: const Color(0xFF312249),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF312249),
+                      ),
+                      context: context,
                     ),
                   ),
                 ],
@@ -524,15 +547,19 @@ class _InfoCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0E8FA),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF0E8FA),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           height: 1.45,
-          color: Color(0xFF5D536B),
+          color: DunesColors.resolveNullable(context, Color(0xFF5D536B)),
         ),
       ),
     );
@@ -555,9 +582,19 @@ class _StatsWrap extends StatelessWidget {
             width: 104,
             padding: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE9E2EF)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE9E2EF),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Column(
               children: [
@@ -566,14 +603,21 @@ class _StatsWrap extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFF62438B),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF62438B),
+                    ),
+                    context: context,
                   ),
                 ),
                 Text(
                   item.$1,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: Color(0xFF817589),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF817589),
+                    ),
                   ),
                 ),
               ],
@@ -595,7 +639,8 @@ class _SectionTitle extends StatelessWidget {
     style: DunesTypography.sans(
       fontSize: 16,
       fontWeight: FontWeight.w700,
-      color: const Color(0xFF312249),
+      color: DunesColors.resolve(context, const Color(0xFF312249)),
+      context: context,
     ),
   );
 }
@@ -617,7 +662,11 @@ class _ListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -626,11 +675,20 @@ class _ListCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE9E2EF)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE9E2EF),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Row(
             children: [
-              Icon(icon, color: const Color(0xFF7651B8)),
+              Icon(
+                icon,
+                color: DunesColors.resolve(context, const Color(0xFF7651B8)),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -640,10 +698,13 @@ class _ListCard extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF342740),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF342740),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -651,18 +712,24 @@ class _ListCard extends StatelessWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF817589),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF817589),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
               if (onTap != null)
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
-                  color: Color(0xFF9A7FB8),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF9A7FB8),
+                  ),
                 ),
             ],
           ),
@@ -708,15 +775,21 @@ class _UnavailableBlock extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(16),
     ),
     child: Row(
       children: [
-        const Expanded(
+        Expanded(
           child: Text(
             '该部分数据暂时无法加载',
-            style: TextStyle(color: Color(0xFF817589)),
+            style: TextStyle(
+              color: DunesColors.resolveNullable(context, Color(0xFF817589)),
+            ),
           ),
         ),
         TextButton(
@@ -737,11 +810,20 @@ class _EmptyBlock extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(vertical: 32),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(16),
     ),
     child: Center(
-      child: Text(text, style: const TextStyle(color: Color(0xFF817589))),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: DunesColors.resolveNullable(context, Color(0xFF817589)),
+        ),
+      ),
     ),
   );
 }

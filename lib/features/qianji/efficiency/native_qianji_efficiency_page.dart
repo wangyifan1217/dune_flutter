@@ -45,8 +45,14 @@ EfficiencyAiResult? _withoutKnowledgeResult(EfficiencyAiResult? result) {
   bool keep(String text) => !_copyMentionsKnowledge(text);
   return EfficiencyAiResult(
     summary: keep(result.summary) ? result.summary : '',
-    wins: [for (final item in result.wins) if (keep(item)) item],
-    risks: [for (final item in result.risks) if (keep(item)) item],
+    wins: [
+      for (final item in result.wins)
+        if (keep(item)) item,
+    ],
+    risks: [
+      for (final item in result.risks)
+        if (keep(item)) item,
+    ],
     actions: [
       for (final item in result.actions)
         if (keep(item.title) && keep(item.expectedImpact)) item,
@@ -193,8 +199,7 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
   String get _scope => _tabs.index == 0 ? 'personal' : 'department';
   String get _monthKey =>
       '${_month.year.toString().padLeft(4, '0')}-${_month.month.toString().padLeft(2, '0')}';
-  String get _dateKey =>
-      '$_monthKey-${_day.day.toString().padLeft(2, '0')}';
+  String get _dateKey => '$_monthKey-${_day.day.toString().padLeft(2, '0')}';
   String _cacheKey(String scope) =>
       _grain == 'day' ? '$scope:day:$_dateKey' : '$scope:month:$_monthKey';
 
@@ -363,7 +368,11 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -380,26 +389,30 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE8E2EE),
+                        color: DunesColors.resolve(
+                          ctx,
+                          const Color(0xFFE8E2EE),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
+                  Text(
                     '这些指标怎么算',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(ctx, DunesColors.text),
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     '按所选自然月或某一天，用任务、审批、提案、会议纪要和群里的业务卡片汇总。AI 只做解读，不参与打分；不看聊天正文，也不看知识库。按日看当天窗口，按月看整月。',
                     style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(ctx, DunesColors.text3),
                       height: 1.45,
                     ),
                   ),
@@ -440,14 +453,22 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F5FA),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF7F5FA),
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
             _Header(onBack: widget.onBack, onHelp: _showGuide),
             Container(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
               child: Row(
                 children: [
@@ -455,15 +476,22 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
                     child: TabBar(
                       controller: _tabs,
                       labelColor: _purple,
-                      unselectedLabelColor: DunesColors.text3,
+                      unselectedLabelColor: DunesColors.resolve(
+                        context,
+                        DunesColors.text3,
+                      ),
                       indicatorColor: _purple,
                       indicatorSize: TabBarIndicatorSize.label,
                       dividerColor: Colors.transparent,
                       labelStyle: DunesTypography.sans(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
+                        context: context,
                       ),
-                      unselectedLabelStyle: DunesTypography.sans(fontSize: 14),
+                      unselectedLabelStyle: DunesTypography.sans(
+                        fontSize: 14,
+                        context: context,
+                      ),
                       tabs: const [
                         Tab(text: '个人分析'),
                         Tab(text: '部门汇总'),
@@ -498,8 +526,18 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
                           : '${_month.year}.${_month.month}',
                     ),
                     visualDensity: VisualDensity.compact,
-                    side: const BorderSide(color: Color(0xFFE8E2EE)),
-                    backgroundColor: const Color(0xFFF7F5FA),
+                    side: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFE8E2EE),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      const Color(0xFFF7F5FA),
+                      role: DunesColorRole.surface,
+                    ),
                   ),
                 ],
               ),
@@ -671,9 +709,21 @@ class _Header extends StatelessWidget {
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE8E2EE))),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE8E2EE),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -687,7 +737,8 @@ class _Header extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           const Spacer(),
@@ -695,7 +746,10 @@ class _Header extends StatelessWidget {
             key: const Key('efficiency-help'),
             tooltip: '这些指标怎么算',
             onPressed: onHelp,
-            icon: const Icon(Icons.help_outline_rounded, color: _purple),
+            icon: Icon(
+              Icons.help_outline_rounded,
+              color: DunesColors.resolveNullable(context, _purple),
+            ),
           ),
         ],
       ),
@@ -720,7 +774,8 @@ class _Masthead extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           const SizedBox(height: 4),
@@ -728,17 +783,20 @@ class _Masthead extends StatelessWidget {
             snapshot.scope == 'department'
                 ? '覆盖 ${snapshot.peopleCount} 人 · 看闭环和质量，不排名、不读下属文档和聊天'
                 : '按超期、没纪要、没人用等硬事实看，数量只作背景',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               height: 1.4,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
           if (snapshot.privacyProtected) ...[
             const SizedBox(height: 6),
-            const Text(
+            Text(
               '当前范围少于5人，已隐藏个人下钻信息',
-              style: TextStyle(fontSize: 12, color: DunesColors.amber),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.amber),
+              ),
             ),
           ],
           if (snapshot.schedule?.enabled == true) ...[
@@ -747,7 +805,10 @@ class _Masthead extends StatelessWidget {
               snapshot.latestAnalysis?.isScheduled == true
                   ? '昨夜定时分析已落库，打开即可查看'
                   : '每月 1 日 ${snapshot.schedule!.hour.toString().padLeft(2, '0')}:${snapshot.schedule!.minute.toString().padLeft(2, '0')} 自动分析上个月',
-              style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 11,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ],
         ],
@@ -768,11 +829,14 @@ class _FactStrip extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (onOpen != null)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: Text(
               '点标签去工作情况看对应的人',
-              style: TextStyle(fontSize: 11, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 11,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         Wrap(
@@ -797,21 +861,25 @@ class _FactChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final high = item.severity == 'high';
     final color = high
-        ? DunesColors.coral
+        ? DunesColors.resolve(context, DunesColors.coral)
         : item.severity == 'medium'
-        ? DunesColors.amber
-        : DunesColors.text2;
+        ? DunesColors.resolve(context, DunesColors.amber)
+        : DunesColors.resolve(context, DunesColors.text2);
     final soft = high
-        ? DunesColors.coralSoft
+        ? DunesColors.resolve(context, DunesColors.coralSoft)
         : item.severity == 'medium'
-        ? DunesColors.amberSoft
-        : DunesColors.bgSoft;
+        ? DunesColors.resolve(context, DunesColors.amberSoft)
+        : DunesColors.resolve(context, DunesColors.bgSoft);
     return GestureDetector(
       onTap: onOpen == null ? null : () => onOpen!(item),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: soft,
+          color: DunesColors.resolveNullable(
+            context,
+            soft,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -820,6 +888,7 @@ class _FactChip extends StatelessWidget {
             fontSize: 12,
             fontWeight: FontWeight.w600,
             color: color,
+            context: context,
           ),
         ),
       ),
@@ -828,7 +897,10 @@ class _FactChip extends StatelessWidget {
 }
 
 class _RateBoard extends StatelessWidget {
-  const _RateBoard({required this.metrics, required this.restMetricsStorageKey});
+  const _RateBoard({
+    required this.metrics,
+    required this.restMetricsStorageKey,
+  });
 
   final List<EfficiencyMetric> metrics;
   final PageStorageKey<String> restMetricsStorageKey;
@@ -850,7 +922,15 @@ class _RateBoard extends StatelessWidget {
       child: Column(
         children: [
           for (var i = 0; i < _metricGroups.length; i++) ...[
-            if (i > 0) const Divider(height: 22, color: Color(0xFFF0EBF4)),
+            if (i > 0)
+              Divider(
+                height: 22,
+                color: DunesColors.resolve(
+                  context,
+                  Color(0xFFF0EBF4),
+                  role: DunesColorRole.border,
+                ),
+              ),
             _RateGroup(
               label: _metricGroups[i].$1,
               metrics: [
@@ -860,7 +940,14 @@ class _RateBoard extends StatelessWidget {
             ),
           ],
           if (rest.isNotEmpty) ...[
-            const Divider(height: 22, color: Color(0xFFF0EBF4)),
+            Divider(
+              height: 22,
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFF0EBF4),
+                role: DunesColorRole.border,
+              ),
+            ),
             Theme(
               data: Theme.of(
                 context,
@@ -872,12 +959,12 @@ class _RateBoard extends StatelessWidget {
                   tilePadding: EdgeInsets.zero,
                   childrenPadding: EdgeInsets.zero,
                   dense: true,
-                  title: const Text(
+                  title: Text(
                     '其余指标',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
                     ),
                   ),
                   children: [
@@ -907,11 +994,11 @@ class _RateGroup extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.6,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
           ),
         ),
         const SizedBox(height: 6),
@@ -938,7 +1025,10 @@ class _RateRow extends StatelessWidget {
             Expanded(
               child: Text(
                 metric.label,
-                style: const TextStyle(fontSize: 13, color: DunesColors.text),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                ),
               ),
             ),
             Text(
@@ -946,7 +1036,8 @@ class _RateRow extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
             const SizedBox(width: 8),
@@ -957,7 +1048,13 @@ class _RateRow extends StatelessWidget {
                     ? '—'
                     : '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(0)}%',
                 textAlign: TextAlign.right,
-                style: TextStyle(fontSize: 11, color: _deltaColor(metric)),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    _deltaColor(metric),
+                  ),
+                ),
               ),
             ),
           ],
@@ -983,9 +1080,19 @@ class _SectionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE9E3EE)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE9E3EE),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -997,7 +1104,10 @@ class _SectionCard extends StatelessWidget {
           const SizedBox(height: 3),
           Text(
             subtitle,
-            style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 14),
           child,
@@ -1024,9 +1134,9 @@ class _StageList extends StatelessWidget {
                 width: 88,
                 child: Text(
                   stages[i].label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                 ),
               ),
@@ -1047,9 +1157,9 @@ class _StageList extends StatelessWidget {
                 child: Text(
                   '${stages[i].completed}/${stages[i].total}',
                   textAlign: TextAlign.right,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                 ),
               ),
@@ -1079,9 +1189,9 @@ class _TrendList extends StatelessWidget {
                 Expanded(
                   child: Text(
                     '完成 ${point.taskCompletionRate.toStringAsFixed(0)}% · 按期 ${point.onTimeRate.toStringAsFixed(0)}% · 提案 ${point.proposalDoneRate.toStringAsFixed(0)}%',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
                     ),
                   ),
                 ),
@@ -1114,9 +1224,9 @@ class _TimelineList extends StatelessWidget {
                     item.at == null
                         ? ''
                         : '${item.at!.month.toString().padLeft(2, '0')}-${item.at!.day.toString().padLeft(2, '0')} ${item.at!.hour.toString().padLeft(2, '0')}:${item.at!.minute.toString().padLeft(2, '0')}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 ),
@@ -1152,8 +1262,8 @@ class _ChainList extends StatelessWidget {
                     ? Icons.check_circle_outline_rounded
                     : Icons.link_off_rounded,
                 color: items[i].brokenAt == 'ok'
-                    ? DunesColors.green
-                    : DunesColors.coral,
+                    ? DunesColors.resolve(context, DunesColors.green)
+                    : DunesColors.resolve(context, DunesColors.coral),
                 size: 20,
               ),
               const SizedBox(width: 10),
@@ -1169,8 +1279,8 @@ class _ChainList extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   color: items[i].brokenAt == 'ok'
-                      ? DunesColors.green
-                      : DunesColors.coral,
+                      ? DunesColors.resolve(context, DunesColors.green)
+                      : DunesColors.resolve(context, DunesColors.coral),
                 ),
               ),
             ],
@@ -1195,7 +1305,17 @@ class _EfficiencyGrainChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? _purpleSoft : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              _purpleSoft,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
@@ -1205,7 +1325,17 @@ class _EfficiencyGrainChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: selected ? _purple : const Color(0xFFE8E2EE),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _purple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8E2EE),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -1213,7 +1343,9 @@ class _EfficiencyGrainChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: selected ? _purple : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, _purple)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -1246,9 +1378,19 @@ class _AiCard extends StatelessWidget {
     final shown = _withoutKnowledgeResult(result);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE9E3EE)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE9E3EE),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: IntrinsicHeight(
         child: Row(
@@ -1256,8 +1398,12 @@ class _AiCard extends StatelessWidget {
           children: [
             Container(
               width: 4,
-              decoration: const BoxDecoration(
-                color: _purple,
+              decoration: BoxDecoration(
+                color: DunesColors.resolveNullable(
+                  context,
+                  _purple,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.horizontal(
                   left: Radius.circular(14),
                 ),
@@ -1284,9 +1430,12 @@ class _AiCard extends StatelessWidget {
                           tooltip: '复制汇报摘要',
                           visualDensity: VisualDensity.compact,
                           onPressed: onExport,
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.copy_all_outlined,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                             size: 20,
                           ),
                         ),
@@ -1313,13 +1462,16 @@ class _AiCard extends StatelessWidget {
                       ],
                     ),
                     if (scheduled)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.only(bottom: 8),
                         child: Text(
                           '当前是定时分析结果，可随时重跑。',
                           style: TextStyle(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                       ),
@@ -1330,19 +1482,27 @@ class _AiCard extends StatelessWidget {
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
                           error!,
-                          style: const TextStyle(color: DunesColors.coral),
+                          style: TextStyle(
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.coral,
+                            ),
+                          ),
                         ),
                       ),
                     if (shown != null) ...[
                       if (shown.summary.trim().isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        shown.summary,
-                        style: const TextStyle(
-                          height: 1.55,
-                          color: DunesColors.text,
+                        const SizedBox(height: 6),
+                        Text(
+                          shown.summary,
+                          style: TextStyle(
+                            height: 1.55,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                          ),
                         ),
-                      ),
                       ],
                       if (shown.wins.isNotEmpty) ...[
                         const SizedBox(height: 12),
@@ -1358,9 +1518,12 @@ class _AiCard extends StatelessWidget {
                             padding: const EdgeInsets.only(top: 5),
                             child: Text(
                               win,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 height: 1.4,
-                                color: DunesColors.green,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.green,
+                                ),
                               ),
                             ),
                           ),
@@ -1404,9 +1567,15 @@ class _AiCard extends StatelessWidget {
                     ] else if (!analyzing &&
                         (error == null || error!.isEmpty)) ...[
                       const SizedBox(height: 6),
-                      const Text(
+                      Text(
                         '按超期、没纪要等硬事实解读，不把会话数当成绩，也不看知识库。',
-                        style: TextStyle(height: 1.5, color: DunesColors.text2),
+                        style: TextStyle(
+                          height: 1.5,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                        ),
                       ),
                     ],
                   ],
@@ -1444,8 +1613,16 @@ class _SourceCard extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: source.available
-                      ? DunesColors.greenSoft
-                      : const Color(0xFFF2F0F3),
+                      ? DunesColors.resolve(
+                          context,
+                          DunesColors.greenSoft,
+                          role: DunesColorRole.surface,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          const Color(0xFFF2F0F3),
+                          role: DunesColorRole.surface,
+                        ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -1454,8 +1631,8 @@ class _SourceCard extends StatelessWidget {
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: source.available
-                        ? DunesColors.green
-                        : DunesColors.text3,
+                        ? DunesColors.resolve(context, DunesColors.green)
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ),
@@ -1481,19 +1658,19 @@ class _GuideItem extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 4),
           Text(
             body,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
               height: 1.5,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ],
@@ -1516,10 +1693,10 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.cloud_off_outlined,
               size: 40,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
             const SizedBox(height: 12),
             Text(message, textAlign: TextAlign.center),

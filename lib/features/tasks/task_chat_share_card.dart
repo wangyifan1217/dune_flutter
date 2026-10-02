@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'task_chat_share.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 class TaskChatShareCard extends StatelessWidget {
   const TaskChatShareCard({
@@ -25,9 +26,9 @@ class TaskChatShareCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = taskShareStatusLabel(share.status, overdue: share.overdue);
     final statusColor = state == '已完成'
-        ? const Color(0xFF317952)
+        ? DunesColors.resolve(context, const Color(0xFF317952))
         : state == '已逾期' || state == '已驳回'
-        ? const Color(0xFFB16D24)
+        ? DunesColors.resolve(context, const Color(0xFFB16D24))
         : _purple;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -39,7 +40,11 @@ class TaskChatShareCard extends StatelessWidget {
           button: true,
           label: '任务名片，${share.title}，$state，只读查看',
           child: Material(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(19),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
@@ -48,7 +53,13 @@ class TaskChatShareCard extends StatelessWidget {
                 width: cardWidth,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(19),
-                  border: Border.all(color: const Color(0xFFE8E3F4)),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8E3F4),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                   boxShadow: const [
                     BoxShadow(
                       color: Color(0x1339296F),
@@ -62,9 +73,20 @@ class TaskChatShareCard extends StatelessWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Color(0xFF39296A), Color(0xFF6852B0)],
+                          colors: [
+                            DunesColors.resolve(
+                              context,
+                              Color(0xFF39296A),
+                              role: DunesColorRole.surface,
+                            ),
+                            DunesColors.resolve(
+                              context,
+                              Color(0xFF6852B0),
+                              role: DunesColorRole.surface,
+                            ),
+                          ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -78,31 +100,44 @@ class TaskChatShareCard extends StatelessWidget {
                                 width: 23,
                                 height: 23,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: .15),
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    Colors.white.withValues(alpha: .15),
+                                    role: DunesColorRole.surface,
+                                  ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.task_alt_rounded,
-                                  color: Colors.white,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Colors.white,
+                                  ),
                                   size: 15,
                                 ),
                               ),
                               const SizedBox(width: 7),
-                              const Text(
+                              Text(
                                 '沙丘任务',
                                 style: TextStyle(
                                   fontSize: 10,
                                   letterSpacing: .35,
-                                  color: Color(0xFFE9E3FA),
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    Color(0xFFE9E3FA),
+                                  ),
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                               const Spacer(),
                               Text(
                                 '${share.sharedAt.toLocal().hour.toString().padLeft(2, '0')}:${share.sharedAt.toLocal().minute.toString().padLeft(2, '0')}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 9,
-                                  color: Color(0xFFD5CDEB),
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    Color(0xFFD5CDEB),
+                                  ),
                                 ),
                               ),
                             ],
@@ -112,8 +147,8 @@ class TaskChatShareCard extends StatelessWidget {
                             share.title,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: DunesColors.resolve(context, Colors.white),
                               fontSize: 14,
                               height: 1.4,
                               fontWeight: FontWeight.w700,
@@ -126,7 +161,10 @@ class TaskChatShareCard extends StatelessWidget {
                             children: [
                               _chip(
                                 state,
-                                background: const Color(0xFFE9F6EF),
+                                background: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFFE9F6EF),
+                                ),
                                 foreground: statusColor,
                               ),
                               _chip(taskSharePriorityLabel(share.priority)),
@@ -159,19 +197,25 @@ class TaskChatShareCard extends StatelessWidget {
                           const SizedBox(height: 12),
                           Row(
                             children: [
-                              const Text(
+                              Text(
                                 '任务进度',
                                 style: TextStyle(
                                   fontSize: 9,
-                                  color: Color(0xFF9692A1),
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    Color(0xFF9692A1),
+                                  ),
                                 ),
                               ),
                               const Spacer(),
                               Text(
                                 '${share.progressPct}%',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 10,
-                                  color: _purple,
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    _purple,
+                                  ),
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -183,7 +227,11 @@ class TaskChatShareCard extends StatelessWidget {
                             child: LinearProgressIndicator(
                               value: share.progressPct / 100,
                               minHeight: 5,
-                              backgroundColor: const Color(0xFFEFEDF5),
+                              backgroundColor: DunesColors.resolve(
+                                context,
+                                const Color(0xFFEFEDF5),
+                                role: DunesColorRole.surface,
+                              ),
                               valueColor: const AlwaysStoppedAnimation(_purple),
                             ),
                           ),
@@ -195,35 +243,54 @@ class TaskChatShareCard extends StatelessWidget {
                         horizontal: 13,
                         vertical: 9,
                       ),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFDFCFF),
+                      decoration: BoxDecoration(
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFFFDFCFF),
+                          role: DunesColorRole.surface,
+                        ),
                         border: Border(
-                          top: BorderSide(color: Color(0xFFF0EEF4)),
+                          top: BorderSide(
+                            color: DunesColors.resolve(
+                              context,
+                              Color(0xFFF0EEF4),
+                              role: DunesColorRole.border,
+                            ),
+                          ),
                         ),
                       ),
                       child: Row(
                         children: [
-                          const Text(
+                          Text(
                             '点击查看任务明细',
                             style: TextStyle(
                               fontSize: 9,
-                              color: Color(0xFF8A8498),
+                              color: DunesColors.resolveNullable(
+                                context,
+                                Color(0xFF8A8498),
+                              ),
                             ),
                           ),
                           const Spacer(),
-                          const Text(
+                          Text(
                             '只读查看',
                             style: TextStyle(
                               fontSize: 9,
-                              color: _purple,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _purple,
+                              ),
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                           const SizedBox(width: 3),
-                          const Icon(
+                          Icon(
                             Icons.chevron_right_rounded,
                             size: 15,
-                            color: _purple,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _purple,
+                            ),
                           ),
                         ],
                       ),

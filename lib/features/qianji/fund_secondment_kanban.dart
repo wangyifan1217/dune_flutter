@@ -35,7 +35,11 @@ class FundSecondmentKanban extends StatelessWidget {
         key: const Key('fund-secondment-kanban'),
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: _cardBorder),
         ),
@@ -54,22 +58,23 @@ class FundSecondmentKanban extends StatelessWidget {
                 if (summary.overdueCount > 0) ...[
                   const SizedBox(height: 8),
                   _AlertStrip(
-                    color: DunesColors.coral,
-                    bg: DunesColors.coralSoft,
+                    color: DunesColors.resolve(context, DunesColors.coral),
+                    bg: DunesColors.resolve(context, DunesColors.coralSoft),
                     text:
                         '有 ${summary.overdueCount} 笔已过预计还款日，还剩 ${formatFundSecondmentWan(summary.overdueRemainingWan)}',
                   ),
                 ] else if (summary.dueSoonCount > 0) ...[
                   const SizedBox(height: 8),
                   _AlertStrip(
-                    color: DunesColors.amber,
-                    bg: DunesColors.amberSoft,
+                    color: DunesColors.resolve(context, DunesColors.amber),
+                    bg: DunesColors.resolve(context, DunesColors.amberSoft),
                     text:
                         '7 天内到期 ${summary.dueSoonCount} 笔，共 ${formatFundSecondmentWan(summary.dueSoonRemainingWan)}',
                   ),
                 ],
                 if (summary.remainingTotalWan > 0 &&
-                    (summary.routes.isNotEmpty || summary.lenders.isNotEmpty)) ...[
+                    (summary.routes.isNotEmpty ||
+                        summary.lenders.isNotEmpty)) ...[
                   const SizedBox(height: 12),
                   _buildBreakdown(wide, netting),
                 ],
@@ -88,13 +93,13 @@ class FundSecondmentKanban extends StatelessWidget {
     final subtitle = allClear
         ? '一共借出 ${formatFundSecondmentWan(summary.borrowTotalWan)}，已经全部收回'
         : summary.count == 0
-            ? '还没有审批通过的借调'
-            : '借出去还没还回来 · 一共 ${formatFundSecondmentWan(summary.borrowTotalWan)}，已收回 ${formatFundSecondmentWan(summary.repaidTotalWan)}';
+        ? '还没有审批通过的借调'
+        : '借出去还没还回来 · 一共 ${formatFundSecondmentWan(summary.borrowTotalWan)}，已收回 ${formatFundSecondmentWan(summary.repaidTotalWan)}';
     final amountColor = allClear
         ? DunesColors.green
         : remaining > 0
-            ? DunesColors.coral
-            : DunesColors.text3;
+        ? DunesColors.coral
+        : DunesColors.text3;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -193,22 +198,22 @@ class FundSecondmentKanban extends StatelessWidget {
     );
     final lenderRows = useNet
         ? netting!.netLenders
-            .map(
-              (item) => _BreakdownRow(
-                label: item.subject,
-                tag: item.isBridge ? '过桥' : null,
-                value: formatFundSecondmentWan(item.netWan),
-              ),
-            )
-            .toList(growable: false)
+              .map(
+                (item) => _BreakdownRow(
+                  label: item.subject,
+                  tag: item.isBridge ? '过桥' : null,
+                  value: formatFundSecondmentWan(item.netWan),
+                ),
+              )
+              .toList(growable: false)
         : summary.lenders
-            .map(
-              (item) => _BreakdownRow(
-                label: item.subject,
-                value: formatFundSecondmentWan(item.remainingWan),
-              ),
-            )
-            .toList(growable: false);
+              .map(
+                (item) => _BreakdownRow(
+                  label: item.subject,
+                  value: formatFundSecondmentWan(item.remainingWan),
+                ),
+              )
+              .toList(growable: false);
     if (lenderRows.isEmpty) return routes;
     final lenders = _BreakdownColumn(
       title: '谁还在垫钱',
@@ -226,11 +231,7 @@ class FundSecondmentKanban extends StatelessWidget {
           )
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              routes,
-              const SizedBox(height: 12),
-              lenders,
-            ],
+            children: [routes, const SizedBox(height: 12), lenders],
           );
     if (!useNet || netting!.bridgeNote.isEmpty) return columns;
     return Column(
@@ -272,12 +273,24 @@ class _RepayProgressBar extends StatelessWidget {
                 if (repaidFlex > 0)
                   Flexible(
                     flex: repaidFlex,
-                    child: const ColoredBox(color: DunesColors.green),
+                    child: ColoredBox(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.green,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   ),
                 if (remainFlex > 0)
                   Flexible(
                     flex: remainFlex,
-                    child: const ColoredBox(color: Color(0xFFF3D6CE)),
+                    child: ColoredBox(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFF3D6CE),
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -286,7 +299,10 @@ class _RepayProgressBar extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           '已收回 ${(ratio * 100).round()}%',
-          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 11,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       ],
     );
@@ -309,7 +325,11 @@ class _AlertStrip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: bg,
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -317,7 +337,7 @@ class _AlertStrip extends StatelessWidget {
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: color,
+          color: DunesColors.resolveNullable(context, color),
         ),
       ),
     );
@@ -339,9 +359,17 @@ class _KanbanChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = selected ? color : DunesColors.text2;
+    final fg = selected
+        ? color
+        : DunesColors.resolve(context, DunesColors.text2);
     return Material(
-      color: selected ? color.withValues(alpha: 0.12) : const Color(0xFFF7F7F8),
+      color: selected
+          ? color.withValues(alpha: 0.12)
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF7F7F8),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -353,7 +381,7 @@ class _KanbanChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: fg,
+              color: DunesColors.resolveNullable(context, fg),
             ),
           ),
         ),
@@ -381,16 +409,19 @@ class _BreakdownColumn extends StatelessWidget {
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
           ),
         ),
         const SizedBox(height: 2),
         Text(
           hint,
-          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 11,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
         const SizedBox(height: 6),
         ...children,
@@ -431,10 +462,10 @@ class _BreakdownRow extends StatelessWidget {
                 TextSpan(text: from),
                 TextSpan(
                   text: '  ${relation ?? '欠'}  ',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.coral,
+                    color: DunesColors.resolve(context, DunesColors.coral),
                   ),
                 ),
                 TextSpan(text: to),
@@ -460,20 +491,20 @@ class _BreakdownRow extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               mark,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.amber,
+                color: DunesColors.resolve(context, DunesColors.amber),
               ),
             ),
           ],
           const SizedBox(width: 8),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
-              color: DunesColors.coral,
+              color: DunesColors.resolve(context, DunesColors.coral),
             ),
           ),
         ],

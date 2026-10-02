@@ -78,7 +78,7 @@ class _NativeAmSsoPageState extends State<NativeAmSsoPage> {
           tooltip: '重新打开${widget.title}',
           onPressed: _loading ? null : () => unawaited(_openAm()),
           icon: const Icon(Icons.refresh_rounded, size: 20),
-          color: DunesColors.text2,
+          color: DunesColors.resolve(context, DunesColors.text2),
         ),
       ),
     );
@@ -133,7 +133,11 @@ class _NativeAmSsoPageState extends State<NativeAmSsoPage> {
   Widget build(BuildContext context) {
     final topInset = MediaQuery.paddingOf(context).top;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(52 + topInset),
         child: _buildAppTopBar(),
@@ -144,13 +148,25 @@ class _NativeAmSsoPageState extends State<NativeAmSsoPage> {
 
   Widget _buildAppTopBar() {
     return Material(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Container(
           height: 52,
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
+            ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
@@ -158,7 +174,10 @@ class _NativeAmSsoPageState extends State<NativeAmSsoPage> {
               TextButton.icon(
                 onPressed: _exitToApp,
                 style: TextButton.styleFrom(
-                  foregroundColor: DunesColors.accentDeep,
+                  foregroundColor: DunesColors.resolve(
+                    context,
+                    DunesColors.accentDeep,
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
                 icon: const Icon(Icons.arrow_back_ios_new, size: 16),
@@ -167,7 +186,8 @@ class _NativeAmSsoPageState extends State<NativeAmSsoPage> {
                   style: DunesTypography.sans(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.accentDeep,
+                    color: DunesColors.resolve(context, DunesColors.accentDeep),
+                    context: context,
                   ),
                 ),
               ),
@@ -178,7 +198,8 @@ class _NativeAmSsoPageState extends State<NativeAmSsoPage> {
                   style: DunesTypography.sans(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
               ),
@@ -186,7 +207,7 @@ class _NativeAmSsoPageState extends State<NativeAmSsoPage> {
                 tooltip: '重新打开',
                 onPressed: _loading ? null : () => unawaited(_openAm()),
                 icon: const Icon(Icons.refresh_rounded, size: 22),
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             ],
           ),
@@ -197,15 +218,19 @@ class _NativeAmSsoPageState extends State<NativeAmSsoPage> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const ColoredBox(
-        color: Colors.white,
+      return ColoredBox(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
       );
     }
     if (_error != null) {
       return _buildMessage(
         icon: Icons.info_outline_rounded,
-        iconColor: const Color(0xFFE38B24),
+        iconColor: DunesColors.resolve(context, const Color(0xFFE38B24)),
         message: _error!,
         actionLabel: '重新打开',
       );
@@ -213,7 +238,7 @@ class _NativeAmSsoPageState extends State<NativeAmSsoPage> {
     if (_opened) {
       return _buildMessage(
         icon: Icons.open_in_browser_rounded,
-        iconColor: DunesColors.accentDeep,
+        iconColor: DunesColors.resolve(context, DunesColors.accentDeep),
         message: '已在系统浏览器中打开${widget.title}。\n办理完成后可关闭浏览器标签，返回沙丘继续工作。',
         actionLabel: '再次打开',
       );
@@ -228,14 +253,22 @@ class _NativeAmSsoPageState extends State<NativeAmSsoPage> {
     required String actionLabel,
   }) {
     return ColoredBox(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 36),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: iconColor, size: 40),
+              Icon(
+                icon,
+                color: DunesColors.resolveNullable(context, iconColor),
+                size: 40,
+              ),
               const SizedBox(height: 14),
               Text(
                 message,
@@ -243,7 +276,8 @@ class _NativeAmSsoPageState extends State<NativeAmSsoPage> {
                 style: DunesTypography.sans(
                   fontSize: 14,
                   height: 1.5,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 18),

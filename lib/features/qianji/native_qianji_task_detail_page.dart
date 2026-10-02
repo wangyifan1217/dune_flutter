@@ -23,7 +23,11 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
     final detail = QianjiProjectCatalog.detailFor(project).taskDetail;
 
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -43,7 +47,8 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                       height: 1.25,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -52,11 +57,7 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                     runSpacing: 6,
                     children: [
                       _metaChip(Icons.person_outline, '${detail.owner}负责'),
-                      _metaChip(
-                        Icons.schedule,
-                        detail.due,
-                        warn: true,
-                      ),
+                      _metaChip(Icons.schedule, detail.due, warn: true),
                       _metaChip(Icons.account_tree_outlined, detail.branch),
                     ],
                   ),
@@ -75,8 +76,15 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                               CircularProgressIndicator(
                                 value: detail.progress,
                                 strokeWidth: 7,
-                                backgroundColor: DunesColors.bgSoft,
-                                color: DunesColors.green,
+                                backgroundColor: DunesColors.resolve(
+                                  context,
+                                  DunesColors.bgSoft,
+                                  role: DunesColorRole.surface,
+                                ),
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.green,
+                                ),
                               ),
                               Column(
                                 mainAxisSize: MainAxisSize.min,
@@ -86,13 +94,18 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                     style: DunesTypography.sans(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w700,
+                                      context: context,
                                     ),
                                   ),
                                   Text(
                                     '完成',
                                     style: DunesTypography.sans(
                                       fontSize: 10,
-                                      color: DunesColors.text3,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text3,
+                                      ),
+                                      context: context,
                                     ),
                                   ),
                                 ],
@@ -104,17 +117,29 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                         Expanded(
                           child: Column(
                             children: [
-                              _kv('子任务', '${detail.subDone} / ${detail.subTotal} 完成'),
-                              _kv('已用工时', '${detail.usedDays} / ${detail.totalDays} 天'),
+                              _kv(
+                                '子任务',
+                                '${detail.subDone} / ${detail.subTotal} 完成',
+                              ),
+                              _kv(
+                                '已用工时',
+                                '${detail.usedDays} / ${detail.totalDays} 天',
+                              ),
                               _kv(
                                 '剩余天数',
                                 '${detail.remainDays} 天',
-                                valueColor: DunesColors.coral,
+                                valueColor: DunesColors.resolve(
+                                  context,
+                                  DunesColors.coral,
+                                ),
                               ),
                               _kv(
                                 '本周提交',
                                 '${detail.weekCommits} 次',
-                                valueColor: QianjiPerfTheme.purple,
+                                valueColor: DunesColors.resolve(
+                                  context,
+                                  QianjiPerfTheme.purple,
+                                ),
                               ),
                             ],
                           ),
@@ -139,7 +164,11 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                     e.key,
                                     style: DunesTypography.sans(
                                       fontSize: 12,
-                                      color: DunesColors.text3,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text3,
+                                      ),
+                                      context: context,
                                     ),
                                   ),
                                 ),
@@ -150,12 +179,22 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
                                       color: e.key == '截止日期'
-                                          ? DunesColors.coral
+                                          ? DunesColors.resolve(
+                                              context,
+                                              DunesColors.coral,
+                                            )
                                           : (e.key == '项目名称' ||
-                                                  e.key == '负责人' ||
-                                                  e.key == '关联提案')
-                                              ? QianjiPerfTheme.purple
-                                              : DunesColors.text,
+                                                e.key == '负责人' ||
+                                                e.key == '关联提案')
+                                          ? DunesColors.resolve(
+                                              context,
+                                              QianjiPerfTheme.purple,
+                                            )
+                                          : DunesColors.resolve(
+                                              context,
+                                              DunesColors.text,
+                                            ),
+                                      context: context,
                                     ),
                                   ),
                                 ),
@@ -181,7 +220,11 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                   height: 34,
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: m.color,
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      m.color,
+                                      role: DunesColorRole.surface,
+                                    ),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Text(
@@ -191,27 +234,37 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                     style: DunesTypography.sans(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w700,
-                                      color: Colors.white,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        Colors.white,
+                                      ),
+                                      context: context,
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         m.name,
                                         style: DunesTypography.sans(
                                           fontSize: 13,
                                           fontWeight: FontWeight.w600,
+                                          context: context,
                                         ),
                                       ),
                                       Text(
                                         m.role,
                                         style: DunesTypography.sans(
                                           fontSize: 11,
-                                          color: DunesColors.text3,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.text3,
+                                          ),
+                                          context: context,
                                         ),
                                       ),
                                     ],
@@ -225,14 +278,22 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                       style: DunesTypography.sans(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w700,
-                                        color: QianjiPerfTheme.purple,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          QianjiPerfTheme.purple,
+                                        ),
+                                        context: context,
                                       ),
                                     ),
                                     Text(
                                       m.days,
                                       style: DunesTypography.sans(
                                         fontSize: 10,
-                                        color: DunesColors.text3,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text3,
+                                        ),
+                                        context: context,
                                       ),
                                     ),
                                   ],
@@ -259,33 +320,51 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                   s.done
                                       ? Icons.check_circle
                                       : s.running
-                                          ? Icons.radio_button_checked
-                                          : Icons.radio_button_unchecked,
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
                                   size: 18,
                                   color: s.done
-                                      ? DunesColors.green
+                                      ? DunesColors.resolve(
+                                          context,
+                                          DunesColors.green,
+                                        )
                                       : s.running
-                                          ? QianjiPerfTheme.purple
-                                          : DunesColors.border,
+                                      ? DunesColors.resolve(
+                                          context,
+                                          QianjiPerfTheme.purple,
+                                        )
+                                      : DunesColors.resolve(
+                                          context,
+                                          DunesColors.border,
+                                        ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         s.name,
-                                        style: DunesTypography.sans(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: s.done
-                                              ? DunesColors.text3
-                                              : DunesColors.text,
-                                        ).copyWith(
-                                          decoration: s.done
-                                              ? TextDecoration.lineThrough
-                                              : TextDecoration.none,
-                                        ),
+                                        style:
+                                            DunesTypography.sans(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: s.done
+                                                  ? DunesColors.resolve(
+                                                      context,
+                                                      DunesColors.text3,
+                                                    )
+                                                  : DunesColors.resolve(
+                                                      context,
+                                                      DunesColors.text,
+                                                    ),
+                                              context: context,
+                                            ).copyWith(
+                                              decoration: s.done
+                                                  ? TextDecoration.lineThrough
+                                                  : TextDecoration.none,
+                                            ),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
@@ -293,8 +372,15 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                         style: DunesTypography.sans(
                                           fontSize: 11,
                                           color: s.warn
-                                              ? DunesColors.coral
-                                              : DunesColors.text3,
+                                              ? DunesColors.resolve(
+                                                  context,
+                                                  DunesColors.coral,
+                                                )
+                                              : DunesColors.resolve(
+                                                  context,
+                                                  DunesColors.text3,
+                                                ),
+                                          context: context,
                                         ),
                                       ),
                                     ],
@@ -306,8 +392,15 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                     color: s.done
-                                        ? DunesColors.green
-                                        : DunesColors.text2,
+                                        ? DunesColors.resolve(
+                                            context,
+                                            DunesColors.green,
+                                          )
+                                        : DunesColors.resolve(
+                                            context,
+                                            DunesColors.text2,
+                                          ),
+                                    context: context,
                                   ),
                                 ),
                               ],
@@ -331,28 +424,45 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                   width: 36,
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    color: a.bg,
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      a.bg,
+                                      role: DunesColorRole.surface,
+                                    ),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: Icon(a.icon, size: 18, color: a.color),
+                                  child: Icon(
+                                    a.icon,
+                                    size: 18,
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      a.color,
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         a.name,
                                         style: DunesTypography.sans(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
+                                          context: context,
                                         ),
                                       ),
                                       Text(
                                         a.meta,
                                         style: DunesTypography.sans(
                                           fontSize: 10,
-                                          color: DunesColors.text3,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.text3,
+                                          ),
+                                          context: context,
                                         ),
                                       ),
                                     ],
@@ -361,7 +471,10 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                 Icon(
                                   Icons.download_rounded,
                                   size: 18,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
                                 ),
                               ],
                             ),
@@ -384,23 +497,32 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                   width: 22,
                                   height: 22,
                                   alignment: Alignment.center,
-                                  decoration: const BoxDecoration(
-                                    color: QianjiPerfTheme.purpleSoft,
+                                  decoration: BoxDecoration(
+                                    color: DunesColors.resolve(
+                                      context,
+                                      QianjiPerfTheme.purpleSoft,
+                                      role: DunesColorRole.surface,
+                                    ),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Text(
                                     f.up ? '↑' : '✓',
                                     style: DunesTypography.sans(
                                       fontSize: 11,
-                                      color: QianjiPerfTheme.purple,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        QianjiPerfTheme.purple,
+                                      ),
                                       fontWeight: FontWeight.w700,
+                                      context: context,
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
                                         children: [
@@ -409,6 +531,7 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                             style: DunesTypography.sans(
                                               fontSize: 12,
                                               fontWeight: FontWeight.w600,
+                                              context: context,
                                             ),
                                           ),
                                           const Spacer(),
@@ -416,7 +539,11 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                             f.time,
                                             style: DunesTypography.sans(
                                               fontSize: 11,
-                                              color: DunesColors.text3,
+                                              color: DunesColors.resolve(
+                                                context,
+                                                DunesColors.text3,
+                                              ),
+                                              context: context,
                                             ),
                                           ),
                                         ],
@@ -426,7 +553,11 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
                                         style: DunesTypography.sans(
                                           fontSize: 12,
                                           height: 1.4,
-                                          color: DunesColors.text2,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.text2,
+                                          ),
+                                          context: context,
                                         ),
                                       ),
                                     ],
@@ -457,7 +588,11 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: warn ? DunesColors.coral : DunesColors.text2),
+          Icon(
+            icon,
+            size: 12,
+            color: warn ? DunesColors.coral : DunesColors.text2,
+          ),
           const SizedBox(width: 4),
           Text(
             text,
@@ -480,7 +615,10 @@ class NativeQianjiTaskDetailPage extends StatelessWidget {
             width: 64,
             child: Text(
               k,
-              style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: DunesColors.text3,
+              ),
             ),
           ),
           Expanded(

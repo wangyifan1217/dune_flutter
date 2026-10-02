@@ -32,6 +32,7 @@ class NativeAiSummaryHubPage extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onCreate;
   final ValueChanged<int> onOpenDetail;
+
   /// 进入页时回调（用于 Host 刷新通讯 Tab 未读）。
   final VoidCallback? onOpened;
 
@@ -67,7 +68,9 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
         .of(widget.session)
         .events
         .listen(_onRealtime);
-    _localStatusSub = AiSummaryStatusBus.instance.stream.listen(_applyItemUpdate);
+    _localStatusSub = AiSummaryStatusBus.instance.stream.listen(
+      _applyItemUpdate,
+    );
     _scrollController.addListener(_onScroll);
     _searchController.addListener(_onSearchChanged);
     unawaited(_load());
@@ -180,10 +183,8 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
       unawaited(_load(silent: true));
       return;
     }
-    final generating =
-        update.status == 'PENDING' || update.status == 'RUNNING';
-    final terminal =
-        update.status == 'SUCCESS' || update.status == 'FAILED';
+    final generating = update.status == 'PENDING' || update.status == 'RUNNING';
+    final terminal = update.status == 'SUCCESS' || update.status == 'FAILED';
     setState(() {
       _items = List<AiSummaryItem>.from(_items)
         ..[idx] = _items[idx].copyWith(
@@ -341,7 +342,11 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F4F7),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF2F4F7),
+        role: DunesColorRole.surface,
+      ),
       body: Column(
         children: [
           _buildHeader(),
@@ -354,11 +359,22 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFFEDE6F8), Color(0xFFF2F4F7)],
+          colors: [
+            DunesColors.resolve(
+              context,
+              Color(0xFFEDE6F8),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFF2F4F7),
+              role: DunesColorRole.surface,
+            ),
+          ],
         ),
       ),
       child: SafeArea(
@@ -372,7 +388,10 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
                 children: [
                   IconButton(
                     onPressed: widget.onBack,
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 18,
+                    ),
                   ),
                   const Spacer(),
                   IconButton(
@@ -394,7 +413,11 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
                         style: DunesTypography.sans(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
-                          color: const Color(0xFF1C1C1C),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF1C1C1C),
+                          ),
+                          context: context,
                         ),
                       ),
                     ),
@@ -409,7 +432,11 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     height: 1.45,
-                    color: const Color(0xFF6B7280),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF6B7280),
+                    ),
+                    context: context,
                   ),
                 ),
               ),
@@ -423,12 +450,19 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
                     hintText: '搜索主题、发起人或会话（人/群）',
                     hintStyle: DunesTypography.sans(
                       fontSize: 13.5,
-                      color: const Color(0xFF9CA3AF),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF9CA3AF),
+                      ),
+                      context: context,
                     ),
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.search_rounded,
                       size: 20,
-                      color: Color(0xFF9CA3AF),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF9CA3AF),
+                      ),
                     ),
                     suffixIcon: _searchController.text.isEmpty
                         ? null
@@ -438,27 +472,47 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
                             icon: const Icon(Icons.close_rounded, size: 18),
                           ),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 10,
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      borderSide: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFE5E7EB),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      borderSide: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFE5E7EB),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: DunesColors.brandPurple,
+                      borderSide: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                          role: DunesColorRole.border,
+                        ),
                       ),
                     ),
                   ),
-                  style: DunesTypography.sans(fontSize: 14),
+                  style: DunesTypography.sans(fontSize: 14, context: context),
                 ),
               ),
             ],
@@ -477,12 +531,21 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: DunesTypography.sans(color: DunesColors.text3)),
+            Text(
+              _error!,
+              style: DunesTypography.sans(
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
+              ),
+            ),
             const SizedBox(height: 12),
             TextButton(
               onPressed: () => _load(),
               style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF7B5CD8),
+                foregroundColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFF7B5CD8),
+                ),
               ),
               child: const Text('重试'),
             ),
@@ -491,9 +554,7 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
       );
     }
 
-    final emptyHint = _query.isEmpty
-        ? '还没有总结，点上方新建开始'
-        : '未找到与「$_query」相关的总结';
+    final emptyHint = _query.isEmpty ? '还没有总结，点上方新建开始' : '未找到与「$_query」相关的总结';
 
     return RefreshIndicator(
       onRefresh: () => _load(silent: true),
@@ -511,7 +572,8 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
                   emptyHint,
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -564,7 +626,11 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
                   '没有更多了',
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: const Color(0xFF9CA3AF),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF9CA3AF),
+                    ),
+                    context: context,
                   ),
                 ),
               ),
@@ -583,7 +649,11 @@ class _NewSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -595,11 +665,19 @@ class _NewSummaryCard extends StatelessWidget {
               Container(
                 width: 36,
                 height: 36,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1C1C1C),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF1C1C1C),
+                    role: DunesColorRole.surface,
+                  ),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.add, color: Colors.white, size: 20),
+                child: Icon(
+                  Icons.add,
+                  color: DunesColors.resolve(context, Colors.white),
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Text(
@@ -607,7 +685,8 @@ class _NewSummaryCard extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFF1C1C1C),
+                  color: DunesColors.resolve(context, const Color(0xFF1C1C1C)),
+                  context: context,
                 ),
               ),
             ],
@@ -658,7 +737,11 @@ class _SummaryCard extends StatelessWidget {
     final badge = item.statusBadgeLabel;
 
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -675,7 +758,11 @@ class _SummaryCard extends StatelessWidget {
                       '$initiator 发起',
                       style: DunesTypography.sans(
                         fontSize: 12,
-                        color: const Color(0xFF9CA3AF),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF9CA3AF),
+                        ),
+                        context: context,
                       ),
                     ),
                   ),
@@ -687,8 +774,16 @@ class _SummaryCard extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: item.isFailed
-                            ? const Color(0xFFFEE2E2)
-                            : DunesColors.brandPurpleSoft,
+                            ? DunesColors.resolve(
+                                context,
+                                const Color(0xFFFEE2E2),
+                                role: DunesColorRole.surface,
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                DunesColors.brandPurpleSoft,
+                                role: DunesColorRole.surface,
+                              ),
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Row(
@@ -700,7 +795,10 @@ class _SummaryCard extends StatelessWidget {
                               height: 10,
                               child: CircularProgressIndicator(
                                 strokeWidth: 1.6,
-                                color: DunesColors.brandPurple,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.brandPurple,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 5),
@@ -711,8 +809,15 @@ class _SummaryCard extends StatelessWidget {
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: item.isFailed
-                                  ? const Color(0xFFB91C1C)
-                                  : DunesColors.brandPurpleDeep,
+                                  ? DunesColors.resolve(
+                                      context,
+                                      const Color(0xFFB91C1C),
+                                    )
+                                  : DunesColors.resolve(
+                                      context,
+                                      DunesColors.brandPurpleDeep,
+                                    ),
+                              context: context,
                             ),
                           ),
                         ],
@@ -730,8 +835,12 @@ class _SummaryCard extends StatelessWidget {
                       child: Container(
                         width: 8,
                         height: 8,
-                        decoration: const BoxDecoration(
-                          color: DunesColors.brandPurple,
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                            role: DunesColorRole.surface,
+                          ),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -742,7 +851,11 @@ class _SummaryCard extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
-                        color: const Color(0xFF111827),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF111827),
+                        ),
+                        context: context,
                       ),
                     ),
                   ),
@@ -757,8 +870,9 @@ class _SummaryCard extends StatelessWidget {
                   fontSize: 13.5,
                   height: 1.5,
                   color: item.isGenerating
-                      ? DunesColors.brandPurple
-                      : const Color(0xFF6B7280),
+                      ? DunesColors.resolve(context, DunesColors.brandPurple)
+                      : DunesColors.resolve(context, const Color(0xFF6B7280)),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 10),
@@ -781,7 +895,11 @@ class _SummaryCard extends StatelessWidget {
                             '$participantCount位成员',
                             style: DunesTypography.sans(
                               fontSize: 12,
-                              color: const Color(0xFF9CA3AF),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFF9CA3AF),
+                              ),
+                              context: context,
                             ),
                           ),
                         ],
@@ -795,7 +913,11 @@ class _SummaryCard extends StatelessWidget {
                         '$participantCount位成员',
                         style: DunesTypography.sans(
                           fontSize: 12,
-                          color: const Color(0xFF9CA3AF),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF9CA3AF),
+                          ),
+                          context: context,
                         ),
                       ),
                     ),
@@ -805,16 +927,23 @@ class _SummaryCard extends StatelessWidget {
                     time,
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: const Color(0xFF9CA3AF),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF9CA3AF),
+                      ),
+                      context: context,
                     ),
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: onMore,
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.more_horiz_rounded,
                       size: 18,
-                      color: Color(0xFF9CA3AF),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF9CA3AF),
+                      ),
                     ),
                     visualDensity: VisualDensity.compact,
                   ),

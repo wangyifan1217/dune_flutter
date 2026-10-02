@@ -45,12 +45,16 @@ Future<void> showAppUpdateDialog(
         return FadeTransition(
           opacity: animation,
           child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 0.04),
-              end: Offset.zero,
-            ).animate(
-              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-            ),
+            position:
+                Tween<Offset>(
+                  begin: const Offset(0, 0.04),
+                  end: Offset.zero,
+                ).animate(
+                  CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  ),
+                ),
             child: child,
           ),
         );
@@ -129,9 +133,7 @@ class _AppSoftwareUpdatePageState extends State<AppSoftwareUpdatePage> {
         _busy = false;
         _opening = false;
         _error = _inApp
-            ? (_isMac
-                  ? '应用内更新失败，可重试或改用浏览器下载安装包。'
-                  : '应用内更新失败，可重试或改用浏览器下载。')
+            ? (_isMac ? '应用内更新失败，可重试或改用浏览器下载安装包。' : '应用内更新失败，可重试或改用浏览器下载。')
             : '更新失败，请稍后重试';
       });
     }
@@ -175,9 +177,7 @@ class _AppSoftwareUpdatePageState extends State<AppSoftwareUpdatePage> {
   }
 
   bool get _canOpenBrowser =>
-      _inApp &&
-      _error != null &&
-      widget.result.downloadUrl.trim().isNotEmpty;
+      _inApp && _error != null && widget.result.downloadUrl.trim().isNotEmpty;
 
   String? get _secondaryLabel {
     if (_canOpenBrowser) return '浏览器下载';

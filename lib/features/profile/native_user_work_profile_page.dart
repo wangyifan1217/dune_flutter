@@ -641,7 +641,11 @@ class _NativeUserWorkProfilePageState extends State<NativeUserWorkProfilePage> {
     ];
 
     return ColoredBox(
-      color: const Color(0xFFF8F5FC),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF8F5FC),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -699,7 +703,11 @@ class _NativeUserWorkProfilePageState extends State<NativeUserWorkProfilePage> {
                         style: DunesTypography.sans(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
-                          color: const Color(0xFF312249),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF312249),
+                          ),
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 5),
@@ -707,7 +715,11 @@ class _NativeUserWorkProfilePageState extends State<NativeUserWorkProfilePage> {
                         '按月查看个人工作数据；知识库文档暂无月份字段，会标注“当前累计”。',
                         style: DunesTypography.sans(
                           fontSize: 13,
-                          color: const Color(0xFF766B86),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF766B86),
+                          ),
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -761,9 +773,21 @@ class _Header extends StatelessWidget {
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: const BoxDecoration(
-        color: Color(0xFFFCFAFF),
-        border: Border(bottom: BorderSide(color: Color(0xFFE7DFF0))),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFFCFAFF),
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE7DFF0),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -771,7 +795,7 @@ class _Header extends StatelessWidget {
             tooltip: '返回我的',
             onPressed: onBack,
             icon: const Icon(Icons.arrow_back_rounded),
-            color: const Color(0xFF4A3866),
+            color: DunesColors.resolve(context, const Color(0xFF4A3866)),
           ),
           const SizedBox(width: 2),
           Text(
@@ -779,7 +803,8 @@ class _Header extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: const Color(0xFF312249),
+              color: DunesColors.resolve(context, const Color(0xFF312249)),
+              context: context,
             ),
           ),
         ],
@@ -807,8 +832,12 @@ class _IdentityHero extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF604084), Color(0xFF8E6BBC), Color(0xFFA286C6)],
+        gradient: LinearGradient(
+          colors: [
+            DunesColors.resolve(context, Color(0xFF604084)),
+            DunesColors.resolve(context, Color(0xFF8E6BBC)),
+            DunesColors.resolve(context, Color(0xFFA286C6)),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -827,7 +856,11 @@ class _IdentityHero extends StatelessWidget {
             avatarPreset: avatarPreset,
             avatarUrl: avatarUrl,
             fallbackText: name.characters.first,
-            borderColor: const Color(0x99FFFFFF),
+            borderColor: DunesColors.resolve(
+              context,
+              const Color(0x99FFFFFF),
+              role: DunesColorRole.border,
+            ),
             borderWidth: 2,
           ),
           const SizedBox(width: 16),
@@ -835,10 +868,13 @@ class _IdentityHero extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '个人工作画像',
                   style: TextStyle(
-                    color: Color(0xCCFFFFFF),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xCCFFFFFF),
+                    ),
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
@@ -852,7 +888,8 @@ class _IdentityHero extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -862,7 +899,11 @@ class _IdentityHero extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: const Color(0xEFFFFFFF),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xEFFFFFFF),
+                    ),
+                    context: context,
                   ),
                 ),
               ],
@@ -882,9 +923,19 @@ class _ExplanationCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE6DCF0)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE6DCF0),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -892,24 +943,28 @@ class _ExplanationCard extends StatelessWidget {
           Container(
             width: 34,
             height: 34,
-            decoration: const BoxDecoration(
-              color: Color(0xFFF0E8FA),
+            decoration: BoxDecoration(
+              color: DunesColors.resolveNullable(
+                context,
+                Color(0xFFF0E8FA),
+                role: DunesColorRole.surface,
+              ),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.auto_awesome_rounded,
-              color: Color(0xFF7651B8),
+              color: DunesColors.resolveNullable(context, Color(0xFF7651B8)),
               size: 18,
             ),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Text(
               '这里汇总当前登录用户的任务、知识、业务与绩效数据，帮助你按月回顾投入与发展。所有指标均来自已有业务记录。',
               style: TextStyle(
                 fontSize: 13,
                 height: 1.55,
-                color: Color(0xFF5D536B),
+                color: DunesColors.resolveNullable(context, Color(0xFF5D536B)),
               ),
             ),
           ),
@@ -934,25 +989,38 @@ class WorkProfileRadarCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE9E2EF)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE9E2EF),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '$monthLabel 工作维度',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF342740),
+              color: DunesColors.resolveNullable(context, Color(0xFF342740)),
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             '按任务、会议、知识、审批与提案记录展示；不是能力评分或排名。',
-            style: TextStyle(fontSize: 11, color: Color(0xFF817589)),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolveNullable(context, Color(0xFF817589)),
+            ),
           ),
           const SizedBox(height: 8),
           LayoutBuilder(
@@ -980,13 +1048,20 @@ class WorkProfileRadarCard extends StatelessWidget {
                     vertical: 7,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF8F5FC),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFF8F5FC),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     '${dimension.label}  ${dimension.value == null ? '暂不可用' : '${dimension.value}/${dimension.cap}${dimension.unit}'}${dimension.period == '当前累计' ? ' · 累计' : ''}',
-                    style: const TextStyle(
-                      color: Color(0xFF62576F),
+                    style: TextStyle(
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF62576F),
+                      ),
                       fontSize: 11,
                     ),
                   ),
@@ -994,9 +1069,12 @@ class WorkProfileRadarCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             '图形采用柔和非线性缩放，提升低频记录的可读性；实际数量见各轴标签，不代表能力评分。',
-            style: TextStyle(fontSize: 10.5, color: Color(0xFF9A8FA3)),
+            style: TextStyle(
+              fontSize: 10.5,
+              color: DunesColors.resolveNullable(context, Color(0xFF9A8FA3)),
+            ),
           ),
         ],
       ),
@@ -1143,41 +1221,66 @@ class _WorkProfileTrendCardState extends State<WorkProfileTrendCard> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE9E2EF)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE9E2EF),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   '近 12 个月趋势',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF342740),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF342740),
+                    ),
                   ),
                 ),
               ),
               Text(
                 _metricLabel,
-                style: const TextStyle(fontSize: 11, color: Color(0xFF817589)),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF817589),
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             '本月为截至查询时的累计；各项是业务记录数量，不代表能力评分',
-            style: TextStyle(fontSize: 11, color: Color(0xFF9A8FA3)),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolveNullable(context, Color(0xFF9A8FA3)),
+            ),
           ),
           if (widget.updatedAt.trim().isNotEmpty) ...[
             const SizedBox(height: 3),
             Text(
               '查询于 ${widget.updatedAt}',
-              style: const TextStyle(fontSize: 10, color: Color(0xFFAAA0B2)),
+              style: TextStyle(
+                fontSize: 10,
+                color: DunesColors.resolveNullable(context, Color(0xFFAAA0B2)),
+              ),
             ),
           ],
           const SizedBox(height: 12),
@@ -1194,12 +1297,18 @@ class _WorkProfileTrendCardState extends State<WorkProfileTrendCard> {
           ),
           const SizedBox(height: 12),
           if (points.isEmpty)
-            const SizedBox(
+            SizedBox(
               height: 112,
               child: Center(
                 child: Text(
                   '暂无近 12 个月汇总数据',
-                  style: TextStyle(color: Color(0xFF9A8FA3), fontSize: 12),
+                  style: TextStyle(
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF9A8FA3),
+                    ),
+                    fontSize: 12,
+                  ),
                 ),
               ),
             )
@@ -1218,9 +1327,12 @@ class _WorkProfileTrendCardState extends State<WorkProfileTrendCard> {
                           children: [
                             Text(
                               '${_valueOf(point)}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 9,
-                                color: Color(0xFF817589),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFF817589),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -1234,8 +1346,10 @@ class _WorkProfileTrendCardState extends State<WorkProfileTrendCard> {
                                         )
                                         .toDouble(),
                               decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF8057B7,
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF8057B7),
+                                  role: DunesColorRole.surface,
                                 ).withValues(alpha: .82),
                                 borderRadius: BorderRadius.circular(5),
                               ),
@@ -1245,9 +1359,12 @@ class _WorkProfileTrendCardState extends State<WorkProfileTrendCard> {
                               point.month.length >= 7
                                   ? point.month.substring(5)
                                   : '—',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 9,
-                                color: Color(0xFF9A8FA3),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFF9A8FA3),
+                                ),
                               ),
                             ),
                           ],
@@ -1272,12 +1389,30 @@ class _WorkProfileTrendCardState extends State<WorkProfileTrendCard> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFFF0E8FA) : const Color(0xFFF8F6FA),
+            color: selected
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFF0E8FA),
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    const Color(0xFFF8F6FA),
+                    role: DunesColorRole.surface,
+                  ),
             borderRadius: BorderRadius.circular(99),
             border: Border.all(
               color: selected
-                  ? const Color(0xFFD4C1E9)
-                  : const Color(0xFFECE7F0),
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0xFFD4C1E9),
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFECE7F0),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -1285,8 +1420,8 @@ class _WorkProfileTrendCardState extends State<WorkProfileTrendCard> {
             style: TextStyle(
               fontSize: 10.5,
               color: selected
-                  ? const Color(0xFF6743A0)
-                  : const Color(0xFF817589),
+                  ? DunesColors.resolve(context, const Color(0xFF6743A0))
+                  : DunesColors.resolve(context, const Color(0xFF817589)),
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
@@ -1314,9 +1449,19 @@ class _ModuleCard extends StatelessWidget {
     final card = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE9E2EF)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE9E2EF),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -1324,10 +1469,18 @@ class _ModuleCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: module.type.color.withValues(alpha: .12),
+              color: DunesColors.resolveNullable(
+                context,
+                module.type.color.withValues(alpha: .12),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(13),
             ),
-            child: Icon(module.type.icon, color: module.type.color, size: 21),
+            child: Icon(
+              module.type.icon,
+              color: DunesColors.resolveNullable(context, module.type.color),
+              size: 21,
+            ),
           ),
           const SizedBox(width: 13),
           Expanded(
@@ -1339,7 +1492,11 @@ class _ModuleCard extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFF342740),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF342740),
+                    ),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -1347,7 +1504,11 @@ class _ModuleCard extends StatelessWidget {
                   summary,
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: const Color(0xFF817589),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF817589),
+                    ),
+                    context: context,
                   ),
                 ),
                 if (module.source.isNotEmpty || module.period.isNotEmpty) ...[
@@ -1359,7 +1520,11 @@ class _ModuleCard extends StatelessWidget {
                     ].join(' · '),
                     style: DunesTypography.sans(
                       fontSize: 10.5,
-                      color: const Color(0xFF9A8FA3),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF9A8FA3),
+                      ),
+                      context: context,
                     ),
                   ),
                 ],
@@ -1374,7 +1539,7 @@ class _ModuleCard extends StatelessWidget {
                 : isConnecting
                 ? Icons.hourglass_top_rounded
                 : Icons.check_circle_outline_rounded,
-            color: const Color(0xFF9A7FB8),
+            color: DunesColors.resolve(context, const Color(0xFF9A7FB8)),
             size: 19,
           ),
         ],

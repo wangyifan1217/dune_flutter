@@ -25,7 +25,9 @@ Widget groupInfoPageShell({required Widget child}) {
         final wide = isWideChatLayout(context);
         if (!wide) return child;
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: kGroupInfoWidePadding),
+          padding: const EdgeInsets.symmetric(
+            horizontal: kGroupInfoWidePadding,
+          ),
           child: child,
         );
       },
@@ -50,7 +52,11 @@ class GroupInfoHero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      color: _bgCard,
+      color: DunesColors.resolveNullable(
+        context,
+        _bgCard,
+        role: DunesColorRole.surface,
+      ),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Column(
         children: [
@@ -61,6 +67,7 @@ class GroupInfoHero extends StatelessWidget {
               fontSize: 17,
               fontWeight: FontWeight.w600,
               color: _textPrimary,
+              context: context,
             ),
           ),
           const SizedBox(height: 6),
@@ -70,6 +77,7 @@ class GroupInfoHero extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12,
               color: _textSecondary,
+              context: context,
             ),
           ),
         ],
@@ -96,6 +104,7 @@ class GroupInfoSectionLabel extends StatelessWidget {
         style: DunesTypography.sans(
           fontSize: 13,
           color: _textSecondary,
+          context: context,
         ),
       ),
     );
@@ -124,7 +133,11 @@ class GroupInfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = Container(
-      color: _bgCard,
+      color: DunesColors.resolveNullable(
+        context,
+        _bgCard,
+        role: DunesColorRole.surface,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
@@ -138,6 +151,7 @@ class GroupInfoRow extends StatelessWidget {
                     fontSize: 16,
                     fontWeight: FontWeight.w400,
                     color: _textPrimary,
+                    context: context,
                   ),
                 ),
                 if (subtitle != null && subtitle!.isNotEmpty) ...[
@@ -147,6 +161,7 @@ class GroupInfoRow extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 12,
                       color: _textSecondary,
+                      context: context,
                     ),
                   ),
                 ],
@@ -158,15 +173,32 @@ class GroupInfoRow extends StatelessWidget {
       ),
     );
     final bordered = DecoratedBox(
-      decoration: const BoxDecoration(
-        color: _bgCard,
-        border: Border(bottom: BorderSide(color: _rowDivider, width: 0.5)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          _bgCard,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _rowDivider,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
+        ),
       ),
       child: row,
     );
     if (onTap == null) return bordered;
     return Material(
-      color: _bgCard,
+      color: DunesColors.resolveNullable(
+        context,
+        _bgCard,
+        role: DunesColorRole.surface,
+      ),
       child: InkWell(onTap: onTap, child: bordered),
     );
   }
@@ -185,7 +217,17 @@ class GroupInfoToggle extends StatelessWidget {
       height: 28,
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: value ? const Color(0xFF07C160) : const Color(0xFFE5E5E5),
+        color: value
+            ? DunesColors.resolve(
+                context,
+                const Color(0xFF07C160),
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                const Color(0xFFE5E5E5),
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(14),
       ),
       child: AnimatedAlign(
@@ -195,7 +237,11 @@ class GroupInfoToggle extends StatelessWidget {
           width: 24,
           height: 24,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
@@ -216,9 +262,13 @@ class GroupInfoChevron extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.only(left: 4),
-      child: Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFFC7C7C7)),
+      child: Icon(
+        Icons.chevron_right_rounded,
+        size: 18,
+        color: DunesColors.resolveNullable(context, Color(0xFFC7C7C7)),
+      ),
     );
   }
 }
@@ -254,7 +304,11 @@ class GroupInfoMemberGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      color: _bgCard,
+      color: DunesColors.resolveNullable(
+        context,
+        _bgCard,
+        role: DunesColorRole.surface,
+      ),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -267,8 +321,7 @@ class GroupInfoMemberGrid extends StatelessWidget {
           if (totalItems > 0 && totalItems < cols) {
             cols = totalItems;
           }
-          final avatarSize =
-              ((maxW / cols) * 0.58).clamp(40.0, 52.0);
+          final avatarSize = ((maxW / cols) * 0.58).clamp(40.0, 52.0);
 
           final cells = <Widget>[
             for (final m in members)
@@ -377,6 +430,7 @@ class _MemberCell extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12,
               color: _textPrimary,
+              context: context,
             ),
           ),
         ],
@@ -410,18 +464,36 @@ class _ActionMemberCell extends StatelessWidget {
             width: avatarSize,
             height: avatarSize,
             decoration: BoxDecoration(
-              color: const Color(0xFFF7F7F7),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF7F7F7),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFE5E5E5)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE5E5E5),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
-            child: Icon(icon, size: avatarSize * 0.46, color: _textSecondary),
+            child: Icon(
+              icon,
+              size: avatarSize * 0.46,
+              color: DunesColors.resolveNullable(context, _textSecondary),
+            ),
           ),
           const SizedBox(height: 6),
           Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: DunesTypography.sans(fontSize: 12, color: _textPrimary),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: _textPrimary,
+              context: context,
+            ),
           ),
         ],
       ),
@@ -430,7 +502,11 @@ class _ActionMemberCell extends StatelessWidget {
 }
 
 class GroupInfoDangerRow extends StatelessWidget {
-  const GroupInfoDangerRow({super.key, required this.label, required this.onTap});
+  const GroupInfoDangerRow({
+    super.key,
+    required this.label,
+    required this.onTap,
+  });
 
   final String label;
   final VoidCallback onTap;
@@ -440,7 +516,11 @@ class GroupInfoDangerRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Material(
-        color: _bgCard,
+        color: DunesColors.resolveNullable(
+          context,
+          _bgCard,
+          role: DunesColorRole.surface,
+        ),
         child: InkWell(
           onTap: onTap,
           child: Container(
@@ -452,7 +532,8 @@ class GroupInfoDangerRow extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 16,
                 fontWeight: FontWeight.w400,
-                color: const Color(0xFFFA5151),
+                color: DunesColors.resolve(context, const Color(0xFFFA5151)),
+                context: context,
               ),
             ),
           ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 // 灯塔 · 产品三级分类（category_l3_name）
 //
@@ -190,9 +191,17 @@ class LhProductL3BranchMark extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color.lerp(color, Colors.white, 0.2)!,
+              Color.lerp(
+                color,
+                DunesColors.resolve(context, Colors.white),
+                0.2,
+              )!,
               color,
-              Color.lerp(color, const Color(0xFF1F2421), 0.16)!,
+              Color.lerp(
+                color,
+                DunesColors.resolve(context, const Color(0xFF1F2421)),
+                0.16,
+              )!,
             ],
             stops: const [0, 0.52, 1],
           ),
@@ -214,7 +223,7 @@ class LhProductL3BranchMark extends StatelessWidget {
                 child: Icon(
                   Icons.subdirectory_arrow_right_rounded,
                   size: size * 0.78,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
                 ),
               ),
             ],
@@ -263,9 +272,17 @@ class LhProductL3ChildShell extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Color.lerp(color, Colors.white, 0.18)!,
+                    Color.lerp(
+                      color,
+                      DunesColors.resolve(context, Colors.white),
+                      0.18,
+                    )!,
                     color,
-                    Color.lerp(color, const Color(0xFF1F2421), 0.12)!,
+                    Color.lerp(
+                      color,
+                      DunesColors.resolve(context, const Color(0xFF1F2421)),
+                      0.12,
+                    )!,
                   ],
                 ),
               ),

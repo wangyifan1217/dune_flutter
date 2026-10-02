@@ -88,8 +88,18 @@ class AssistantBackToLatestChip extends StatelessWidget {
           child: Ink(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(999),
-              color: Colors.white,
-              border: Border.all(color: DunesColors.borderSoft),
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x1A000000),
@@ -102,10 +112,13 @@ class AssistantBackToLatestChip extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.keyboard_arrow_down_rounded,
                   size: 16,
-                  color: DunesColors.brandPurpleDeep,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurpleDeep,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -113,7 +126,11 @@ class AssistantBackToLatestChip extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.brandPurpleDeep,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleDeep,
+                    ),
+                    context: context,
                   ),
                 ),
               ],

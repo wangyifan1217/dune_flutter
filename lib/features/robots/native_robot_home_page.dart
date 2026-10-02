@@ -36,7 +36,11 @@ class _NativeRobotHomePageState extends State<NativeRobotHomePage> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: RobotTheme.pageBg,
+      color: DunesColors.resolve(
+        context,
+        RobotTheme.pageBg,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -49,9 +53,7 @@ class _NativeRobotHomePageState extends State<NativeRobotHomePage> {
                 onChanged: (v) => setState(() => _query = v.trim()),
               ),
             ),
-            Expanded(
-              child: _tab == 0 ? _buildScenarios() : _buildRoles(),
-            ),
+            Expanded(child: _tab == 0 ? _buildScenarios() : _buildRoles()),
           ],
         ),
       ),
@@ -76,7 +78,8 @@ class _NativeRobotHomePageState extends State<NativeRobotHomePage> {
                   style: DunesTypography.sans(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: RobotTheme.text,
+                    color: DunesColors.resolve(context, RobotTheme.text),
+                    context: context,
                   ),
                 ),
                 Text(
@@ -85,16 +88,14 @@ class _NativeRobotHomePageState extends State<NativeRobotHomePage> {
                       : '${RobotCatalog.roles.length} 位数字员工',
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: RobotTheme.text3,
+                    color: DunesColors.resolve(context, RobotTheme.text3),
+                    context: context,
                   ),
                 ),
               ],
             ),
           ),
-          _Segment(
-            tab: _tab,
-            onChanged: (v) => setState(() => _tab = v),
-          ),
+          _Segment(tab: _tab, onChanged: (v) => setState(() => _tab = v)),
         ],
       ),
     );
@@ -109,7 +110,14 @@ class _NativeRobotHomePageState extends State<NativeRobotHomePage> {
     }).toList();
 
     if (list.isEmpty) {
-      return const Center(child: Text('没有匹配的场景', style: TextStyle(color: RobotTheme.text3)));
+      return Center(
+        child: Text(
+          '没有匹配的场景',
+          style: TextStyle(
+            color: DunesColors.resolve(context, RobotTheme.text3),
+          ),
+        ),
+      );
     }
 
     return ListView.separated(
@@ -152,15 +160,31 @@ class _NativeRobotHomePageState extends State<NativeRobotHomePage> {
                 label: Text(c),
                 selected: active,
                 onSelected: (_) => setState(() => _category = c),
-                selectedColor: RobotTheme.purple,
+                selectedColor: DunesColors.resolve(context, RobotTheme.purple),
                 labelStyle: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: active ? Colors.white : RobotTheme.text2,
+                  color: active
+                      ? DunesColors.resolve(context, Colors.white)
+                      : DunesColors.resolve(context, RobotTheme.text2),
                 ),
-                backgroundColor: Colors.white,
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 side: BorderSide(
-                  color: active ? RobotTheme.purple : RobotTheme.cardBorder,
+                  color: active
+                      ? DunesColors.resolve(
+                          context,
+                          RobotTheme.purple,
+                          role: DunesColorRole.border,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          RobotTheme.cardBorder,
+                          role: DunesColorRole.border,
+                        ),
                 ),
                 showCheckmark: false,
                 visualDensity: VisualDensity.compact,
@@ -171,8 +195,13 @@ class _NativeRobotHomePageState extends State<NativeRobotHomePage> {
         const SizedBox(height: 10),
         Expanded(
           child: list.isEmpty
-              ? const Center(
-                  child: Text('没有匹配的角色', style: TextStyle(color: RobotTheme.text3)),
+              ? Center(
+                  child: Text(
+                    '没有匹配的角色',
+                    style: TextStyle(
+                      color: DunesColors.resolve(context, RobotTheme.text3),
+                    ),
+                  ),
                 )
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
@@ -204,15 +233,16 @@ class _Segment extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFFECEDEF),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFECEDEF),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          _segBtn('场景', 0),
-          _segBtn('角色', 1),
-        ],
+        children: [_segBtn('场景', 0), _segBtn('角色', 1)],
       ),
     );
   }

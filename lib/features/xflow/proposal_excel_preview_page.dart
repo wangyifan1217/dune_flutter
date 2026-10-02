@@ -239,9 +239,17 @@ class _ProposalExcelPreviewPageState extends State<ProposalExcelPreviewPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
@@ -253,7 +261,8 @@ class _ProposalExcelPreviewPageState extends State<ProposalExcelPreviewPage> {
           style: DunesTypography.sans(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
+            context: context,
           ),
         ),
         centerTitle: true,
@@ -278,7 +287,14 @@ class _ProposalExcelPreviewPageState extends State<ProposalExcelPreviewPage> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(0.5),
-          child: Container(height: 0.5, color: DunesColors.borderSoft),
+          child: Container(
+            height: 0.5,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.surface,
+            ),
+          ),
         ),
       ),
       body: Stack(
@@ -295,7 +311,8 @@ class _ProposalExcelPreviewPageState extends State<ProposalExcelPreviewPage> {
                       textAlign: TextAlign.center,
                       style: DunesTypography.sans(
                         fontSize: 13,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 12),

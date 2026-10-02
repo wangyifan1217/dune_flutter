@@ -5,6 +5,7 @@ import 'native_nova_service.dart';
 import 'nova_affinity.dart';
 import 'nova_history_utils.dart';
 import 'nova_time_utils.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// 小饕左侧个人与历史记录面板。
 /// 亲密度按真实对话计算；下面是账号信息和对话记录。
@@ -80,21 +81,29 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
         ),
         content: Text(
           '确定要删除「${item.title.isEmpty ? '此对话' : item.title}」吗？删除后将无法恢复。',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13.5,
-            color: Color(0xFF4E5969),
+            color: DunesColors.resolveNullable(ctx, Color(0xFF4E5969)),
             height: 1.4,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消', style: TextStyle(color: Color(0xFF86909C))),
+            child: Text(
+              '取消',
+              style: TextStyle(
+                color: DunesColors.resolveNullable(ctx, Color(0xFF86909C)),
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFFF4D4F),
+              foregroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFFF4D4F),
+              ),
             ),
             child: const Text(
               '删除',
@@ -149,7 +158,11 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
               : '阿凡');
 
     return Drawer(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       surfaceTintColor: Colors.transparent,
       elevation: 16,
       shape: const RoundedRectangleBorder(
@@ -170,7 +183,14 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                   const SizedBox(height: 16),
                   _buildAffinityCard(),
                   const SizedBox(height: 16),
-                  const Divider(height: 1, color: Color(0xFFF2F3F5)),
+                  Divider(
+                    height: 1,
+                    color: DunesColors.resolve(
+                      context,
+                      Color(0xFFF2F3F5),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                   const SizedBox(height: 14),
                   _buildChatHistorySection(),
                 ],
@@ -192,8 +212,19 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
           height: 44,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: const Color(0xFFFFF2E8),
-            border: Border.all(color: Colors.white, width: 2),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFFFF2E8),
+              role: DunesColorRole.surface,
+            ),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.border,
+              ),
+              width: 2,
+            ),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x18000000),
@@ -234,18 +265,24 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                         displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1D2129),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF1D2129),
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(
+                    Icon(
                       Icons.chevron_right_rounded,
                       size: 20,
-                      color: Color(0xFF86909C),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF86909C),
+                      ),
                     ),
                   ],
                 ),
@@ -255,9 +292,12 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                     _identityLine,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF86909C),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF86909C),
+                      ),
                     ),
                   ),
                 ],
@@ -279,10 +319,13 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
               message: '知识库',
               child: Container(
                 padding: const EdgeInsets.all(6),
-                child: const Icon(
+                child: Icon(
                   Icons.menu_book_outlined,
                   size: 22,
-                  color: Color(0xFF4E5969),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF4E5969),
+                  ),
                 ),
               ),
             ),
@@ -298,10 +341,10 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
         : '我';
     return Text(
       firstChar,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.w700,
-        color: Color(0xFFFF7D00),
+        color: DunesColors.resolveNullable(context, Color(0xFFFF7D00)),
       ),
     );
   }
@@ -318,13 +361,22 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFFF9F7FF), Color(0xFFF0E9FC)],
+              colors: [
+                DunesColors.resolve(context, Color(0xFFF9F7FF)),
+                DunesColors.resolve(context, Color(0xFFF0E9FC)),
+              ],
             ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE9E0FA)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE9E0FA),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -335,40 +387,56 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                     width: 20,
                     height: 20,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE4D5F8),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFE4D5F8),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(
+                    child: Icon(
                       Icons.auto_awesome_rounded,
                       size: 13,
-                      color: Color(0xFF6B3FE2),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF6B3FE2),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     '亲密度 ${affinity.level}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF6B3FE2),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF6B3FE2),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 2),
-                  const Icon(
+                  Icon(
                     Icons.chevron_right_rounded,
                     size: 16,
-                    color: Color(0xFF6B3FE2),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF6B3FE2),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
                 affinity.subtitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   height: 1.4,
-                  color: Color(0xFF7E8695),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF7E8695),
+                  ),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -381,9 +449,13 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                       child: LinearProgressIndicator(
                         value: affinity.progress,
                         minHeight: 6,
-                        backgroundColor: const Color(0xFFE5D8F7),
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0xFF6B3FE2),
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          const Color(0xFFE5D8F7),
+                          role: DunesColorRole.surface,
+                        ),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          DunesColors.resolve(context, Color(0xFF6B3FE2)),
                         ),
                       ),
                     ),
@@ -391,10 +463,13 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                   const SizedBox(width: 10),
                   Text(
                     '${affinity.intoLevel}/${affinity.levelStep}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF6B3FE2),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF6B3FE2),
+                      ),
                     ),
                   ),
                 ],
@@ -412,8 +487,16 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                       ),
                       decoration: BoxDecoration(
                         color: skill.unlocked
-                            ? const Color(0xFFEDE7F6)
-                            : const Color(0xFFF4F5F7),
+                            ? DunesColors.resolve(
+                                context,
+                                const Color(0xFFEDE7F6),
+                                role: DunesColorRole.surface,
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFFF4F5F7),
+                                role: DunesColorRole.surface,
+                              ),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -422,8 +505,14 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: skill.unlocked
-                              ? const Color(0xFF6B3FE2)
-                              : const Color(0xFFC2C7D0),
+                              ? DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF6B3FE2),
+                                )
+                              : DunesColors.resolve(
+                                  context,
+                                  const Color(0xFFC2C7D0),
+                                ),
                         ),
                       ),
                     ),
@@ -439,7 +528,11 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
   void _showAffinitySheet(NovaAffinitySnapshot affinity) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -452,28 +545,28 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
             children: [
               Text(
                 '亲密度 ${affinity.level}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1D2129),
+                  color: DunesColors.resolveNullable(ctx, Color(0xFF1D2129)),
                 ),
               ),
               const SizedBox(height: 6),
               Text(
                 affinity.subtitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   height: 1.45,
-                  color: Color(0xFF86909C),
+                  color: DunesColors.resolveNullable(ctx, Color(0xFF86909C)),
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 '从真实对话里点亮',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF4E5969),
+                  color: DunesColors.resolveNullable(ctx, Color(0xFF4E5969)),
                 ),
               ),
               const SizedBox(height: 8),
@@ -488,8 +581,8 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                             : Icons.radio_button_unchecked,
                         size: 18,
                         color: skill.unlocked
-                            ? const Color(0xFF6B3FE2)
-                            : const Color(0xFFC2C7D0),
+                            ? DunesColors.resolve(ctx, const Color(0xFF6B3FE2))
+                            : DunesColors.resolve(ctx, const Color(0xFFC2C7D0)),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -498,8 +591,14 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: skill.unlocked
-                              ? const Color(0xFF1D2129)
-                              : const Color(0xFF86909C),
+                              ? DunesColors.resolve(
+                                  ctx,
+                                  const Color(0xFF1D2129),
+                                )
+                              : DunesColors.resolve(
+                                  ctx,
+                                  const Color(0xFF86909C),
+                                ),
                         ),
                       ),
                       const Spacer(),
@@ -508,8 +607,14 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                         style: TextStyle(
                           fontSize: 12,
                           color: skill.unlocked
-                              ? const Color(0xFF6B3FE2)
-                              : const Color(0xFFC2C7D0),
+                              ? DunesColors.resolve(
+                                  ctx,
+                                  const Color(0xFF6B3FE2),
+                                )
+                              : DunesColors.resolve(
+                                  ctx,
+                                  const Color(0xFFC2C7D0),
+                                ),
                         ),
                       ),
                     ],
@@ -529,12 +634,12 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
       children: [
         Row(
           children: [
-            const Text(
+            Text(
               '对话记录',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1D2129),
+                color: DunesColors.resolveNullable(context, Color(0xFF1D2129)),
               ),
             ),
             const Spacer(),
@@ -553,16 +658,23 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF1EBFA),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFF1EBFA),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.add_comment_outlined,
                         size: 15,
-                        color: Color(0xFF6B3FE2),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF6B3FE2),
+                        ),
                       ),
                       SizedBox(width: 4),
                       Text(
@@ -570,7 +682,10 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF6B3FE2),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF6B3FE2),
+                          ),
                         ),
                       ),
                     ],
@@ -583,7 +698,7 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
         const SizedBox(height: 12),
 
         if (_loading)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
             child: Center(
               child: SizedBox(
@@ -591,7 +706,7 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                 height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Color(0xFF6B3FE2),
+                  color: DunesColors.resolve(context, Color(0xFF6B3FE2)),
                 ),
               ),
             ),
@@ -600,9 +715,12 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
           Container(
             padding: const EdgeInsets.symmetric(vertical: 18),
             alignment: Alignment.center,
-            child: const Text(
+            child: Text(
               '暂无历史对话',
-              style: TextStyle(fontSize: 12.5, color: Color(0xFF86909C)),
+              style: TextStyle(
+                fontSize: 12.5,
+                color: DunesColors.resolveNullable(context, Color(0xFF86909C)),
+              ),
             ),
           )
         else
@@ -617,7 +735,10 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
               widget.onOpenHistoryAll();
             },
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFF6B3FE2),
+              foregroundColor: DunesColors.resolve(
+                context,
+                const Color(0xFF6B3FE2),
+              ),
               visualDensity: VisualDensity.compact,
             ),
             child: const Row(
@@ -646,7 +767,13 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Material(
-          color: isNewCurrent ? const Color(0xFFF7F3FF) : Colors.transparent,
+          color: isNewCurrent
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFFF7F3FF),
+                  role: DunesColorRole.surface,
+                )
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
             onTap: () {
@@ -662,8 +789,8 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                     Icons.add_circle_outline_rounded,
                     size: 16,
                     color: isNewCurrent
-                        ? const Color(0xFF6B3FE2)
-                        : const Color(0xFF86909C),
+                        ? DunesColors.resolve(context, const Color(0xFF6B3FE2))
+                        : DunesColors.resolve(context, const Color(0xFF86909C)),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -675,8 +802,14 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                             ? FontWeight.w700
                             : FontWeight.w500,
                         color: isNewCurrent
-                            ? const Color(0xFF6B3FE2)
-                            : const Color(0xFF1D2129),
+                            ? DunesColors.resolve(
+                                context,
+                                const Color(0xFF6B3FE2),
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFF1D2129),
+                              ),
                       ),
                     ),
                   ),
@@ -687,14 +820,21 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                         vertical: 1.5,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEBE3FA),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFEBE3FA),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: const Text(
+                      child: Text(
                         '当前',
                         style: TextStyle(
                           fontSize: 10,
-                          color: Color(0xFF6B3FE2),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF6B3FE2),
+                          ),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -718,10 +858,10 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
             padding: const EdgeInsets.only(top: 10, bottom: 6),
             child: Text(
               dayLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF86909C),
+                color: DunesColors.resolveNullable(context, Color(0xFF86909C)),
               ),
             ),
           ),
@@ -737,7 +877,13 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 3),
           child: Material(
-            color: isCurrent ? const Color(0xFFF7F3FF) : Colors.transparent,
+            color: isCurrent
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFF7F3FF),
+                    role: DunesColorRole.surface,
+                  )
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             child: InkWell(
               onTap: () {
@@ -765,8 +911,14 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                               ? FontWeight.w700
                               : FontWeight.w500,
                           color: isCurrent
-                              ? const Color(0xFF6B3FE2)
-                              : const Color(0xFF1D2129),
+                              ? DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF6B3FE2),
+                                )
+                              : DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF1D2129),
+                                ),
                         ),
                       ),
                     ),
@@ -774,10 +926,13 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
 
                     // 删除按钮（优雅垃圾桶图标）
                     IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.delete_outline_rounded,
                         size: 17,
-                        color: Color(0xFFC2C7D0),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFFC2C7D0),
+                        ),
                       ),
                       tooltip: '删除对话',
                       visualDensity: VisualDensity.compact,

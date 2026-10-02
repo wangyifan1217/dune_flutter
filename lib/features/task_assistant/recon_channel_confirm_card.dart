@@ -49,7 +49,11 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-              backgroundColor: DunesColors.brandPurple,
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                DunesColors.brandPurple,
+                role: DunesColorRole.surface,
+              ),
             ),
             child: const Text('确认无误'),
           ),
@@ -85,7 +89,11 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
           FilledButton(
             onPressed: () => Navigator.pop(ctx, draft.trim()),
             style: FilledButton.styleFrom(
-              backgroundColor: DunesColors.brandPurple,
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                DunesColors.brandPurple,
+                role: DunesColorRole.surface,
+              ),
             ),
             child: const Text('提交并确认'),
           ),
@@ -109,9 +117,19 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
         width: 320,
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: DunesColors.borderSoft),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -132,10 +150,12 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
                 ),
                 _pill(
                   _confirmed ? '已确认' : '待确认',
-                  _confirmed ? const Color(0xFF267449) : DunesColors.amber,
                   _confirmed
-                      ? const Color(0xFFD7F3E1)
-                      : const Color(0xFFFFF3DC),
+                      ? DunesColors.resolve(context, const Color(0xFF267449))
+                      : DunesColors.resolve(context, DunesColors.amber),
+                  _confirmed
+                      ? DunesColors.resolve(context, const Color(0xFFD7F3E1))
+                      : DunesColors.resolve(context, const Color(0xFFFFF3DC)),
                 ),
               ],
             ),
@@ -158,9 +178,9 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
                   padding: const EdgeInsets.only(left: 16, bottom: 2),
                   child: Text(
                     line.date,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
                     ),
                   ),
                 ),
@@ -172,8 +192,11 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
                       fontSize: 12,
                       height: 1.4,
                       color: line.receivable == line.received
-                          ? DunesColors.text
-                          : const Color(0xFFB07A2B),
+                          ? DunesColors.resolve(context, DunesColors.text)
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFFB07A2B),
+                            ),
                     ),
                   ),
                 ),
@@ -186,9 +209,9 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
               const SizedBox(height: 8),
               Text(
                 '意见：$_comment',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                   height: 1.4,
                 ),
               ),
@@ -199,7 +222,11 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
                 children: [
                   FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: DunesColors.brandPurple,
+                      backgroundColor: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
+                        role: DunesColorRole.surface,
+                      ),
                       visualDensity: VisualDensity.compact,
                     ),
                     onPressed: _requestConfirm,
@@ -236,7 +263,10 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const Spacer(),
           Text(
@@ -244,7 +274,9 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: highlight ? DunesColors.amber : DunesColors.text,
+              color: highlight
+                  ? DunesColors.resolve(context, DunesColors.amber)
+                  : DunesColors.resolve(context, DunesColors.text),
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
@@ -257,7 +289,11 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: bg,
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
@@ -265,7 +301,7 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: text,
+          color: DunesColors.resolveNullable(context, text),
         ),
       ),
     );

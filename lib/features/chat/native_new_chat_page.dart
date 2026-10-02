@@ -48,6 +48,7 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
   List<NativeContact> _externalContacts = const <NativeContact>[];
   Set<int> _onlineUsers = <int>{};
   Set<int> _selectedUserIds = <int>{};
+
   /// 跨搜索保留已见过的联系人，避免已选成员头像/姓名退化成 userId。
   final Map<int, NativeContact> _knownContacts = <int, NativeContact>{};
   StreamSubscription<Set<int>>? _onlineSub;
@@ -89,9 +90,13 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
     });
     try {
       final searching = _searchController.text.trim().isNotEmpty;
-      final data = await _service.fetchOrgContacts(keyword: _searchController.text);
+      final data = await _service.fetchOrgContacts(
+        keyword: _searchController.text,
+      );
       final external = searching
-          ? await _service.fetchExternalContacts(keyword: _searchController.text)
+          ? await _service.fetchExternalContacts(
+              keyword: _searchController.text,
+            )
           : await _service.fetchExternalContacts();
       if (!mounted) return;
       setState(() {
@@ -100,8 +105,14 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
         final mergedSearch = [...data.searchItems, ...external]
             .where((c) => c.enabled && c.userId != widget.session.userId)
             .toList(growable: false);
-        _searchItems = searching ? mergedSearch : data.searchItems.where((c) => c.enabled && c.userId != widget.session.userId).toList(growable: false);
-        _externalContacts = external.where((c) => c.enabled && c.userId != widget.session.userId).toList(growable: false);
+        _searchItems = searching
+            ? mergedSearch
+            : data.searchItems
+                  .where((c) => c.enabled && c.userId != widget.session.userId)
+                  .toList(growable: false);
+        _externalContacts = external
+            .where((c) => c.enabled && c.userId != widget.session.userId)
+            .toList(growable: false);
         _rememberContacts(data.searchItems);
         _rememberDepartments(data.departments);
         _rememberContacts(external);
@@ -132,7 +143,11 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
   }
 
   void _toggleSelected(NativeContact contact) {
-    if (!contact.enabled || contact.userId <= 0 || contact.userId == widget.session.userId) return;
+    if (!contact.enabled ||
+        contact.userId <= 0 ||
+        contact.userId == widget.session.userId) {
+      return;
+    }
     _rememberContacts([contact]);
     setState(() {
       final next = Set<int>.from(_selectedUserIds);
@@ -158,9 +173,14 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
     _rememberContacts(contacts);
     setState(() {
       if (_mode == _NewChatMode.private) {
-        _selectedUserIds = contacts.isEmpty ? <int>{} : <int>{contacts.first.userId};
+        _selectedUserIds = contacts.isEmpty
+            ? <int>{}
+            : <int>{contacts.first.userId};
       } else {
-        _selectedUserIds = contacts.map((c) => c.userId).where((id) => id > 0 && id != widget.session.userId).toSet();
+        _selectedUserIds = contacts
+            .map((c) => c.userId)
+            .where((id) => id > 0 && id != widget.session.userId)
+            .toSet();
       }
     });
   }
@@ -172,18 +192,25 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
   List<NativeContact> _allSelectableContacts() {
     final all = <NativeContact>[];
     void walk(NativeDepartment dep) {
-      all.addAll(dep.users.where((c) => c.enabled && c.userId != widget.session.userId));
+      all.addAll(
+        dep.users.where((c) => c.enabled && c.userId != widget.session.userId),
+      );
       for (final child in dep.children) {
         walk(child);
       }
     }
+
     for (final dep in _departments) {
       walk(dep);
     }
     final seen = <int>{};
-    final deduped = all.where((c) => seen.add(c.userId)).toList(growable: false);
+    final deduped = all
+        .where((c) => seen.add(c.userId))
+        .toList(growable: false);
     if (deduped.isNotEmpty) return deduped;
-    return _searchItems.where((c) => seen.add(c.userId)).toList(growable: false);
+    return _searchItems
+        .where((c) => seen.add(c.userId))
+        .toList(growable: false);
   }
 
   void _rememberContacts(Iterable<NativeContact> rows) {
@@ -227,6 +254,7 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
         walk(child);
       }
     }
+
     for (final dep in _departments) {
       if (hit != null) break;
       walk(dep);
@@ -237,7 +265,9 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
 
   Future<void> _createConversation() async {
     if (_creating) return;
-    final ids = _selectedUserIds.where((id) => id > 0 && id != widget.session.userId).toList(growable: false);
+    final ids = _selectedUserIds
+        .where((id) => id > 0 && id != widget.session.userId)
+        .toList(growable: false);
     if (ids.isEmpty) {
       showDunesSoonToast(context, '请至少选择一位同事');
       return;
@@ -265,7 +295,10 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
         widget.onOpenPrivateChat(peerId);
         return;
       }
-      final title = ids.take(3).map((id) => _contactById(id)?.displayName ?? '成员').join('、');
+      final title = ids
+          .take(3)
+          .map((id) => _contactById(id)?.displayName ?? '成员')
+          .join('、');
       final conversation = await _conversationService.createConversation(
         kind: (groupType ?? NewGroupType.normal).kind,
         memberUserIds: ids,
@@ -277,7 +310,11 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
       widget.onOpenGroupChat(conversation);
     } catch (e) {
       if (mounted) {
-        showDunesToast(context, '创建会话失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+        showDunesToast(
+          context,
+          '创建会话失败：${friendlyErrorText(e)}',
+          kind: DunesToastKind.error,
+        );
       }
     } finally {
       if (mounted) setState(() => _creating = false);
@@ -287,11 +324,19 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            _NewChatHeader(onBack: widget.onBack, creating: _creating, onCreate: _createConversation),
+            _NewChatHeader(
+              onBack: widget.onBack,
+              creating: _creating,
+              onCreate: _createConversation,
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(11, 0, 11, 4),
               child: _NewChatModeGrid(mode: _mode, onPick: _toggleMode),
@@ -299,26 +344,47 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  color: DunesColors.bgSoft,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.bgSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.search, size: 18, color: DunesColors.text3),
+                    Icon(
+                      Icons.search,
+                      size: 18,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                     const SizedBox(width: 9),
                     Expanded(
                       child: TextField(
                         controller: _searchController,
                         onChanged: _onSearchChanged,
                         onSubmitted: (_) => _load(),
-                        style: DunesTypography.sans(fontSize: 13),
+                        style: DunesTypography.sans(
+                          fontSize: 13,
+                          context: context,
+                        ),
                         decoration: InputDecoration(
                           isDense: true,
                           border: InputBorder.none,
                           hintText: '搜索同事 · 部门 · 角色',
-                          hintStyle: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+                          hintStyle: DunesTypography.sans(
+                            fontSize: 13,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
+                          ),
                         ),
                       ),
                     ),
@@ -329,7 +395,8 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
             _NewChatSelectedStack(
               selectedUserIds: _selectedUserIds.toList()..sort(),
               resolveContact: _contactById,
-              onRemove: (userId) => setState(() => _selectedUserIds.remove(userId)),
+              onRemove: (userId) =>
+                  setState(() => _selectedUserIds.remove(userId)),
             ),
             _NewChatBulkBar(
               onSelectAll: _selectAllMembers,
@@ -339,10 +406,22 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
             _NewChatOrgLabel(total: _total),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : _error != null
-                      ? Center(child: Text(_error!, style: const TextStyle(color: DunesColors.text3)))
-                      : _buildBody(),
+                  ? Center(
+                      child: Text(
+                        _error!,
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
+                      ),
+                    )
+                  : _buildBody(),
             ),
           ],
         ),
@@ -354,7 +433,14 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
     final searching = _searchController.text.trim().isNotEmpty;
     if (searching) {
       if (_searchItems.isEmpty) {
-        return const Center(child: Text('无匹配联系人', style: TextStyle(color: DunesColors.text3)));
+        return Center(
+          child: Text(
+            '无匹配联系人',
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
+          ),
+        );
       }
       return ListView(
         padding: EdgeInsets.zero,
@@ -372,7 +458,14 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
       );
     }
     if (_departments.isEmpty && _externalContacts.isEmpty) {
-      return const Center(child: Text('暂无组织数据', style: TextStyle(color: DunesColors.text3)));
+      return Center(
+        child: Text(
+          '暂无组织数据',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
+      );
     }
     return ListView(
       padding: const EdgeInsets.only(bottom: 16),
@@ -391,11 +484,18 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
             )
             .toList(growable: false),
         if (_externalContacts.isNotEmpty) ...[
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(16, 10, 16, 6),
             child: Row(
               children: [
-                Text('外部用户', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: DunesColors.accent)),
+                Text(
+                  '外部用户',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolve(context, DunesColors.accent),
+                  ),
+                ),
               ],
             ),
           ),
@@ -429,16 +529,32 @@ class _NewChatOrgLabel extends StatelessWidget {
         children: [
           Text(
             'HeUnion',
-            style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600, color: DunesColors.accent),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.resolve(context, DunesColors.accent),
+              context: context,
+            ),
           ),
           Expanded(
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 8),
               height: 1,
-              color: DunesColors.borderSoft,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.surface,
+              ),
             ),
           ),
-          Text('$total 人', style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3)),
+          Text(
+            '$total 人',
+            style: DunesTypography.mono(
+              fontSize: 9.5,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
+          ),
         ],
       ),
     );
@@ -472,21 +588,42 @@ class _NewChatHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('新建会话', style: DunesTypography.sans(fontSize: 16, fontWeight: FontWeight.w600)),
-                Text('选择成员 · 单聊 / 群聊', style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3)),
+                Text(
+                  '新建会话',
+                  style: DunesTypography.sans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    context: context,
+                  ),
+                ),
+                Text(
+                  '选择成员 · 单聊 / 群聊',
+                  style: DunesTypography.mono(
+                    fontSize: 9.5,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
+                  ),
+                ),
               ],
             ),
           ),
           TextButton(
             onPressed: creating ? null : onCreate,
             style: TextButton.styleFrom(
-              backgroundColor: DunesColors.accent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              backgroundColor: DunesColors.resolve(
+                context,
+                DunesColors.accent,
+                role: DunesColorRole.surface,
+              ),
+              foregroundColor: DunesColors.resolve(context, Colors.white),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               textStyle: DunesTypography.mono(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
+                context: context,
               ),
             ),
             child: Text(creating ? '创建中' : '创建'),
@@ -498,10 +635,7 @@ class _NewChatHeader extends StatelessWidget {
 }
 
 class _NewChatModeGrid extends StatelessWidget {
-  const _NewChatModeGrid({
-    required this.mode,
-    required this.onPick,
-  });
+  const _NewChatModeGrid({required this.mode, required this.onPick});
 
   final _NewChatMode mode;
   final ValueChanged<_NewChatMode> onPick;
@@ -552,9 +686,15 @@ class _NewChatModeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = selected ? DunesColors.accentLine : DunesColors.border;
-    final iconBg = selected ? DunesColors.accent : DunesColors.bgSoft;
-    final iconColor = selected ? Colors.white : DunesColors.text2;
+    final borderColor = selected
+        ? DunesColors.resolve(context, DunesColors.accentLine)
+        : DunesColors.resolve(context, DunesColors.border);
+    final iconBg = selected
+        ? DunesColors.resolve(context, DunesColors.accent)
+        : DunesColors.resolve(context, DunesColors.bgSoft);
+    final iconColor = selected
+        ? DunesColors.resolve(context, Colors.white)
+        : DunesColors.resolve(context, DunesColors.text2);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -566,7 +706,12 @@ class _NewChatModeCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(11),
             border: Border.all(color: borderColor),
             gradient: selected
-                ? LinearGradient(colors: [DunesColors.accentSoft, DunesColors.bgApp])
+                ? LinearGradient(
+                    colors: [
+                      DunesColors.resolve(context, DunesColors.accentSoft),
+                      DunesColors.resolve(context, DunesColors.bgApp),
+                    ],
+                  )
                 : null,
           ),
           child: Row(
@@ -575,11 +720,31 @@ class _NewChatModeCard extends StatelessWidget {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: iconBg,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    iconBg,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: selected ? DunesColors.accent : DunesColors.borderSoft),
+                  border: Border.all(
+                    color: selected
+                        ? DunesColors.resolve(
+                            context,
+                            DunesColors.accent,
+                            role: DunesColorRole.border,
+                          )
+                        : DunesColors.resolve(
+                            context,
+                            DunesColors.borderSoft,
+                            role: DunesColorRole.border,
+                          ),
+                  ),
                 ),
-                child: Icon(icon, size: 16, color: iconColor),
+                child: Icon(
+                  icon,
+                  size: 16,
+                  color: DunesColors.resolveNullable(context, iconColor),
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -587,9 +752,23 @@ class _NewChatModeCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(title, style: DunesTypography.sans(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                    Text(
+                      title,
+                      style: DunesTypography.sans(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        context: context,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text(subtitle, style: DunesTypography.mono(fontSize: 8.5, color: DunesColors.text3)),
+                    Text(
+                      subtitle,
+                      style: DunesTypography.mono(
+                        fontSize: 8.5,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -617,9 +796,21 @@ class _NewChatSelectedStack extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgSoft,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Wrap(
         spacing: 6,
@@ -630,13 +821,21 @@ class _NewChatSelectedStack extends StatelessWidget {
             '已选 ${selectedUserIds.length}：',
             style: DunesTypography.mono(
               fontSize: 9,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
               fontWeight: FontWeight.w700,
               letterSpacing: 0.04 * 9,
+              context: context,
             ),
           ),
           if (selectedUserIds.isEmpty)
-            Text('请从 HeUnion 选择成员', style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3))
+            Text(
+              '请从 HeUnion 选择成员',
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
+              ),
+            )
           else
             ...selectedUserIds.map((id) {
               final name = resolveContact(id)?.displayName ?? '成员$id';
@@ -644,17 +843,36 @@ class _NewChatSelectedStack extends StatelessWidget {
                 onTap: () => onRemove(id),
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: DunesColors.accent,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.accent,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(name, style: DunesTypography.sans(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600)),
+                      Text(
+                        name,
+                        style: DunesTypography.sans(
+                          fontSize: 10,
+                          color: DunesColors.resolve(context, Colors.white),
+                          fontWeight: FontWeight.w600,
+                          context: context,
+                        ),
+                      ),
                       const SizedBox(width: 4),
-                      const Icon(Icons.close_rounded, size: 12, color: Colors.white70),
+                      Icon(
+                        Icons.close_rounded,
+                        size: 12,
+                        color: DunesColors.resolve(context, Colors.white70),
+                      ),
                     ],
                   ),
                 ),
@@ -686,21 +904,51 @@ class _NewChatBulkBar extends StatelessWidget {
           OutlinedButton(
             onPressed: privateMode ? null : onSelectAll,
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: DunesColors.border),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              side: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.border,
+                  role: DunesColorRole.border,
+                ),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             ),
-            child: Text('全选', style: DunesTypography.sans(fontSize: 11, color: DunesColors.text2)),
+            child: Text(
+              '全选',
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           OutlinedButton(
             onPressed: onClearAll,
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: DunesColors.border),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              side: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.border,
+                  role: DunesColorRole.border,
+                ),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             ),
-            child: Text('清空已选', style: DunesTypography.sans(fontSize: 11, color: DunesColors.text2)),
+            child: Text(
+              '清空已选',
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
+              ),
+            ),
           ),
         ],
       ),
@@ -754,8 +1002,22 @@ class _NewChatDeptBlockState extends State<_NewChatDeptBlock> {
               margin: const EdgeInsets.fromLTRB(10, 0, 10, 6),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [DunesColors.bgSoft, DunesColors.bgApp.withValues(alpha: 0.2)]),
-                border: Border.all(color: DunesColors.border),
+                gradient: LinearGradient(
+                  colors: [
+                    DunesColors.resolve(context, DunesColors.bgSoft),
+                    DunesColors.resolve(
+                      context,
+                      DunesColors.bgApp,
+                    ).withValues(alpha: 0.2),
+                  ],
+                ),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.border,
+                    role: DunesColorRole.border,
+                  ),
+                ),
                 borderRadius: BorderRadius.circular(9),
               ),
               child: Row(
@@ -763,31 +1025,76 @@ class _NewChatDeptBlockState extends State<_NewChatDeptBlock> {
                   AnimatedRotation(
                     turns: _expanded ? 0.25 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: const Icon(Icons.chevron_right, size: 13, color: DunesColors.text3),
+                    child: Icon(
+                      Icons.chevron_right,
+                      size: 13,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                   const SizedBox(width: 7),
                   Container(
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
-                      color: DunesColors.accentSoft,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.accentSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(7),
-                      border: Border.all(color: DunesColors.borderSoft),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
-                    child: const Icon(Icons.business_outlined, size: 13, color: DunesColors.accentDeep),
+                    child: Icon(
+                      Icons.business_outlined,
+                      size: 13,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.accentDeep,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(dep.name, style: DunesTypography.sans(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                        Text(
+                          dep.name,
+                          style: DunesTypography.sans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            context: context,
+                          ),
+                        ),
                         if ((dep.subtitle ?? '').isNotEmpty)
-                          Text(dep.subtitle!, style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3)),
+                          Text(
+                            dep.subtitle!,
+                            style: DunesTypography.mono(
+                              fontSize: 9,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
+                            ),
+                          ),
                       ],
                     ),
                   ),
-                  Text('${dep.userCount}', style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3)),
+                  Text(
+                    '${dep.userCount}',
+                    style: DunesTypography.mono(
+                      fontSize: 9,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -799,7 +1106,12 @@ class _NewChatDeptBlockState extends State<_NewChatDeptBlock> {
             child: Column(
               children: [
                 ...dep.users
-                    .where((c) => c.userId > 0 && c.userId != widget.currentUserId && c.enabled)
+                    .where(
+                      (c) =>
+                          c.userId > 0 &&
+                          c.userId != widget.currentUserId &&
+                          c.enabled,
+                    )
                     .map(
                       (c) => _NewChatPickRow(
                         contact: c,
@@ -851,16 +1163,42 @@ class _NewChatPickRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
           decoration: BoxDecoration(
-            color: DunesColors.bgSoft,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.bgSoft,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(3),
-            border: Border.all(color: DunesColors.borderSoft),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
-          child: Text(contact.primaryRole, style: DunesTypography.mono(fontSize: 8.5, color: DunesColors.text2)),
+          child: Text(
+            contact.primaryRole,
+            style: DunesTypography.mono(
+              fontSize: 8.5,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
+            ),
+          ),
         ),
       );
     }
     if ((contact.department ?? '').trim().isNotEmpty) {
-      meta.add(Text(contact.department!.trim(), style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3)));
+      meta.add(
+        Text(
+          contact.department!.trim(),
+          style: DunesTypography.mono(
+            fontSize: 9,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
+        ),
+      );
     }
     return Material(
       color: Colors.transparent,
@@ -868,9 +1206,21 @@ class _NewChatPickRow extends StatelessWidget {
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-          decoration: const BoxDecoration(
-            color: DunesColors.bgApp,
-            border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
+            ),
           ),
           child: Row(
             children: [
@@ -879,14 +1229,44 @@ class _NewChatPickRow extends StatelessWidget {
                 height: 20,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: selected ? DunesColors.accent : Colors.white,
-                  border: Border.all(color: selected ? DunesColors.accent : DunesColors.border),
+                  color: selected
+                      ? DunesColors.resolve(
+                          context,
+                          DunesColors.accent,
+                          role: DunesColorRole.surface,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
+                  border: Border.all(
+                    color: selected
+                        ? DunesColors.resolve(
+                            context,
+                            DunesColors.accent,
+                            role: DunesColorRole.border,
+                          )
+                        : DunesColors.resolve(
+                            context,
+                            DunesColors.border,
+                            role: DunesColorRole.border,
+                          ),
+                  ),
                 ),
-                child: selected ? const Icon(Icons.check_rounded, size: 12, color: Colors.white) : null,
+                child: selected
+                    ? Icon(
+                        Icons.check_rounded,
+                        size: 12,
+                        color: DunesColors.resolve(context, Colors.white),
+                      )
+                    : null,
               ),
               const SizedBox(width: 10),
               ImUserAvatar(
-                initial: contact.displayLabel.isNotEmpty ? contact.displayLabel.substring(0, 1) : '?',
+                initial: contact.displayLabel.isNotEmpty
+                    ? contact.displayLabel.substring(0, 1)
+                    : '?',
                 seed: contact.userId,
                 size: 34,
                 showOnline: online,
@@ -900,9 +1280,21 @@ class _NewChatPickRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(contact.displayLabel, style: DunesTypography.sans(fontSize: 11.5, fontWeight: FontWeight.w500)),
+                    Text(
+                      contact.displayLabel,
+                      style: DunesTypography.sans(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        context: context,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Wrap(spacing: 5, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: meta),
+                    Wrap(
+                      spacing: 5,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: meta,
+                    ),
                   ],
                 ),
               ),

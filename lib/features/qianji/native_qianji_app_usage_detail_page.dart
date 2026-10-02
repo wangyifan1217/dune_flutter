@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -83,7 +83,11 @@ class _NativeQianjiAppUsageDetailPageState
         ? _detail!.displayName
         : (widget.displayName.isNotEmpty ? widget.displayName : '使用明细');
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -96,25 +100,28 @@ class _NativeQianjiAppUsageDetailPageState
                   InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: widget.onBack,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 8,
-                      ),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             Icons.arrow_back_ios_new,
                             size: 14,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
                           ),
                           SizedBox(width: 2),
                           Text(
                             '使用热力',
                             style: TextStyle(
                               fontSize: 13,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
                             ),
                           ),
                         ],
@@ -125,10 +132,13 @@ class _NativeQianjiAppUsageDetailPageState
                   Expanded(
                     child: Text(
                       name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     ),
                   ),
@@ -167,7 +177,9 @@ class _NativeQianjiAppUsageDetailPageState
           Text(
             friendlyErrorText(_error, fallback: '加载失败，请稍后重试'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -183,9 +195,16 @@ class _NativeQianjiAppUsageDetailPageState
     if (detail == null) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
+        children: [
           SizedBox(height: 120),
-          Center(child: Text('暂无数据', style: TextStyle(color: DunesColors.text3))),
+          Center(
+            child: Text(
+              '暂无数据',
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
+            ),
+          ),
         ],
       );
     }
@@ -219,7 +238,10 @@ class _NativeQianjiAppUsageDetailPageState
             if (dept.isNotEmpty) dept,
             '停留 ${formatUsageStay(detail.durationMs)}',
           ].join(' · '),
-          style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+          style: TextStyle(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
         ),
         const SizedBox(height: 12),
         Row(
@@ -228,29 +250,34 @@ class _NativeQianjiAppUsageDetailPageState
             const SizedBox(width: 8),
             _Stat(label: '浏览', value: '${detail.pv}次'),
             const SizedBox(width: 8),
-            _Stat(
-              label: '最常用',
-              value: topModule.isEmpty ? '-' : topModule,
-            ),
+            _Stat(label: '最常用', value: topModule.isEmpty ? '-' : topModule),
           ],
         ),
         const SizedBox(height: 20),
-        const Text(
+        Text(
           '功能停留',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF261D38),
+            color: DunesColors.resolveNullable(context, Color(0xFF261D38)),
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           '携程、薪人薪事和各免登应用分开统计，其它按功能汇总',
-          style: TextStyle(fontSize: 12, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
         const SizedBox(height: 10),
         if (pages.isEmpty)
-          const Text('暂无使用数据', style: TextStyle(color: DunesColors.text3))
+          Text(
+            '暂无使用数据',
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
+          )
         else
           for (final page in pages)
             Padding(
@@ -276,26 +303,39 @@ class _Stat extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFEDE8F5)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFEDE8F5),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               label,
-              style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 11,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               value,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ],
@@ -322,19 +362,22 @@ class _PageBar extends StatelessWidget {
             Expanded(
               child: Text(
                 page.screenName,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF261D38),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF261D38),
+                  ),
                 ),
               ),
             ),
             Text(
               formatUsageStay(page.durationMs),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ],
@@ -345,7 +388,11 @@ class _PageBar extends StatelessWidget {
           child: LinearProgressIndicator(
             value: ratio.clamp(0.04, 1),
             minHeight: 6,
-            backgroundColor: const Color(0xFFF1EBF9),
+            backgroundColor: DunesColors.resolve(
+              context,
+              const Color(0xFFF1EBF9),
+              role: DunesColorRole.surface,
+            ),
             color: _themePurple,
           ),
         ),

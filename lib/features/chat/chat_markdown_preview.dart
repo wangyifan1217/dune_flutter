@@ -55,7 +55,11 @@ Future<void> showChatMarkdownPreview({
               minHeight: 480,
             ),
             child: Material(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
               clipBehavior: Clip.antiAlias,
               child: page,
@@ -174,9 +178,17 @@ class _ChatMarkdownPreviewPageState extends State<ChatMarkdownPreviewPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         title: Text(
           widget.fileName,
           maxLines: 1,
@@ -210,10 +222,10 @@ class _ChatMarkdownPreviewPageState extends State<ChatMarkdownPreviewPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.description_outlined,
                 size: 48,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
               const SizedBox(height: 12),
               Text(
@@ -221,7 +233,8 @@ class _ChatMarkdownPreviewPageState extends State<ChatMarkdownPreviewPage> {
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 14,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 16),

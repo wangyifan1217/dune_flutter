@@ -61,7 +61,11 @@ class AuthAppLogo extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           // Logo 本体是黑底白字，圆形容器同步黑底，避免透出白底。
-          color: Colors.black,
+          color: DunesColors.resolve(
+            context,
+            Colors.black,
+            role: DunesColorRole.surface,
+          ),
           boxShadow: [
             BoxShadow(
               color: authBlue.withValues(alpha: 0.18),
@@ -79,7 +83,11 @@ class AuthAppLogo extends StatelessWidget {
           errorBuilder: (context, error, stackTrace) {
             // 资源偶发失败时用同风格文字 Logo，避免落到地形占位图标。
             return ColoredBox(
-              color: Colors.black,
+              color: DunesColors.resolve(
+                context,
+                Colors.black,
+                role: DunesColorRole.surface,
+              ),
               child: Center(
                 child: Text.rich(
                   TextSpan(
@@ -87,7 +95,7 @@ class AuthAppLogo extends StatelessWidget {
                       TextSpan(
                         text: 'DU',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
                           fontSize: size * 0.22,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.5,
@@ -101,14 +109,17 @@ class AuthAppLogo extends StatelessWidget {
                           child: Icon(
                             Icons.auto_awesome,
                             size: size * 0.1,
-                            color: const Color(0xFF7DFFB3),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFF7DFFB3),
+                            ),
                           ),
                         ),
                       ),
                       TextSpan(
                         text: 'NE',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
                           fontSize: size * 0.22,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.5,
@@ -139,9 +150,15 @@ class AuthBackButton extends StatelessWidget {
       onPressed: onPressed,
       style: IconButton.styleFrom(
         backgroundColor: authSurface,
-        foregroundColor: DunesColors.text,
+        foregroundColor: DunesColors.resolve(context, DunesColors.text),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        side: const BorderSide(color: Color(0xFFE8ECF2)),
+        side: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            Color(0xFFE8ECF2),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
     );
@@ -163,11 +180,20 @@ class AuthPhonePrefix extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 18,
               fontWeight: FontWeight.w500,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           const SizedBox(width: 12),
-          Container(width: 1, height: 22, color: const Color(0xFFE8ECF2)),
+          Container(
+            width: 1,
+            height: 22,
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8ECF2),
+              role: DunesColorRole.surface,
+            ),
+          ),
           const SizedBox(width: 12),
         ],
       ),
@@ -286,7 +312,8 @@ class AuthCodeEntryLayout extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 22,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           const SizedBox(height: 10),
@@ -295,8 +322,9 @@ class AuthCodeEntryLayout extends StatelessWidget {
             textAlign: TextAlign.center,
             style: DunesTypography.sans(
               fontSize: 14,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
               height: 1.5,
+              context: context,
             ),
           ),
           const SizedBox(height: 36),
@@ -305,10 +333,14 @@ class AuthCodeEntryLayout extends StatelessWidget {
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 180),
             child: loading
-                ? const LinearProgressIndicator(
+                ? LinearProgressIndicator(
                     minHeight: 2,
                     color: authBlue,
-                    backgroundColor: Color(0xFFE8EDF5),
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      Color(0xFFE8EDF5),
+                      role: DunesColorRole.surface,
+                    ),
                   )
                 : error != null
                 ? Text(
@@ -317,8 +349,9 @@ class AuthCodeEntryLayout extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: DunesTypography.sans(
                       fontSize: 13,
-                      color: DunesColors.coral,
+                      color: DunesColors.resolve(context, DunesColors.coral),
                       height: 1.5,
+                      context: context,
                     ),
                   )
                 : const SizedBox.shrink(key: ValueKey('idle')),
@@ -343,17 +376,21 @@ class _AuthCodeBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color borderColor = hasError
-        ? DunesColors.coral
+        ? DunesColors.resolve(context, DunesColors.coral)
         : active
-        ? authBlue
-        : const Color(0xFFE8ECF2);
+        ? DunesColors.resolve(context, authBlue)
+        : DunesColors.resolve(context, const Color(0xFFE8ECF2));
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       width: 48,
       height: 56,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: authSurface,
+        color: DunesColors.resolveNullable(
+          context,
+          authSurface,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: borderColor,
@@ -365,7 +402,8 @@ class _AuthCodeBox extends StatelessWidget {
         style: DunesTypography.sans(
           fontSize: 24,
           fontWeight: FontWeight.w600,
-          color: DunesColors.text,
+          color: DunesColors.resolve(context, DunesColors.text),
+          context: context,
         ),
       ),
     );

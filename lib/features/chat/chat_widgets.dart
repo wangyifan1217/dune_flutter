@@ -50,9 +50,21 @@ class ChatConvHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(showBackButton ? 4 : 12, 8, 8, 10),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -60,7 +72,7 @@ class ChatConvHeader extends StatelessWidget {
             IconButton(
               onPressed: onBack,
               icon: const Icon(Icons.chevron_left_rounded, size: 28),
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           if (leadingAvatar != null) ...[
             GestureDetector(onTap: onTapTitle, child: leadingAvatar!),
@@ -84,7 +96,11 @@ class ChatConvHeader extends StatelessWidget {
                             fontSize: 15.5,
                             fontWeight: FontWeight.w600,
                             letterSpacing: -0.01 * 15.5,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                            context: context,
                           ),
                         ),
                       ),
@@ -108,7 +124,11 @@ class ChatConvHeader extends StatelessWidget {
                           height: 7,
                           margin: const EdgeInsets.only(right: 5),
                           decoration: BoxDecoration(
-                            color: DunesColors.green,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.green,
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(99),
                           ),
                         ),
@@ -120,8 +140,12 @@ class ChatConvHeader extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: DunesTypography.mono(
                             fontSize: 9.5,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                             letterSpacing: 0.04 * 9.5,
+                            context: context,
                           ),
                         ),
                       ),
@@ -217,9 +241,21 @@ class ChatQuickActions extends StatelessWidget {
     if (wide) {
       return Container(
         padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
-        decoration: const BoxDecoration(
-          color: DunesColors.bgApp,
-          border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.bgApp,
+            role: DunesColorRole.surface,
+          ),
+          border: Border(
+            top: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
         ),
         child: Row(
           children: cells
@@ -238,13 +274,24 @@ class ChatQuickActions extends StatelessWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(c.icon, size: 18, color: DunesColors.text2),
+                            Icon(
+                              c.icon,
+                              size: 18,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
+                            ),
                             const SizedBox(height: 3),
                             Text(
                               c.label,
                               style: DunesTypography.sans(
                                 fontSize: 9.5,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                                context: context,
                               ),
                             ),
                           ],
@@ -268,7 +315,11 @@ class ChatQuickActions extends StatelessWidget {
     }
     return Container(
       width: double.infinity,
-      color: const Color(0xFFF7F7F7),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF7F7F7),
+        role: DunesColorRole.surface,
+      ),
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -312,17 +363,26 @@ class _WeChatToolTile extends StatelessWidget {
             height: 58,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(cell.icon, size: 28, color: const Color(0xFF353535)),
+            child: Icon(
+              cell.icon,
+              size: 28,
+              color: DunesColors.resolve(context, const Color(0xFF353535)),
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             cell.label,
             style: DunesTypography.sans(
               fontSize: 12,
-              color: const Color(0xFF7A7A7A),
+              color: DunesColors.resolve(context, const Color(0xFF7A7A7A)),
+              context: context,
             ),
           ),
           if ((cell.hint ?? '').isNotEmpty) ...[
@@ -331,7 +391,8 @@ class _WeChatToolTile extends StatelessWidget {
               cell.hint!,
               style: DunesTypography.sans(
                 fontSize: 9,
-                color: const Color(0xFFAAAAAA),
+                color: DunesColors.resolve(context, const Color(0xFFAAAAAA)),
+                context: context,
               ),
             ),
           ],
@@ -480,13 +541,31 @@ class ChatInputBar extends StatelessWidget {
             decoration: BoxDecoration(
               color:
                   backgroundColor ??
-                  (wide ? DunesColors.bgApp : const Color(0xFFF7F7F7)),
+                  (wide
+                      ? DunesColors.resolve(
+                          context,
+                          DunesColors.bgApp,
+                          role: DunesColorRole.surface,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          const Color(0xFFF7F7F7),
+                          role: DunesColorRole.surface,
+                        )),
               border: showTopBorder
                   ? Border(
                       top: BorderSide(
                         color: wide
-                            ? DunesColors.borderSoft
-                            : const Color(0xFFE8E8E8),
+                            ? DunesColors.resolve(
+                                context,
+                                DunesColors.borderSoft,
+                                role: DunesColorRole.border,
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFFE8E8E8),
+                                role: DunesColorRole.border,
+                              ),
                       ),
                     )
                   : null,
@@ -537,18 +616,40 @@ class ChatInputBar extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: recording
                                       ? (recordWillCancel
-                                            ? DunesColors.coral
+                                            ? DunesColors.resolve(
+                                                context,
+                                                DunesColors.coral,
+                                                role: DunesColorRole.surface,
+                                              )
                                             : (recordWillTranscribe
-                                                  ? const Color(0xFF3C8B86)
-                                                  : const Color(0xFF8B72B7)))
-                                      : Colors.white,
+                                                  ? DunesColors.resolve(
+                                                      context,
+                                                      const Color(0xFF3C8B86),
+                                                      role: DunesColorRole
+                                                          .surface,
+                                                    )
+                                                  : DunesColors.resolve(
+                                                      context,
+                                                      const Color(0xFF8B72B7),
+                                                      role: DunesColorRole
+                                                          .surface,
+                                                    )))
+                                      : DunesColors.resolve(
+                                          context,
+                                          Colors.white,
+                                          role: DunesColorRole.surface,
+                                        ),
                                   borderRadius: BorderRadius.circular(
                                     wide ? 7 : 8,
                                   ),
                                   border: recording || !wide
                                       ? null
                                       : Border.all(
-                                          color: DunesColors.borderSoft,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.borderSoft,
+                                            role: DunesColorRole.border,
+                                          ),
                                         ),
                                 ),
                                 child: Text(
@@ -563,8 +664,15 @@ class ChatInputBar extends StatelessWidget {
                                     fontSize: wide ? 13.5 : 15,
                                     fontWeight: FontWeight.w500,
                                     color: recording
-                                        ? Colors.white
-                                        : DunesColors.text2,
+                                        ? DunesColors.resolve(
+                                            context,
+                                            Colors.white,
+                                          )
+                                        : DunesColors.resolve(
+                                            context,
+                                            DunesColors.text2,
+                                          ),
+                                    context: context,
                                   ),
                                 ),
                               ),
@@ -700,9 +808,19 @@ class _PcComposerBox extends StatelessWidget {
       height: height,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFFFFFEFF),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFFFFEFF),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(7),
-          border: Border.all(color: const Color(0xFFE3DCEE)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE3DCEE),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -743,31 +861,52 @@ class _PcComposerBox extends StatelessWidget {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(6),
                         color: showStop
-                            ? const Color(0xFFB65252)
+                            ? DunesColors.resolve(
+                                context,
+                                const Color(0xFFB65252),
+                                role: DunesColorRole.surface,
+                              )
                             : interactionLocked
-                            ? const Color(0xFFC9BEDD)
-                            : const Color(0xFF8B72B7),
+                            ? DunesColors.resolve(
+                                context,
+                                const Color(0xFFC9BEDD),
+                                role: DunesColorRole.surface,
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFF8B72B7),
+                                role: DunesColorRole.surface,
+                              ),
                       ),
                       child: Center(
                         child: showStop
-                            ? const Icon(
+                            ? Icon(
                                 Icons.stop_rounded,
                                 size: 18,
-                                color: Colors.white,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
                               )
                             : sending
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Colors.white,
+                                  ),
                                 ),
                               )
-                            : const Text(
+                            : Text(
                                 '发送',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Colors.white,
+                                  ),
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -806,7 +945,11 @@ class _ComposerResizeHandle extends StatelessWidget {
               width: 36,
               height: 3,
               decoration: BoxDecoration(
-                color: const Color(0xFFC9C2D6),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFC9C2D6),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -833,7 +976,11 @@ class _RoundIconBtn extends StatelessWidget {
         child: SizedBox(
           width: 40,
           height: 40,
-          child: Icon(icon, size: 23, color: DunesColors.text2),
+          child: Icon(
+            icon,
+            size: 23,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
         ),
       ),
     );
@@ -857,7 +1004,11 @@ class _WeChatCircleIconBtn extends StatelessWidget {
         child: SizedBox(
           width: 36,
           height: 36,
-          child: Icon(icon, size: 26, color: const Color(0xFF1A1A1A)),
+          child: Icon(
+            icon,
+            size: 26,
+            color: DunesColors.resolve(context, const Color(0xFF1A1A1A)),
+          ),
         ),
       ),
     );
@@ -883,10 +1034,12 @@ class _WeChatPlusBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = showStop
-        ? const Color(0xFFB65252)
+        ? DunesColors.resolve(context, const Color(0xFFB65252))
         : locked
-        ? const Color(0xFFC9BEDD)
-        : (plusOpen ? const Color(0xFF553B96) : const Color(0xFF7E64BD));
+        ? DunesColors.resolve(context, const Color(0xFFC9BEDD))
+        : (plusOpen
+              ? DunesColors.resolve(context, const Color(0xFF553B96))
+              : DunesColors.resolve(context, const Color(0xFF7E64BD)));
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -895,23 +1048,34 @@ class _WeChatPlusBtn extends StatelessWidget {
         child: Ink(
           width: 36,
           height: 36,
-          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: DunesColors.resolveNullable(
+              context,
+              bg,
+              role: DunesColorRole.surface,
+            ),
+            shape: BoxShape.circle,
+          ),
           child: Center(
             child: showStop
-                ? const Icon(Icons.stop_rounded, size: 18, color: Colors.white)
+                ? Icon(
+                    Icons.stop_rounded,
+                    size: 18,
+                    color: DunesColors.resolve(context, Colors.white),
+                  )
                 : sending
-                ? const SizedBox(
+                ? SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                     ),
                   )
                 : Icon(
                     plusOpen ? Icons.close_rounded : Icons.add_rounded,
                     size: 22,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
                   ),
           ),
         ),
@@ -934,7 +1098,9 @@ class _WeChatSendBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = locked ? const Color(0xFFC9BEDD) : const Color(0xFF7E64BD);
+    final bg = locked
+        ? DunesColors.resolve(context, const Color(0xFFC9BEDD))
+        : DunesColors.resolve(context, const Color(0xFF7E64BD));
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -944,23 +1110,27 @@ class _WeChatSendBtn extends StatelessWidget {
           height: 36,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: bg,
+            color: DunesColors.resolveNullable(
+              context,
+              bg,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Center(
             child: sending
-                ? const SizedBox(
+                ? SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                     ),
                   )
-                : const Text(
+                : Text(
                     '发送',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       height: 1,
@@ -1242,25 +1412,45 @@ class _ChatTextFieldState extends State<_ChatTextField> {
         fontSize: widget.wide ? 15 : 16,
         height: widget.wide ? 1.55 : 1.35,
         fontWeight: widget.wide ? FontWeight.w500 : null,
-        color: widget.wide ? const Color(0xFF111111) : DunesColors.text,
+        color: widget.wide
+            ? DunesColors.resolve(context, const Color(0xFF111111))
+            : DunesColors.resolve(context, DunesColors.text),
+        context: context,
       ),
       decoration: InputDecoration(
         hintText: widget.hintText ?? '输入消息…',
         hintStyle: DunesTypography.sans(
           fontSize: widget.wide ? 15 : 16,
           color: widget.wide
-              ? const Color(0xFF6F6E66)
-              : const Color(0xFFB0B0B0),
+              ? DunesColors.resolve(context, const Color(0xFF6F6E66))
+              : DunesColors.resolve(context, const Color(0xFFB0B0B0)),
+          context: context,
         ),
         filled: outline,
         fillColor: outline
-            ? (widget.wide ? const Color(0xFFFFFEFF) : Colors.white)
+            ? (widget.wide
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0xFFFFFEFF),
+                      role: DunesColorRole.surface,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ))
             : null,
         border: outline
             ? OutlineInputBorder(
                 borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
                 borderSide: widget.wide
-                    ? const BorderSide(color: Color(0xFFE3DCEE))
+                    ? BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFE3DCEE),
+                          role: DunesColorRole.border,
+                        ),
+                      )
                     : BorderSide.none,
               )
             : InputBorder.none,
@@ -1268,7 +1458,13 @@ class _ChatTextFieldState extends State<_ChatTextField> {
             ? OutlineInputBorder(
                 borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
                 borderSide: widget.wide
-                    ? const BorderSide(color: Color(0xFFE3DCEE))
+                    ? BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFE3DCEE),
+                          role: DunesColorRole.border,
+                        ),
+                      )
                     : BorderSide.none,
               )
             : InputBorder.none,
@@ -1276,7 +1472,13 @@ class _ChatTextFieldState extends State<_ChatTextField> {
             ? OutlineInputBorder(
                 borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
                 borderSide: widget.wide
-                    ? const BorderSide(color: Color(0xFF9A82C5))
+                    ? BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFF9A82C5),
+                          role: DunesColorRole.border,
+                        ),
+                      )
                     : BorderSide.none,
               )
             : InputBorder.none,
@@ -1390,7 +1592,11 @@ class ChatMessageRow extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: DunesTypography.mono(
                                   fontSize: 9.5,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -1401,7 +1607,11 @@ class ChatMessageRow extends StatelessWidget {
                               time,
                               style: DunesTypography.mono(
                                 fontSize: 9.5,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                                context: context,
                               ),
                             ),
                           if (mine && showTimeForMine && time.isNotEmpty) ...[
@@ -1409,7 +1619,11 @@ class ChatMessageRow extends StatelessWidget {
                               time,
                               style: DunesTypography.mono(
                                 fontSize: 9.5,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                                context: context,
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -1417,7 +1631,11 @@ class ChatMessageRow extends StatelessWidget {
                               message.senderName,
                               style: DunesTypography.mono(
                                 fontSize: 9.5,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                                context: context,
                               ),
                             ),
                           ],
@@ -1434,8 +1652,12 @@ class ChatMessageRow extends StatelessWidget {
                           fontSize: 10.5,
                           fontWeight: FontWeight.w500,
                           color: readLabel == '已读'
-                              ? DunesColors.readReceipt
-                              : DunesColors.text3,
+                              ? DunesColors.resolve(
+                                  context,
+                                  DunesColors.readReceipt,
+                                )
+                              : DunesColors.resolve(context, DunesColors.text3),
+                          context: context,
                         ),
                       ),
                     )
@@ -1450,8 +1672,15 @@ class ChatMessageRow extends StatelessWidget {
                             fontSize: 10.5,
                             fontWeight: FontWeight.w500,
                             color: (readTapLabel ?? '').trim() != '未读'
-                                ? DunesColors.readReceipt
-                                : DunesColors.text3,
+                                ? DunesColors.resolve(
+                                    context,
+                                    DunesColors.readReceipt,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
+                            context: context,
                           ),
                         ),
                       ),
@@ -1595,8 +1824,26 @@ class ChatTextBubble extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
           decoration: BoxDecoration(
             // 扁平化：己方纯色；对方浅底 + 细描边，避免与聊天背景融在一起。
-            color: mine ? const Color(0xFF7E64BD) : DunesColors.bgApp,
-            border: mine ? null : Border.all(color: DunesColors.borderSoft),
+            color: mine
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFF7E64BD),
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    DunesColors.bgApp,
+                    role: DunesColorRole.surface,
+                  ),
+            border: mine
+                ? null
+                : Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(mine ? 12 : 4),
               topRight: Radius.circular(mine ? 4 : 12),
@@ -1884,9 +2131,22 @@ class ChatQuoteBlock extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(6),
-        border: Border(left: BorderSide(color: DunesColors.accent, width: 2.5)),
+        border: Border(
+          left: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.accent,
+              role: DunesColorRole.border,
+            ),
+            width: 2.5,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1899,7 +2159,8 @@ class ChatQuoteBlock extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
           const SizedBox(height: 2),
@@ -1910,7 +2171,8 @@ class ChatQuoteBlock extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 11,
               height: 1.35,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
             ),
           ),
         ],
@@ -1930,19 +2192,28 @@ class ChatQuoteBlock extends StatelessWidget {
   Widget _buildBelowText(BuildContext context) {
     final divider = mine
         ? Colors.white.withValues(alpha: 0.28)
-        : DunesColors.borderSoft;
+        : DunesColors.resolve(context, DunesColors.borderSoft);
     final accent = mine
-        ? Colors.white.withValues(alpha: 0.92)
-        : DunesColors.accent;
+        ? DunesColors.resolve(context, Colors.white).withValues(alpha: 0.92)
+        : DunesColors.resolve(context, DunesColors.accent);
     final textColor = mine
         ? Colors.white.withValues(alpha: 0.72)
-        : DunesColors.text3;
+        : DunesColors.resolve(context, DunesColors.text3);
 
     final child = Container(
       width: double.infinity,
       padding: EdgeInsets.only(top: compact ? 5 : 6, left: compact ? 0 : 0),
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: divider, width: 0.5)),
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              divider,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1956,6 +2227,7 @@ class ChatQuoteBlock extends StatelessWidget {
               fontSize: compact ? 11 : 11,
               fontWeight: FontWeight.w600,
               color: accent,
+              context: context,
             ),
           ),
           const SizedBox(height: 2),
@@ -1967,6 +2239,7 @@ class ChatQuoteBlock extends StatelessWidget {
               fontSize: compact ? 11 : 12,
               height: 1.35,
               color: textColor,
+              context: context,
             ),
           ),
         ],
@@ -2011,9 +2284,23 @@ class ChatQuotePreviewBar extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(wide ? 12 : 10, 8, 4, 0),
       decoration: BoxDecoration(
-        color: wide ? DunesColors.bgApp : _composerGray,
+        color: wide
+            ? DunesColors.resolve(
+                context,
+                DunesColors.bgApp,
+                role: DunesColorRole.surface,
+              )
+            : _composerGray,
         border: Border(
-          top: BorderSide(color: wide ? DunesColors.borderSoft : _composerLine),
+          top: BorderSide(
+            color: wide
+                ? DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.border,
+                  )
+                : _composerLine,
+          ),
         ),
       ),
       child: IntrinsicHeight(
@@ -2024,7 +2311,11 @@ class ChatQuotePreviewBar extends StatelessWidget {
               width: 3,
               margin: const EdgeInsets.symmetric(vertical: 2),
               decoration: BoxDecoration(
-                color: _accent,
+                color: DunesColors.resolveNullable(
+                  context,
+                  _accent,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -2045,6 +2336,7 @@ class ChatQuotePreviewBar extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         height: 1.3,
                         color: _accent,
+                        context: context,
                       ),
                     ),
                     if (preview.isNotEmpty) ...[
@@ -2056,7 +2348,11 @@ class ChatQuotePreviewBar extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 12,
                           height: 1.35,
-                          color: const Color(0xFF8A8490),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF8A8490),
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -2070,10 +2366,10 @@ class ChatQuotePreviewBar extends StatelessWidget {
               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               tooltip: '取消引用',
               onPressed: onCancel,
-              icon: const Icon(
+              icon: Icon(
                 Icons.close_rounded,
                 size: 18,
-                color: Color(0xFFB0AAB6),
+                color: DunesColors.resolveNullable(context, Color(0xFFB0AAB6)),
               ),
             ),
           ],
@@ -2094,8 +2390,15 @@ class ChatDateDivider extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(0, 14, 0, 8),
       child: Row(
         children: [
-          const Expanded(
-            child: Divider(height: 1, color: DunesColors.borderSoft),
+          Expanded(
+            child: Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 11),
@@ -2105,12 +2408,20 @@ class ChatDateDivider extends StatelessWidget {
                 fontSize: 9.5,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 0.06 * 9.5,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ),
-          const Expanded(
-            child: Divider(height: 1, color: DunesColors.borderSoft),
+          Expanded(
+            child: Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ],
       ),
@@ -2130,12 +2441,20 @@ class ChatSystemPill extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: DunesColors.bgSoft,
+          color: DunesColors.resolve(
+            context,
+            DunesColors.bgSoft,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(99),
         ),
         child: Text(
           text,
-          style: DunesTypography.mono(fontSize: 10, color: DunesColors.text3),
+          style: DunesTypography.mono(
+            fontSize: 10,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       ),
     );
@@ -2165,11 +2484,23 @@ class ChatPinnedMessagesBar extends StatelessWidget {
     final latest = items.first;
     final canExpand = items.length > 1;
     return Material(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: Container(
         width: double.infinity,
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2182,10 +2513,13 @@ class ChatPinnedMessagesBar extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.push_pin_rounded,
                       size: 16,
-                      color: Color(0xFFE6A23C),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFE6A23C),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -2194,7 +2528,11 @@ class ChatPinnedMessagesBar extends StatelessWidget {
                               '置顶消息 · ${items.length}',
                               style: DunesTypography.sans(
                                 fontSize: 13,
-                                color: DunesColors.text2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
+                                context: context,
                               ),
                             )
                           : _PinnedMessageText(item: latest),
@@ -2214,7 +2552,10 @@ class ChatPinnedMessagesBar extends StatelessWidget {
                               ? Icons.keyboard_arrow_up_rounded
                               : Icons.keyboard_arrow_down_rounded,
                           size: 20,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       )
                     else if (onUnpinItem != null)
@@ -2227,10 +2568,13 @@ class ChatPinnedMessagesBar extends StatelessWidget {
                           minHeight: 32,
                         ),
                         onPressed: () => onUnpinItem!(latest),
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.close_rounded,
                           size: 18,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                   ],
@@ -2245,9 +2589,15 @@ class ChatPinnedMessagesBar extends StatelessWidget {
                   onTap: () => onTapItem(item),
                   child: Container(
                     decoration: index == 0
-                        ? const BoxDecoration(
+                        ? BoxDecoration(
                             border: Border(
-                              top: BorderSide(color: DunesColors.borderSoft),
+                              top: BorderSide(
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.borderSoft,
+                                  role: DunesColorRole.border,
+                                ),
+                              ),
                             ),
                           )
                         : null,
@@ -2267,10 +2617,13 @@ class ChatPinnedMessagesBar extends StatelessWidget {
                               minHeight: 30,
                             ),
                             onPressed: () => onUnpinItem!(item),
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.close_rounded,
                               size: 16,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
                         ],
@@ -2303,8 +2656,9 @@ class _PinnedMessageText extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: DunesTypography.sans(
             fontSize: 12,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
             height: 1.35,
+            context: context,
           ),
         ),
         const SizedBox(height: 4),
@@ -2314,8 +2668,9 @@ class _PinnedMessageText extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: DunesTypography.sans(
             fontSize: 13,
-            color: DunesColors.text2,
+            color: DunesColors.resolve(context, DunesColors.text2),
             height: 1.4,
+            context: context,
           ),
         ),
       ],
@@ -2408,11 +2763,25 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               decoration: BoxDecoration(
                 color: widget.mine
-                    ? const Color(0xFF7E64BD)
-                    : DunesColors.bgApp,
+                    ? DunesColors.resolve(
+                        context,
+                        const Color(0xFF7E64BD),
+                        role: DunesColorRole.surface,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        DunesColors.bgApp,
+                        role: DunesColorRole.surface,
+                      ),
                 border: widget.mine
                     ? null
-                    : Border.all(color: DunesColors.borderSoft),
+                    : Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -2421,7 +2790,9 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
                   Icon(
                     playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
                     size: 18,
-                    color: widget.mine ? Colors.white : DunesColors.accent,
+                    color: widget.mine
+                        ? DunesColors.resolve(context, Colors.white)
+                        : DunesColors.resolve(context, DunesColors.accent),
                   ),
                   const SizedBox(width: 6),
                   ...List.generate(4, (i) {
@@ -2430,8 +2801,19 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
                       height: playing ? 8.0 + (i * 3) : 6.0 + i,
                       margin: const EdgeInsets.symmetric(horizontal: 1),
                       decoration: BoxDecoration(
-                        color: (widget.mine ? Colors.white : DunesColors.accent)
-                            .withValues(alpha: 0.75),
+                        color:
+                            (widget.mine
+                                    ? DunesColors.resolve(
+                                        context,
+                                        Colors.white,
+                                        role: DunesColorRole.surface,
+                                      )
+                                    : DunesColors.resolve(
+                                        context,
+                                        DunesColors.accent,
+                                        role: DunesColorRole.surface,
+                                      ))
+                                .withValues(alpha: 0.75),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     );
@@ -2441,7 +2823,10 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
                     '${widget.durationSec}s',
                     style: DunesTypography.mono(
                       fontSize: 10,
-                      color: widget.mine ? Colors.white70 : DunesColors.text3,
+                      color: widget.mine
+                          ? DunesColors.resolve(context, Colors.white70)
+                          : DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ],
@@ -2464,7 +2849,8 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
                 '转写中…',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ],
@@ -2485,16 +2871,27 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: DunesColors.bgApp,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.bgApp,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: DunesColors.borderSoft),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.borderSoft,
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                   ),
                   child: Text(
                     transcript,
                     style: DunesTypography.sans(
                       fontSize: 13,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
                       height: 1.45,
+                      context: context,
                     ),
                   ),
                 ),
@@ -2573,7 +2970,11 @@ class ChatFileAttach extends StatelessWidget {
             constraints: BoxConstraints(minWidth: minW, maxWidth: maxW),
             padding: const EdgeInsets.all(11),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
@@ -2594,8 +2995,15 @@ class ChatFileAttach extends StatelessWidget {
                                 ? busyProgress
                                 : null,
                             strokeWidth: 2.5,
-                            color: const Color(0xFF7E64BD),
-                            backgroundColor: Colors.white54,
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFF7E64BD),
+                            ),
+                            backgroundColor: DunesColors.resolve(
+                              context,
+                              Colors.white54,
+                              role: DunesColorRole.surface,
+                            ),
                           ),
                         ),
                     ],
@@ -2614,6 +3022,7 @@ class ChatFileAttach extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
+                          context: context,
                         ),
                       ),
                       if (statusLabel != null || sizeLabel != null) ...[
@@ -2622,7 +3031,11 @@ class ChatFileAttach extends StatelessWidget {
                           statusLabel ?? sizeLabel!,
                           style: DunesTypography.sans(
                             fontSize: 11,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],
@@ -2640,10 +3053,10 @@ class ChatFileAttach extends StatelessWidget {
                       minWidth: 32,
                       minHeight: 32,
                     ),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close_rounded,
                       size: 18,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 ] else if (downloading && onCancelDownload != null) ...[
@@ -2657,18 +3070,21 @@ class ChatFileAttach extends StatelessWidget {
                       minWidth: 32,
                       minHeight: 32,
                     ),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close_rounded,
                       size: 18,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 ] else if (downloaded && !busy) ...[
                   const SizedBox(width: 8),
-                  const Icon(
+                  Icon(
                     Icons.check_circle,
                     size: 18,
-                    color: Color(0xFF07C160),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF07C160),
+                    ),
                   ),
                 ],
               ],
@@ -2721,10 +3137,18 @@ class ChatKbDocCard extends StatelessWidget {
         constraints: const BoxConstraints(minWidth: 220, maxWidth: 290),
         padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: DunesColors.brandPurpleLine.withValues(alpha: 0.45),
+            color: DunesColors.resolve(
+              context,
+              DunesColors.brandPurpleLine,
+              role: DunesColorRole.border,
+            ).withValues(alpha: 0.45),
           ),
         ),
         child: Column(
@@ -2737,13 +3161,20 @@ class ChatKbDocCard extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: DunesColors.brandPurpleSoft,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleSoft,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(9),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.menu_book_outlined,
                     size: 18,
-                    color: DunesColors.brandPurple,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurple,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -2758,8 +3189,9 @@ class ChatKbDocCard extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
                           height: 1.25,
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -2769,7 +3201,11 @@ class ChatKbDocCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 10.5,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -2778,7 +3214,14 @@ class ChatKbDocCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 9),
-            const Divider(height: 1, color: DunesColors.borderSoft),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
             const SizedBox(height: 7),
             Row(
               children: [
@@ -2786,8 +3229,12 @@ class ChatKbDocCard extends StatelessWidget {
                   '沙丘知识库',
                   style: DunesTypography.sans(
                     fontSize: 10,
-                    color: DunesColors.brandPurpleDeep,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleDeep,
+                    ),
                     fontWeight: FontWeight.w500,
+                    context: context,
                   ),
                 ),
                 const Spacer(),
@@ -2795,14 +3242,15 @@ class ChatKbDocCard extends StatelessWidget {
                   '打开 · 可存知识库',
                   style: DunesTypography.sans(
                     fontSize: 10,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
                 const SizedBox(width: 2),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   size: 14,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ],
             ),
@@ -2835,10 +3283,18 @@ class ChatMeetingMinutesCard extends StatelessWidget {
         constraints: const BoxConstraints(minWidth: 220, maxWidth: 290),
         padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: DunesColors.accentLine.withValues(alpha: 0.7),
+            color: DunesColors.resolve(
+              context,
+              DunesColors.accentLine,
+              role: DunesColorRole.border,
+            ).withValues(alpha: 0.7),
           ),
         ),
         child: Column(
@@ -2851,13 +3307,17 @@ class ChatMeetingMinutesCard extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: DunesColors.accentSoft,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.accentSoft,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(9),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.article_outlined,
                     size: 18,
-                    color: DunesColors.accentDeep,
+                    color: DunesColors.resolve(context, DunesColors.accentDeep),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -2872,8 +3332,9 @@ class ChatMeetingMinutesCard extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
                           height: 1.25,
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -2883,7 +3344,11 @@ class ChatMeetingMinutesCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 10.5,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -2892,7 +3357,14 @@ class ChatMeetingMinutesCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 9),
-            const Divider(height: 1, color: DunesColors.borderSoft),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
             const SizedBox(height: 7),
             Row(
               children: [
@@ -2900,8 +3372,9 @@ class ChatMeetingMinutesCard extends StatelessWidget {
                   '沙丘会议',
                   style: DunesTypography.sans(
                     fontSize: 10,
-                    color: DunesColors.accentDeep,
+                    color: DunesColors.resolve(context, DunesColors.accentDeep),
                     fontWeight: FontWeight.w500,
+                    context: context,
                   ),
                 ),
                 const Spacer(),
@@ -2909,14 +3382,15 @@ class ChatMeetingMinutesCard extends StatelessWidget {
                   '查看 · 可存知识库',
                   style: DunesTypography.sans(
                     fontSize: 10,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
                 const SizedBox(width: 2),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   size: 14,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ],
             ),
@@ -2957,10 +3431,18 @@ class ChatApprovalCard extends StatelessWidget {
         constraints: const BoxConstraints(minWidth: 220, maxWidth: 290),
         padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: DunesColors.accentLine.withValues(alpha: 0.7),
+            color: DunesColors.resolve(
+              context,
+              DunesColors.accentLine,
+              role: DunesColorRole.border,
+            ).withValues(alpha: 0.7),
           ),
         ),
         child: Column(
@@ -2974,13 +3456,17 @@ class ChatApprovalCard extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: DunesColors.accentSoft,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.accentSoft,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(9),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.assignment_outlined,
                     size: 18,
-                    color: DunesColors.accentDeep,
+                    color: DunesColors.resolve(context, DunesColors.accentDeep),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -2995,8 +3481,9 @@ class ChatApprovalCard extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
                           height: 1.25,
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -3009,7 +3496,11 @@ class ChatApprovalCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 10.5,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -3018,7 +3509,14 @@ class ChatApprovalCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 9),
-            const Divider(height: 1, color: DunesColors.borderSoft),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
             const SizedBox(height: 7),
             Row(
               children: [
@@ -3026,8 +3524,9 @@ class ChatApprovalCard extends StatelessWidget {
                   brandLabel,
                   style: DunesTypography.sans(
                     fontSize: 10,
-                    color: DunesColors.accentDeep,
+                    color: DunesColors.resolve(context, DunesColors.accentDeep),
                     fontWeight: FontWeight.w500,
+                    context: context,
                   ),
                 ),
                 const Spacer(),
@@ -3035,14 +3534,15 @@ class ChatApprovalCard extends StatelessWidget {
                   '查看详情',
                   style: DunesTypography.sans(
                     fontSize: 10,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
                 const SizedBox(width: 2),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   size: 14,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ],
             ),
@@ -3078,13 +3578,17 @@ class ChatPersonAvatar extends StatelessWidget {
           height: size,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: style.gradient.first,
+            color: DunesColors.resolveNullable(
+              context,
+              style.gradient.first,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(size * 0.18),
           ),
           child: Text(
             initial.isEmpty ? '?' : initial,
             style: TextStyle(
-              color: style.textColor,
+              color: DunesColors.resolveNullable(context, style.textColor),
               fontSize: size * 0.38,
               fontWeight: FontWeight.w500,
             ),
@@ -3098,9 +3602,20 @@ class ChatPersonAvatar extends StatelessWidget {
               width: 9,
               height: 9,
               decoration: BoxDecoration(
-                color: DunesColors.green,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.green,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(99),
-                border: Border.all(color: DunesColors.bgApp, width: 1.5),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.bgApp,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 1.5,
+                ),
               ),
             ),
           ),
@@ -3146,9 +3661,21 @@ class ChatEmojiPanel extends StatelessWidget {
     return Container(
       height: 180,
       padding: const EdgeInsets.all(10),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: GridView.builder(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -3187,7 +3714,11 @@ class CommBackScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -3195,9 +3726,15 @@ class CommBackScaffold extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.fromLTRB(4, 6, 12, 10),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(color: DunesColors.borderSoft),
+                  bottom: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
               ),
               child: Row(
@@ -3214,7 +3751,11 @@ class CommBackScaffold extends StatelessWidget {
                           crumb,
                           style: DunesTypography.mono(
                             fontSize: 9.5,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
                         ),
                         Text(
@@ -3222,7 +3763,11 @@ class CommBackScaffold extends StatelessWidget {
                           style: DunesTypography.sans(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],
@@ -3274,14 +3819,30 @@ class NotiCard extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: read
-              ? DunesColors.borderSoft
+              ? DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                )
               : (unread
-                    ? DunesColors.coral.withValues(alpha: 0.35)
-                    : DunesColors.borderSoft),
+                    ? DunesColors.resolve(
+                        context,
+                        DunesColors.coral,
+                        role: DunesColorRole.border,
+                      ).withValues(alpha: 0.35)
+                    : DunesColors.resolve(
+                        context,
+                        DunesColors.borderSoft,
+                        role: DunesColorRole.border,
+                      )),
         ),
       ),
       child: SelectionArea(
@@ -3295,8 +3856,12 @@ class NotiCard extends StatelessWidget {
                     width: 7,
                     height: 7,
                     margin: const EdgeInsets.only(right: 6),
-                    decoration: const BoxDecoration(
-                      color: DunesColors.coral,
+                    decoration: BoxDecoration(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.coral,
+                        role: DunesColorRole.surface,
+                      ),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -3307,6 +3872,7 @@ class NotiCard extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w600,
+                      context: context,
                     ),
                   ),
                 ),
@@ -3315,7 +3881,8 @@ class NotiCard extends StatelessWidget {
                     timeLabel,
                     style: DunesTypography.mono(
                       fontSize: 9.5,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 if (showReadMark) ...[
@@ -3330,7 +3897,9 @@ class NotiCard extends StatelessWidget {
                             ? Icons.check_circle
                             : Icons.radio_button_unchecked,
                         size: 16,
-                        color: read ? DunesColors.accent : DunesColors.text3,
+                        color: read
+                            ? DunesColors.resolve(context, DunesColors.accent)
+                            : DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ),
@@ -3343,8 +3912,9 @@ class NotiCard extends StatelessWidget {
                 body,
                 style: DunesTypography.sans(
                   fontSize: 12.5,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                   height: 1.45,
+                  context: context,
                 ),
               ),
             ],
@@ -3353,14 +3923,19 @@ class NotiCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: DunesColors.accentSoft,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.accentSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
                   tag!,
                   style: DunesTypography.mono(
                     fontSize: 9,
-                    color: DunesColors.accentDeep,
+                    color: DunesColors.resolve(context, DunesColors.accentDeep),
+                    context: context,
                   ),
                 ),
               ),

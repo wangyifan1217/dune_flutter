@@ -108,10 +108,7 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _startingQr = false);
-      showDunesToast(
-        context,
-        friendlyErrorText(e, fallback: '获取二维码失败'),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '获取二维码失败'));
     }
   }
 
@@ -130,9 +127,13 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
         _stopPolling();
         if (!mounted) return;
         setState(() {
-          _status = (_status ??
-                  const WechatPersonalStatus(bound: false, status: 'expired'))
-              .copyWith(status: 'expired');
+          _status =
+              (_status ??
+                      const WechatPersonalStatus(
+                        bound: false,
+                        status: 'expired',
+                      ))
+                  .copyWith(status: 'expired');
           _remainSeconds = 0;
         });
         showDunesToast(context, '二维码已过期，请重新获取');
@@ -152,11 +153,13 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
         showDunesToast(context, '微信助手已绑定');
         return;
       }
-      setState(() => _status = status.copyWith(
-            qrImageBase64: status.qrImageBase64 ?? _status?.qrImageBase64,
-            guideText: status.guideText ?? _status?.guideText,
-            expiresAt: status.expiresAt ?? _status?.expiresAt,
-          ));
+      setState(
+        () => _status = status.copyWith(
+          qrImageBase64: status.qrImageBase64 ?? _status?.qrImageBase64,
+          guideText: status.guideText ?? _status?.guideText,
+          expiresAt: status.expiresAt ?? _status?.expiresAt,
+        ),
+      );
     } catch (_) {
       // 轮询失败不打断流程，下一轮继续。
     }
@@ -202,10 +205,7 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
         showDunesToast(context, '已保存');
       } catch (_) {
         if (!mounted) return;
-        showDunesToast(
-          context,
-          '保存失败：${friendlyErrorText(e)}',
-        );
+        showDunesToast(context, '保存失败：${friendlyErrorText(e)}');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -226,7 +226,12 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('解绑', style: TextStyle(color: DunesColors.coral)),
+            child: Text(
+              '解绑',
+              style: TextStyle(
+                color: DunesColors.resolve(ctx, DunesColors.coral),
+              ),
+            ),
           ),
         ],
       ),
@@ -241,10 +246,7 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
       await _loadStatus();
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(
-        context,
-        friendlyErrorText(e, fallback: '解绑失败'),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '解绑失败'));
     } finally {
       if (mounted) setState(() => _unbinding = false);
     }
@@ -253,7 +255,11 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
         leading: BackButton(onPressed: widget.onBack),
         title: const Text('微信助手'),
@@ -287,9 +293,19 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -299,7 +315,8 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
             style: DunesTypography.sans(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           const SizedBox(height: 8),
@@ -308,7 +325,8 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
             style: DunesTypography.sans(
               fontSize: 14,
               height: 1.45,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
         ],
@@ -320,22 +338,33 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
           Text(
             _error!,
             textAlign: TextAlign.center,
-            style: DunesTypography.sans(fontSize: 14, color: DunesColors.text2),
+            style: DunesTypography.sans(
+              fontSize: 14,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
+            ),
           ),
           const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _loadStatus,
-            child: const Text('重试'),
-          ),
+          FilledButton(onPressed: _loadStatus, child: const Text('重试')),
         ],
       ),
     );
@@ -346,26 +375,45 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
-          const Icon(Icons.check_circle_rounded, size: 56, color: Color(0xFF07C160)),
+          Icon(
+            Icons.check_circle_rounded,
+            size: 56,
+            color: DunesColors.resolveNullable(context, Color(0xFF07C160)),
+          ),
           const SizedBox(height: 12),
           Text(
             '已绑定',
             style: DunesTypography.sans(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '状态：${status.status}',
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -374,15 +422,22 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
             style: DunesTypography.sans(
               fontSize: 14,
               height: 1.4,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
           const SizedBox(height: 20),
           OutlinedButton(
             onPressed: _unbinding ? null : _unbind,
             style: OutlinedButton.styleFrom(
-              foregroundColor: DunesColors.coral,
-              side: const BorderSide(color: DunesColors.coral),
+              foregroundColor: DunesColors.resolve(context, DunesColors.coral),
+              side: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.coral,
+                  role: DunesColorRole.border,
+                ),
+              ),
               minimumSize: const Size(double.infinity, 44),
             ),
             child: _unbinding
@@ -401,15 +456,26 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
   Widget _buildBindCard() {
     final bytes = _qrBytes;
     final guide = _status?.guideText?.trim();
-    final expired = _status?.isExpired == true ||
+    final expired =
+        _status?.isExpired == true ||
         (_remainSeconds <= 0 && bytes != null && _status?.expiresAt != null);
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -430,7 +496,8 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
                 '剩余 $_remainSeconds 秒',
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               )
             else if (expired)
@@ -438,7 +505,8 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
                 '二维码已过期',
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.coral,
+                  color: DunesColors.resolve(context, DunesColors.coral),
+                  context: context,
                 ),
               ),
             const SizedBox(height: 8),
@@ -450,26 +518,31 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
               style: DunesTypography.sans(
                 fontSize: 14,
                 height: 1.45,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
             const SizedBox(height: 18),
             FilledButton.icon(
               onPressed: (_saving || expired) ? null : _saveQr,
               icon: _saving
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                       ),
                     )
                   : const Icon(Icons.download_rounded),
               label: Text(_saving ? '保存中…' : '保存到相册'),
               style: FilledButton.styleFrom(
                 minimumSize: const Size(double.infinity, 46),
-                backgroundColor: const Color(0xFF07C160),
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFF07C160),
+                  role: DunesColorRole.surface,
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -486,7 +559,8 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
               style: DunesTypography.sans(
                 fontSize: 14,
                 height: 1.45,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
             const SizedBox(height: 20),
@@ -494,15 +568,19 @@ class _NativeWechatBotPageState extends State<NativeWechatBotPage> {
               onPressed: _startingQr ? null : _startQr,
               style: FilledButton.styleFrom(
                 minimumSize: const Size(double.infinity, 46),
-                backgroundColor: const Color(0xFF07C160),
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFF07C160),
+                  role: DunesColorRole.surface,
+                ),
               ),
               child: _startingQr
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                       ),
                     )
                   : const Text('获取二维码'),

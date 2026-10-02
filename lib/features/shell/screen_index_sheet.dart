@@ -207,7 +207,11 @@ class _GroupHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: _tagColor.withValues(alpha: 0.12),
+              color: DunesColors.resolveNullable(
+                context,
+                _tagColor.withValues(alpha: 0.12),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
@@ -215,7 +219,7 @@ class _GroupHeader extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: _tagColor,
+                color: DunesColors.resolveNullable(context, _tagColor),
                 letterSpacing: 0.3,
               ),
             ),
@@ -236,7 +240,11 @@ class _ScreenChip extends StatelessWidget {
     final palette =
         Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
     return Material(
-      color: palette.surfaceRaised,
+      color: DunesColors.resolveNullable(
+        context,
+        palette.surfaceRaised,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
@@ -254,7 +262,7 @@ class _ScreenChip extends StatelessWidget {
               Text(
                 info.id,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: DunesColors.accent,
+                  color: DunesColors.resolve(context, DunesColors.accent),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -266,7 +274,7 @@ class _ScreenChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: palette.text,
+                  color: DunesColors.resolveNullable(context, palette.text),
                 ),
               ),
             ],

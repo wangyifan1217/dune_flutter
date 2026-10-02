@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'proposal_archive_models.dart';
 import 'proposal_upload_config.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// 与 [ProposalUploadPage] 上传识别区一致的 Palette D 样式。
 class ProposalRecognitionColors {
@@ -50,7 +51,8 @@ class ProposalRecognitionView extends StatefulWidget {
   final Map<String, String> authenticatedImageHeaders;
 
   @override
-  State<ProposalRecognitionView> createState() => _ProposalRecognitionViewState();
+  State<ProposalRecognitionView> createState() =>
+      _ProposalRecognitionViewState();
 }
 
 class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
@@ -65,7 +67,8 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
   @override
   void didUpdateWidget(covariant ProposalRecognitionView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.initialExpandedSectionIds != widget.initialExpandedSectionIds) {
+    if (oldWidget.initialExpandedSectionIds !=
+        widget.initialExpandedSectionIds) {
       _expandedIds = {...widget.initialExpandedSectionIds};
     }
   }
@@ -94,22 +97,37 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
         const SizedBox(height: 10),
         _summaryCard(),
         const SizedBox(height: 18),
-        _badgeKicker(
-          '内容预览',
-          'PREVIEW · ${previewSections.length} SECTIONS',
-        ),
+        _badgeKicker('内容预览', 'PREVIEW · ${previewSections.length} SECTIONS'),
         const SizedBox(height: 10),
         if (previewSections.isEmpty)
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: ProposalRecognitionColors.card,
+              color: DunesColors.resolve(
+                context,
+                ProposalRecognitionColors.card,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: ProposalRecognitionColors.line2, width: 0.6),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  ProposalRecognitionColors.line2,
+                  role: DunesColorRole.border,
+                ),
+                width: 0.6,
+              ),
             ),
-            child: const Text(
+            child: Text(
               '未配置预览板块',
-              style: TextStyle(fontSize: 11, color: ProposalRecognitionColors.mute, height: 1.5),
+              style: TextStyle(
+                fontSize: 11,
+                color: DunesColors.resolve(
+                  context,
+                  ProposalRecognitionColors.mute,
+                ),
+                height: 1.5,
+              ),
             ),
           )
         else
@@ -144,7 +162,11 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
 
   Widget _excelPreviewButton() {
     return Material(
-      color: ProposalRecognitionColors.card,
+      color: DunesColors.resolve(
+        context,
+        ProposalRecognitionColors.card,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -153,7 +175,14 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: ProposalRecognitionColors.line2, width: 0.6),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                ProposalRecognitionColors.line2,
+                role: DunesColorRole.border,
+              ),
+              width: 0.6,
+            ),
           ),
           child: Row(
             children: [
@@ -161,13 +190,20 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: ProposalRecognitionColors.coral.withAlpha(18),
+                  color: DunesColors.resolve(
+                    context,
+                    ProposalRecognitionColors.coral,
+                    role: DunesColorRole.surface,
+                  ).withAlpha(18),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.table_chart_outlined,
                   size: 17,
-                  color: ProposalRecognitionColors.coral,
+                  color: DunesColors.resolve(
+                    context,
+                    ProposalRecognitionColors.coral,
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -179,9 +215,12 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
                       widget.fileName.isEmpty ? 'Excel 原文预览' : widget.fileName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: ProposalRecognitionColors.ink,
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalRecognitionColors.ink,
+                        ),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -190,19 +229,25 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
                       widget.fileSize.isEmpty
                           ? '打开完整工作簿 · 保留表格、图片与布局'
                           : '${widget.fileSize} · ${widget.sheetCount} sheet',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 9,
-                        color: ProposalRecognitionColors.mute,
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalRecognitionColors.mute,
+                        ),
                         fontFamily: 'monospace',
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 size: 18,
-                color: ProposalRecognitionColors.mute2,
+                color: DunesColors.resolve(
+                  context,
+                  ProposalRecognitionColors.mute2,
+                ),
               ),
             ],
           ),
@@ -221,20 +266,38 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
     }
     if (rows.isEmpty) {
       rows.add(
-        const Text(
+        Text(
           '未配置识别摘要字段（recognitionConfig.summaryFields）',
-          style: TextStyle(fontSize: 11, color: ProposalRecognitionColors.mute, height: 1.5),
+          style: TextStyle(
+            fontSize: 11,
+            color: DunesColors.resolve(context, ProposalRecognitionColors.mute),
+            height: 1.5,
+          ),
         ),
       );
     }
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: ProposalRecognitionColors.card,
+        color: DunesColors.resolve(
+          context,
+          ProposalRecognitionColors.card,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: ProposalRecognitionColors.line2, width: 0.6),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            ProposalRecognitionColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.6,
+        ),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
+      ),
     );
   }
 
@@ -270,12 +333,24 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: ProposalRecognitionColors.card,
+        color: DunesColors.resolve(
+          context,
+          ProposalRecognitionColors.card,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isFinance
-              ? ProposalRecognitionColors.coral.withAlpha(90)
-              : ProposalRecognitionColors.line2,
+              ? DunesColors.resolve(
+                  context,
+                  ProposalRecognitionColors.coral,
+                  role: DunesColorRole.border,
+                ).withAlpha(90)
+              : DunesColors.resolve(
+                  context,
+                  ProposalRecognitionColors.line2,
+                  role: DunesColorRole.border,
+                ),
           width: 0.6,
         ),
       ),
@@ -285,7 +360,11 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
         children: [
           Material(
             color: isFinance
-                ? ProposalRecognitionColors.coral.withAlpha(13)
+                ? DunesColors.resolve(
+                    context,
+                    ProposalRecognitionColors.coral,
+                    role: DunesColorRole.surface,
+                  ).withAlpha(13)
                 : Colors.transparent,
             child: InkWell(
               onTap: () => _toggleSection(section.id),
@@ -293,8 +372,15 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                 decoration: BoxDecoration(
                   border: isFinance
-                      ? const Border(
-                          left: BorderSide(color: ProposalRecognitionColors.coral, width: 2),
+                      ? Border(
+                          left: BorderSide(
+                            color: DunesColors.resolve(
+                              context,
+                              ProposalRecognitionColors.coral,
+                              role: DunesColorRole.border,
+                            ),
+                            width: 2,
+                          ),
                         )
                       : null,
                 ),
@@ -310,37 +396,59 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
                               fontFamily: 'monospace',
                               fontSize: 9,
                               color: isFinance
-                                  ? ProposalRecognitionColors.coral
-                                  : ProposalRecognitionColors.mute2,
+                                  ? DunesColors.resolve(
+                                      context,
+                                      ProposalRecognitionColors.coral,
+                                    )
+                                  : DunesColors.resolve(
+                                      context,
+                                      ProposalRecognitionColors.mute2,
+                                    ),
                               letterSpacing: 0.6,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                        if (section.orderCn.isNotEmpty) const SizedBox(width: 6),
+                        if (section.orderCn.isNotEmpty)
+                          const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             section.title,
                             style: TextStyle(
                               fontSize: 12,
-                              color: ProposalRecognitionColors.ink,
-                              fontWeight: isFinance ? FontWeight.w700 : FontWeight.w600,
+                              color: DunesColors.resolve(
+                                context,
+                                ProposalRecognitionColors.ink,
+                              ),
+                              fontWeight: isFinance
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
                             ),
                           ),
                         ),
                         if (isFinance) ...[
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
-                              color: ProposalRecognitionColors.coral.withAlpha(38),
+                              color: DunesColors.resolve(
+                                context,
+                                ProposalRecognitionColors.coral,
+                                role: DunesColorRole.surface,
+                              ).withAlpha(38),
                               borderRadius: BorderRadius.circular(2),
                             ),
-                            child: const Text(
+                            child: Text(
                               '灯塔基线',
                               style: TextStyle(
                                 fontFamily: 'monospace',
                                 fontSize: 8,
-                                color: ProposalRecognitionColors.coral,
+                                color: DunesColors.resolve(
+                                  context,
+                                  ProposalRecognitionColors.coral,
+                                ),
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.4,
                               ),
@@ -354,8 +462,14 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
                             Icons.keyboard_arrow_down_rounded,
                             size: 18,
                             color: isFinance
-                                ? ProposalRecognitionColors.coral
-                                : ProposalRecognitionColors.mute2,
+                                ? DunesColors.resolve(
+                                    context,
+                                    ProposalRecognitionColors.coral,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    ProposalRecognitionColors.mute2,
+                                  ),
                           ),
                         ),
                       ],
@@ -364,10 +478,13 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
                       const SizedBox(height: 4),
                       Text(
                         section.preview,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 10,
-                          color: ProposalRecognitionColors.mute,
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalRecognitionColors.mute,
+                          ),
                           height: 1.5,
                           letterSpacing: 0.2,
                         ),
@@ -411,15 +528,22 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: ProposalRecognitionColors.coral.withAlpha(31),
+            color: DunesColors.resolve(
+              context,
+              ProposalRecognitionColors.coral,
+              role: DunesColorRole.surface,
+            ).withAlpha(31),
             borderRadius: BorderRadius.circular(3),
           ),
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'monospace',
               fontSize: 8,
-              color: ProposalRecognitionColors.coral,
+              color: DunesColors.resolve(
+                context,
+                ProposalRecognitionColors.coral,
+              ),
               letterSpacing: 1,
               fontWeight: FontWeight.w600,
             ),
@@ -428,44 +552,75 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
         const SizedBox(width: 6),
         Text(
           subLabel,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'monospace',
             fontSize: 8.5,
-            color: ProposalRecognitionColors.mute2,
+            color: DunesColors.resolve(
+              context,
+              ProposalRecognitionColors.mute2,
+            ),
             letterSpacing: 1.4,
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(width: 8),
-        Expanded(child: Container(height: 0.5, color: ProposalRecognitionColors.line)),
+        Expanded(
+          child: Container(
+            height: 0.5,
+            color: DunesColors.resolve(
+              context,
+              ProposalRecognitionColors.line,
+              role: DunesColorRole.surface,
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _fieldRow(String label, {String? valueText, String? valueMono, Widget? child}) {
+  Widget _fieldRow(
+    String label, {
+    String? valueText,
+    String? valueMono,
+    Widget? child,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: ProposalRecognitionColors.mute)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: DunesColors.resolve(context, ProposalRecognitionColors.mute),
+          ),
+        ),
         const Spacer(),
         if (child != null)
-          Flexible(child: Align(alignment: Alignment.centerRight, child: child))
+          Flexible(
+            child: Align(alignment: Alignment.centerRight, child: child),
+          )
         else if (valueMono != null)
           Text(
             valueMono,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'monospace',
               fontSize: 11,
-              color: ProposalRecognitionColors.ink,
+              color: DunesColors.resolve(
+                context,
+                ProposalRecognitionColors.ink,
+              ),
               fontWeight: FontWeight.w600,
             ),
           )
         else
           Text(
             valueText ?? '—',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
-              color: ProposalRecognitionColors.ink,
+              color: DunesColors.resolve(
+                context,
+                ProposalRecognitionColors.ink,
+              ),
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -481,13 +636,27 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
           width: 78,
           child: Text(
             label,
-            style: const TextStyle(fontSize: 10.5, color: ProposalRecognitionColors.mute, letterSpacing: 0.1),
+            style: TextStyle(
+              fontSize: 10.5,
+              color: DunesColors.resolve(
+                context,
+                ProposalRecognitionColors.mute,
+              ),
+              letterSpacing: 0.1,
+            ),
           ),
         ),
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(fontSize: 10.5, color: ProposalRecognitionColors.ink, height: 1.5),
+            style: TextStyle(
+              fontSize: 10.5,
+              color: DunesColors.resolve(
+                context,
+                ProposalRecognitionColors.ink,
+              ),
+              height: 1.5,
+            ),
           ),
         ),
       ],
@@ -529,10 +698,8 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
     showDialog<void>(
       context: context,
       barrierColor: Colors.black87,
-      builder: (ctx) => _ProposalArchiveImagePreview(
-        src: src,
-        headers: headers,
-      ),
+      builder: (ctx) =>
+          _ProposalArchiveImagePreview(src: src, headers: headers),
     );
   }
 
@@ -540,15 +707,19 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
       decoration: BoxDecoration(
-        color: ProposalRecognitionColors.coral.withAlpha(31),
+        color: DunesColors.resolve(
+          context,
+          ProposalRecognitionColors.coral,
+          role: DunesColorRole.surface,
+        ).withAlpha(31),
         borderRadius: BorderRadius.circular(3),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'monospace',
           fontSize: 9.5,
-          color: ProposalRecognitionColors.coral,
+          color: DunesColors.resolve(context, ProposalRecognitionColors.coral),
           fontWeight: FontWeight.w600,
           letterSpacing: 0.4,
         ),
@@ -560,15 +731,19 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
-        color: ProposalRecognitionColors.ink.withAlpha(14),
+        color: DunesColors.resolve(
+          context,
+          ProposalRecognitionColors.ink,
+          role: DunesColorRole.surface,
+        ).withAlpha(14),
         borderRadius: BorderRadius.circular(3),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'monospace',
           fontSize: 9,
-          color: ProposalRecognitionColors.ink,
+          color: DunesColors.resolve(context, ProposalRecognitionColors.ink),
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -590,7 +765,11 @@ class _ProposalArchiveImageThumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: ProposalRecognitionColors.cardAlt,
+      color: DunesColors.resolve(
+        context,
+        ProposalRecognitionColors.cardAlt,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: onTap,
@@ -598,13 +777,22 @@ class _ProposalArchiveImageThumb extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: ProposalRecognitionColors.line2, width: 0.6),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                ProposalRecognitionColors.line2,
+                role: DunesColorRole.border,
+              ),
+              width: 0.6,
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(5.4)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(5.4),
+                ),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 360),
                   child: Image.network(
@@ -616,25 +804,31 @@ class _ProposalArchiveImageThumb extends StatelessWidget {
                     errorBuilder: (_, _, _) => Container(
                       height: 96,
                       alignment: Alignment.center,
-                      child: const Text(
+                      child: Text(
                         '图片加载失败',
                         style: TextStyle(
                           fontSize: 10,
-                          color: ProposalRecognitionColors.mute,
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalRecognitionColors.mute,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 child: Text(
                   '点击放大查看',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 10,
-                    color: ProposalRecognitionColors.mute,
+                    color: DunesColors.resolve(
+                      context,
+                      ProposalRecognitionColors.mute,
+                    ),
                     letterSpacing: 0.2,
                   ),
                 ),
@@ -678,9 +872,12 @@ class _ProposalArchiveImagePreview extends StatelessWidget {
                 src,
                 headers: headers.isEmpty ? null : headers,
                 fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => const Text(
+                errorBuilder: (_, _, _) => Text(
                   '图片加载失败',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, Colors.white70),
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ),
@@ -690,18 +887,24 @@ class _ProposalArchiveImagePreview extends StatelessWidget {
             right: 8,
             child: IconButton(
               onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close, color: Colors.white),
+              icon: Icon(
+                Icons.close,
+                color: DunesColors.resolve(context, Colors.white),
+              ),
               tooltip: '关闭',
             ),
           ),
-          const Positioned(
+          Positioned(
             left: 0,
             right: 0,
             bottom: 16,
             child: Text(
               '双指缩放 · 点击空白处关闭',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 11),
+              style: TextStyle(
+                color: DunesColors.resolve(context, Colors.white54),
+                fontSize: 11,
+              ),
             ),
           ),
         ],

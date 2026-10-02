@@ -22,12 +22,20 @@ class NativeQianjiProjectTasksPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final detail = QianjiProjectCatalog.detailFor(project);
     final all = [...detail.myTasks, ...detail.otherTasks];
-    final running = all.where((t) => t.status == QianjiTaskStatus.running).length;
+    final running = all
+        .where((t) => t.status == QianjiTaskStatus.running)
+        .length;
     final done = all.where((t) => t.status == QianjiTaskStatus.done).length;
-    final pending = all.where((t) => t.status == QianjiTaskStatus.pending).length;
+    final pending = all
+        .where((t) => t.status == QianjiTaskStatus.pending)
+        .length;
 
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -41,10 +49,26 @@ class NativeQianjiProjectTasksPage extends StatelessWidget {
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      _sum('${all.length}', '全部', DunesColors.text3),
-                      _sum('$running', '进行中', QianjiPerfTheme.purple),
-                      _sum('$done', '已完成', DunesColors.green),
-                      _sum('$pending', '待开始', DunesColors.amber),
+                      _sum(
+                        '${all.length}',
+                        '全部',
+                        DunesColors.resolve(context, DunesColors.text3),
+                      ),
+                      _sum(
+                        '$running',
+                        '进行中',
+                        DunesColors.resolve(context, QianjiPerfTheme.purple),
+                      ),
+                      _sum(
+                        '$done',
+                        '已完成',
+                        DunesColors.resolve(context, DunesColors.green),
+                      ),
+                      _sum(
+                        '$pending',
+                        '待开始',
+                        DunesColors.resolve(context, DunesColors.amber),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 14),
@@ -124,7 +148,10 @@ class NativeQianjiProjectTasksPage extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               l,
-              style: DunesTypography.sans(fontSize: 10, color: DunesColors.text3),
+              style: DunesTypography.sans(
+                fontSize: 10,
+                color: DunesColors.text3,
+              ),
             ),
           ],
         ),
@@ -145,10 +172,13 @@ class _Banner extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1D9E75), Color(0xFF56C9A0)],
+          colors: [
+            DunesColors.resolve(context, Color(0xFF1D9E75)),
+            DunesColors.resolve(context, Color(0xFF56C9A0)),
+          ],
         ),
       ),
       child: Column(
@@ -156,7 +186,11 @@ class _Banner extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(detail.project.icon, size: 16, color: Colors.white),
+              Icon(
+                detail.project.icon,
+                size: 16,
+                color: DunesColors.resolve(context, Colors.white),
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -164,7 +198,8 @@ class _Banner extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
+                    context: context,
                   ),
                 ),
               ),
@@ -179,21 +214,33 @@ class _Banner extends StatelessWidget {
                 '我的角色：${detail.role}',
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: Colors.white.withValues(alpha: 0.9),
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                  ).withValues(alpha: 0.9),
+                  context: context,
                 ),
               ),
               Text(
                 detail.deadline,
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: Colors.white.withValues(alpha: 0.9),
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                  ).withValues(alpha: 0.9),
+                  context: context,
                 ),
               ),
               Text(
                 detail.branch,
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: Colors.white.withValues(alpha: 0.9),
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                  ).withValues(alpha: 0.9),
+                  context: context,
                 ),
               ),
             ],
@@ -205,11 +252,7 @@ class _Banner extends StatelessWidget {
 }
 
 class _TaskCard extends StatelessWidget {
-  const _TaskCard({
-    required this.task,
-    required this.onTap,
-    this.onComplete,
-  });
+  const _TaskCard({required this.task, required this.onTap, this.onComplete});
 
   final QianjiTaskItem task;
   final VoidCallback onTap;
@@ -218,18 +261,37 @@ class _TaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusBg = switch (task.status) {
-      QianjiTaskStatus.running => QianjiPerfTheme.purpleSoft,
-      QianjiTaskStatus.done => DunesColors.greenSoft,
-      QianjiTaskStatus.pending => DunesColors.bgSoft,
+      QianjiTaskStatus.running => DunesColors.resolve(
+        context,
+        QianjiPerfTheme.purpleSoft,
+      ),
+      QianjiTaskStatus.done => DunesColors.resolve(
+        context,
+        DunesColors.greenSoft,
+      ),
+      QianjiTaskStatus.pending => DunesColors.resolve(
+        context,
+        DunesColors.bgSoft,
+      ),
     };
     final statusFg = switch (task.status) {
-      QianjiTaskStatus.running => QianjiPerfTheme.purple,
-      QianjiTaskStatus.done => DunesColors.green,
-      QianjiTaskStatus.pending => DunesColors.text3,
+      QianjiTaskStatus.running => DunesColors.resolve(
+        context,
+        QianjiPerfTheme.purple,
+      ),
+      QianjiTaskStatus.done => DunesColors.resolve(context, DunesColors.green),
+      QianjiTaskStatus.pending => DunesColors.resolve(
+        context,
+        DunesColors.text3,
+      ),
     };
 
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -241,8 +303,16 @@ class _TaskCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: task.mine && task.status == QianjiTaskStatus.running
-                  ? QianjiPerfTheme.purpleLine
-                  : DunesColors.borderSoft,
+                  ? DunesColors.resolve(
+                      context,
+                      QianjiPerfTheme.purpleLine,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Column(
@@ -257,15 +327,23 @@ class _TaskCard extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
-                      color: statusBg,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        statusBg,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -274,6 +352,7 @@ class _TaskCard extends StatelessWidget {
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
                         color: statusFg,
+                        context: context,
                       ),
                     ),
                   ),
@@ -290,7 +369,8 @@ class _TaskCard extends StatelessWidget {
                       task.assignee!,
                       style: DunesTypography.sans(
                         fontSize: 11,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
                       ),
                     ),
                   for (final tag in task.tags)
@@ -300,14 +380,22 @@ class _TaskCard extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: DunesColors.bgSoft,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.bgSoft,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(5),
                       ),
                       child: Text(
                         tag,
                         style: DunesTypography.sans(
                           fontSize: 10,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ),
@@ -318,7 +406,10 @@ class _TaskCard extends StatelessWidget {
                 task.due,
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: task.warn ? DunesColors.coral : DunesColors.text3,
+                  color: task.warn
+                      ? DunesColors.resolve(context, DunesColors.coral)
+                      : DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
               if (onComplete != null) ...[
@@ -330,8 +421,17 @@ class _TaskCard extends StatelessWidget {
                     icon: const Icon(Icons.check_circle_outline, size: 16),
                     label: const Text('标记为已完成'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: QianjiPerfTheme.purple,
-                      side: const BorderSide(color: QianjiPerfTheme.purpleLine),
+                      foregroundColor: DunesColors.resolve(
+                        context,
+                        QianjiPerfTheme.purple,
+                      ),
+                      side: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          QianjiPerfTheme.purpleLine,
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -355,9 +455,19 @@ class _FeedBlock extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,7 +477,8 @@ class _FeedBlock extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           const SizedBox(height: 10),
@@ -382,15 +493,23 @@ class _FeedBlock extends StatelessWidget {
                     height: 22,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: QianjiPerfTheme.purpleSoft,
+                      color: DunesColors.resolve(
+                        context,
+                        QianjiPerfTheme.purpleSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       shape: BoxShape.circle,
                     ),
                     child: Text(
                       f.up ? '↑' : '✓',
                       style: DunesTypography.sans(
                         fontSize: 11,
-                        color: QianjiPerfTheme.purple,
+                        color: DunesColors.resolve(
+                          context,
+                          QianjiPerfTheme.purple,
+                        ),
                         fontWeight: FontWeight.w700,
+                        context: context,
                       ),
                     ),
                   ),
@@ -406,7 +525,11 @@ class _FeedBlock extends StatelessWidget {
                               style: DunesTypography.sans(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: DunesColors.text,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text,
+                                ),
+                                context: context,
                               ),
                             ),
                             const Spacer(),
@@ -414,7 +537,11 @@ class _FeedBlock extends StatelessWidget {
                               f.time,
                               style: DunesTypography.sans(
                                 fontSize: 11,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                                context: context,
                               ),
                             ),
                           ],
@@ -423,7 +550,11 @@ class _FeedBlock extends StatelessWidget {
                           f.type,
                           style: DunesTypography.sans(
                             fontSize: 11,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -432,7 +563,11 @@ class _FeedBlock extends StatelessWidget {
                           style: DunesTypography.sans(
                             fontSize: 12,
                             height: 1.4,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],

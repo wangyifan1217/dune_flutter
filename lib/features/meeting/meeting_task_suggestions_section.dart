@@ -244,8 +244,16 @@ class _MeetingTaskSuggestionsSectionState
               FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: destructive
-                      ? DunesColors.coral
-                      : DunesColors.brandPurple,
+                      ? DunesColors.resolve(
+                          ctx,
+                          DunesColors.coral,
+                          role: DunesColorRole.surface,
+                        )
+                      : DunesColors.resolve(
+                          ctx,
+                          DunesColors.brandPurple,
+                          role: DunesColorRole.surface,
+                        ),
                 ),
                 onPressed: () => Navigator.pop(ctx, true),
                 child: Text(confirmLabel),
@@ -268,19 +276,29 @@ class _MeetingTaskSuggestionsSectionState
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.task_alt_outlined,
                 size: 18,
-                color: DunesColors.brandPurple,
+                color: DunesColors.resolve(context, DunesColors.brandPurple),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -289,7 +307,8 @@ class _MeetingTaskSuggestionsSectionState
                   style: DunesTypography.sans(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
               ),
@@ -305,7 +324,8 @@ class _MeetingTaskSuggestionsSectionState
             '处理也会出现在任务助手，不必回到这场会议。',
             style: DunesTypography.sans(
               fontSize: 12,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
             ),
           ),
           const SizedBox(height: 8),
@@ -314,12 +334,15 @@ class _MeetingTaskSuggestionsSectionState
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  const SizedBox(
+                  SizedBox(
                     width: 13,
                     height: 13,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: DunesColors.brandPurple,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -327,7 +350,11 @@ class _MeetingTaskSuggestionsSectionState
                     'AI 正在分析纪要，识别待办与相关任务…',
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: DunesColors.brandPurpleDeep,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurpleDeep,
+                      ),
+                      context: context,
                     ),
                   ),
                 ],
@@ -339,7 +366,8 @@ class _MeetingTaskSuggestionsSectionState
               style: DunesTypography.sans(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
             const SizedBox(height: 6),
@@ -348,10 +376,13 @@ class _MeetingTaskSuggestionsSectionState
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.check_circle_outline,
                       size: 15,
-                      color: DunesColors.readReceipt,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.readReceipt,
+                      ),
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -361,7 +392,11 @@ class _MeetingTaskSuggestionsSectionState
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 13,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                          context: context,
                         ),
                       ),
                     ),
@@ -369,7 +404,8 @@ class _MeetingTaskSuggestionsSectionState
                       '${t.progressPct}%',
                       style: DunesTypography.sans(
                         fontSize: 12,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
                       ),
                     ),
                   ],
@@ -389,7 +425,11 @@ class _MeetingTaskSuggestionsSectionState
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -400,7 +440,8 @@ class _MeetingTaskSuggestionsSectionState
             style: DunesTypography.sans(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           if (sug.suggestedDescription.trim().isNotEmpty) ...[
@@ -411,8 +452,9 @@ class _MeetingTaskSuggestionsSectionState
               overflow: TextOverflow.ellipsis,
               style: DunesTypography.sans(
                 fontSize: 12,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
                 height: 1.4,
+                context: context,
               ),
             ),
           ],
@@ -424,7 +466,8 @@ class _MeetingTaskSuggestionsSectionState
               overflow: TextOverflow.ellipsis,
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],
@@ -433,7 +476,11 @@ class _MeetingTaskSuggestionsSectionState
             children: [
               FilledButton(
                 style: FilledButton.styleFrom(
-                  backgroundColor: DunesColors.brandPurple,
+                  backgroundColor: DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurple,
+                    role: DunesColorRole.surface,
+                  ),
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                 ),
@@ -443,7 +490,10 @@ class _MeetingTaskSuggestionsSectionState
               const Spacer(),
               TextButton(
                 style: TextButton.styleFrom(
-                  foregroundColor: DunesColors.text3,
+                  foregroundColor: DunesColors.resolve(
+                    context,
+                    DunesColors.text3,
+                  ),
                   visualDensity: VisualDensity.compact,
                 ),
                 onPressed: _busy ? null : () => _dismiss(sug),

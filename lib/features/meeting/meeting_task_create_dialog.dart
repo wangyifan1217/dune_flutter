@@ -157,7 +157,11 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
     final picked = await showModalBottomSheet<TaskAssignee>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -172,7 +176,7 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                   padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
                   child: Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -188,7 +192,10 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                               '自己或有权限分配的下级',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  ctx,
+                                  DunesColors.text3,
+                                ),
                               ),
                             ),
                           ],
@@ -203,10 +210,15 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                 ),
                 Expanded(
                   child: items.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             '暂可先创建给自己',
-                            style: TextStyle(color: DunesColors.text3),
+                            style: TextStyle(
+                              color: DunesColors.resolve(
+                                ctx,
+                                DunesColors.text3,
+                              ),
+                            ),
                           ),
                         )
                       : ListView.builder(
@@ -233,9 +245,12 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                                   ? null
                                   : Text(a.departmentName),
                               trailing: a.id == _ownerId
-                                  ? const Icon(
+                                  ? Icon(
                                       Icons.check_circle,
-                                      color: DunesColors.brandPurple,
+                                      color: DunesColors.resolve(
+                                        ctx,
+                                        DunesColors.brandPurple,
+                                      ),
                                     )
                                   : null,
                               onTap: () => Navigator.pop(ctx, a),
@@ -326,7 +341,11 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
     return InputDecoration(
       hintText: hint,
       filled: true,
-      fillColor: const Color(0xFFF5F6F8),
+      fillColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide.none,
@@ -349,13 +368,27 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE8E5EF)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8E5EF),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 19, color: DunesColors.brandPurple),
+            Icon(
+              icon,
+              size: 19,
+              color: DunesColors.resolve(context, DunesColors.brandPurple),
+            ),
             const SizedBox(width: 11),
             Expanded(
               child: Column(
@@ -363,10 +396,10 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -375,16 +408,18 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: placeholder ? DunesColors.text3 : DunesColors.text,
+                      color: placeholder
+                          ? DunesColors.resolve(context, DunesColors.text3)
+                          : DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               Icons.chevron_right_rounded,
               size: 20,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
           ],
         ),
@@ -398,18 +433,18 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
           ),
         ),
         if (required) ...[
           const SizedBox(width: 4),
-          const Text(
+          Text(
             '*',
             style: TextStyle(
-              color: Color(0xFFE35D6A),
+              color: DunesColors.resolveNullable(context, Color(0xFFE35D6A)),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -432,9 +467,19 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE8E5EF)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8E5EF),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Row(
           children: [
@@ -454,10 +499,10 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                 children: [
                   Text(
                     _ownerName,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                   if (selected?.departmentName.isNotEmpty == true)
@@ -465,17 +510,17 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                       selected!.departmentName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               Icons.swap_horiz_rounded,
-              color: DunesColors.brandPurple,
+              color: DunesColors.resolve(context, DunesColors.brandPurple),
               size: 20,
             ),
           ],
@@ -491,7 +536,9 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    final color = selected ? DunesColors.brandPurple : DunesColors.text2;
+    final color = selected
+        ? DunesColors.resolve(context, DunesColors.brandPurple)
+        : DunesColors.resolve(context, DunesColors.text2);
     return Expanded(
       child: InkWell(
         onTap: onTap,
@@ -500,18 +547,40 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
           duration: const Duration(milliseconds: 160),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFFF2EDFF) : Colors.white,
+            color: selected
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFF2EDFF),
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: selected
-                  ? DunesColors.brandPurple
-                  : const Color(0xFFE8E5EF),
+                  ? DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8E5EF),
+                      role: DunesColorRole.border,
+                    ),
               width: selected ? 1.4 : 1,
             ),
           ),
           child: Row(
             children: [
-              Icon(icon, color: color, size: 20),
+              Icon(
+                icon,
+                color: DunesColors.resolveNullable(context, color),
+                size: 20,
+              ),
               const SizedBox(width: 9),
               Expanded(
                 child: Column(
@@ -525,8 +594,11 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: selected
-                            ? DunesColors.brandPurple
-                            : DunesColors.text,
+                            ? DunesColors.resolve(
+                                context,
+                                DunesColors.brandPurple,
+                              )
+                            : DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -534,20 +606,20 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                       subtitle,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
                         height: 1.25,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],
                 ),
               ),
               if (selected)
-                const Icon(
+                Icon(
                   Icons.check_circle,
                   size: 17,
-                  color: DunesColors.brandPurple,
+                  color: DunesColors.resolve(context, DunesColors.brandPurple),
                 ),
             ],
           ),
@@ -569,20 +641,43 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
         width: width,
         height: height,
         child: Material(
-          color: const Color(0xFFFCFBFE),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFFCFBFE),
+            role: DunesColorRole.surface,
+          ),
           clipBehavior: Clip.antiAlias,
           borderRadius: BorderRadius.circular(24),
           child: Column(
             children: [
               Container(
                 padding: const EdgeInsets.fromLTRB(20, 17, 10, 16),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFFF4EFFF), Color(0xFFFCFBFE)],
+                    colors: [
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFF4EFFF),
+                        role: DunesColorRole.surface,
+                      ),
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFFCFBFE),
+                        role: DunesColorRole.surface,
+                      ),
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  border: Border(bottom: BorderSide(color: Color(0xFFECE6F5))),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFECE6F5),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -590,12 +685,19 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: DunesColors.brandPurple.withValues(alpha: 0.12),
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                          role: DunesColorRole.surface,
+                        ).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.event_note_rounded,
-                        color: DunesColors.brandPurple,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -605,10 +707,13 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                         children: [
                           Text(
                             heading,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 19,
                               fontWeight: FontWeight.w800,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -616,9 +721,12 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                             _batch
                                 ? '来自会议纪要 · ${widget.batchCount} 项建议'
                                 : '来自会议纪要的任务建议',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
                             ),
                           ),
                         ],
@@ -630,9 +738,9 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                     IconButton(
                       tooltip: '关闭',
                       onPressed: () => Navigator.pop(context),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.close_rounded,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],
@@ -674,16 +782,23 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF3F0FA),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFF3F0FA),
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.info_outline_rounded,
                               size: 17,
-                              color: DunesColors.brandPurple,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.brandPurple,
+                              ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
@@ -691,9 +806,12 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                                 _linkExisting
                                     ? '会议建议会作为子任务挂到主目标下。'
                                     : '会议建议会创建为新的主目标。',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: DunesColors.text2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text2,
+                                  ),
                                   height: 1.35,
                                 ),
                               ),
@@ -758,9 +876,19 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFE8E5EF)),
+                          border: Border.all(
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFE8E5EF),
+                              role: DunesColorRole.border,
+                            ),
+                          ),
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
@@ -819,23 +947,33 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                             vertical: 10,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFFF1F2),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFFFF1F2),
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.error_outline_rounded,
                                 size: 17,
-                                color: Color(0xFFE35D6A),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFFE35D6A),
+                                ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   _error!,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
-                                    color: Color(0xFFE35D6A),
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      Color(0xFFE35D6A),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -849,8 +987,16 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
               ),
               Container(
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-                decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: Color(0xFFECE8F0))),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFECE8F0),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -859,8 +1005,17 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                         onPressed: () => Navigator.pop(context),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(46),
-                          foregroundColor: DunesColors.text2,
-                          side: const BorderSide(color: Color(0xFFE2DFE8)),
+                          foregroundColor: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                          side: BorderSide(
+                            color: DunesColors.resolve(
+                              context,
+                              Color(0xFFE2DFE8),
+                              role: DunesColorRole.border,
+                            ),
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
@@ -878,7 +1033,11 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                           _batch ? '创建 ${widget.batchCount} 项' : '确认创建',
                         ),
                         style: FilledButton.styleFrom(
-                          backgroundColor: DunesColors.brandPurple,
+                          backgroundColor: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                            role: DunesColorRole.surface,
+                          ),
                           minimumSize: const Size.fromHeight(46),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),

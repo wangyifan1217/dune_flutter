@@ -11,10 +11,7 @@ import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
 
 class UrgeSuggestTarget {
-  const UrgeSuggestTarget({
-    required this.userId,
-    required this.displayName,
-  });
+  const UrgeSuggestTarget({required this.userId, required this.displayName});
 
   final int userId;
   final String displayName;
@@ -109,7 +106,8 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
           final pending = step.decision.trim().isEmpty;
           if (!pending) continue;
           final inCurrentList = currentNos.contains(step.stepNo);
-          final current = step.isCurrent == true ||
+          final current =
+              step.isCurrent == true ||
               inCurrentList ||
               (trail.isParallel && pending);
           if (!current) continue;
@@ -183,11 +181,7 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(
-        context,
-        friendlyErrorText(e),
-        kind: DunesToastKind.error,
-      );
+      showDunesToast(context, friendlyErrorText(e), kind: DunesToastKind.error);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -211,7 +205,8 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
                   style: DunesTypography.sans(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
               ),
@@ -221,7 +216,8 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
                   '将统一发送：${_includeCard ? '审批名片 + ' : ''}催办话术',
                   style: DunesTypography.sans(
                     fontSize: 12.5,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -235,7 +231,8 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
                       style: DunesTypography.sans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -244,11 +241,16 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
                       maxLines: 4,
                       style: DunesTypography.sans(
                         fontSize: 14,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: DunesColors.brandPurpleSoft,
+                        fillColor: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurpleSoft,
+                          role: DunesColorRole.surface,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -259,12 +261,16 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
                       value: _includeCard,
-                      activeColor: DunesColors.brandPurple,
+                      activeColor: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
+                      ),
                       title: Text(
                         '同时发送审批名片',
                         style: DunesTypography.sans(
                           fontSize: 13.5,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                       onChanged: _sending
@@ -280,7 +286,11 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
                             style: DunesTypography.sans(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -308,7 +318,11 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
                           '未找到当前审批人，可点「追加会话」选择私聊/群聊发送',
                           style: DunesTypography.sans(
                             fontSize: 12.5,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
                         ),
                       )
@@ -318,13 +332,20 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
                         return CheckboxListTile(
                           value: selected,
                           contentPadding: EdgeInsets.zero,
-                          activeColor: DunesColors.brandPurple,
+                          activeColor: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                          ),
                           controlAffinity: ListTileControlAffinity.trailing,
                           title: Text(
                             e.value,
                             style: DunesTypography.sans(
                               fontSize: 14,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
+                              context: context,
                             ),
                           ),
                           onChanged: _sending
@@ -348,19 +369,23 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
                 child: FilledButton(
                   onPressed: _sending ? null : _send,
                   style: FilledButton.styleFrom(
-                    backgroundColor: DunesColors.brandPurple,
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurple,
+                      role: DunesColorRole.surface,
+                    ),
                     minimumSize: const Size.fromHeight(44),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   child: _sending
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: DunesColors.resolve(context, Colors.white),
                           ),
                         )
                       : Text(
@@ -368,7 +393,8 @@ class _UrgeSendSheetState extends State<_UrgeSendSheet> {
                           style: DunesTypography.sans(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
-                            color: Colors.white,
+                            color: DunesColors.resolve(context, Colors.white),
+                            context: context,
                           ),
                         ),
                 ),

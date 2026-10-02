@@ -119,22 +119,22 @@ TaskTodoConfirmCopy taskTodoConfirmCopy(
   final loan = _isLoanRequestItem(item);
   final adminProc = taskTodoIsAdminProcurement(item);
   final body = switch (action) {
-    'PAY' => loan
-        ? '确认后进入「已付款」待办。完成已付款并填写实付金额后，才会进入资金借调。不重审。'
-        : adminProc
-            ? '确认后进入「已付款」待办（填实付金额）。不重审。'
-            : '确认后进入「已付款」待办（填实付金额和凭证）。不重审。',
-    'MARK_PAID' => loan
-        ? '提交实付金额和支付凭证后进入资金借调，借出金额以实付为准。不重审。'
-        : adminProc
-            ? '提交实付金额后，按先票/先款进入核验或补票。不重审。'
-            : '提交实付金额和支付凭证后，按先票/先款进入核验或补票。不重审。',
+    'PAY' =>
+      loan
+          ? '确认后进入「已付款」待办。完成已付款并填写实付金额后，才会进入资金借调。不重审。'
+          : adminProc
+          ? '确认后进入「已付款」待办（填实付金额）。不重审。'
+          : '确认后进入「已付款」待办（填实付金额和凭证）。不重审。',
+    'MARK_PAID' =>
+      loan
+          ? '提交实付金额和支付凭证后进入资金借调，借出金额以实付为准。不重审。'
+          : adminProc
+          ? '提交实付金额后，按先票/先款进入核验或补票。不重审。'
+          : '提交实付金额和支付凭证后，按先票/先款进入核验或补票。不重审。',
     'UPLOAD_INVOICE' => '请上传发票文件（可多张，电脑可拖拽）。提交后核验人会收到「核验发票」。不重审。',
     'ISSUE_INVOICE' => '请上传已开具的发票文件（可多张，电脑可拖拽）。提交后写入原单，不重新走审批。',
     'SEAL' => '确认盖章后，合同用印进入「填写快递单号」。不重审。',
-    'REPAY' => loan
-        ? '提交还款金额后冲减资金借调剩余未还。不重审。'
-        : '提交还款金额和凭证后关闭本条待办。不重审。',
+    'REPAY' => loan ? '提交还款金额后冲减资金借调剩余未还。不重审。' : '提交还款金额和凭证后关闭本条待办。不重审。',
     'OPEN_ACCOUNT' => '请回填开户信息到本单。提交后抄送出纳，不重审。',
     _ => '确认完成该待办？提交后写入原单，不重新走审批。',
   };
@@ -526,10 +526,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
                           ? null
                           : _fieldValues[key],
                       decoration: InputDecoration(
-                        labelText: _taskFieldLabel(
-                          key,
-                          defs: widget.fieldDefs,
-                        ),
+                        labelText: _taskFieldLabel(key, defs: widget.fieldDefs),
                       ),
                       items: const [
                         DropdownMenuItem(value: '壹钱包', child: Text('壹钱包')),
@@ -552,9 +549,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
                       ),
                       keyboardType:
                           key == 'actualPayAmount' || key == 'repayAmount'
-                          ? const TextInputType.numberWithOptions(
-                              decimal: true,
-                            )
+                          ? const TextInputType.numberWithOptions(decimal: true)
                           : TextInputType.text,
                       onChanged: (v) => _fieldValues[key] = v,
                     ),
@@ -576,7 +571,13 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
         FilledButton(
           onPressed: _submit,
           style: copy.danger
-              ? FilledButton.styleFrom(backgroundColor: DunesColors.coral)
+              ? FilledButton.styleFrom(
+                  backgroundColor: DunesColors.resolve(
+                    context,
+                    DunesColors.coral,
+                    role: DunesColorRole.surface,
+                  ),
+                )
               : null,
           child: Text(copy.okText),
         ),
@@ -589,8 +590,16 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
     final full = files.length >= kTaskTodoMaxInvoiceFiles;
     final zone = Material(
       color: _dragging && _pickingKey == key
-          ? const Color(0xFFFFF1DC)
-          : const Color(0xFFFFF6E8),
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFFFF1DC),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFFFF6E8),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: full || _picking ? null : () => _pickFiles(key),
@@ -602,8 +611,16 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _dragging && _pickingKey == key
-                  ? const Color(0xFFD59A4A)
-                  : const Color(0xFFE5BD85),
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0xFFD59A4A),
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE5BD85),
+                      role: DunesColorRole.border,
+                    ),
               width: _dragging && _pickingKey == key ? 1.6 : 1,
             ),
           ),
@@ -612,7 +629,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
               Icon(
                 Icons.add_photo_alternate_outlined,
                 size: 22,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
               const SizedBox(height: 6),
               Text(
@@ -622,7 +639,8 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 2),
@@ -630,7 +648,8 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
                 '图片 / PDF · 最多 $kTaskTodoMaxInvoiceFiles 个，单个不超过 20MB',
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
               if (files.isNotEmpty) ...[
@@ -674,7 +693,8 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
                   overflow: TextOverflow.ellipsis,
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 Text(
@@ -682,8 +702,9 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
                   style: DunesTypography.sans(
                     fontSize: 11,
                     color: item.status == _InvoiceFileStatus.error
-                        ? DunesColors.coral
-                        : DunesColors.text3,
+                        ? DunesColors.resolve(context, DunesColors.coral)
+                        : DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ],

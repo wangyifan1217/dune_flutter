@@ -133,7 +133,11 @@ class _NativeWorkProfileCollaborationPageState
         .toList(growable: false);
 
     return Material(
-      color: const Color(0xFFF8F5FC),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF8F5FC),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -167,15 +171,22 @@ class _NativeWorkProfileCollaborationPageState
                         style: DunesTypography.sans(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
-                          color: const Color(0xFF312249),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF312249),
+                          ),
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 5),
-                      const Text(
+                      Text(
                         '按会话最近更新时间排序，点击可直接进入会话。',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF817589),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF817589),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -249,9 +260,21 @@ class _Header extends StatelessWidget {
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: const BoxDecoration(
-        color: Color(0xFFFCFAFF),
-        border: Border(bottom: BorderSide(color: Color(0xFFE7DFF0))),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFFCFAFF),
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE7DFF0),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -259,7 +282,7 @@ class _Header extends StatelessWidget {
             tooltip: '返回工作画像',
             onPressed: onBack,
             icon: const Icon(Icons.arrow_back_rounded),
-            color: const Color(0xFF4A3866),
+            color: DunesColors.resolve(context, const Color(0xFF4A3866)),
           ),
           const SizedBox(width: 2),
           Text(
@@ -267,7 +290,8 @@ class _Header extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: const Color(0xFF312249),
+              color: DunesColors.resolve(context, const Color(0xFF312249)),
+              context: context,
             ),
           ),
         ],
@@ -287,25 +311,29 @@ class _ScopeNotice extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0E8FA),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF0E8FA),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
+          Icon(
             Icons.info_outline_rounded,
             size: 19,
-            color: Color(0xFF7651B8),
+            color: DunesColors.resolveNullable(context, Color(0xFF7651B8)),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               '${selected.isEmpty ? '' : '$selected · '}按会话最近活跃时间统计当月协作，不是全量历史联系人。',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 height: 1.5,
-                color: Color(0xFF5D536B),
+                color: DunesColors.resolveNullable(context, Color(0xFF5D536B)),
               ),
             ),
           ),
@@ -339,9 +367,19 @@ class _StatsCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE6DCF0)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE6DCF0),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Wrap(
         spacing: 10,
@@ -356,7 +394,11 @@ class _StatsCard extends StatelessWidget {
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFAF8FC),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFFAF8FC),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(
@@ -366,15 +408,22 @@ class _StatsCard extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: const Color(0xFF62438B),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF62438B),
+                        ),
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       item.label,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: Color(0xFF817589),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF817589),
+                        ),
                       ),
                     ),
                   ],
@@ -407,7 +456,11 @@ class _ConversationCard extends StatelessWidget {
     final preview = conversation.preview.trim();
 
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(17),
       child: InkWell(
         key: Key('work-profile-collaboration-${conversation.id}'),
@@ -417,7 +470,13 @@ class _ConversationCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(17),
-            border: Border.all(color: const Color(0xFFE9E2EF)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE9E2EF),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Row(
             children: [
@@ -425,12 +484,16 @@ class _ConversationCard extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF0E8FA),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF0E8FA),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(13),
                 ),
                 child: Icon(
                   isPrivate ? Icons.person_rounded : Icons.groups_rounded,
-                  color: const Color(0xFF7651B8),
+                  color: DunesColors.resolve(context, const Color(0xFF7651B8)),
                   size: 21,
                 ),
               ),
@@ -449,7 +512,11 @@ class _ConversationCard extends StatelessWidget {
                             style: DunesTypography.sans(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: const Color(0xFF342740),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFF342740),
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -460,14 +527,21 @@ class _ConversationCard extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF8E6BBC),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFF8E6BBC),
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
                               '${conversation.unreadCount}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
-                                color: Colors.white,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -479,19 +553,22 @@ class _ConversationCard extends StatelessWidget {
                       preview.isEmpty ? detail : '$detail · $preview',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF817589),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF817589),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 size: 19,
-                color: Color(0xFF9A7FB8),
+                color: DunesColors.resolveNullable(context, Color(0xFF9A7FB8)),
               ),
             ],
           ),
@@ -528,12 +605,27 @@ class _EmptyCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 42),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE9E2EF)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE9E2EF),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
-      child: const Center(
-        child: Text('暂无协作会话', style: TextStyle(color: Color(0xFF817589))),
+      child: Center(
+        child: Text(
+          '暂无协作会话',
+          style: TextStyle(
+            color: DunesColors.resolveNullable(context, Color(0xFF817589)),
+          ),
+        ),
       ),
     );
   }

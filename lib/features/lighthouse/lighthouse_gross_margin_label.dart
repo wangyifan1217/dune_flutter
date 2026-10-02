@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'lighthouse_theme.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// Always-visible denominator, shared by all card levels and IM renderers.
 /// Wrap instead of ellipsis: the calculation must remain readable on small cards.
@@ -23,16 +24,23 @@ class LighthouseGrossMarginLabel extends StatelessWidget {
     children: [
       Text(
         label,
-        style: labelStyle ?? LhTypography.sans(size: 10, color: LhColors.ink2),
+        style:
+            labelStyle ??
+            LhTypography.sans(
+              size: 10,
+              color: DunesColors.resolve(context, LhColors.ink2),
+              context: context,
+            ),
       ),
       Text(
         formula,
         style: LhTypography.sans(
           size: 9,
-          color: LhColors.ink2,
+          color: DunesColors.resolve(context, LhColors.ink2),
           weight: FontWeight.w500,
           height: 1.2,
           letterSpacing: 0,
+          context: context,
         ),
       ),
     ],

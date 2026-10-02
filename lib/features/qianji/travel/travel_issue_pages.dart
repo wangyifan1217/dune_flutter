@@ -123,7 +123,7 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
           data: base.copyWith(
             colorScheme: base.colorScheme.copyWith(
               primary: _issuePurple,
-              onPrimary: Colors.white,
+              onPrimary: DunesColors.resolve(ctx, Colors.white),
             ),
           ),
           child: child!,
@@ -133,7 +133,11 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
     if (range == null || !mounted) return;
     setState(() {
       _preset = _IssueRangePreset.custom;
-      _customFrom = DateTime(range.start.year, range.start.month, range.start.day);
+      _customFrom = DateTime(
+        range.start.year,
+        range.start.month,
+        range.start.day,
+      );
       _customTo = DateTime(range.end.year, range.end.month, range.end.day);
     });
     unawaited(_load());
@@ -162,7 +166,11 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
     final snapshot = _snapshot;
     final departments = _departments;
     return Material(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -178,15 +186,31 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
                   hintText: '搜索人员',
                   prefixIcon: const Icon(Icons.search_rounded, size: 20),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
                   isDense: true,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+                    borderSide: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFE8EAED),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+                    borderSide: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFE8EAED),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -196,11 +220,31 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
               child: HorizontalDragScrollView(
                 child: Row(
                   children: [
-                    _chip('本周', _preset == _IssueRangePreset.week, () => _setPreset(_IssueRangePreset.week)),
-                    _chip('近7天', _preset == _IssueRangePreset.d7, () => _setPreset(_IssueRangePreset.d7)),
-                    _chip('近30天', _preset == _IssueRangePreset.d30, () => _setPreset(_IssueRangePreset.d30)),
-                    _chip('全部', _preset == _IssueRangePreset.all, () => _setPreset(_IssueRangePreset.all)),
-                    _chip('自定义', _preset == _IssueRangePreset.custom, () => _setPreset(_IssueRangePreset.custom)),
+                    _chip(
+                      '本周',
+                      _preset == _IssueRangePreset.week,
+                      () => _setPreset(_IssueRangePreset.week),
+                    ),
+                    _chip(
+                      '近7天',
+                      _preset == _IssueRangePreset.d7,
+                      () => _setPreset(_IssueRangePreset.d7),
+                    ),
+                    _chip(
+                      '近30天',
+                      _preset == _IssueRangePreset.d30,
+                      () => _setPreset(_IssueRangePreset.d30),
+                    ),
+                    _chip(
+                      '全部',
+                      _preset == _IssueRangePreset.all,
+                      () => _setPreset(_IssueRangePreset.all),
+                    ),
+                    _chip(
+                      '自定义',
+                      _preset == _IssueRangePreset.custom,
+                      () => _setPreset(_IssueRangePreset.custom),
+                    ),
                   ],
                 ),
               ),
@@ -208,24 +252,55 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Material(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(10),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(10),
                   onTap: _pickRange,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     child: Row(
                       children: [
-                        const Icon(Icons.date_range_rounded, size: 18, color: _issuePurple),
+                        Icon(
+                          Icons.date_range_rounded,
+                          size: 18,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _issuePurple,
+                          ),
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             '时间段  $_rangeText',
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF24212B)),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                Color(0xFF24212B),
+                              ),
+                            ),
                           ),
                         ),
-                        const Text('选择', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _issuePurple)),
+                        Text(
+                          '选择',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _issuePurple,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -236,15 +311,21 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Row(
                 children: [
-                  Expanded(child: _menu('问题类型', _typeLabel, _typeOptions, (value) {
-                    setState(() => _type = value);
-                    unawaited(_load());
-                  })),
+                  Expanded(
+                    child: _menu('问题类型', _typeLabel, _typeOptions, (value) {
+                      setState(() => _type = value);
+                      unawaited(_load());
+                    }),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _menu('复核状态', _reviewFilterLabel, _statusOptions, (value) {
-                    setState(() => _status = value);
-                    unawaited(_load());
-                  })),
+                  Expanded(
+                    child: _menu('复核状态', _reviewFilterLabel, _statusOptions, (
+                      value,
+                    ) {
+                      setState(() => _status = value);
+                      unawaited(_load());
+                    }),
+                  ),
                 ],
               ),
             ),
@@ -282,27 +363,48 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: _back,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
+                  Icon(
+                    Icons.arrow_back_ios_new,
+                    size: 14,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                  ),
                   SizedBox(width: 2),
-                  Text('返回', style: TextStyle(fontSize: 13, color: DunesColors.text2)),
+                  Text(
+                    '返回',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               '问题分析',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _issuePurple),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: DunesColors.resolveNullable(context, _issuePurple),
+              ),
             ),
           ),
           if (_snapshot != null)
-            Text('${_snapshot!.count} 条', style: const TextStyle(fontSize: 12, color: DunesColors.text2, fontWeight: FontWeight.w600)),
+            Text(
+              '${_snapshot!.count} 条',
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
         ],
       ),
     );
@@ -310,10 +412,17 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
 
   Widget _body(TravelIssueSnapshot? snapshot) {
     if (_loading && snapshot == null) {
-      return const Center(child: CircularProgressIndicator(color: _issuePurple));
+      return const Center(
+        child: CircularProgressIndicator(color: _issuePurple),
+      );
     }
     if (_error != null && snapshot == null) {
-      return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('问题分析加载失败：$_error', textAlign: TextAlign.center)));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('问题分析加载失败：$_error', textAlign: TextAlign.center),
+        ),
+      );
     }
     final issues = snapshot?.issues ?? const <TravelIssue>[];
     if (issues.isEmpty) {
@@ -329,7 +438,12 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
           issue: issue,
           onTap: () async {
             final changed = await Navigator.of(context).push<bool>(
-              MaterialPageRoute(builder: (_) => TravelIssueDetailPage(session: widget.session, issue: issue)),
+              MaterialPageRoute(
+                builder: (_) => TravelIssueDetailPage(
+                  session: widget.session,
+                  issue: issue,
+                ),
+              ),
             );
             if (changed == true) unawaited(_load());
           },
@@ -340,7 +454,11 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
 }
 
 class TravelIssueDetailPage extends StatefulWidget {
-  const TravelIssueDetailPage({super.key, required this.session, required this.issue});
+  const TravelIssueDetailPage({
+    super.key,
+    required this.session,
+    required this.issue,
+  });
 
   final AuthSession session;
   final TravelIssue issue;
@@ -416,27 +534,45 @@ class _TravelIssueDetailPageState extends State<TravelIssueDetailPage> {
     final note = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(status == 'CONFIRMED' ? '确认线索' : status == 'FALSE_POSITIVE' ? '标记为误报' : '恢复待核实'),
+        title: Text(
+          status == 'CONFIRMED'
+              ? '确认线索'
+              : status == 'FALSE_POSITIVE'
+              ? '标记为误报'
+              : '恢复待核实',
+        ),
         content: TextField(
           controller: noteCtrl,
           maxLines: 3,
           decoration: const InputDecoration(labelText: '复核说明（可选）'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, noteCtrl.text.trim()), child: const Text('保存')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, noteCtrl.text.trim()),
+            child: const Text('保存'),
+          ),
         ],
       ),
     );
     noteCtrl.dispose();
     if (note == null) return;
     try {
-      await _service.reviewIssue(fingerprint: _issue.fingerprint, status: status, note: note);
+      await _service.reviewIssue(
+        fingerprint: _issue.fingerprint,
+        status: status,
+        note: note,
+      );
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存复核结果失败：$error')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存复核结果失败：$error')));
     }
   }
 
@@ -444,19 +580,39 @@ class _TravelIssueDetailPageState extends State<TravelIssueDetailPage> {
   Widget build(BuildContext context) {
     final orders = _visibleOrders;
     final hidden = _issue.orders.length - orders.length;
-    final rangeText = _from == null || _to == null ? '未选择' : '${_ymd(_from!)} 至 ${_ymd(_to!)}';
+    final rangeText = _from == null || _to == null
+        ? '未选择'
+        : '${_ymd(_from!)} 至 ${_ymd(_to!)}';
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6F8),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF24212B),
+        backgroundColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        foregroundColor: DunesColors.resolve(context, const Color(0xFF24212B)),
         elevation: 0,
-        title: const Text('线索详情', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+        title: const Text(
+          '线索详情',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
-          Text(_issue.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF24212B))),
+          Text(
+            _issue.title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: DunesColors.resolveNullable(context, Color(0xFF24212B)),
+            ),
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -474,7 +630,11 @@ class _TravelIssueDetailPageState extends State<TravelIssueDetailPage> {
           _block('建议', _issue.suggestion),
           const SizedBox(height: 14),
           Material(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
@@ -483,29 +643,64 @@ class _TravelIssueDetailPageState extends State<TravelIssueDetailPage> {
                 padding: const EdgeInsets.all(14),
                 child: Row(
                   children: [
-                    const Icon(Icons.date_range_rounded, color: _issuePurple),
+                    Icon(
+                      Icons.date_range_rounded,
+                      color: DunesColors.resolveNullable(context, _issuePurple),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('时间段', style: TextStyle(fontSize: 12, color: DunesColors.text3)),
+                          Text(
+                            '时间段',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                            ),
+                          ),
                           const SizedBox(height: 2),
-                          Text(rangeText, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                          Text(
+                            rangeText,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    const Text('选择', style: TextStyle(color: _issuePurple, fontWeight: FontWeight.w700)),
+                    Text(
+                      '选择',
+                      style: TextStyle(
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _issuePurple,
+                        ),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
           ),
           const SizedBox(height: 16),
-          Text('关联订单 ${orders.length}${hidden > 0 ? ' · 已隐藏 $hidden 笔不在此时段' : ''}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+          Text(
+            '关联订单 ${orders.length}${hidden > 0 ? ' · 已隐藏 $hidden 笔不在此时段' : ''}',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
           if (orders.isEmpty)
-            const Text('所选时间段内没有关联订单', style: TextStyle(color: DunesColors.text2))
+            Text(
+              '所选时间段内没有关联订单',
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
+            )
           else
             for (final order in orders) ...[
               _OrderCard(
@@ -513,7 +708,11 @@ class _TravelIssueDetailPageState extends State<TravelIssueDetailPage> {
                 selected: _matchesSelectedRange(order),
                 onUseRange: () {
                   final start = _dateOnly(_parseStamp(order.startAt));
-                  final end = _dateOnly(_parseStamp(order.endAt.isEmpty ? order.startAt : order.endAt));
+                  final end = _dateOnly(
+                    _parseStamp(
+                      order.endAt.isEmpty ? order.startAt : order.endAt,
+                    ),
+                  );
                   if (start == null && end == null) return;
                   setState(() {
                     _from = start ?? end;
@@ -531,7 +730,12 @@ class _TravelIssueDetailPageState extends State<TravelIssueDetailPage> {
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: OutlinedButton(onPressed: () => _review('FALSE_POSITIVE'), child: const Text('标记误报'))),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _review('FALSE_POSITIVE'),
+                  child: const Text('标记误报'),
+                ),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: FilledButton(
@@ -543,7 +747,10 @@ class _TravelIssueDetailPageState extends State<TravelIssueDetailPage> {
             ],
           ),
           if (_issue.reviewStatus != 'PENDING')
-            TextButton(onPressed: () => _review('PENDING'), child: const Text('恢复待核实')),
+            TextButton(
+              onPressed: () => _review('PENDING'),
+              child: const Text('恢复待核实'),
+            ),
         ],
       ),
     );
@@ -551,7 +758,9 @@ class _TravelIssueDetailPageState extends State<TravelIssueDetailPage> {
 
   bool _matchesSelectedRange(TravelIssueOrder order) {
     final start = _dateOnly(_parseStamp(order.startAt));
-    final end = _dateOnly(_parseStamp(order.endAt.isEmpty ? order.startAt : order.endAt));
+    final end = _dateOnly(
+      _parseStamp(order.endAt.isEmpty ? order.startAt : order.endAt),
+    );
     final from = start ?? end;
     var to = end ?? start;
     if (from != null && to != null && to.isBefore(from)) to = from;
@@ -562,13 +771,34 @@ class _TravelIssueDetailPageState extends State<TravelIssueDetailPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 12, color: DunesColors.text3, fontWeight: FontWeight.w700)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 6),
-          Text(body.isEmpty ? '—' : body, style: const TextStyle(fontSize: 14, height: 1.45, color: Color(0xFF24212B))),
+          Text(
+            body.isEmpty ? '—' : body,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.45,
+              color: DunesColors.resolveNullable(context, Color(0xFF24212B)),
+            ),
+          ),
         ],
       ),
     );
@@ -583,10 +813,20 @@ class _IssueSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final names = issue.orders.map((order) => order.traveler.trim()).where((name) => name.isNotEmpty).toSet().join('、');
-    final when = issue.startAt.isEmpty ? '时间待补' : '${_formatStamp(issue.startAt)}${issue.endAt.isEmpty ? '' : ' 至 ${_formatStamp(issue.endAt)}'}';
+    final names = issue.orders
+        .map((order) => order.traveler.trim())
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .join('、');
+    final when = issue.startAt.isEmpty
+        ? '时间待补'
+        : '${_formatStamp(issue.startAt)}${issue.endAt.isEmpty ? '' : ' 至 ${_formatStamp(issue.endAt)}'}';
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -598,18 +838,48 @@ class _IssueSummaryCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Expanded(child: Text(issue.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700))),
+                  Expanded(
+                    child: Text(
+                      issue.title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                   _pill(_severityLabel(issue)),
-                  const Icon(Icons.chevron_right_rounded, color: Color(0xFF98A2B3)),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF98A2B3),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
-                [if (names.isNotEmpty) names, if (issue.location.isNotEmpty) issue.location].join(' · '),
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF344054)),
+                [
+                  if (names.isNotEmpty) names,
+                  if (issue.location.isNotEmpty) issue.location,
+                ].join(' · '),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF344054),
+                  ),
+                ),
               ),
               const SizedBox(height: 4),
-              Text('$when · ${_money(issue.amountFen)} · ${issue.orders.length} 笔订单', style: const TextStyle(fontSize: 12, color: DunesColors.text2)),
+              Text(
+                '$when · ${_money(issue.amountFen)} · ${issue.orders.length} 笔订单',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
+              ),
             ],
           ),
         ),
@@ -619,7 +889,11 @@ class _IssueSummaryCard extends StatelessWidget {
 }
 
 class _OrderCard extends StatelessWidget {
-  const _OrderCard({required this.order, required this.selected, required this.onUseRange});
+  const _OrderCard({
+    required this.order,
+    required this.selected,
+    required this.onUseRange,
+  });
 
   final TravelIssueOrder order;
   final bool selected;
@@ -629,14 +903,39 @@ class _OrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final where = order.kind == 'hotel'
         ? (order.place.isEmpty ? order.destCity : order.place)
-        : [order.originCity, order.destCity].where((part) => part.trim().isNotEmpty).join(' → ');
+        : [
+            order.originCity,
+            order.destCity,
+          ].where((part) => part.trim().isNotEmpty).join(' → ');
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: selected ? const Color(0xFFF7F3FF) : Colors.white,
+        color: selected
+            ? DunesColors.resolve(
+                context,
+                const Color(0xFFF7F3FF),
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: selected ? _issuePurple : const Color(0xFFE4E7EC)),
+        border: Border.all(
+          color: selected
+              ? DunesColors.resolve(
+                  context,
+                  _issuePurple,
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFFE4E7EC),
+                  role: DunesColorRole.border,
+                ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -646,16 +945,33 @@ class _OrderCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   order.traveler.isEmpty ? '未匹配员工' : order.traveler,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-              Text(_money(order.amountFen), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _issuePurple)),
+              Text(
+                _money(order.amountFen),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.resolveNullable(context, _issuePurple),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
-            [if (order.department.isNotEmpty) order.department, _kindLabel(order.kind), if (order.orderId.isNotEmpty) '订单 ${order.orderId}'].join(' · '),
-            style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+            [
+              if (order.department.isNotEmpty) order.department,
+              _kindLabel(order.kind),
+              if (order.orderId.isNotEmpty) '订单 ${order.orderId}',
+            ].join(' · '),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -664,12 +980,24 @@ class _OrderCard extends StatelessWidget {
           ),
           if (where.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(where, style: const TextStyle(fontSize: 13, color: Color(0xFF344054))),
+            Text(
+              where,
+              style: TextStyle(
+                fontSize: 13,
+                color: DunesColors.resolveNullable(context, Color(0xFF344054)),
+              ),
+            ),
           ],
           if (order.shared)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 4),
-              child: Text('同单多人', style: TextStyle(fontSize: 12, color: DunesColors.text2)),
+              child: Text(
+                '同单多人',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
+              ),
             ),
           Align(
             alignment: Alignment.centerRight,
@@ -694,9 +1022,18 @@ Widget _chip(String label, bool selected, VoidCallback onTap) {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: selected ? _issuePurple : const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: selected ? _issuePurple : const Color(0xFFE8EAED),
+            ),
           ),
-          child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: selected ? _issuePurple : const Color(0xFF5C5566))),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: selected ? _issuePurple : const Color(0xFF5C5566),
+            ),
+          ),
         ),
       ),
     ),
@@ -706,16 +1043,32 @@ Widget _chip(String label, bool selected, VoidCallback onTap) {
 Widget _pill(String text) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(color: const Color(0xFFF2EDFC), borderRadius: BorderRadius.circular(999)),
-    child: Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF5B3FA0))),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF2EDFC),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF5B3FA0),
+      ),
+    ),
   );
 }
 
-Widget _menu(String label, String value, List<({String value, String label})> options, ValueChanged<String> onSelected) {
+Widget _menu(
+  String label,
+  String value,
+  List<({String value, String label})> options,
+  ValueChanged<String> onSelected,
+) {
   return PopupMenuButton<String>(
     onSelected: onSelected,
     itemBuilder: (context) => [
-      for (final option in options) PopupMenuItem(value: option.value, child: Text(option.label)),
+      for (final option in options)
+        PopupMenuItem(value: option.value, child: Text(option.label)),
     ],
     child: Container(
       height: 42,
@@ -732,12 +1085,30 @@ Widget _menu(String label, String value, List<({String value, String label})> op
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(fontSize: 10, color: DunesColors.text3)),
-                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: DunesColors.text3,
+                  ),
+                ),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ],
             ),
           ),
-          const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: DunesColors.text3),
+          const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 18,
+            color: DunesColors.text3,
+          ),
         ],
       ),
     ),
@@ -765,8 +1136,18 @@ const _statusOptions = <({String value, String label})>[
 ];
 
 extension on _TravelIssuesPageState {
-  String get _typeLabel => _typeOptions.firstWhere((item) => item.value == _type, orElse: () => _typeOptions.first).label;
-  String get _reviewFilterLabel => _statusOptions.firstWhere((item) => item.value == _status, orElse: () => _statusOptions.first).label;
+  String get _typeLabel => _typeOptions
+      .firstWhere(
+        (item) => item.value == _type,
+        orElse: () => _typeOptions.first,
+      )
+      .label;
+  String get _reviewFilterLabel => _statusOptions
+      .firstWhere(
+        (item) => item.value == _status,
+        orElse: () => _statusOptions.first,
+      )
+      .label;
 }
 
 List<String> _departmentsOf(TravelIssueSnapshot? snapshot) {
@@ -817,7 +1198,8 @@ String _ymd(DateTime day) =>
 DateTime? _parseStamp(String raw) {
   final text = raw.trim();
   if (text.isEmpty) return null;
-  return DateTime.tryParse(text.replaceFirst(' ', 'T')) ?? DateTime.tryParse(text.split(' ').first);
+  return DateTime.tryParse(text.replaceFirst(' ', 'T')) ??
+      DateTime.tryParse(text.split(' ').first);
 }
 
 DateTime? _dateOnly(DateTime? value) {

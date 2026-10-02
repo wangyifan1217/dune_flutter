@@ -256,14 +256,19 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
             Icon(
               Icons.image_outlined,
               size: 28,
-              color: widget.mine ? Colors.white70 : DunesColors.text3,
+              color: widget.mine
+                  ? DunesColors.resolve(context, Colors.white70)
+                  : DunesColors.resolve(context, DunesColors.text3),
             ),
             const SizedBox(height: 6),
             Text(
               '[图片]',
               style: DunesTypography.sans(
                 fontSize: 13,
-                color: widget.mine ? Colors.white : DunesColors.text2,
+                color: widget.mine
+                    ? DunesColors.resolve(context, Colors.white)
+                    : DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
             const SizedBox(height: 2),
@@ -271,7 +276,10 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
               '点击重试',
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: widget.mine ? Colors.white60 : DunesColors.text3,
+                color: widget.mine
+                    ? DunesColors.resolve(context, Colors.white60)
+                    : DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],
@@ -285,12 +293,12 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
     return _placeholder(
       width: box.width,
       height: box.width * 0.72,
-      child: const SizedBox(
+      child: SizedBox(
         width: 20,
         height: 20,
         child: CircularProgressIndicator(
           strokeWidth: 2,
-          color: DunesColors.text3,
+          color: DunesColors.resolve(context, DunesColors.text3),
         ),
       ),
     );
@@ -301,12 +309,12 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
     return _placeholder(
       width: box.width * 0.72,
       height: box.width * 0.54,
-      child: const SizedBox(
+      child: SizedBox(
         width: 20,
         height: 20,
         child: CircularProgressIndicator(
           strokeWidth: 2,
-          color: DunesColors.text3,
+          color: DunesColors.resolve(context, DunesColors.text3),
         ),
       ),
     );
@@ -322,10 +330,30 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
       height: height,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: widget.mine ? const Color(0x33FFFFFF) : DunesColors.bgSoft,
+        color: widget.mine
+            ? DunesColors.resolve(
+                context,
+                const Color(0x33FFFFFF),
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                DunesColors.bgSoft,
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: widget.mine ? Colors.white24 : DunesColors.borderSoft,
+          color: widget.mine
+              ? DunesColors.resolve(
+                  context,
+                  Colors.white24,
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
         ),
       ),
       child: child,
@@ -681,14 +709,22 @@ Future<void> _openDesktopChatImagePreviewWithFeedback(
     entry = OverlayEntry(
       builder: (_) => IgnorePointer(
         child: ColoredBox(
-          color: Colors.black.withValues(alpha: 0.18),
+          color: DunesColors.resolve(
+            context,
+            Colors.black,
+            role: DunesColorRole.surface,
+          ).withValues(alpha: 0.18),
           child: Center(
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.78),
+                color: DunesColors.resolve(
+                  context,
+                  Colors.black,
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.78),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -698,14 +734,14 @@ Future<void> _openDesktopChatImagePreviewWithFeedback(
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.2,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                       ),
                     ),
                     SizedBox(width: 12),
                     Text(
                       '正在打开预览…',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         decoration: TextDecoration.none,
@@ -854,15 +890,19 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
         final label = original ? '原图' : '预览图';
         return DecoratedBox(
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.55),
+            color: DunesColors.resolve(
+              context,
+              Colors.black,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.55),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             child: Text(
               details.isEmpty ? label : '$label · $details',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: DunesColors.resolve(context, Colors.white),
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
               ),
@@ -1060,7 +1100,11 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
 
   Widget _navButton({required IconData icon, required VoidCallback? onTap}) {
     return Material(
-      color: Colors.black.withValues(alpha: 0.45),
+      color: DunesColors.resolve(
+        context,
+        Colors.black,
+        role: DunesColorRole.surface,
+      ).withValues(alpha: 0.45),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -1070,7 +1114,9 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
           height: 44,
           child: Icon(
             icon,
-            color: onTap == null ? Colors.white38 : Colors.white,
+            color: onTap == null
+                ? DunesColors.resolve(context, Colors.white38)
+                : DunesColors.resolve(context, Colors.white),
             size: 26,
           ),
         ),
@@ -1163,7 +1209,14 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
       child: Focus(
         focusNode: _focusNode,
         autofocus: true,
-        child: Material(color: Colors.black, child: child),
+        child: Material(
+          color: DunesColors.resolve(
+            context,
+            Colors.black,
+            role: DunesColorRole.surface,
+          ),
+          child: child,
+        ),
       ),
     );
     // 独立系统窗口：铺满；手机端仍用 Dialog。
@@ -1171,7 +1224,11 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
       return SizedBox.expand(child: body);
     }
     return Dialog(
-      backgroundColor: Colors.black,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.black,
+        role: DunesColorRole.surface,
+      ),
       insetPadding: const EdgeInsets.all(12),
       child: body,
     );
@@ -1210,9 +1267,9 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                     right: 4,
                     child: IconButton(
                       onPressed: _close,
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.close_rounded,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                       ),
                     ),
                   ),
@@ -1233,7 +1290,11 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                           const SizedBox(width: 8),
                           DecoratedBox(
                             decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.55),
+                              color: DunesColors.resolve(
+                                context,
+                                Colors.black,
+                                role: DunesColorRole.surface,
+                              ).withValues(alpha: 0.55),
                               borderRadius: BorderRadius.circular(14),
                             ),
                             child: Padding(
@@ -1243,8 +1304,11 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                               ),
                               child: Text(
                                 '${_index + 1} / ${widget.items.length}',
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Colors.white,
+                                  ),
                                   fontSize: 11,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -1292,7 +1356,11 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                   alignment: Alignment.center,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.black,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: Padding(
@@ -1331,17 +1399,17 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
 
           final Widget content;
           if (loading) {
-            content = const Center(
+            content = Center(
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Colors.white70,
+                color: DunesColors.resolve(context, Colors.white70),
               ),
             );
           } else if (failed || bytes == null) {
-            content = const Center(
+            content = Center(
               child: Icon(
                 Icons.broken_image_outlined,
-                color: Colors.white54,
+                color: DunesColors.resolve(context, Colors.white54),
                 size: 48,
               ),
             );
@@ -1364,9 +1432,9 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                       right: 4,
                       child: IconButton(
                         onPressed: _close,
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.close_rounded,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
                         ),
                       ),
                     ),
@@ -1387,7 +1455,11 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                               const SizedBox(width: 8),
                               DecoratedBox(
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.55),
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Colors.black,
+                                    role: DunesColorRole.surface,
+                                  ).withValues(alpha: 0.55),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                                 child: Padding(
@@ -1397,8 +1469,11 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                                   ),
                                   child: Text(
                                     '${_index + 1} / ${widget.items.length}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: DunesColors.resolve(
+                                        context,
+                                        Colors.white,
+                                      ),
                                       fontSize: 11,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -1447,7 +1522,11 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                       alignment: Alignment.center,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.55),
+                          color: DunesColors.resolve(
+                            context,
+                            Colors.black,
+                            role: DunesColorRole.surface,
+                          ).withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(24),
                         ),
                         child: Padding(
@@ -1550,7 +1629,11 @@ class _ChatImagePopupBodyState extends State<_ChatImagePopupBody> {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -1565,10 +1648,10 @@ class _ChatImagePopupBodyState extends State<_ChatImagePopupBody> {
                     widget.fileName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                 ),
@@ -1583,7 +1666,11 @@ class _ChatImagePopupBodyState extends State<_ChatImagePopupBody> {
           ),
           Flexible(
             child: ColoredBox(
-              color: const Color(0xFFF3F4F6),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF3F4F6),
+                role: DunesColorRole.surface,
+              ),
               child: FutureBuilder<Uint8List>(
                 future: _future,
                 builder: (context, snap) {
@@ -1598,11 +1685,11 @@ class _ChatImagePopupBodyState extends State<_ChatImagePopupBody> {
                   }
                   final bytes = snap.data;
                   if (snap.hasError || bytes == null || bytes.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Icon(
                         Icons.broken_image_outlined,
                         size: 48,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     );
                   }
@@ -1620,7 +1707,11 @@ class _ChatImagePopupBodyState extends State<_ChatImagePopupBody> {
                         right: 10,
                         bottom: 10,
                         child: Material(
-                          color: Colors.black.withValues(alpha: 0.55),
+                          color: DunesColors.resolve(
+                            context,
+                            Colors.black,
+                            role: DunesColorRole.surface,
+                          ).withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(18),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(18),
@@ -1636,15 +1727,19 @@ class _ChatImagePopupBodyState extends State<_ChatImagePopupBody> {
                                   Icon(
                                     Icons.download_rounded,
                                     size: 16,
-                                    color: Colors.white.withValues(
-                                      alpha: _saving ? 0.5 : 1,
-                                    ),
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ).withValues(alpha: _saving ? 0.5 : 1),
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
                                     _saving ? '下载中…' : '下载',
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: DunesColors.resolve(
+                                        context,
+                                        Colors.white,
+                                      ),
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -1681,7 +1776,11 @@ class _PreviewActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.black54,
+      color: DunesColors.resolve(
+        context,
+        Colors.black54,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
@@ -1691,12 +1790,16 @@ class _PreviewActionButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 16, color: Colors.white),
+              Icon(
+                icon,
+                size: 16,
+                color: DunesColors.resolve(context, Colors.white),
+              ),
               const SizedBox(width: 6),
               Text(
                 label,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: DunesColors.resolve(context, Colors.white),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),

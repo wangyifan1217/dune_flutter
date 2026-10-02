@@ -3710,7 +3710,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                   offset: active ? Offset.zero : const Offset(1, 0),
                   duration: const Duration(milliseconds: 280),
                   curve: Curves.easeOutCubic,
-                  child: ColoredBox(color: DunesColors.bgApp, child: panel),
+                  child: ColoredBox(
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.bgApp,
+                      role: DunesColorRole.surface,
+                    ),
+                    child: panel,
+                  ),
                 )
               : Opacity(opacity: active ? 1 : 0, child: panel),
         ),
@@ -3787,8 +3794,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) widget.navigation.go('QJ');
       });
-      return const Scaffold(
-        backgroundColor: DunesColors.bgApp,
+      return Scaffold(
+        backgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -3893,8 +3904,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJ');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -3934,8 +3949,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJ');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -3965,8 +3984,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJ');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -3974,8 +3997,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJR');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -4008,8 +4035,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJC');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -4139,8 +4170,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.popTo('QJ');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -4154,8 +4189,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJ');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -4168,8 +4207,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJ');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -4182,8 +4225,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJ');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -4196,8 +4243,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJ');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -4215,8 +4266,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJ');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -4224,8 +4279,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJFS');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -4264,8 +4323,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('QJMM');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -5019,8 +5082,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.navigation.go('MM-L');
           });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -5693,7 +5760,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
     if (isDesktopCommOnly) {
       return ColoredBox(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -5706,7 +5777,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
     // APP：根页用悬浮底栏覆盖内容，列表能透过导航胶囊呈现毛玻璃效果。
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: Stack(
         children: [
           Positioned.fill(child: content),
@@ -6183,8 +6258,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return SafeArea(
           top: false,
           child: Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -6197,7 +6276,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: DunesColors.borderSoft,
+                      color: DunesColors.resolve(
+                        ctx,
+                        DunesColors.borderSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(99),
                     ),
                   ),
@@ -6208,7 +6291,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                   style: DunesTypography.sans(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(ctx, DunesColors.text),
+                    context: ctx,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -6216,7 +6300,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                   '调整后将作用于整个 App',
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(ctx, DunesColors.text3),
+                    context: ctx,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -6228,13 +6313,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                       style: DunesTypography.sans(
                         fontSize: 15 * AppTextScaleController.presets[i],
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(ctx, DunesColors.text),
+                        context: ctx,
                       ),
                     ),
                     trailing: i == controller.presetIndex
-                        ? const Icon(
+                        ? Icon(
                             Icons.check_rounded,
-                            color: Color(0xFF7E64BD),
+                            color: DunesColors.resolveNullable(
+                              ctx,
+                              Color(0xFF7E64BD),
+                            ),
                           )
                         : null,
                     onTap: () => Navigator.pop(ctx, i),
@@ -6296,20 +6385,40 @@ class _NativePlatformTreeShell extends StatelessWidget {
     return Theme(
       data: DunesTheme.light(),
       child: Scaffold(
-        backgroundColor: const Color(0xFFE8D5B8),
+        backgroundColor: DunesColors.resolve(
+          context,
+          const Color(0xFFE8D5B8),
+          role: DunesColorRole.surface,
+        ),
         body: Column(
           children: [
             Expanded(
               child: DecoratedBox(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Color(0xFFE8F0F4),
-                      Color(0xFFF3E8D4),
-                      Color(0xFFE8D5B8),
-                      Color(0xFFD4B896),
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFE8F0F4),
+                        role: DunesColorRole.surface,
+                      ),
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFF3E8D4),
+                        role: DunesColorRole.surface,
+                      ),
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFE8D5B8),
+                        role: DunesColorRole.surface,
+                      ),
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFD4B896),
+                        role: DunesColorRole.surface,
+                      ),
                     ],
                     stops: [0.0, 0.35, 0.72, 1.0],
                   ),
@@ -6333,8 +6442,12 @@ class _NativePlatformTreeShell extends StatelessWidget {
                               style: DunesTypography.sans(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
-                                color: DunesColors.text,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text,
+                                ),
                                 letterSpacing: 0.6,
+                                context: context,
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -6342,8 +6455,12 @@ class _NativePlatformTreeShell extends StatelessWidget {
                               '生态树',
                               style: DunesTypography.mono(
                                 fontSize: 11,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
                                 letterSpacing: 1.2,
+                                context: context,
                               ),
                             ),
                           ],
@@ -7064,7 +7181,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                         textAlign: TextAlign.center,
                         style: DunesTypography.sans(
                           fontSize: 14,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -7270,7 +7391,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       ],
     );
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(bottom: false, child: body),
     );
   }
@@ -7286,7 +7411,17 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: paused ? DunesColors.text3 : DunesColors.coral,
+            color: paused
+                ? DunesColors.resolve(
+                    context,
+                    DunesColors.text3,
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    DunesColors.coral,
+                    role: DunesColorRole.surface,
+                  ),
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
@@ -7303,7 +7438,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             children: [
               Icon(
                 paused ? Icons.pause_rounded : Icons.mic_rounded,
-                color: Colors.white,
+                color: DunesColors.resolve(context, Colors.white),
                 size: 18,
               ),
               const SizedBox(width: 6),
@@ -7316,7 +7451,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
+                  context: context,
                 ),
               ),
             ],
@@ -7358,8 +7494,12 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         return SafeArea(
           top: false,
           child: Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -7372,7 +7512,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: DunesColors.borderSoft,
+                      color: DunesColors.resolve(
+                        ctx,
+                        DunesColors.borderSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(99),
                     ),
                   ),
@@ -7383,7 +7527,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   style: DunesTypography.sans(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(ctx, DunesColors.text),
+                    context: ctx,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -7391,7 +7536,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   '调整后将作用于整个 App',
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(ctx, DunesColors.text3),
+                    context: ctx,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -7403,13 +7549,17 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       style: DunesTypography.sans(
                         fontSize: 15 * AppTextScaleController.presets[i],
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(ctx, DunesColors.text),
+                        context: ctx,
                       ),
                     ),
                     trailing: i == controller.presetIndex
-                        ? const Icon(
+                        ? Icon(
                             Icons.check_rounded,
-                            color: Color(0xFF7E64BD),
+                            color: DunesColors.resolveNullable(
+                              ctx,
+                              Color(0xFF7E64BD),
+                            ),
                           )
                         : null,
                     onTap: () => Navigator.pop(ctx, i),
@@ -7430,19 +7580,34 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
           RichText(
-            text: const TextSpan(
+            text: TextSpan(
               children: [
                 TextSpan(
                   text: '沙丘',
                   style: TextStyle(
-                    color: Color(0xFF7C5CE6),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF7C5CE6),
+                    ),
                     fontSize: 19,
                     fontWeight: FontWeight.w500,
                     letterSpacing: -0.2,
@@ -7450,11 +7615,17 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                 ),
                 TextSpan(
                   text: ' DUNES',
-                  style: TextStyle(color: DunesColors.text3, fontSize: 11),
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    fontSize: 11,
+                  ),
                 ),
                 TextSpan(
                   text: '  ·  我的',
-                  style: TextStyle(color: DunesColors.text2, fontSize: 11),
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    fontSize: 11,
+                  ),
                 ),
               ],
             ),
@@ -7465,7 +7636,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               tooltip: '字体大小',
               onPressed: _openTextScalePicker,
               icon: const Icon(Icons.format_size_rounded, size: 22),
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           // PC 外部用户无可用项；APP 仍保留清缓存/退出等。
           if (!(isDesktopCommOnly && widget.session.isExternalUser))
@@ -7490,7 +7661,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       offset: const Offset(0, 4),
       shape: const _WechatMenuShape(),
       menuPadding: const EdgeInsets.only(top: 12, bottom: 8),
-      color: const Color(0xFFF2F2F2),
+      color: DunesColors.resolve(context, const Color(0xFFF2F2F2)),
       onSelected: (action) {
         switch (action) {
           case _B2MenuAction.scanWorkstation:
@@ -7575,12 +7746,12 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             ),
           if (widget.onLogout != null) ...[
             const PopupMenuDivider(),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: _B2MenuAction.logout,
               child: _B2MenuEntry(
                 icon: Icons.logout_rounded,
                 label: '退出登录',
-                color: DunesColors.coral,
+                color: DunesColors.resolve(context, DunesColors.coral),
               ),
             ),
           ],
@@ -7591,14 +7762,24 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         height: 42,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: DunesColors.borderSoft),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
-        child: const Icon(
+        child: Icon(
           Icons.more_horiz_rounded,
           size: 24,
-          color: DunesColors.text2,
+          color: DunesColors.resolve(context, DunesColors.text2),
         ),
       ),
     );
@@ -7637,8 +7818,12 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        gradient: const LinearGradient(
-          colors: [Color(0xFFF0ECF6), Color(0xFFE7E2F2), Color(0xFFDCD5EA)],
+        gradient: LinearGradient(
+          colors: [
+            DunesColors.resolve(context, Color(0xFFF0ECF6)),
+            DunesColors.resolve(context, Color(0xFFE7E2F2)),
+            DunesColors.resolve(context, Color(0xFFDCD5EA)),
+          ],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
@@ -7666,13 +7851,20 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     width: 18,
                     height: 18,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(99),
                     ),
                     child: Icon(
                       _avatarSheetOpen ? Icons.more_horiz : Icons.edit,
                       size: 11,
-                      color: DunesColors.accentDeep,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.accentDeep,
+                      ),
                     ),
                   ),
                 ),
@@ -7698,9 +7890,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   profile.subtitleLine,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                 ),
               ],
@@ -7721,17 +7913,28 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     width: 34,
                     height: 34,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF7F3FC),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFF7F3FC),
+                        role: DunesColorRole.surface,
+                      ),
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: const Color(0xFFC1B0D6),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFC1B0D6),
+                          role: DunesColorRole.border,
+                        ),
                         width: 1.5,
                       ),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.insights_rounded,
                       size: 19,
-                      color: Color(0xFF7651B8),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF7651B8),
+                      ),
                     ),
                   ),
                 ),
@@ -7753,13 +7956,17 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
         decoration: BoxDecoration(
-          color: const Color(0xE61F2421),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xE61F2421),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(99),
         ),
-        child: const Text(
+        child: Text(
           '敬请期待',
           style: TextStyle(
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
             fontSize: 8,
             fontWeight: FontWeight.w600,
           ),
@@ -7779,7 +7986,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         child: Container(
           height: 76,
           decoration: BoxDecoration(
-            color: const Color(0xFFF0EEE8),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF0EEE8),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Stack(
@@ -7793,9 +8004,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                     const SizedBox(height: 5),
@@ -7939,8 +8150,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   Widget _buildSectionLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(
-        color: DunesColors.text2,
+      style: TextStyle(
+        color: DunesColors.resolve(context, DunesColors.text2),
         fontSize: 14,
         fontWeight: FontWeight.w500,
       ),
@@ -7953,7 +8164,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     required VoidCallback onTap,
   }) {
     return Material(
-      color: const Color(0xFFF5EEE1),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5EEE1),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -7962,21 +8177,28 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             children: [
-              Icon(icon, size: 16, color: const Color(0xFF8A5A14)),
+              Icon(
+                icon,
+                size: 16,
+                color: DunesColors.resolve(context, const Color(0xFF8A5A14)),
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   text,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF6E4A11),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF6E4A11),
+                    ),
                   ),
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 size: 16,
-                color: Color(0xFF8A5A14),
+                color: DunesColors.resolveNullable(context, Color(0xFF8A5A14)),
               ),
             ],
           ),
@@ -7988,7 +8210,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   Widget _buildMenuList(List<Widget> children) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(children: children),
@@ -8012,7 +8238,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           child: Row(
             children: [
               const SizedBox(width: 14),
-              Icon(icon, size: 21, color: DunesColors.text2),
+              Icon(
+                icon,
+                size: 21,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
               const SizedBox(width: 13),
               Expanded(
                 child: Column(
@@ -8029,9 +8259,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     const SizedBox(height: 3),
                     Text(
                       desc,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],
@@ -8045,19 +8275,26 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     vertical: 1,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFC6C2B8),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFC6C2B8),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     '$badge',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-              const Icon(Icons.chevron_right_rounded, color: DunesColors.text3),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
               const SizedBox(width: 10),
             ],
           ),
@@ -8065,8 +8302,16 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       ),
     );
     final withBorder = Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: row,
     );
@@ -8080,7 +8325,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             child: InkWell(
               onTap: onTap,
               child: Container(
-                color: const Color(0x38FFFFFF),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0x38FFFFFF),
+                  role: DunesColorRole.surface,
+                ),
                 alignment: Alignment.centerRight,
                 padding: const EdgeInsets.only(right: 44),
                 child: Container(
@@ -8089,13 +8338,17 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xE61F2421),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xE61F2421),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(99),
                   ),
-                  child: const Text(
+                  child: Text(
                     '敬请期待',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                     ),
@@ -8135,9 +8388,20 @@ class _B2MenuEntry extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: color),
+        Icon(
+          icon,
+          size: 20,
+          color: DunesColors.resolveNullable(context, color),
+        ),
         const SizedBox(width: 10),
-        Text(label, style: DunesTypography.sans(fontSize: 14, color: color)),
+        Text(
+          label,
+          style: DunesTypography.sans(
+            fontSize: 14,
+            color: color,
+            context: context,
+          ),
+        ),
       ],
     );
   }
@@ -8424,7 +8688,11 @@ class _NativeScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         child: Column(
           children: [
@@ -8443,7 +8711,7 @@ class _NativeScaffold extends StatelessWidget {
                   Text(
                     'NATIVE PILOT',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                       letterSpacing: 0.8,
                     ),
                   ),
@@ -8478,7 +8746,11 @@ class _ActionTile extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Material(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -8501,17 +8773,20 @@ class _ActionTile extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         subtitle,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ],
             ),
@@ -8534,7 +8809,11 @@ class _InfoTile extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -8542,7 +8821,10 @@ class _InfoTile extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 6),
           Text(value, style: const TextStyle(fontSize: 14)),

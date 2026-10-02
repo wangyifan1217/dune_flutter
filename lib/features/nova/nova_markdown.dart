@@ -46,7 +46,8 @@ class NovaMarkdownBody extends StatelessWidget {
               '…',
               style: DunesTypography.sans(
                 fontSize: 13,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             )
           : const SizedBox.shrink();
@@ -96,7 +97,8 @@ class NovaMarkdownBody extends StatelessWidget {
               '…',
               style: DunesTypography.sans(
                 fontSize: 13,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             )
           : const SizedBox.shrink();
@@ -367,7 +369,11 @@ class NovaMarkdownBody extends StatelessWidget {
         padding: const EdgeInsets.only(top: 8),
         child: Text(
           file.name,
-          style: DunesTypography.sans(fontSize: 13, color: DunesColors.text2),
+          style: DunesTypography.sans(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text2),
+            context: context,
+          ),
         ),
       );
     }
@@ -396,7 +402,11 @@ class NovaMarkdownBody extends StatelessWidget {
         padding: const EdgeInsets.only(top: 8),
         child: Text(
           file.name,
-          style: DunesTypography.sans(fontSize: 13, color: DunesColors.text2),
+          style: DunesTypography.sans(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text2),
+            context: context,
+          ),
         ),
       );
     }
@@ -426,10 +436,24 @@ class NovaCodeBlock extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E2E),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFF1E1E2E),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: partial ? const Color(0x592F5D62) : const Color(0x1F0F172A),
+          color: partial
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0x592F5D62),
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  const Color(0x1F0F172A),
+                  role: DunesColorRole.border,
+                ),
         ),
         boxShadow: const [
           BoxShadow(
@@ -445,9 +469,21 @@ class NovaCodeBlock extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-            decoration: const BoxDecoration(
-              color: Color(0x0AFFFFFF),
-              border: Border(bottom: BorderSide(color: Color(0x14FFFFFF))),
+            decoration: BoxDecoration(
+              color: DunesColors.resolveNullable(
+                context,
+                Color(0x0AFFFFFF),
+                role: DunesColorRole.surface,
+              ),
+              border: Border(
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0x14FFFFFF),
+                    role: DunesColorRole.border,
+                  ),
+                ),
+              ),
             ),
             child: Row(
               children: [
@@ -456,13 +492,21 @@ class NovaCodeBlock extends StatelessWidget {
                   style: DunesTypography.mono(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0x8CFFFFFF),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0x8CFFFFFF),
+                    ),
                     letterSpacing: 0.04 * 11,
+                    context: context,
                   ),
                 ),
                 const Spacer(),
                 Material(
-                  color: const Color(0x0FFFFFFF),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0x0FFFFFFF),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                   child: InkWell(
                     onTap: () async {
@@ -484,17 +528,24 @@ class NovaCodeBlock extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.copy_rounded,
                             size: 14,
-                            color: Color(0xD9FFFFFF),
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xD9FFFFFF),
+                            ),
                           ),
                           const SizedBox(width: 4),
                           Text(
                             '复制',
                             style: DunesTypography.sans(
                               fontSize: 11,
-                              color: const Color(0xD9FFFFFF),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xD9FFFFFF),
+                              ),
+                              context: context,
                             ),
                           ),
                         ],
@@ -512,8 +563,9 @@ class NovaCodeBlock extends StatelessWidget {
               code + (partial ? '▍' : ''),
               style: DunesTypography.mono(
                 fontSize: 12,
-                color: const Color(0xFFE8EEED),
+                color: DunesColors.resolve(context, const Color(0xFFE8EEED)),
                 height: 1.5,
+                context: context,
               ),
             ),
           ),
@@ -524,7 +576,8 @@ class NovaCodeBlock extends StatelessWidget {
                 '代码生成中…',
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: const Color(0x8CFFFFFF),
+                  color: DunesColors.resolve(context, const Color(0x8CFFFFFF)),
+                  context: context,
                 ),
               ),
             ),
@@ -598,11 +651,11 @@ class _NovaMarkdownBlock extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '• ',
                   style: TextStyle(
                     fontSize: 13,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                     height: 1.6,
                   ),
                 ),
@@ -629,9 +682,9 @@ class _NovaMarkdownBlock extends StatelessWidget {
               children: [
                 Text(
                   '${ordered.group(1)}. ',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                     height: 1.6,
                   ),
                 ),
@@ -789,9 +842,9 @@ class _NovaMarkdownInline extends StatelessWidget {
         out.add(
           TextSpan(
             text: token.substring(2, token.length - 2),
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: DunesColors.accentDeep,
+              color: DunesColors.resolve(context, DunesColors.accentDeep),
             ),
           ),
         );
@@ -813,15 +866,26 @@ class _NovaMarkdownInline extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
               margin: const EdgeInsets.symmetric(horizontal: 1),
               decoration: BoxDecoration(
-                color: const Color(0x142F5D62),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0x142F5D62),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0x1F2F5D62)),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0x1F2F5D62),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               child: Text(
                 token.substring(1, token.length - 1),
                 style: DunesTypography.mono(
                   fontSize: 11.5,
-                  color: DunesColors.accentDeep,
+                  color: DunesColors.resolve(context, DunesColors.accentDeep),
+                  context: context,
                 ),
               ),
             ),

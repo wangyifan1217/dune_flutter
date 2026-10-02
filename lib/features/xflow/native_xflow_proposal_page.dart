@@ -7,6 +7,7 @@ import 'native_xflow_form_page.dart';
 import 'proposal_upload_page.dart';
 import 'xflow_form_styles.dart';
 import 'xflow_service.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// 销售/业务提案统一入口：先拉后端模板配置，再决定展示上传页或动态表单。
 class NativeXflowProposalPage extends StatefulWidget {
@@ -72,9 +73,17 @@ class _NativeXflowProposalPageState extends State<NativeXflowProposalPage> {
   Widget build(BuildContext context) {
     if (_useUploadFlow == null) {
       return Scaffold(
-        backgroundColor: XfProposalUi.bg,
+        backgroundColor: DunesColors.resolve(
+          context,
+          XfProposalUi.bg,
+          role: DunesColorRole.surface,
+        ),
         appBar: AppBar(
-          backgroundColor: XfProposalUi.bg,
+          backgroundColor: DunesColors.resolve(
+            context,
+            XfProposalUi.bg,
+            role: DunesColorRole.surface,
+          ),
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_rounded, size: 18),
@@ -88,9 +97,17 @@ class _NativeXflowProposalPageState extends State<NativeXflowProposalPage> {
 
     if (_error != null && !_useUploadFlow!) {
       return Scaffold(
-        backgroundColor: XfProposalUi.bg,
+        backgroundColor: DunesColors.resolve(
+          context,
+          XfProposalUi.bg,
+          role: DunesColorRole.surface,
+        ),
         appBar: AppBar(
-          backgroundColor: XfProposalUi.bg,
+          backgroundColor: DunesColors.resolve(
+            context,
+            XfProposalUi.bg,
+            role: DunesColorRole.surface,
+          ),
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_rounded, size: 18),

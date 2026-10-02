@@ -252,7 +252,11 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
     final empty = !hasScore;
     return ColoredBox(
       key: ValueKey<int>(widget.session.userId),
-      color: const Color(0xFFF8F5FC),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF8F5FC),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -296,7 +300,11 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
                         key: const Key('work-profile-perf-acked'),
                         style: DunesTypography.sans(
                           fontSize: 13,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -340,9 +348,21 @@ class _Header extends StatelessWidget {
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: const BoxDecoration(
-        color: Color(0xFFFCFAFF),
-        border: Border(bottom: BorderSide(color: Color(0xFFE7DFF0))),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFFCFAFF),
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE7DFF0),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -350,7 +370,7 @@ class _Header extends StatelessWidget {
             tooltip: '返回',
             onPressed: onBack,
             icon: const Icon(Icons.arrow_back_rounded),
-            color: const Color(0xFF4A3866),
+            color: DunesColors.resolve(context, const Color(0xFF4A3866)),
           ),
           Expanded(
             child: Text(
@@ -358,7 +378,8 @@ class _Header extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
-                color: const Color(0xFF312249),
+                color: DunesColors.resolve(context, const Color(0xFF312249)),
+                context: context,
               ),
             ),
           ),
@@ -372,6 +393,7 @@ class _Header extends StatelessWidget {
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: _perfAccent,
+                  context: context,
                 ),
               ),
             ),
@@ -518,7 +540,8 @@ class _ErrorCard extends StatelessWidget {
               key: const Key('work-profile-perf-error'),
               style: DunesTypography.sans(
                 fontSize: 14,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
             const SizedBox(height: 8),
@@ -529,7 +552,8 @@ class _ErrorCard extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.coral,
+                  color: DunesColors.resolve(context, DunesColors.coral),
+                  context: context,
                 ),
               ),
             ),
@@ -551,7 +575,11 @@ class _SummaryCard extends StatelessWidget {
       key: const Key('work-profile-perf-summary'),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFEEF4FF),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFEEF4FF),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -568,7 +596,8 @@ class _SummaryCard extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFF312249),
+                  color: DunesColors.resolve(context, const Color(0xFF312249)),
+                  context: context,
                 ),
               ),
               _GradeChip(grade: person.resolvedGrade),
@@ -578,7 +607,11 @@ class _SummaryCard extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFFB07A2B),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFB07A2B),
+                    ),
+                    context: context,
                   ),
                 ),
               if (!person.isRubric) ...[
@@ -586,14 +619,16 @@ class _SummaryCard extends StatelessWidget {
                   '运营商权重 ${person.telecomWeight.toStringAsFixed(4)}',
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
                 ),
                 Text(
                   '能源权重 ${person.energyWeight.toStringAsFixed(4)}',
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
                 ),
               ],
@@ -616,7 +651,11 @@ class _EmptyCard extends StatelessWidget {
         child: Text(
           '本月暂无对应的灯塔数据规则',
           key: const Key('work-profile-perf-empty'),
-          style: DunesTypography.sans(fontSize: 14, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 14,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       ),
     );
@@ -633,9 +672,19 @@ class _CategoryBlock extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE6DCF0)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE6DCF0),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -647,7 +696,8 @@ class _CategoryBlock extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: const Color(0xFF312249),
+              color: DunesColors.resolve(context, const Color(0xFF312249)),
+              context: context,
             ),
           ),
           const SizedBox(height: 2),
@@ -655,7 +705,11 @@ class _CategoryBlock extends StatelessWidget {
             category.category == 'rd' || category.category == 'office'
                 ? '量表得分 ${category.score.toStringAsFixed(2)}'
                 : '板块得分 ${category.score.toStringAsFixed(2)} · 权重 ${category.categoryWeight.toStringAsFixed(4)}',
-            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
           const SizedBox(height: 8),
           for (final task in category.tasks) _TaskRow(task: task),
@@ -678,9 +732,19 @@ class _TaskRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8F5FC),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFF8F5FC),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE6DCF0)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE6DCF0),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -696,7 +760,8 @@ class _TaskRow extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -704,7 +769,11 @@ class _TaskRow extends StatelessWidget {
                         kpiLighthouseSliceSubtitle(task),
                         style: DunesTypography.sans(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -719,7 +788,11 @@ class _TaskRow extends StatelessWidget {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -727,7 +800,11 @@ class _TaskRow extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ),
@@ -739,7 +816,8 @@ class _TaskRow extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
               ],
@@ -756,7 +834,11 @@ class _TaskRow extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: const Color(0xFFB07A2B),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFB07A2B),
+                          ),
+                          context: context,
                         ),
                       ),
                     ),
@@ -765,7 +847,8 @@ class _TaskRow extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.coral,
+                      color: DunesColors.resolve(context, DunesColors.coral),
+                      context: context,
                     ),
                   ),
                 ],
@@ -777,7 +860,8 @@ class _TaskRow extends StatelessWidget {
                 '自动权重 ${task.autoWeightPct!.toStringAsFixed(2)}%',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: const Color(0xFFB07A2B),
+                  color: DunesColors.resolve(context, const Color(0xFFB07A2B)),
+                  context: context,
                 ),
               ),
             if (task.remark.isNotEmpty)
@@ -785,7 +869,8 @@ class _TaskRow extends StatelessWidget {
                 '备注 ${task.remark}',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: const Color(0xFFB07A2B),
+                  color: DunesColors.resolve(context, const Color(0xFFB07A2B)),
+                  context: context,
                 ),
               ),
             if (task.scoreAdjusted || task.scoreAdj != 0)
@@ -793,7 +878,8 @@ class _TaskRow extends StatelessWidget {
                 '加减分 ${formatKpiAdj(task.scoreAdj)}',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: const Color(0xFFB07A2B),
+                  color: DunesColors.resolve(context, const Color(0xFFB07A2B)),
+                  context: context,
                 ),
               ),
             if (!task.isRubric) ...[
@@ -801,7 +887,8 @@ class _TaskRow extends StatelessWidget {
                 '本月营收 ${kpiMoney(task.curRevenue)} · 上月 ${kpiMoney(task.prevRevenue)}',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               Text(
@@ -811,7 +898,8 @@ class _TaskRow extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
             ],
@@ -836,7 +924,11 @@ class _GradeChip extends StatelessWidget {
       key: const Key('work-profile-perf-grade'),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFEDE4F6),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFEDE4F6),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -845,6 +937,7 @@ class _GradeChip extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.w700,
           color: _perfAccent,
+          context: context,
         ),
       ),
     );

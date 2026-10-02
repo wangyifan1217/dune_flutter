@@ -17,11 +17,7 @@ Future<bool> downloadDriveItemToLocal({
   required DriveItem item,
 }) async {
   if (item.isFolder) {
-    showDunesCenterToast(
-      context,
-      '文件夹不支持下载到本地',
-      kind: DunesToastKind.error,
-    );
+    showDunesCenterToast(context, '文件夹不支持下载到本地', kind: DunesToastKind.error);
     return false;
   }
 
@@ -36,7 +32,7 @@ Future<bool> downloadDriveItemToLocal({
             : (item.downloaded
                   ? '「$title」本地有旧版本。是否下载当前版本？'
                   : '将把「$title」下载到本地。\n\n是否继续？'),
-        style: DunesTypography.sans(fontSize: 14, height: 1.55),
+        style: DunesTypography.sans(fontSize: 14, height: 1.55, context: ctx),
       ),
       actions: [
         TextButton(
@@ -84,9 +80,7 @@ Future<bool> downloadDriveItemToLocal({
 
     if (!context.mounted) return true;
     Navigator.of(context, rootNavigator: true).maybePop();
-    final hint = (path != null && path.isNotEmpty)
-        ? '已下载到本地'
-        : '已开始下载';
+    final hint = (path != null && path.isNotEmpty) ? '已下载到本地' : '已开始下载';
     showDunesCenterToast(context, hint);
 
     if (path != null && path.isNotEmpty) {

@@ -24,7 +24,8 @@ class NativeApprovalAssistantPendingPage extends StatefulWidget {
   final AuthSession session;
   final ApprovalAssistantPickMode mode;
   final VoidCallback? onBack;
-  final Future<void> Function(String businessType, int businessId)? onOpenDetail;
+  final Future<void> Function(String businessType, int businessId)?
+  onOpenDetail;
   final VoidCallback? onActionDone;
 
   @override
@@ -177,11 +178,7 @@ class _NativeApprovalAssistantPendingPageState
       widget.onActionDone?.call();
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(
-        context,
-        friendlyErrorText(e),
-        kind: DunesToastKind.error,
-      );
+      showDunesToast(context, friendlyErrorText(e), kind: DunesToastKind.error);
     } finally {
       if (mounted) setState(() => _acting = false);
     }
@@ -200,11 +197,7 @@ class _NativeApprovalAssistantPendingPageState
       widget.onActionDone?.call();
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(
-        context,
-        friendlyErrorText(e),
-        kind: DunesToastKind.error,
-      );
+      showDunesToast(context, friendlyErrorText(e), kind: DunesToastKind.error);
     } finally {
       if (mounted) setState(() => _acting = false);
     }
@@ -220,7 +213,11 @@ class _NativeApprovalAssistantPendingPageState
     final mine = _filter(_mine);
     final initiated = _filter(_initiated);
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -229,9 +226,10 @@ class _NativeApprovalAssistantPendingPageState
               child: Row(
                 children: [
                   IconButton(
-                    onPressed: widget.onBack ?? () => Navigator.maybePop(context),
+                    onPressed:
+                        widget.onBack ?? () => Navigator.maybePop(context),
                     icon: const Icon(Icons.chevron_left_rounded, size: 28),
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                   Expanded(
                     child: Text(
@@ -239,7 +237,8 @@ class _NativeApprovalAssistantPendingPageState
                       style: DunesTypography.sans(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                     ),
                   ),
@@ -260,18 +259,20 @@ class _NativeApprovalAssistantPendingPageState
                 textInputAction: TextInputAction.search,
                 style: DunesTypography.sans(
                   fontSize: 14,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
                 decoration: InputDecoration(
                   hintText: '搜索标题、单号、类型、发起人…',
                   hintStyle: DunesTypography.sans(
                     fontSize: 13.5,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
-                  prefixIcon: const Icon(
+                  prefixIcon: Icon(
                     Icons.search_rounded,
                     size: 20,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                   suffixIcon: _query.isEmpty
                       ? null
@@ -281,14 +282,21 @@ class _NativeApprovalAssistantPendingPageState
                             _search.clear();
                             _searchFocus.requestFocus();
                           },
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.close_rounded,
                             size: 18,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                   filled: true,
-                  fillColor: DunesColors.brandPurpleSoft,
+                  fillColor: DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurpleSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 10,
@@ -299,14 +307,22 @@ class _NativeApprovalAssistantPendingPageState
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: DunesColors.brandPurpleLine,
+                    borderSide: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurpleLine,
+                        role: DunesColorRole.border,
+                      ),
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: DunesColors.brandPurple,
+                    borderSide: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
+                        role: DunesColorRole.border,
+                      ),
                       width: 1.2,
                     ),
                   ),
@@ -315,9 +331,18 @@ class _NativeApprovalAssistantPendingPageState
             ),
             TabBar(
               controller: _tabs,
-              labelColor: DunesColors.brandPurpleDeep,
-              unselectedLabelColor: DunesColors.text3,
-              indicatorColor: DunesColors.brandPurple,
+              labelColor: DunesColors.resolve(
+                context,
+                DunesColors.brandPurpleDeep,
+              ),
+              unselectedLabelColor: DunesColors.resolve(
+                context,
+                DunesColors.text3,
+              ),
+              indicatorColor: DunesColors.resolve(
+                context,
+                DunesColors.brandPurple,
+              ),
               tabs: [
                 Tab(text: '待我审批(${mine.length})'),
                 Tab(text: '我发起进行中(${initiated.length})'),
@@ -344,9 +369,7 @@ class _NativeApprovalAssistantPendingPageState
                         _ListPane(
                           items: mine,
                           mode: widget.mode,
-                          empty: _query.isEmpty
-                              ? '暂无待我审批'
-                              : '未找到匹配的待审',
+                          empty: _query.isEmpty ? '暂无待我审批' : '未找到匹配的待审',
                           onOpen: _openItem,
                           onExplain: _runExplain,
                           onUrge: _runUrge,
@@ -354,9 +377,7 @@ class _NativeApprovalAssistantPendingPageState
                         _ListPane(
                           items: initiated,
                           mode: widget.mode,
-                          empty: _query.isEmpty
-                              ? '暂无进行中的发起'
-                              : '未找到匹配的发起',
+                          empty: _query.isEmpty ? '暂无进行中的发起' : '未找到匹配的发起',
                           preferUrge: true,
                           onOpen: _openItem,
                           onExplain: _runExplain,
@@ -397,7 +418,11 @@ class _ListPane extends StatelessWidget {
       return Center(
         child: Text(
           empty,
-          style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       );
     }
@@ -423,7 +448,11 @@ class _ListPane extends StatelessWidget {
         final urgency = _urgencyLabel(item);
         final status = _statusLabel(item.status);
         return Material(
-          color: DunesColors.bgApp,
+          color: DunesColors.resolve(
+            context,
+            DunesColors.bgApp,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(14),
           child: InkWell(
             onTap: () => onOpen(item),
@@ -431,7 +460,13 @@ class _ListPane extends StatelessWidget {
             child: Ink(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: DunesColors.brandPurpleLine),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurpleLine,
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
               child: Column(
@@ -448,7 +483,11 @@ class _ListPane extends StatelessWidget {
                           style: DunesTypography.sans(
                             fontSize: 14.5,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                            context: context,
                           ),
                         ),
                       ),
@@ -462,7 +501,11 @@ class _ListPane extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: DunesColors.coralSoft,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.coralSoft,
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
@@ -470,7 +513,11 @@ class _ListPane extends StatelessWidget {
                             style: DunesTypography.sans(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w600,
-                              color: DunesColors.coral,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.coral,
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -514,7 +561,8 @@ class _ListPane extends StatelessWidget {
                             onPressed: () => onExplain(item),
                             child: const Text('解释'),
                           ),
-                        if (mode == ApprovalAssistantPickMode.urge || preferUrge)
+                        if (mode == ApprovalAssistantPickMode.urge ||
+                            preferUrge)
                           TextButton(
                             onPressed: () => onUrge(item),
                             child: const Text('催办'),
@@ -538,10 +586,7 @@ class _ListPane extends StatelessWidget {
           width: 64,
           child: Text(
             label,
-            style: DunesTypography.sans(
-              fontSize: 12,
-              color: DunesColors.text3,
-            ),
+            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
           ),
         ),
         Expanded(
@@ -549,10 +594,7 @@ class _ListPane extends StatelessWidget {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: DunesTypography.sans(
-              fontSize: 12,
-              color: DunesColors.text2,
-            ),
+            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2),
           ),
         ),
       ],
@@ -594,7 +636,8 @@ String _displayTitle(XflowProposalItem item) {
   final kind = _kindLabel(item);
   final raw = _normalizeApprovalAssistantTitle(item.title);
   final bt = item.businessType.trim();
-  final generic = raw.isEmpty ||
+  final generic =
+      raw.isEmpty ||
       raw == bt ||
       raw.toUpperCase() == bt.toUpperCase() ||
       raw.startsWith('$bt #') ||
@@ -662,25 +705,29 @@ class _StatusChip extends StatelessWidget {
     late final Color bg;
     late final Color fg;
     if (st == 'OPEN' || st == 'PENDING') {
-      bg = DunesColors.amberSoft;
-      fg = const Color(0xFF5D3508);
+      bg = DunesColors.resolve(context, DunesColors.amberSoft);
+      fg = DunesColors.resolve(context, const Color(0xFF5D3508));
     } else if (st == 'APPROVED' || st == 'DONE' || st == 'LIVE') {
-      bg = DunesColors.greenSoft;
-      fg = const Color(0xFF085041);
+      bg = DunesColors.resolve(context, DunesColors.greenSoft);
+      fg = DunesColors.resolve(context, const Color(0xFF085041));
     } else if (st == 'REJECTED') {
-      bg = DunesColors.coralSoft;
-      fg = const Color(0xFF993C1D);
+      bg = DunesColors.resolve(context, DunesColors.coralSoft);
+      fg = DunesColors.resolve(context, const Color(0xFF993C1D));
     } else if (st == 'DRAFT' || st == 'PENDING_INITIATE') {
-      bg = DunesColors.blueSoft;
-      fg = DunesColors.blue;
+      bg = DunesColors.resolve(context, DunesColors.blueSoft);
+      fg = DunesColors.resolve(context, DunesColors.blue);
     } else {
-      bg = DunesColors.bgSoft;
-      fg = DunesColors.text2;
+      bg = DunesColors.resolve(context, DunesColors.bgSoft);
+      fg = DunesColors.resolve(context, DunesColors.text2);
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: bg,
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
@@ -689,6 +736,7 @@ class _StatusChip extends StatelessWidget {
           fontSize: 10.5,
           fontWeight: FontWeight.w600,
           color: fg,
+          context: context,
         ),
       ),
     );

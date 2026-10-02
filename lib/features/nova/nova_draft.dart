@@ -35,11 +35,7 @@ class NovaDraftAttachment {
 }
 
 class NovaDraftTray extends StatelessWidget {
-  const NovaDraftTray({
-    super.key,
-    required this.items,
-    required this.onRemove,
-  });
+  const NovaDraftTray({super.key, required this.items, required this.onRemove});
 
   final List<NovaDraftAttachment> items;
   final ValueChanged<String> onRemove;
@@ -49,9 +45,21 @@ class NovaDraftTray extends StatelessWidget {
     if (items.isEmpty) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: SizedBox(
         height: 72,
@@ -59,7 +67,8 @@ class NovaDraftTray extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           itemCount: items.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
-          itemBuilder: (_, i) => _DraftTile(item: items[i], onRemove: () => onRemove(items[i].id)),
+          itemBuilder: (_, i) =>
+              _DraftTile(item: items[i], onRemove: () => onRemove(items[i].id)),
         ),
       ),
     );
@@ -84,9 +93,19 @@ class _DraftTile extends StatelessWidget {
             width: 62,
             height: 62,
             decoration: BoxDecoration(
-              color: DunesColors.bgApp,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.bgApp,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: DunesColors.borderSoft),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             clipBehavior: Clip.antiAlias,
             child: item.isImage
@@ -94,7 +113,11 @@ class _DraftTile extends StatelessWidget {
                 : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.insert_drive_file_outlined, size: 18, color: DunesColors.accent),
+                      Icon(
+                        Icons.insert_drive_file_outlined,
+                        size: 18,
+                        color: DunesColors.resolve(context, DunesColors.accent),
+                      ),
                       const SizedBox(height: 3),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -102,7 +125,14 @@ class _DraftTile extends StatelessWidget {
                           item.fileName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: DunesTypography.sans(fontSize: 9, color: DunesColors.text2),
+                          style: DunesTypography.sans(
+                            fontSize: 9,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
+                            context: context,
+                          ),
                         ),
                       ),
                     ],
@@ -112,7 +142,11 @@ class _DraftTile extends StatelessWidget {
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black26,
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.black26,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
@@ -121,8 +155,10 @@ class _DraftTile extends StatelessWidget {
                   height: 22,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    value: item.uploadProgress > 0 ? item.uploadProgress / 100 : null,
-                    color: Colors.white,
+                    value: item.uploadProgress > 0
+                        ? item.uploadProgress / 100
+                        : null,
+                    color: DunesColors.resolve(context, Colors.white),
                   ),
                 ),
               ),
@@ -131,15 +167,23 @@ class _DraftTile extends StatelessWidget {
             right: -2,
             top: -2,
             child: Material(
-              color: Colors.black54,
+              color: DunesColors.resolve(
+                context,
+                Colors.black54,
+                role: DunesColorRole.surface,
+              ),
               shape: const CircleBorder(),
               child: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: onRemove,
-                child: const SizedBox(
+                child: SizedBox(
                   width: 18,
                   height: 18,
-                  child: Icon(Icons.close, size: 12, color: Colors.white),
+                  child: Icon(
+                    Icons.close,
+                    size: 12,
+                    color: DunesColors.resolve(context, Colors.white),
+                  ),
                 ),
               ),
             ),

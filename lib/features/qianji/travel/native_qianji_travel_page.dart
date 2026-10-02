@@ -114,14 +114,26 @@ Future<DateTimeRange?> _pickTravelDateRange(
         data: base.copyWith(
           colorScheme: base.colorScheme.copyWith(
             primary: _themePurple,
-            onPrimary: Colors.white,
+            onPrimary: DunesColors.resolve(ctx, Colors.white),
             surfaceTint: Colors.transparent,
           ),
           datePickerTheme: base.datePickerTheme.copyWith(
-            rangeSelectionBackgroundColor: const Color(0xFFEFEAFA),
-            backgroundColor: Colors.white,
-            headerBackgroundColor: Colors.white,
-            headerForegroundColor: DunesColors.text,
+            rangeSelectionBackgroundColor: DunesColors.resolve(
+              ctx,
+              const Color(0xFFEFEAFA),
+              role: DunesColorRole.surface,
+            ),
+            backgroundColor: DunesColors.resolve(
+              ctx,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
+            headerBackgroundColor: DunesColors.resolve(
+              ctx,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
+            headerForegroundColor: DunesColors.resolve(ctx, DunesColors.text),
           ),
         ),
         child: child!,
@@ -145,9 +157,9 @@ void _showTravelKindCosts(BuildContext context, List<TravelEmployee> people) {
           children: [
             Text(
               total == 0 ? '当前筛选下没有费用' : '合计 ${formatYuan(total)}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(ctx, DunesColors.text2),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -185,18 +197,18 @@ void _showTravelFeeBreakdown(
           children: [
             Text(
               total == 0 ? '当前筛选下没有手续费' : '合计 ${formatYuan(total)}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(ctx, DunesColors.text2),
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               '目前只统计改签手续费。同一订单多人出行只计一次整单金额，不拆到人，也不计入出行成本。',
               style: TextStyle(
                 fontSize: 12,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(ctx, DunesColors.text3),
                 height: 1.4,
               ),
             ),
@@ -362,7 +374,11 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
     final legs = _visibleLegs.length;
 
     return Material(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: !isDesktopCommOnly,
         child: Column(
@@ -391,7 +407,12 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
                         child: Text(
                           _error!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Color(0xFFB42318)),
+                          style: TextStyle(
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFFB42318),
+                            ),
+                          ),
                         ),
                       ),
                     )
@@ -400,7 +421,12 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
                         ? Center(
                             child: Text(
                               _hasPeopleFilter ? '没有符合条件的人员' : '暂无导入的差旅数据',
-                              style: const TextStyle(color: DunesColors.text3),
+                              style: TextStyle(
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                              ),
                             ),
                           )
                         : _EmployeeList(
@@ -434,7 +460,7 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: widget.onBack,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -442,38 +468,45 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
                   Icon(
                     Icons.arrow_back_ios_new,
                     size: 14,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                   SizedBox(width: 2),
                   Text(
                     '饕',
-                    style: TextStyle(fontSize: 13, color: DunesColors.text2),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               '差旅管理',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ),
           if (widget.onOpenTravelImport != null) ...[
             const SizedBox(width: 8),
             Material(
-              color: const Color(0xFFF3EEFA),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF3EEFA),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(999),
               child: InkWell(
                 key: const Key('travel-import-entry'),
                 borderRadius: BorderRadius.circular(999),
                 onTap: widget.onOpenTravelImport,
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -481,7 +514,10 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
                       Icon(
                         Icons.list_alt_rounded,
                         size: 16,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                       SizedBox(width: 4),
                       Text(
@@ -489,7 +525,10 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: _themePurple,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _themePurple,
+                          ),
                         ),
                       ),
                     ],
@@ -501,13 +540,19 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
           IconButton(
             tooltip: '出行成本怎么算',
             onPressed: () => _showTravelCostHelp(context),
-            icon: const Icon(Icons.help_outline, color: _themePurple),
+            icon: Icon(
+              Icons.help_outline,
+              color: DunesColors.resolveNullable(context, _themePurple),
+            ),
           ),
           if (_view == _TravelView.map)
             IconButton(
               tooltip: '全屏',
               onPressed: _openMapFullscreen,
-              icon: const Icon(Icons.fullscreen, color: _themePurple),
+              icon: Icon(
+                Icons.fullscreen,
+                color: DunesColors.resolveNullable(context, _themePurple),
+              ),
             ),
         ],
       ),
@@ -600,7 +645,8 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => TravelIssuesPage(session: widget.session),
+                        builder: (_) =>
+                            TravelIssuesPage(session: widget.session),
                       ),
                     );
                   },
@@ -757,9 +803,19 @@ class _StatChip extends StatelessWidget {
     final body = Container(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -768,10 +824,10 @@ class _StatChip extends StatelessWidget {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 2),
@@ -780,14 +836,18 @@ class _StatChip extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ),
               if (onInfo != null)
-                const Icon(Icons.info_outline, size: 14, color: _themePurple),
+                Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: DunesColors.resolveNullable(context, _themePurple),
+                ),
             ],
           ),
         ],
@@ -838,17 +898,21 @@ class _KindCostLine extends StatelessWidget {
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: color,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    color,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(99),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 kind.label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
               const Spacer(),
@@ -857,7 +921,7 @@ class _KindCostLine extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: color,
+                  color: DunesColors.resolveNullable(context, color),
                 ),
               ),
               const SizedBox(width: 8),
@@ -866,9 +930,9 @@ class _KindCostLine extends StatelessWidget {
                 child: Text(
                   '$pct%',
                   textAlign: TextAlign.right,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ),
@@ -881,7 +945,11 @@ class _KindCostLine extends StatelessWidget {
               value: ratio,
               minHeight: 4,
               color: color,
-              backgroundColor: const Color(0xFFF0EEF7),
+              backgroundColor: DunesColors.resolve(
+                context,
+                const Color(0xFFF0EEF7),
+                role: DunesColorRole.surface,
+              ),
             ),
           ),
         ],
@@ -905,7 +973,11 @@ class _Segmented<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFFEEF0F3),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFEEF0F3),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -922,7 +994,11 @@ class _Segmented<T> extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: value == item.value
-                      ? Colors.white
+                      ? DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        )
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -935,8 +1011,8 @@ class _Segmented<T> extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                     decoration: TextDecoration.none,
                     color: value == item.value
-                        ? _themePurple
-                        : DunesColors.text2,
+                        ? DunesColors.resolve(context, _themePurple)
+                        : DunesColors.resolve(context, DunesColors.text2),
                   ),
                 ),
               ),
@@ -1032,20 +1108,23 @@ class _TravelSearchFilters extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Text(
+                    Text(
                       '部门筛选',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       viewAllDepts ? '全部部门' : '本人及下属',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1094,14 +1173,20 @@ class _PersonSearchField extends StatelessWidget {
       child: TextField(
         controller: controller,
         onChanged: onChanged,
-        style: const TextStyle(fontSize: 13, color: DunesColors.text),
+        style: TextStyle(
+          fontSize: 13,
+          color: DunesColors.resolve(context, DunesColors.text),
+        ),
         decoration: InputDecoration(
           hintText: '搜索人员',
-          hintStyle: const TextStyle(fontSize: 13, color: DunesColors.text3),
-          prefixIcon: const Icon(
+          hintStyle: TextStyle(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+          prefixIcon: Icon(
             Icons.search,
             size: 18,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
           ),
           suffixIcon: controller.text.isEmpty
               ? null
@@ -1110,14 +1195,18 @@ class _PersonSearchField extends StatelessWidget {
                     controller.clear();
                     onChanged('');
                   },
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.close,
                     size: 16,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 8,
@@ -1125,15 +1214,33 @@ class _PersonSearchField extends StatelessWidget {
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _themePurple),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                _themePurple,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ),
       ),
@@ -1155,7 +1262,17 @@ class _RangeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFF0EEF7) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EEF7),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -1165,7 +1282,17 @@ class _RangeChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? _themePurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -1173,7 +1300,9 @@ class _RangeChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? _themePurple : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, _themePurple)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -1198,7 +1327,17 @@ class _DeptChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFF0EEF7) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EEF7),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -1208,7 +1347,17 @@ class _DeptChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? _themePurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Row(
@@ -1219,7 +1368,9 @@ class _DeptChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? _themePurple : DunesColors.text2,
+                  color: selected
+                      ? DunesColors.resolve(context, _themePurple)
+                      : DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 6),
@@ -1228,7 +1379,9 @@ class _DeptChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: selected ? _themePurple : DunesColors.text3,
+                  color: selected
+                      ? DunesColors.resolve(context, _themePurple)
+                      : DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
             ],
@@ -1262,7 +1415,11 @@ class _EmployeeList extends StatelessWidget {
         final kinds = p.legs.map((l) => l.kind).toSet();
         final fee = travelRebookFeeTotal([p]);
         return Material(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
@@ -1277,19 +1434,25 @@ class _EmployeeList extends StatelessWidget {
                       Expanded(
                         child: Text(
                           p.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
                           ),
                         ),
                       ),
                       Text(
                         formatYuan(p.cost),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: _themePurple,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _themePurple,
+                          ),
                         ),
                       ),
                     ],
@@ -1301,9 +1464,9 @@ class _EmployeeList extends StatelessWidget {
                       '${p.trips} 段行程',
                       if (fee > 0) '手续费 ${formatYuan(fee)}',
                     ].join(' · '),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1318,14 +1481,21 @@ class _EmployeeList extends StatelessWidget {
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: _kindColor(kind).withValues(alpha: 0.12),
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _kindColor(kind).withValues(alpha: 0.12),
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
                             kind.label,
                             style: TextStyle(
                               fontSize: 11,
-                              color: _kindColor(kind),
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _kindColor(kind),
+                              ),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -1337,14 +1507,21 @@ class _EmployeeList extends StatelessWidget {
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF0EEF7),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFF0EEF7),
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
                             p.provinceChip(name),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: _themePurple,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _themePurple,
+                              ),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -1695,7 +1872,11 @@ class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
         _close();
       },
       child: Material(
-        color: const Color(0xFFEEF1F6),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFEEF1F6),
+          role: DunesColorRole.surface,
+        ),
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1707,9 +1888,12 @@ class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
                     IconButton(
                       tooltip: '退出全屏',
                       onPressed: _close,
-                      icon: const Icon(Icons.close, color: DunesColors.text),
+                      icon: Icon(
+                        Icons.close,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                      ),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         '差旅地图',
                         maxLines: 1,
@@ -1717,7 +1901,10 @@ class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: _themePurple,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _themePurple,
+                          ),
                           decoration: TextDecoration.none,
                         ),
                       ),
@@ -1725,28 +1912,41 @@ class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
                     IconButton(
                       tooltip: '出行成本怎么算',
                       onPressed: () => _showTravelCostHelp(context),
-                      icon: const Icon(Icons.help_outline, color: _themePurple),
+                      icon: Icon(
+                        Icons.help_outline,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
               Material(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 child: ExpansionTile(
                   tilePadding: const EdgeInsets.symmetric(horizontal: 16),
                   title: Text(
                     _selectedPersonName == null
                         ? '筛选条件'
                         : '当前查看：$_selectedPersonName',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
-                  subtitle: const Text(
+                  subtitle: Text(
                     '展开后可调整人员、时间和部门',
-                    style: TextStyle(fontSize: 11, color: DunesColors.text3),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                   children: [
                     _TravelSearchFilters(
@@ -1806,7 +2006,12 @@ class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
                           child: Text(
                             _error!,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: Color(0xFFB42318)),
+                            style: TextStyle(
+                              color: DunesColors.resolveNullable(
+                                context,
+                                Color(0xFFB42318),
+                              ),
+                            ),
                           ),
                         ),
                       )
@@ -2002,11 +2207,21 @@ class _ChinaTravelMapState extends State<_ChinaTravelMap>
           : const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFFEEF1F6),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFEEF1F6),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(widget.edgeToEdge ? 0 : 12),
           border: widget.edgeToEdge
               ? null
-              : Border.all(color: const Color(0xFFE8EAED)),
+              : Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFE8EAED),
+                    role: DunesColorRole.border,
+                  ),
+                ),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(widget.edgeToEdge ? 0 : 12),
@@ -2063,7 +2278,11 @@ class _ChinaTravelMapState extends State<_ChinaTravelMap>
                       top: 8,
                       right: 8,
                       child: Material(
-                        color: Colors.white.withValues(alpha: 0.92),
+                        color: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ).withValues(alpha: 0.92),
                         shape: const CircleBorder(),
                         elevation: 1,
                         child: IconButton(
@@ -2073,7 +2292,10 @@ class _ChinaTravelMapState extends State<_ChinaTravelMap>
                             widget.fullscreen
                                 ? Icons.fullscreen_exit
                                 : Icons.fullscreen,
-                            color: _themePurple,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _themePurple,
+                            ),
                           ),
                         ),
                       ),
@@ -2092,7 +2314,11 @@ class _ChinaTravelMapState extends State<_ChinaTravelMap>
                   if (_pick != null)
                     Positioned.fill(
                       child: Material(
-                        color: const Color(0x59000000),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0x59000000),
+                          role: DunesColorRole.surface,
+                        ),
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () => setState(() => _pick = null),
@@ -2135,15 +2361,25 @@ class _HintChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ).withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
-          color: Color(0xFF4B5563),
+          color: DunesColors.resolveNullable(context, Color(0xFF4B5563)),
           decoration: TextDecoration.none,
         ),
       ),
@@ -2174,7 +2410,11 @@ class _CostCard extends StatelessWidget {
           );
 
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       elevation: 8,
       shadowColor: const Color(0x33000000),
       borderRadius: BorderRadius.circular(12),
@@ -2192,22 +2432,22 @@ class _CostCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       pick.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ),
                   InkWell(
                     onTap: onClose,
                     borderRadius: BorderRadius.circular(12),
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.all(4),
                       child: Icon(
                         Icons.close,
                         size: 16,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ),
@@ -2215,15 +2455,18 @@ class _CostCard extends StatelessWidget {
               ),
               Text(
                 pick.subtitle,
-                style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               const SizedBox(height: 6),
               Text(
                 formatYuan(pick.total),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
-                  color: _themePurple,
+                  color: DunesColors.resolveNullable(context, _themePurple),
                 ),
               ),
               if (listH > 0) ...[
@@ -2245,17 +2488,23 @@ class _CostCard extends StatelessWidget {
                               children: [
                                 Text(
                                   line.title,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: DunesColors.text,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text,
+                                    ),
                                   ),
                                 ),
                                 Text(
                                   line.meta,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 11,
-                                    color: DunesColors.text3,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text3,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -2266,19 +2515,25 @@ class _CostCard extends StatelessWidget {
                             children: [
                               Text(
                                 formatYuan(line.amount),
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
-                                  color: _themePurple,
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    _themePurple,
+                                  ),
                                 ),
                               ),
                               if (line.shared)
-                                const Text(
+                                Text(
                                   '分摊',
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
-                                    color: _themePurple,
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      _themePurple,
+                                    ),
                                   ),
                                 ),
                             ],
@@ -2305,24 +2560,46 @@ class _RouteLegend extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ).withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
-      child: const Wrap(
+      child: Wrap(
         spacing: 10,
         runSpacing: 6,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          _LegendDot(color: Color(0xFF7B5CD8), label: '飞机'),
-          _LegendDot(color: Color(0xFF0F766E), label: '火车'),
-          _LegendDot(color: Color(0xFFB54708), label: '酒店'),
-          _LegendDot(color: Color(0xFFC2410C), label: '用车'),
+          _LegendDot(
+            color: DunesColors.resolve(context, Color(0xFF7B5CD8)),
+            label: '飞机',
+          ),
+          _LegendDot(
+            color: DunesColors.resolve(context, Color(0xFF0F766E)),
+            label: '火车',
+          ),
+          _LegendDot(
+            color: DunesColors.resolve(context, Color(0xFFB54708)),
+            label: '酒店',
+          ),
+          _LegendDot(
+            color: DunesColors.resolve(context, Color(0xFFC2410C)),
+            label: '用车',
+          ),
           Text(
             '点击线路看费用',
             style: TextStyle(
               fontSize: 11,
-              color: Color(0xFF4B5563),
+              color: DunesColors.resolveNullable(context, Color(0xFF4B5563)),
               decoration: TextDecoration.none,
             ),
           ),
@@ -2345,14 +2622,21 @@ class _LegendDot extends StatelessWidget {
         Container(
           width: 8,
           height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: DunesColors.resolveNullable(
+              context,
+              color,
+              role: DunesColorRole.surface,
+            ),
+            shape: BoxShape.circle,
+          ),
         ),
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
-            color: Color(0xFF4B5563),
+            color: DunesColors.resolveNullable(context, Color(0xFF4B5563)),
             decoration: TextDecoration.none,
           ),
         ),

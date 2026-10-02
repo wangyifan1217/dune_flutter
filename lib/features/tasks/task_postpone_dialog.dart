@@ -119,9 +119,9 @@ class _TaskPostponeDialogState extends State<_TaskPostponeDialog> {
               widget.task.dueAt == null
                   ? '请选择新的截止日。'
                   : '当前截止 ${_fmt(widget.task.dueAt)}，新的截止日必须更晚。',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
                 height: 1.4,
               ),
             ),
@@ -135,7 +135,11 @@ class _TaskPostponeDialogState extends State<_TaskPostponeDialog> {
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF5F6F8),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF5F6F8),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -144,11 +148,14 @@ class _TaskPostponeDialogState extends State<_TaskPostponeDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             '新的截止日',
                             style: TextStyle(
                               fontSize: 11,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -158,17 +165,23 @@ class _TaskPostponeDialogState extends State<_TaskPostponeDialog> {
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
                               color: _dueAt == null
-                                  ? DunesColors.text3
-                                  : DunesColors.text,
+                                  ? DunesColors.resolve(
+                                      context,
+                                      DunesColors.text3,
+                                    )
+                                  : DunesColors.resolve(
+                                      context,
+                                      DunesColors.text,
+                                    ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.calendar_today_outlined,
                       size: 16,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ],
                 ),
@@ -181,7 +194,11 @@ class _TaskPostponeDialogState extends State<_TaskPostponeDialog> {
               decoration: InputDecoration(
                 hintText: '延期原因（可选）',
                 filled: true,
-                fillColor: const Color(0xFFF5F6F8),
+                fillColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF5F6F8),
+                  role: DunesColorRole.surface,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide.none,
@@ -196,7 +213,13 @@ class _TaskPostponeDialogState extends State<_TaskPostponeDialog> {
               const SizedBox(height: 8),
               Text(
                 _error!,
-                style: const TextStyle(fontSize: 12, color: Color(0xFFE35D6A)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFE35D6A),
+                  ),
+                ),
               ),
             ],
           ],
@@ -209,7 +232,11 @@ class _TaskPostponeDialogState extends State<_TaskPostponeDialog> {
         ),
         FilledButton(
           style: FilledButton.styleFrom(
-            backgroundColor: DunesColors.brandPurple,
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.brandPurple,
+              role: DunesColorRole.surface,
+            ),
           ),
           onPressed: _submit,
           child: const Text('确认延期'),

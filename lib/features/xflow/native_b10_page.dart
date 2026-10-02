@@ -47,7 +47,11 @@ Future<void> openLinkedProposalDetail({
         }
 
         return Material(
-          color: DunesColors.bgApp,
+          color: DunesColors.resolve(
+            ctx,
+            DunesColors.bgApp,
+            role: DunesColorRole.surface,
+          ),
           child: NativeB10Page(
             session: session,
             navigation: _LinkedProposalBackNav(onClose: close),
@@ -66,7 +70,7 @@ Future<void> openLinkedProposalDetail({
 
 class _LinkedProposalBackNav extends DunesNavigationController {
   _LinkedProposalBackNav({required this.onClose})
-      : super(initialScreen: 'linked-proposal');
+    : super(initialScreen: 'linked-proposal');
 
   final VoidCallback onClose;
 
@@ -100,6 +104,7 @@ class NativeB10Page extends StatefulWidget {
   final String backScreen;
   final void Function(int proposalId) onReedit;
   final VoidCallback? onApprovalCompleted;
+
   /// 打开下一条待审批（宿主导航 / 覆盖层切换）。
   final ValueChanged<XflowProposalItem>? onOpenPendingItem;
 
@@ -331,9 +336,9 @@ class _NativeB10PageState extends State<NativeB10Page> {
         title: const Text('撤回审批'),
         content: Text(
           _bundle?.trail?.steps.any(
-                (step) => step.decision.trim().isNotEmpty,
-              ) ??
-              false
+                    (step) => step.decision.trim().isNotEmpty,
+                  ) ??
+                  false
               ? '确认撤回此审批？已产生的审批意见会作废，待办会关闭。撤回后将保存为草稿，可修改后重新提交。'
               : '确认撤回此审批？撤回后将保存为草稿，可修改后重新提交。',
         ),
@@ -368,15 +373,12 @@ class _NativeB10PageState extends State<NativeB10Page> {
   Future<void> _deleteDraft() async {
     final id = _bundle?.detail.id ?? 0;
     if (id <= 0) return;
-    final isDraft =
-        (_bundle?.detail.status ?? '').toLowerCase() == 'draft';
+    final isDraft = (_bundle?.detail.status ?? '').toLowerCase() == 'draft';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(isDraft ? '删除草稿' : '删除单据'),
-        content: Text(
-          isDraft ? '确认删除此草稿？删除后不可恢复。' : '确认删除此已作废单据？删除后不可恢复。',
-        ),
+        content: Text(isDraft ? '确认删除此草稿？删除后不可恢复。' : '确认删除此已作废单据？删除后不可恢复。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -529,7 +531,11 @@ class _NativeB10PageState extends State<NativeB10Page> {
     final detail = _bundle?.detail;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -538,8 +544,9 @@ class _NativeB10PageState extends State<NativeB10Page> {
               crumb: '提案详情 · 返回列表',
               title: detail?.code ?? 'PROP-${widget.proposalId}',
               onBack: () => widget.navigation.popTo(widget.backScreen),
-              onForward:
-                  detail == null ? null : () => unawaited(_forwardApproval()),
+              onForward: detail == null
+                  ? null
+                  : () => unawaited(_forwardApproval()),
               forwarding: _forwarding,
             ),
             Expanded(
@@ -557,37 +564,37 @@ class _NativeB10PageState extends State<NativeB10Page> {
                           onTap: () =>
                               FocusManager.instance.primaryFocus?.unfocus(),
                           child: ListView(
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                          children: [
-                            XflowDetailRenderer(
-                              bundle: _bundle!,
-                              service: _service,
-                              onDelete: _deleteDraft,
-                              onPush: _push,
-                              onInitiate: _initiate,
-                              onReedit: () =>
-                                  widget.onReedit(_bundle!.detail.id),
-                              onVoid: _voidProposal,
-                              onWithdraw: _withdrawProposal,
-                              onReturn: _return,
-                              onOpenLinkedProposal: (proposalId, source) {
-                                openLinkedProposalDetail(
-                                  context: context,
-                                  session: widget.session,
-                                  proposalId: proposalId,
-                                  source: source,
-                                );
-                              },
-                            ),
-                            XflowCcRulesCard(
-                              rules: _ccRules,
-                              loading: _ccLoading,
-                              error: _ccError,
-                            ),
-                          ],
-                        ),
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                            children: [
+                              XflowDetailRenderer(
+                                bundle: _bundle!,
+                                service: _service,
+                                onDelete: _deleteDraft,
+                                onPush: _push,
+                                onInitiate: _initiate,
+                                onReedit: () =>
+                                    widget.onReedit(_bundle!.detail.id),
+                                onVoid: _voidProposal,
+                                onWithdraw: _withdrawProposal,
+                                onReturn: _return,
+                                onOpenLinkedProposal: (proposalId, source) {
+                                  openLinkedProposalDetail(
+                                    context: context,
+                                    session: widget.session,
+                                    proposalId: proposalId,
+                                    source: source,
+                                  );
+                                },
+                              ),
+                              XflowCcRulesCard(
+                                rules: _ccRules,
+                                loading: _ccLoading,
+                                error: _ccError,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

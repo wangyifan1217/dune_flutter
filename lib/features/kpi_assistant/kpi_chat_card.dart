@@ -153,15 +153,18 @@ class KpiAssistantAvatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(size * .18),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [DunesColors.brandPurple, DunesColors.brandPurpleDeep],
+          colors: [
+            DunesColors.resolve(context, DunesColors.brandPurple),
+            DunesColors.resolve(context, DunesColors.brandPurpleDeep),
+          ],
         ),
       ),
       child: Icon(
         Icons.insights_outlined,
-        color: Colors.white,
+        color: DunesColors.resolve(context, Colors.white),
         size: size * .42,
       ),
     );
@@ -236,9 +239,19 @@ class ChatKpiAssistantCard extends StatelessWidget {
       child: Container(
         constraints: const BoxConstraints(minWidth: 236, maxWidth: 292),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: DunesColors.borderSoft),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
           boxShadow: [
             BoxShadow(
               color: DunesColors.brandPurpleDeep.withValues(alpha: 0.07),
@@ -259,8 +272,12 @@ class ChatKpiAssistantCard extends StatelessWidget {
                   Container(
                     width: 5,
                     height: 5,
-                    decoration: const BoxDecoration(
-                      color: DunesColors.brandPurple,
+                    decoration: BoxDecoration(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
+                        role: DunesColorRole.surface,
+                      ),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -270,9 +287,13 @@ class ChatKpiAssistantCard extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w500,
-                      color: DunesColors.brandPurpleDeep,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurpleDeep,
+                      ),
                       letterSpacing: 0.3,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                   const Spacer(),
@@ -289,9 +310,10 @@ class ChatKpiAssistantCard extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                   letterSpacing: -0.2,
                   height: 1.25,
+                  context: context,
                 ),
               ),
             ),
@@ -304,8 +326,9 @@ class ChatKpiAssistantCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                     height: 1.35,
+                    context: context,
                   ),
                 ),
               ),
@@ -318,10 +341,10 @@ class ChatKpiAssistantCard extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.person_outline_rounded,
                       size: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                     const SizedBox(width: 4),
                     Flexible(
@@ -331,8 +354,12 @@ class ChatKpiAssistantCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 10.5,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
                           height: 1.0,
+                          context: context,
                         ),
                       ),
                     ),
@@ -350,10 +377,20 @@ class ChatKpiAssistantCard extends StatelessWidget {
                         child: TextButton(
                           onPressed: acking ? null : onConfirm,
                           style: TextButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            backgroundColor: DunesColors.brandPurple,
-                            disabledBackgroundColor: DunesColors.brandPurple
-                                .withValues(alpha: 0.6),
+                            foregroundColor: DunesColors.resolve(
+                              context,
+                              Colors.white,
+                            ),
+                            backgroundColor: DunesColors.resolve(
+                              context,
+                              DunesColors.brandPurple,
+                              role: DunesColorRole.surface,
+                            ),
+                            disabledBackgroundColor: DunesColors.resolve(
+                              context,
+                              DunesColors.brandPurple,
+                              role: DunesColorRole.surface,
+                            ).withValues(alpha: 0.6),
                             padding: const EdgeInsets.symmetric(horizontal: 10),
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             visualDensity: VisualDensity.compact,
@@ -362,12 +399,15 @@ class ChatKpiAssistantCard extends StatelessWidget {
                             ),
                           ),
                           child: acking
-                              ? const SizedBox(
+                              ? SizedBox(
                                   width: 14,
                                   height: 14,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 1.8,
-                                    color: Colors.white,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ),
                                   ),
                                 )
                               : Text(
@@ -375,8 +415,12 @@ class ChatKpiAssistantCard extends StatelessWidget {
                                   style: DunesTypography.sans(
                                     fontSize: 12.5,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.white,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ),
                                     height: 1.0,
+                                    context: context,
                                   ),
                                 ),
                         ),
@@ -392,8 +436,12 @@ class ChatKpiAssistantCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: DunesTypography.sans(
                             fontSize: 10.5,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                             height: 1.0,
+                            context: context,
                           ),
                         ),
                       ),
@@ -407,14 +455,18 @@ class ChatKpiAssistantCard extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
                           height: 1.0,
+                          context: context,
                         ),
                       ),
-                      const Icon(
+                      Icon(
                         Icons.chevron_right_rounded,
                         size: 15,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ],
                   ),
@@ -438,32 +490,47 @@ class _KpiStatusPill extends StatelessWidget {
     final Color fg;
     final Color bg;
     if (data.isAcked) {
-      fg = DunesColors.green;
-      bg = DunesColors.greenSoft;
+      fg = DunesColors.resolve(context, DunesColors.green);
+      bg = DunesColors.resolve(context, DunesColors.greenSoft);
     } else if (data.isUpdated) {
-      fg = DunesColors.blue;
-      bg = DunesColors.blueSoft;
+      fg = DunesColors.resolve(context, DunesColors.blue);
+      bg = DunesColors.resolve(context, DunesColors.blueSoft);
     } else {
-      fg = DunesColors.amber;
-      bg = DunesColors.amberSoft;
+      fg = DunesColors.resolve(context, DunesColors.amber);
+      bg = DunesColors.resolve(context, DunesColors.amberSoft);
     }
     return Container(
       height: 20,
       padding: const EdgeInsets.symmetric(horizontal: 7),
       decoration: BoxDecoration(
-        color: bg,
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (data.isAcked)
-            Icon(Icons.check_rounded, size: 11, color: fg)
+            Icon(
+              Icons.check_rounded,
+              size: 11,
+              color: DunesColors.resolveNullable(context, fg),
+            )
           else
             Container(
               width: 5,
               height: 5,
-              decoration: BoxDecoration(color: fg, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: DunesColors.resolveNullable(
+                  context,
+                  fg,
+                  role: DunesColorRole.surface,
+                ),
+                shape: BoxShape.circle,
+              ),
             ),
           const SizedBox(width: 4),
           Text(
@@ -473,6 +540,7 @@ class _KpiStatusPill extends StatelessWidget {
               fontWeight: FontWeight.w600,
               color: fg,
               height: 1.0,
+              context: context,
             ),
           ),
         ],
@@ -514,26 +582,34 @@ class _KpiScorePanel extends StatelessWidget {
       width: 1,
       height: 34,
       margin: const EdgeInsets.symmetric(horizontal: 10),
-      color: DunesColors.brandPurpleLine.withValues(alpha: 0.35),
+      color: DunesColors.resolve(
+        context,
+        DunesColors.brandPurpleLine,
+        role: DunesColorRole.surface,
+      ).withValues(alpha: 0.35),
     );
 
     Widget caption(String text) => Text(
       text,
       style: DunesTypography.sans(
         fontSize: 9.5,
-        color: DunesColors.text3,
+        color: DunesColors.resolve(context, DunesColors.text3),
         letterSpacing: 0.4,
         height: 1.0,
+        context: context,
       ),
     );
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFF8F5FD), DunesColors.brandPurpleSoft],
+          colors: [
+            DunesColors.resolve(context, Color(0xFFF8F5FD)),
+            DunesColors.resolve(context, DunesColors.brandPurpleSoft),
+          ],
         ),
         borderRadius: BorderRadius.circular(11),
       ),
@@ -556,9 +632,10 @@ class _KpiScorePanel extends StatelessWidget {
                       style: DunesTypography.mono(
                         fontSize: 26,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                         letterSpacing: -0.8,
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                     const SizedBox(width: 3),
@@ -566,8 +643,9 @@ class _KpiScorePanel extends StatelessWidget {
                       '分',
                       style: DunesTypography.sans(
                         fontSize: 11,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                   ],
@@ -579,11 +657,23 @@ class _KpiScorePanel extends StatelessWidget {
                     height: 3,
                     child: Stack(
                       children: [
-                        Container(color: Colors.white),
+                        Container(
+                          color: DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.surface,
+                          ),
+                        ),
                         FractionallySizedBox(
                           alignment: Alignment.centerLeft,
                           widthFactor: ratio,
-                          child: Container(color: gradeFg),
+                          child: Container(
+                            color: DunesColors.resolveNullable(
+                              context,
+                              gradeFg,
+                              role: DunesColorRole.surface,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -604,11 +694,13 @@ class _KpiScorePanel extends StatelessWidget {
                   height: 30,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: gradeBg,
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(
-                      color: gradeFg.withValues(alpha: 0.25),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      gradeBg,
+                      role: DunesColorRole.surface,
                     ),
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(color: gradeFg.withValues(alpha: 0.25)),
                   ),
                   child: Text(
                     grade,
@@ -617,6 +709,7 @@ class _KpiScorePanel extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       color: gradeFg,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ),
@@ -638,8 +731,9 @@ class _KpiScorePanel extends StatelessWidget {
                       style: DunesTypography.mono(
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                   ),

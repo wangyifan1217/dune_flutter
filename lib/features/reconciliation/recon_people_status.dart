@@ -22,7 +22,11 @@ Future<void> showReconEveryoneStatusSheet({
     return showDialog<void>(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          ctx,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520, maxHeight: 640),
@@ -34,7 +38,11 @@ Future<void> showReconEveryoneStatusSheet({
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    ),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -74,7 +82,8 @@ class ReconEveryoneStatusPane extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 4),
@@ -82,7 +91,8 @@ class ReconEveryoneStatusPane extends StatelessWidget {
                 '${shucaiDisplayDate(asOfDate)}${sectors.length == 1 ? ' · ${sectors.first.title}' : ''}',
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 12),
@@ -234,7 +244,11 @@ Future<void> showReconUnmatchedSheet({
     return showDialog<void>(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          ctx,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440, maxHeight: 560),
@@ -246,7 +260,11 @@ Future<void> showReconUnmatchedSheet({
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    ),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -281,7 +299,8 @@ class ReconUnmatchedPane extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 4),
@@ -289,7 +308,8 @@ class ReconUnmatchedPane extends StatelessWidget {
                 '$title · 以下姓名未对上组织人员，或该层尚未分配',
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 12),
@@ -298,7 +318,9 @@ class ReconUnmatchedPane extends StatelessWidget {
                   children: [
                     for (final step in reconAuditChainSteps)
                       ..._stepBlock(
-                        unmatched.where((e) => e.step.toUpperCase() == step).toList(),
+                        unmatched
+                            .where((e) => e.step.toUpperCase() == step)
+                            .toList(),
                       ),
                   ],
                 ),
@@ -324,10 +346,7 @@ class ReconUnmatchedPane extends StatelessWidget {
           ),
         ),
       ),
-      for (final item in items) ...[
-        _row(item),
-        const SizedBox(height: 6),
-      ],
+      for (final item in items) ...[_row(item), const SizedBox(height: 6)],
     ];
   }
 

@@ -41,16 +41,36 @@ class MarketHomePage extends StatelessWidget {
     return Theme(
       data: DunesTheme.light(),
       child: Scaffold(
-        backgroundColor: DunesColors.bgApp,
+        backgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         body: Column(
           children: [
             Expanded(
               child: DecoratedBox(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [_T.cream0, _T.cream1, _T.cream2],
+                    colors: [
+                      DunesColors.resolve(
+                        context,
+                        _T.cream0,
+                        role: DunesColorRole.surface,
+                      ),
+                      DunesColors.resolve(
+                        context,
+                        _T.cream1,
+                        role: DunesColorRole.surface,
+                      ),
+                      DunesColors.resolve(
+                        context,
+                        _T.cream2,
+                        role: DunesColorRole.surface,
+                      ),
+                    ],
                     stops: [0.0, 0.55, 1.0],
                   ),
                 ),
@@ -220,8 +240,17 @@ class _MarketTopBar extends StatelessWidget {
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: _T.hairline, width: 0.5)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _T.hairline,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -238,10 +267,10 @@ class _MarketTopBar extends StatelessWidget {
                   Navigator.of(context).maybePop();
                 }
               },
-              icon: const Icon(
+              icon: Icon(
                 Icons.chevron_left_rounded,
                 size: 24,
-                color: _T.ink,
+                color: DunesColors.resolve(context, _T.ink),
               ),
             ),
             const SizedBox(width: 2),
@@ -251,19 +280,27 @@ class _MarketTopBar extends StatelessWidget {
             style: _T.sansStyle(
               size: 18,
               weight: FontWeight.w500,
-              color: _T.ink,
+              color: DunesColors.resolve(context, _T.ink),
               letterSpacing: 2,
               height: 1.0,
             ),
           ),
           const SizedBox(width: 12),
-          Container(width: 0.5, height: 12, color: _T.hairlineStrong),
+          Container(
+            width: 0.5,
+            height: 12,
+            color: DunesColors.resolve(
+              context,
+              _T.hairlineStrong,
+              role: DunesColorRole.surface,
+            ),
+          ),
           const SizedBox(width: 12),
           Text(
             '市场',
             style: _T.sansStyle(
               size: 12,
-              color: _T.inkMid,
+              color: DunesColors.resolve(context, _T.inkMid),
               letterSpacing: 3,
               height: 1.0,
             ),
@@ -285,13 +322,20 @@ class _PeriodChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        border: Border.all(color: _T.hairlineStrong, width: 0.5),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _T.hairlineStrong,
+            role: DunesColorRole.border,
+          ),
+          width: 0.5,
+        ),
       ),
       child: Text(
         period,
         style: _T.monoStyle(
           size: 11,
-          color: _T.inkMid,
+          color: DunesColors.resolve(context, _T.inkMid),
           letterSpacing: 1,
           height: 1.0,
         ),
@@ -312,9 +356,9 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 10,
-        color: _T.copperDeep,
+        color: DunesColors.resolve(context, _T.copperDeep),
         letterSpacing: 3.5,
         fontWeight: FontWeight.w600,
       ),
@@ -370,12 +414,44 @@ class _AlertChip extends StatelessWidget {
         width: 244,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         decoration: BoxDecoration(
-          color: tone.fill,
+          color: DunesColors.resolveNullable(
+            context,
+            tone.fill,
+            role: DunesColorRole.surface,
+          ),
           border: Border(
-            left: BorderSide(color: tone.stroke, width: 2),
-            top: const BorderSide(color: _T.hairline, width: 0.5),
-            right: const BorderSide(color: _T.hairline, width: 0.5),
-            bottom: const BorderSide(color: _T.hairline, width: 0.5),
+            left: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                tone.stroke,
+                role: DunesColorRole.border,
+              ),
+              width: 2,
+            ),
+            top: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                _T.hairline,
+                role: DunesColorRole.border,
+              ),
+              width: 0.5,
+            ),
+            right: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                _T.hairline,
+                role: DunesColorRole.border,
+              ),
+              width: 0.5,
+            ),
+            bottom: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                _T.hairline,
+                role: DunesColorRole.border,
+              ),
+              width: 0.5,
+            ),
           ),
         ),
         child: Column(
@@ -389,7 +465,7 @@ class _AlertChip extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 9,
                     letterSpacing: 2.5,
-                    color: tone.stroke,
+                    color: DunesColors.resolveNullable(context, tone.stroke),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -398,7 +474,7 @@ class _AlertChip extends StatelessWidget {
                   alert.timeAgo,
                   style: _T.monoStyle(
                     size: 10,
-                    color: _T.inkFaint,
+                    color: DunesColors.resolve(context, _T.inkFaint),
                     height: 1.0,
                   ),
                 ),
@@ -408,9 +484,9 @@ class _AlertChip extends StatelessWidget {
               alert.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: _T.ink,
+                color: DunesColors.resolve(context, _T.ink),
                 fontWeight: FontWeight.w500,
                 height: 1.2,
               ),
@@ -419,9 +495,9 @@ class _AlertChip extends StatelessWidget {
               alert.detail,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: _T.inkMid,
+                color: DunesColors.resolve(context, _T.inkMid),
                 height: 1.2,
                 letterSpacing: 0.2,
               ),
@@ -494,7 +570,7 @@ class _ScaleHero extends StatelessWidget {
               style: _T.monoStyle(
                 size: 52,
                 weight: FontWeight.w300,
-                color: _T.ink,
+                color: DunesColors.resolve(context, _T.ink),
                 letterSpacing: -1.5,
                 height: 1.0,
               ),
@@ -504,10 +580,10 @@ class _ScaleHero extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
                 formatted.unit,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w400,
-                  color: _T.inkMid,
+                  color: DunesColors.resolve(context, _T.inkMid),
                   height: 1.0,
                 ),
               ),
@@ -520,11 +596,11 @@ class _ScaleHero extends StatelessWidget {
           spacing: 14,
           runSpacing: 8,
           children: [
-            const Text(
+            Text(
               '核销规模 · 灯塔口径',
               style: TextStyle(
                 fontSize: 11,
-                color: _T.inkMid,
+                color: DunesColors.resolve(context, _T.inkMid),
                 letterSpacing: 2,
               ),
             ),
@@ -545,7 +621,9 @@ class _ChangePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final positive = pct >= 0;
-    final color = positive ? _T.up : _T.down;
+    final color = positive
+        ? DunesColors.resolve(context, _T.up)
+        : DunesColors.resolve(context, _T.down);
     final arrow = positive ? '↑' : '↓';
 
     return Row(
@@ -554,9 +632,9 @@ class _ChangePill extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 10,
-            color: _T.inkFaint,
+            color: DunesColors.resolve(context, _T.inkFaint),
             letterSpacing: 1.5,
           ),
         ),
@@ -589,17 +667,42 @@ class _DualCaliberBlock extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: _T.cream0,
-        border: Border.all(color: _T.hairline, width: 0.5),
+        color: DunesColors.resolve(
+          context,
+          _T.cream0,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _T.hairline,
+            role: DunesColorRole.border,
+          ),
+          width: 0.5,
+        ),
       ),
       child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(child: _CaliberCell(margin: light, alignEnd: false)),
-            Container(width: 0.5, color: _T.hairline),
+            Container(
+              width: 0.5,
+              color: DunesColors.resolve(
+                context,
+                _T.hairline,
+                role: DunesColorRole.surface,
+              ),
+            ),
             _DeviationCenter(deviation: deviation, tone: tone),
-            Container(width: 0.5, color: _T.hairline),
+            Container(
+              width: 0.5,
+              color: DunesColors.resolve(
+                context,
+                _T.hairline,
+                role: DunesColorRole.surface,
+              ),
+            ),
             Expanded(child: _CaliberCell(margin: finance, alignEnd: true)),
           ],
         ),
@@ -628,9 +731,9 @@ class _CaliberCell extends StatelessWidget {
         children: [
           Text(
             margin.caliber,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
-              color: _T.inkFaint,
+              color: DunesColors.resolve(context, _T.inkFaint),
               letterSpacing: 2,
             ),
             textAlign: textAlign,
@@ -645,7 +748,7 @@ class _CaliberCell extends StatelessWidget {
                 style: _T.monoStyle(
                   size: 22,
                   weight: FontWeight.w400,
-                  color: _T.ink,
+                  color: DunesColors.resolve(context, _T.ink),
                   height: 1.0,
                 ),
               ),
@@ -654,9 +757,9 @@ class _CaliberCell extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 2),
                 child: Text(
                   formatted.unit,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: _T.inkMid,
+                    color: DunesColors.resolve(context, _T.inkMid),
                     height: 1.0,
                   ),
                 ),
@@ -666,7 +769,11 @@ class _CaliberCell extends StatelessWidget {
           const SizedBox(height: 5),
           Text(
             '毛利率 ${margin.ratePct.toStringAsFixed(2)}%',
-            style: _T.monoStyle(size: 11, color: _T.inkMid, letterSpacing: 0.5),
+            style: _T.monoStyle(
+              size: 11,
+              color: DunesColors.resolve(context, _T.inkMid),
+              letterSpacing: 0.5,
+            ),
             textAlign: textAlign,
           ),
         ],
@@ -688,7 +795,11 @@ class _DeviationCenter extends StatelessWidget {
     return Container(
       width: 88,
       padding: const EdgeInsets.symmetric(vertical: 14),
-      color: tone.fill,
+      color: DunesColors.resolveNullable(
+        context,
+        tone.fill,
+        role: DunesColorRole.surface,
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -696,7 +807,7 @@ class _DeviationCenter extends StatelessWidget {
             '偏差',
             style: TextStyle(
               fontSize: 9,
-              color: tone.stroke,
+              color: DunesColors.resolveNullable(context, tone.stroke),
               letterSpacing: 2.5,
               fontWeight: FontWeight.w600,
             ),
@@ -717,7 +828,7 @@ class _DeviationCenter extends StatelessWidget {
             _deviationLabel(abs),
             style: TextStyle(
               fontSize: 9,
-              color: tone.stroke,
+              color: DunesColors.resolveNullable(context, tone.stroke),
               letterSpacing: 1.5,
             ),
           ),
@@ -750,18 +861,22 @@ class _StructureTop3 extends StatelessWidget {
               GestureDetector(
                 onTap: onExpandCube,
                 child: Row(
-                  children: const [
+                  children: [
                     Text(
                       '展开立方',
                       style: TextStyle(
                         fontSize: 10,
-                        color: _T.copper,
+                        color: DunesColors.resolve(context, _T.copper),
                         letterSpacing: 2,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     SizedBox(width: 2),
-                    Icon(Icons.chevron_right, size: 14, color: _T.copper),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 14,
+                      color: DunesColors.resolve(context, _T.copper),
+                    ),
                   ],
                 ),
               ),
@@ -771,9 +886,20 @@ class _StructureTop3 extends StatelessWidget {
           // 我的页感：白底圆角卡 + 发丝分隔
           Container(
             decoration: BoxDecoration(
-              color: _T.cream0,
+              color: DunesColors.resolve(
+                context,
+                _T.cream0,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _T.hairline, width: 0.5),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  _T.hairline,
+                  role: DunesColorRole.border,
+                ),
+                width: 0.5,
+              ),
             ),
             clipBehavior: Clip.antiAlias,
             child: Column(
@@ -781,10 +907,14 @@ class _StructureTop3 extends StatelessWidget {
                 for (var i = 0; i < items.length; i++) ...[
                   _StructureCard(item: items[i], flat: true),
                   if (i < items.length - 1)
-                    const Divider(
+                    Divider(
                       height: 0.5,
                       thickness: 0.5,
-                      color: _T.hairline,
+                      color: DunesColors.resolve(
+                        context,
+                        _T.hairline,
+                        role: DunesColorRole.border,
+                      ),
                     ),
                 ],
               ],
@@ -807,7 +937,15 @@ class _StructureCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
       child: Row(
         children: [
-          Container(width: 2, height: 44, color: item.accentColor),
+          Container(
+            width: 2,
+            height: 44,
+            color: DunesColors.resolveNullable(
+              context,
+              item.accentColor,
+              role: DunesColorRole.surface,
+            ),
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -818,16 +956,19 @@ class _StructureCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 9,
                     letterSpacing: 2.5,
-                    color: item.accentColor,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      item.accentColor,
+                    ),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 5),
                 Text(
                   item.title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: _T.ink,
+                    color: DunesColors.resolve(context, _T.ink),
                     fontWeight: FontWeight.w500,
                     height: 1.2,
                   ),
@@ -837,7 +978,7 @@ class _StructureCard extends StatelessWidget {
                   item.subMetric,
                   style: _T.monoStyle(
                     size: 11,
-                    color: _T.inkMid,
+                    color: DunesColors.resolve(context, _T.inkMid),
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -855,7 +996,11 @@ class _StructureCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          const Icon(Icons.chevron_right, size: 16, color: _T.inkVeryFaint),
+          Icon(
+            Icons.chevron_right,
+            size: 16,
+            color: DunesColors.resolve(context, _T.inkVeryFaint),
+          ),
         ],
       ),
     );
@@ -867,25 +1012,36 @@ class _StructureCard extends StatelessWidget {
           onTap: () {
             // TODO: 下钻到该结构切片
           },
-          splashColor: _T.copperFaint,
-          highlightColor: _T.copperFaint,
+          splashColor: DunesColors.resolve(context, _T.copperFaint),
+          highlightColor: DunesColors.resolve(context, _T.copperFaint),
           child: body,
         ),
       );
     }
 
     return Material(
-      color: _T.cream0,
+      color: DunesColors.resolve(
+        context,
+        _T.cream0,
+        role: DunesColorRole.surface,
+      ),
       child: InkWell(
         onTap: () {
           // TODO: 下钻到该结构切片
         },
-        splashColor: _T.copperFaint,
-        highlightColor: _T.copperFaint,
+        splashColor: DunesColors.resolve(context, _T.copperFaint),
+        highlightColor: DunesColors.resolve(context, _T.copperFaint),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border.fromBorderSide(
-              BorderSide(color: _T.hairline, width: 0.5),
+              BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  _T.hairline,
+                  role: DunesColorRole.border,
+                ),
+                width: 0.5,
+              ),
             ),
           ),
           child: body,

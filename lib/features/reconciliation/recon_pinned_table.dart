@@ -322,14 +322,29 @@ class _ReconPinnedTableState extends State<ReconPinnedTable> {
 
   Widget _band({required double height, required Widget child}) {
     return Material(
-      color: const Color(0xFFF6F7F9),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF6F7F9),
+        role: DunesColorRole.surface,
+      ),
       elevation: 0.5,
       shadowColor: Colors.black26,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: Color(0xFFF6F7F9),
+        decoration: BoxDecoration(
+          color: DunesColors.resolveNullable(
+            context,
+            Color(0xFFF6F7F9),
+            role: DunesColorRole.surface,
+          ),
           border: Border(
-            bottom: BorderSide(color: DunesColors.borderSoft, width: 0.5),
+            bottom: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+              width: 0.5,
+            ),
           ),
         ),
         child: SizedBox(height: height, child: child),

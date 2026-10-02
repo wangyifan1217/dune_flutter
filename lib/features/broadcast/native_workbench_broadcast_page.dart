@@ -12,10 +12,7 @@ import 'broadcast_service.dart';
 const _broadcastAccent = Color(0xFF7B5CD8);
 
 class NativeWorkbenchBroadcastPage extends StatefulWidget {
-  const NativeWorkbenchBroadcastPage({
-    super.key,
-    required this.session,
-  });
+  const NativeWorkbenchBroadcastPage({super.key, required this.session});
 
   final AuthSession session;
 
@@ -61,8 +58,8 @@ class _NativeWorkbenchBroadcastPageState
     });
     try {
       final channels = await _service.listChannels();
-      final nextId = _channelId != null &&
-              channels.any((c) => c.id == _channelId)
+      final nextId =
+          _channelId != null && channels.any((c) => c.id == _channelId)
           ? _channelId
           : (channels.isEmpty ? null : channels.first.id);
       final history = await _service.listHistory(conversationId: nextId);
@@ -89,9 +86,9 @@ class _NativeWorkbenchBroadcastPageState
       return;
     }
     final channelName = _channels
-            .where((c) => c.id == _channelId)
-            .map((c) => c.title)
-            .firstWhere((title) => title.trim().isNotEmpty, orElse: () => '公司广播');
+        .where((c) => c.id == _channelId)
+        .map((c) => c.title)
+        .firstWhere((title) => title.trim().isNotEmpty, orElse: () => '公司广播');
     final preview = body.length > 120 ? '${body.substring(0, 120)}…' : body;
     final ok = await showDialog<bool>(
       context: context,
@@ -150,7 +147,12 @@ class _NativeWorkbenchBroadcastPageState
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除', style: TextStyle(color: Color(0xFFD92D20))),
+            child: Text(
+              '删除',
+              style: TextStyle(
+                color: DunesColors.resolveNullable(ctx, Color(0xFFD92D20)),
+              ),
+            ),
           ),
         ],
       ),
@@ -181,7 +183,12 @@ class _NativeWorkbenchBroadcastPageState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: const TextStyle(color: DunesColors.text3)),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
+            ),
             const SizedBox(height: 10),
             OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
@@ -195,17 +202,48 @@ class _NativeWorkbenchBroadcastPageState
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
-        _card(
-          title: '发布广播',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_channels.length > 1) ...[
-                DropdownButtonFormField<int>(
-                  key: ValueKey<int?>(_channelId),
-                  initialValue: _channelId,
+          _card(
+            title: '发布广播',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_channels.length > 1) ...[
+                  DropdownButtonFormField<int>(
+                    key: ValueKey<int?>(_channelId),
+                    initialValue: _channelId,
+                    decoration: InputDecoration(
+                      labelText: '频道',
+                      border: _roundedBorder(),
+                      enabledBorder: _roundedBorder(),
+                      focusedBorder: _roundedBorder(
+                        width: 1.6,
+                        color: _broadcastAccent,
+                      ),
+                      isDense: true,
+                    ),
+                    items: _channels
+                        .map(
+                          (c) => DropdownMenuItem<int>(
+                            value: c.id,
+                            child: Text(c.title.isEmpty ? '公司广播' : c.title),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: (id) {
+                      setState(() => _channelId = id);
+                      unawaited(_load());
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: _titleController,
+                  textInputAction: TextInputAction.next,
+                  onTapOutside: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
                   decoration: InputDecoration(
-                    labelText: '频道',
+                    labelText: '显示标题',
+                    hintText: '选填，默认「公司广播」',
                     border: _roundedBorder(),
                     enabledBorder: _roundedBorder(),
                     focusedBorder: _roundedBorder(
@@ -214,100 +252,74 @@ class _NativeWorkbenchBroadcastPageState
                     ),
                     isDense: true,
                   ),
-                  items: _channels
-                      .map(
-                        (c) => DropdownMenuItem<int>(
-                          value: c.id,
-                          child: Text(c.title.isEmpty ? '公司广播' : c.title),
-                        ),
-                      )
-                      .toList(growable: false),
-                  onChanged: (id) {
-                    setState(() => _channelId = id);
-                    unawaited(_load());
-                  },
                 ),
                 const SizedBox(height: 12),
-              ],
-              TextField(
-                controller: _titleController,
-                textInputAction: TextInputAction.next,
-                onTapOutside: (_) =>
-                    FocusManager.instance.primaryFocus?.unfocus(),
-                decoration: InputDecoration(
-                  labelText: '显示标题',
-                  hintText: '选填，默认「公司广播」',
-                  border: _roundedBorder(),
-                  enabledBorder: _roundedBorder(),
-                  focusedBorder: _roundedBorder(
-                    width: 1.6,
-                    color: _broadcastAccent,
-                  ),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _bodyController,
-                minLines: 4,
-                maxLines: 8,
-                onTapOutside: (_) =>
-                    FocusManager.instance.primaryFocus?.unfocus(),
-                decoration: InputDecoration(
-                  labelText: '广播正文',
-                  hintText: '将出现在 APP 沙丘公告 · 公司广播',
-                  border: _roundedBorder(),
-                  enabledBorder: _roundedBorder(),
-                  focusedBorder: _roundedBorder(
-                    width: 1.6,
-                    color: _broadcastAccent,
-                  ),
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  onPressed: _sending ? null : _confirmSend,
-                  icon: _sending
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send_outlined, size: 18),
-                  label: Text(_sending ? '发布中…' : '发布广播'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _broadcastAccent,
+                TextField(
+                  controller: _bodyController,
+                  minLines: 4,
+                  maxLines: 8,
+                  onTapOutside: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
+                  decoration: InputDecoration(
+                    labelText: '广播正文',
+                    hintText: '将出现在 APP 沙丘公告 · 公司广播',
+                    border: _roundedBorder(),
+                    enabledBorder: _roundedBorder(),
+                    focusedBorder: _roundedBorder(
+                      width: 1.6,
+                      color: _broadcastAccent,
+                    ),
+                    alignLabelWithHint: true,
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        _card(
-          title: '推送历史',
-          child: _history.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(
-                    child: Text(
-                      '暂无广播记录',
-                      style: TextStyle(color: DunesColors.text3),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.icon(
+                    onPressed: _sending ? null : _confirmSend,
+                    icon: _sending
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send_outlined, size: 18),
+                    label: Text(_sending ? '发布中…' : '发布广播'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _broadcastAccent,
                     ),
                   ),
-                )
-              : Column(
-                  children: [
-                    for (var i = 0; i < _history.length; i++) ...[
-                      if (i > 0) const Divider(height: 1),
-                      _historyTile(_history[i]),
-                    ],
-                  ],
                 ),
-        ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          _card(
+            title: '推送历史',
+            child: _history.isEmpty
+                ? Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: Text(
+                        '暂无广播记录',
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                : Column(
+                    children: [
+                      for (var i = 0; i < _history.length; i++) ...[
+                        if (i > 0) const Divider(height: 1),
+                        _historyTile(_history[i]),
+                      ],
+                    ],
+                  ),
+          ),
         ],
       ),
     );
@@ -315,7 +327,8 @@ class _NativeWorkbenchBroadcastPageState
 
   Widget _historyTile(BroadcastHistoryItem item) {
     final expanded = _expandedHistoryIds.contains(item.id);
-    final long = item.bodyText.trim().length > 80 ||
+    final long =
+        item.bodyText.trim().length > 80 ||
         item.bodyText.trim().split('\n').length > 3;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -326,12 +339,12 @@ class _NativeWorkbenchBroadcastPageState
             child: InkWell(
               onTap: long
                   ? () => setState(() {
-                        if (expanded) {
-                          _expandedHistoryIds.remove(item.id);
-                        } else {
-                          _expandedHistoryIds.add(item.id);
-                        }
-                      })
+                      if (expanded) {
+                        _expandedHistoryIds.remove(item.id);
+                      } else {
+                        _expandedHistoryIds.add(item.id);
+                      }
+                    })
                   : null,
               borderRadius: BorderRadius.circular(8),
               child: Padding(
@@ -351,10 +364,13 @@ class _NativeWorkbenchBroadcastPageState
                       const SizedBox(height: 4),
                       Text(
                         expanded ? '收起' : '展开全部',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: _broadcastAccent,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _broadcastAccent,
+                          ),
                         ),
                       ),
                     ],
@@ -365,9 +381,9 @@ class _NativeWorkbenchBroadcastPageState
                         if (item.senderName.trim().isNotEmpty)
                           item.senderName.trim(),
                       ].where((s) => s.isNotEmpty).join(' · '),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],
@@ -378,7 +394,10 @@ class _NativeWorkbenchBroadcastPageState
           IconButton(
             tooltip: '删除',
             onPressed: () => unawaited(_confirmDelete(item)),
-            icon: const Icon(Icons.delete_outline, color: Color(0xFFD92D20)),
+            icon: Icon(
+              Icons.delete_outline,
+              color: DunesColors.resolveNullable(context, Color(0xFFD92D20)),
+            ),
           ),
         ],
       ),
@@ -391,7 +410,10 @@ class _NativeWorkbenchBroadcastPageState
   }) {
     return OutlineInputBorder(
       borderRadius: BorderRadius.circular(18),
-      borderSide: BorderSide(color: color, width: width),
+      borderSide: BorderSide(
+        color: DunesColors.resolve(context, color, role: DunesColorRole.border),
+        width: width,
+      ),
     );
   }
 
@@ -399,19 +421,29 @@ class _NativeWorkbenchBroadcastPageState
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 12),

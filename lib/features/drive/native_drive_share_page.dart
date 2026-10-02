@@ -174,10 +174,7 @@ class _NativeDriveSharePageState extends State<NativeDriveSharePage> {
               ? SizedBox(
                   width: 320,
                   height: 460,
-                  child: DunesPdfView(
-                    bytes: response.bodyBytes,
-                    padding: 6,
-                  ),
+                  child: DunesPdfView(bytes: response.bodyBytes, padding: 6),
                 )
               : Text(
                   '文件大小：${_formatBytes(response.bodyBytes.length)}\n分享链接仅支持查看和下载。',
@@ -247,7 +244,13 @@ class _NativeDriveSharePageState extends State<NativeDriveSharePage> {
           final name = '${item['name'] ?? ''}';
           return ListTile(
             leading: folder
-                ? const Icon(Icons.folder_rounded, color: Color(0xFF7656D6))
+                ? Icon(
+                    Icons.folder_rounded,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF7656D6),
+                    ),
+                  )
                 : ChatFileTypeIcon(fileName: name, size: 36),
             title: Text(name),
             subtitle: Text(
@@ -283,7 +286,11 @@ class _NativeDriveSharePageState extends State<NativeDriveSharePage> {
     String title = '企业微盘分享',
     VoidCallback? back,
   }) => Scaffold(
-    backgroundColor: DunesColors.bgApp,
+    backgroundColor: DunesColors.resolve(
+      context,
+      DunesColors.bgApp,
+      role: DunesColorRole.surface,
+    ),
     appBar: AppBar(
       title: Text(title),
       leading: back == null
@@ -294,4 +301,3 @@ class _NativeDriveSharePageState extends State<NativeDriveSharePage> {
     body: body,
   );
 }
-

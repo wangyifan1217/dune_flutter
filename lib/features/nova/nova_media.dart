@@ -182,7 +182,11 @@ class _NovaDownloadProgressDialogState
   Widget build(BuildContext context) {
     final pct = (_progress * 100).round();
     return Dialog(
-      backgroundColor: const Color(0xE61F2421),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xE61F2421),
+        role: DunesColorRole.surface,
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
@@ -195,7 +199,8 @@ class _NovaDownloadProgressDialogState
               style: DunesTypography.sans(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.white,
+                color: DunesColors.resolve(context, Colors.white),
+                context: context,
               ),
             ),
             const SizedBox(height: 14),
@@ -204,9 +209,13 @@ class _NovaDownloadProgressDialogState
               child: LinearProgressIndicator(
                 value: _indeterminate ? null : _progress,
                 minHeight: 6,
-                backgroundColor: Colors.white24,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  DunesColors.accentLine,
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  Colors.white24,
+                  role: DunesColorRole.surface,
+                ),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  DunesColors.resolve(context, DunesColors.accentLine),
                 ),
               ),
             ),
@@ -833,18 +842,18 @@ class _NovaImagePreviewDialog extends StatelessWidget {
         fit: BoxFit.contain,
         loadingBuilder: (_, child, progress) {
           if (progress == null) return child;
-          return const SizedBox(
+          return SizedBox(
             width: 48,
             height: 48,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: Colors.white70,
+              color: DunesColors.resolve(context, Colors.white70),
             ),
           );
         },
-        errorBuilder: (_, _, _) => const Icon(
+        errorBuilder: (_, _, _) => Icon(
           Icons.broken_image_outlined,
-          color: Colors.white54,
+          color: DunesColors.resolve(context, Colors.white54),
           size: 48,
         ),
       );
@@ -860,7 +869,10 @@ class _NovaImagePreviewDialog extends StatelessWidget {
             right: 8,
             child: IconButton(
               onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close_rounded, color: Colors.white),
+              icon: Icon(
+                Icons.close_rounded,
+                color: DunesColors.resolve(context, Colors.white),
+              ),
             ),
           ),
           Positioned(
@@ -869,7 +881,10 @@ class _NovaImagePreviewDialog extends StatelessWidget {
             child: IconButton(
               onPressed: () => _saveImage(context),
               tooltip: '保存图片',
-              icon: const Icon(Icons.download_rounded, color: Colors.white),
+              icon: Icon(
+                Icons.download_rounded,
+                color: DunesColors.resolve(context, Colors.white),
+              ),
             ),
           ),
         ],
@@ -1054,9 +1069,12 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
     }
     final publicUrl = image.publicUrl ?? '';
     if (publicUrl.isEmpty) {
-      return const SizedBox(
+      return SizedBox(
         height: 96,
-        child: Icon(Icons.broken_image_outlined, color: DunesColors.text3),
+        child: Icon(
+          Icons.broken_image_outlined,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
       );
     }
     if (kIsWeb) {
@@ -1070,9 +1088,12 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
     return Image.network(
       publicUrl,
       fit: BoxFit.contain,
-      errorBuilder: (_, _, _) => const SizedBox(
+      errorBuilder: (_, _, _) => SizedBox(
         height: 96,
-        child: Icon(Icons.broken_image_outlined, color: DunesColors.text3),
+        child: Icon(
+          Icons.broken_image_outlined,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
       ),
     );
   }
@@ -1085,7 +1106,11 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
         final loading = snap.connectionState != ConnectionState.done;
         final image = snap.data ?? const _NovaResolvedImage.failed();
         return Material(
-          color: DunesColors.bgSoft,
+          color: DunesColors.resolve(
+            context,
+            DunesColors.bgSoft,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -1093,14 +1118,24 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
             child: Container(
               constraints: const BoxConstraints(maxWidth: 280),
               decoration: BoxDecoration(
-                border: Border.all(color: DunesColors.borderSoft),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Container(
-                    color: const Color(0xFFF4F4F6),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFF4F4F6),
+                      role: DunesColorRole.surface,
+                    ),
                     constraints: const BoxConstraints(maxHeight: 220),
                     child: loading
                         ? const SizedBox(
@@ -1113,9 +1148,15 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
                   ),
                   Container(
                     padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       border: Border(
-                        top: BorderSide(color: DunesColors.borderSoft),
+                        top: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.borderSoft,
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                       ),
                     ),
                     child: Row(
@@ -1128,7 +1169,11 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
                             style: DunesTypography.sans(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -1143,10 +1188,13 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
                           onPressed: loading || image.failed
                               ? null
                               : () => _preview(image),
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.zoom_in_rounded,
                             size: 18,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
                           ),
                         ),
                         IconButton(
@@ -1160,10 +1208,13 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
                           onPressed: loading || image.failed
                               ? null
                               : () => _download(image),
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.download_rounded,
                             size: 18,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
                           ),
                         ),
                       ],
@@ -1212,7 +1263,11 @@ class NovaC4DeliverableFileCard extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Material(
-          color: const Color(0xCCFFFFFF),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xCCFFFFFF),
+            role: DunesColorRole.surface,
+          ),
           child: InkWell(
             onTap: () => openNovaDeliverableDownload(
               context,
@@ -1222,7 +1277,13 @@ class NovaC4DeliverableFileCard extends StatelessWidget {
             child: Ink(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0x66FFFFFF)),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0x66FFFFFF),
+                    role: DunesColorRole.border,
+                  ),
+                ),
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x140F172A),
@@ -1242,14 +1303,27 @@ class NovaC4DeliverableFileCard extends StatelessWidget {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: const Color(0xB3FFFFFF),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xB3FFFFFF),
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0x33FFFFFF)),
+                            border: Border.all(
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0x33FFFFFF),
+                                role: DunesColorRole.border,
+                              ),
+                            ),
                           ),
                           child: Icon(
                             novaFileIconData(ext),
                             size: 22,
-                            color: DunesColors.accentDeep,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.accentDeep,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1264,7 +1338,11 @@ class NovaC4DeliverableFileCard extends StatelessWidget {
                                 style: DunesTypography.sans(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
-                                  color: DunesColors.text,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -1274,7 +1352,11 @@ class NovaC4DeliverableFileCard extends StatelessWidget {
                                     : '$sizeHint · 可下载',
                                 style: DunesTypography.sans(
                                   fontSize: 11,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             ],
@@ -1293,20 +1375,20 @@ class NovaC4DeliverableFileCard extends StatelessWidget {
                             resolver: resolver,
                             file: file,
                           ),
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.download_rounded,
                             size: 18,
-                            color: DunesColors.accentDeep,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.accentDeep,
+                            ),
                           ),
                         ),
                       ],
                     ),
                     if (canPreview) ...[
                       const SizedBox(height: 10),
-                      NovaInlineDocumentGlass(
-                        resolver: resolver,
-                        file: file,
-                      ),
+                      NovaInlineDocumentGlass(resolver: resolver, file: file),
                     ],
                   ],
                 ),
@@ -1403,7 +1485,10 @@ class _NovaC4ImageThumbState extends State<NovaC4ImageThumb> {
       height: 96,
       child: Icon(
         Icons.broken_image_outlined,
-        color: DunesColors.text3.withValues(alpha: 0.9),
+        color: DunesColors.resolve(
+          context,
+          DunesColors.text3,
+        ).withValues(alpha: 0.9),
       ),
     );
   }
@@ -1519,7 +1604,17 @@ class _NovaC4VoiceBubbleState extends State<NovaC4VoiceBubble> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: playing ? DunesColors.accentSoft : DunesColors.bgSoft,
+          color: playing
+              ? DunesColors.resolve(
+                  context,
+                  DunesColors.accentSoft,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  DunesColors.bgSoft,
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -1529,14 +1624,15 @@ class _NovaC4VoiceBubbleState extends State<NovaC4VoiceBubble> {
               "${widget.durationSec}'",
               style: DunesTypography.mono(
                 fontSize: 12,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
             const SizedBox(width: 8),
             Icon(
               playing ? Icons.pause_rounded : Icons.volume_up_rounded,
               size: 16,
-              color: DunesColors.accentDeep,
+              color: DunesColors.resolve(context, DunesColors.accentDeep),
             ),
           ],
         ),
@@ -1569,8 +1665,12 @@ class NovaC4FileLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = onDarkBubble ? Colors.white70 : DunesColors.accentDeep;
-    final textColor = onDarkBubble ? Colors.white : DunesColors.text;
+    final iconColor = onDarkBubble
+        ? DunesColors.resolve(context, Colors.white70)
+        : DunesColors.resolve(context, DunesColors.accentDeep);
+    final textColor = onDarkBubble
+        ? DunesColors.resolve(context, Colors.white)
+        : DunesColors.resolve(context, DunesColors.text);
     return InkWell(
       onTap:
           onTap ??
@@ -1586,7 +1686,11 @@ class NovaC4FileLink extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.attach_file, size: 16, color: iconColor),
+          Icon(
+            Icons.attach_file,
+            size: 16,
+            color: DunesColors.resolveNullable(context, iconColor),
+          ),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
@@ -1594,6 +1698,7 @@ class NovaC4FileLink extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 13,
                 color: textColor,
+                context: context,
               ).copyWith(decoration: TextDecoration.underline),
               overflow: TextOverflow.ellipsis,
             ),

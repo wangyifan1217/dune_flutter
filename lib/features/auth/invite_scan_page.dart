@@ -78,16 +78,23 @@ class _InviteScanPageState extends State<InviteScanPage> {
           children: [
             Align(
               alignment: Alignment.centerLeft,
-              child: AuthBackButton(onPressed: () => Navigator.of(context).pop()),
+              child: AuthBackButton(
+                onPressed: () => Navigator.of(context).pop(),
+              ),
             ),
             const SizedBox(height: 20),
-            const Icon(Icons.qr_code_scanner, size: 56, color: DunesColors.accent),
+            Icon(
+              Icons.qr_code_scanner,
+              size: 56,
+              color: DunesColors.resolve(context, DunesColors.accent),
+            ),
             const SizedBox(height: 20),
             Text(
               '扫码邀请注册',
               style: DunesTypography.sans(
                 fontSize: 22,
                 fontWeight: FontWeight.w600,
+                context: context,
               ),
             ),
             const SizedBox(height: 12),
@@ -96,8 +103,9 @@ class _InviteScanPageState extends State<InviteScanPage> {
               '不会用于扫描其他二维码，也不会采集相册内容。',
               style: DunesTypography.sans(
                 fontSize: 14,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
                 height: 1.55,
+                context: context,
               ),
             ),
             const SizedBox(height: 16),
@@ -105,8 +113,9 @@ class _InviteScanPageState extends State<InviteScanPage> {
               '若您不便使用相机，也可在下方手动输入员工提供的邀请码。',
               style: DunesTypography.sans(
                 fontSize: 14,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
                 height: 1.55,
+                context: context,
               ),
             ),
             if (_error != null) ...[
@@ -115,7 +124,8 @@ class _InviteScanPageState extends State<InviteScanPage> {
                 _error!,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.coral,
+                  color: DunesColors.resolve(context, DunesColors.coral),
+                  context: context,
                 ),
               ),
             ],
@@ -126,9 +136,9 @@ class _InviteScanPageState extends State<InviteScanPage> {
                 onPressed: _loading
                     ? null
                     : () => setState(() {
-                          _started = true;
-                          _error = null;
-                        }),
+                        _started = true;
+                        _error = null;
+                      }),
                 style: authPrimaryButtonStyle,
                 child: const Text('开始扫码'),
               ),
@@ -138,7 +148,8 @@ class _InviteScanPageState extends State<InviteScanPage> {
               '或手动输入邀请码',
               style: DunesTypography.sans(
                 fontSize: 13,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
             const SizedBox(height: 10),
@@ -272,7 +283,11 @@ class _InviteCameraScanViewState extends State<_InviteCameraScanView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.black,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -282,7 +297,10 @@ class _InviteCameraScanViewState extends State<_InviteCameraScanView> {
                 children: [
                   IconButton(
                     onPressed: widget.onBack,
-                    icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+                    icon: Icon(
+                      Icons.arrow_back_ios_new,
+                      color: DunesColors.resolve(context, Colors.white),
+                    ),
                   ),
                   Expanded(
                     child: Text(
@@ -290,85 +308,116 @@ class _InviteCameraScanViewState extends State<_InviteCameraScanView> {
                       style: DunesTypography.sans(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
+                        context: context,
                       ),
                     ),
                   ),
                   TextButton(
                     onPressed: widget.onManual,
-                    child: const Text('手动输入', style: TextStyle(color: Colors.white70)),
+                    child: Text(
+                      '手动输入',
+                      style: TextStyle(
+                        color: DunesColors.resolve(context, Colors.white70),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
             Expanded(
               child: _checkingPermission
-                  ? const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
+                  ? Center(
+                      child: CircularProgressIndicator(
+                        color: DunesColors.resolve(context, Colors.white),
+                      ),
                     )
                   : !_cameraGranted
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _tip,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(color: Colors.white70),
-                                ),
-                                const SizedBox(height: 16),
-                                FilledButton(
-                                  onPressed: () => openAppSettings(),
-                                  child: const Text('打开系统设置'),
-                                ),
-                                const SizedBox(height: 8),
-                                TextButton(
-                                  onPressed: widget.onManual,
-                                  child: const Text(
-                                    '改为手动输入邀请码',
-                                    style: TextStyle(color: Colors.white70),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : Stack(
-                          fit: StackFit.expand,
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            MobileScanner(
-                              controller: _controller,
-                              onDetect: _onDetect,
-                            ),
-                            if (widget.loading)
-                              const ColoredBox(
-                                color: Colors.black45,
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                  ),
+                            Text(
+                              _tip,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white70,
                                 ),
                               ),
-                            Align(
-                              alignment: Alignment.bottomCenter,
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                                child: Text(
-                                  widget.error ?? _tip,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: widget.error != null
-                                        ? const Color(0xFFFF8A80)
-                                        : Colors.white,
-                                    fontSize: 14,
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton(
+                              onPressed: () => openAppSettings(),
+                              child: const Text('打开系统设置'),
+                            ),
+                            const SizedBox(height: 8),
+                            TextButton(
+                              onPressed: widget.onManual,
+                              child: Text(
+                                '改为手动输入邀请码',
+                                style: TextStyle(
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Colors.white70,
                                   ),
                                 ),
                               ),
                             ),
                           ],
                         ),
+                      ),
+                    )
+                  : Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        MobileScanner(
+                          controller: _controller,
+                          onDetect: _onDetect,
+                        ),
+                        if (widget.loading)
+                          ColoredBox(
+                            color: DunesColors.resolve(
+                              context,
+                              Colors.black45,
+                              role: DunesColorRole.surface,
+                            ),
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                            child: Text(
+                              widget.error ?? _tip,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: widget.error != null
+                                    ? DunesColors.resolve(
+                                        context,
+                                        const Color(0xFFFF8A80),
+                                      )
+                                    : DunesColors.resolve(
+                                        context,
+                                        Colors.white,
+                                      ),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),

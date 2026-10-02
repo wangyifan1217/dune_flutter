@@ -104,7 +104,11 @@ class TaskEditorPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return TaskTheme(
       child: Scaffold(
-        backgroundColor: const Color(0xFFF5F6F8),
+        backgroundColor: DunesColors.resolve(
+          context,
+          const Color(0xFFF5F6F8),
+          role: DunesColorRole.surface,
+        ),
         // 点击空白处收起软键盘
         body: GestureDetector(
           behavior: HitTestBehavior.translucent,
@@ -415,19 +419,29 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE6E1EF)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE6E1EF),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.groups_2_outlined,
                 size: 18,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
               const SizedBox(width: 7),
               const Expanded(
@@ -447,12 +461,12 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
               ),
             ],
           ),
-          const Text(
+          Text(
             '选择自己或自己的下属。参与人可以查看主任务并提交子任务，子任务需主任务负责人审核。',
             style: TextStyle(
               fontSize: 11,
               height: 1.4,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
           ),
           if (_participants.isNotEmpty) ...[
@@ -465,7 +479,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                   Container(
                     padding: const EdgeInsets.fromLTRB(5, 4, 9, 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF5F1FC),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFF5F1FC),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -568,7 +586,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     if (!mounted) return;
     final picked = await showModalBottomSheet<TaskAssignee>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -774,14 +796,29 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           ChoiceChip(
             label: Text(option.$2),
             selected: kind == option.$1,
-            selectedColor: const Color(0xFFEDE7FA),
+            selectedColor: DunesColors.resolve(
+              context,
+              const Color(0xFFEDE7FA),
+            ),
             labelStyle: TextStyle(
               fontSize: 13,
-              color: kind == option.$1 ? _themePurple : DunesColors.text2,
+              color: kind == option.$1
+                  ? DunesColors.resolve(context, _themePurple)
+                  : DunesColors.resolve(context, DunesColors.text2),
               fontWeight: kind == option.$1 ? FontWeight.w700 : FontWeight.w500,
             ),
             side: BorderSide(
-              color: kind == option.$1 ? _themePurple : const Color(0xFFE4E6EB),
+              color: kind == option.$1
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE4E6EB),
+                      role: DunesColorRole.border,
+                    ),
             ),
             onSelected: (_) {
               if (option.$1 == 'team' && !_canAssignTeam) {
@@ -835,7 +872,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Material(
-        color: const Color(0xFFF7F8FA),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF7F8FA),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         clipBehavior: Clip.antiAlias,
         child: Padding(
@@ -905,11 +946,14 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 ),
               ],
               if (draft.kind == 'self')
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(top: 8),
                   child: Text(
                     '负责人是你自己，创建后直接由你执行。',
-                    style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                 ),
             ],
@@ -997,10 +1041,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           const SizedBox(height: 8),
           Text(
             _pathHint,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               height: 1.4,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ],
@@ -1111,10 +1155,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               '需求方：$_requesterName',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             ),
           ),
@@ -1122,9 +1166,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               '当前分类是「$_category · $_subCategory」，提交前可以修改。',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
                 height: 1.35,
               ),
             ),
@@ -1176,7 +1220,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           const SizedBox(height: 6),
           Text(
             _dateError!,
-            style: const TextStyle(fontSize: 12, color: Color(0xFFE35D6A)),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolveNullable(context, Color(0xFFE35D6A)),
+            ),
           ),
         ],
         const SizedBox(height: 14),
@@ -1212,24 +1259,24 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
               ),
             ],
           ),
-          const Text(
+          Text(
             '和主任务一起保存。自己执行谁都可以。分派协助是找人一起做，负责人仍是你。给团队成员只有沙丘职级为 M 序列可以，对方成为执行人。',
             style: TextStyle(
               fontSize: 12,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
               height: 1.4,
             ),
           ),
           for (var i = 0; i < _subDrafts.length; i++) _subDraftCard(i),
         ],
         if (!_isSub && _handsOff)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 12),
             child: Text(
               '交给科技研发中心后，由需求负责人接收并创建子任务。',
               style: TextStyle(
                 fontSize: 12,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
                 height: 1.4,
               ),
             ),
@@ -1240,9 +1287,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             _parentIsMine
                 ? '作为主任务负责人，你创建的子任务会直接生效。'
                 : '作为主任务参与人，你创建的子任务会提交给主任务负责人审核，通过后才开始执行。',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
               height: 1.4,
             ),
           ),
@@ -1261,24 +1308,24 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 IconButton(
                   onPressed: _saving ? null : widget.onCancel,
                   icon: const Icon(Icons.close_rounded),
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
                 Expanded(
                   child: Text(
                     _isSub ? '添加子目标' : '新建主目标',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                 ),
                 IconButton(
                   tooltip: '使用指引',
                   onPressed: () => unawaited(_showGuide(force: true)),
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.help_outline,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                 ),
                 FilledButton(
@@ -1294,12 +1341,12 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                   ),
                   onPressed: _saving ? null : _submit,
                   child: _saving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: DunesColors.resolve(context, Colors.white),
                           ),
                         )
                       : const Text('保存'),
@@ -1314,9 +1361,19 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 Container(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE8EAED)),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFE8EAED),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                   ),
                   child: form,
                 ),
@@ -1347,7 +1404,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
               IconButton(
                 tooltip: '使用指引',
                 onPressed: () => unawaited(_showGuide(force: true)),
-                icon: const Icon(Icons.help_outline, color: DunesColors.text2),
+                icon: Icon(
+                  Icons.help_outline,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
               ),
             ],
           ),
@@ -1365,9 +1425,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             children: [
               TextButton(
                 onPressed: _saving ? null : widget.onCancel,
-                child: const Text(
+                child: Text(
                   '取消',
-                  style: TextStyle(color: DunesColors.text2),
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1384,12 +1446,12 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 ),
                 onPressed: _saving ? null : _submit,
                 child: _saving
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
                         ),
                       )
                     : const Text('保存'),
@@ -1419,9 +1481,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           TextField(
             controller: c,
             maxLines: maxLines,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
               height: 1.3,
             ),
             onChanged: (_) {
@@ -1435,12 +1497,23 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
               hintText: hint,
               hintStyle: TextStyle(
                 fontSize: 14,
-                color: DunesColors.text3.withValues(alpha: 0.85),
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.text3,
+                ).withValues(alpha: 0.85),
               ),
               filled: true,
               fillColor: hasError
-                  ? const Color(0xFFFFF1F2)
-                  : const Color(0xFFF5F6F8),
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0xFFFFF1F2),
+                      role: DunesColorRole.surface,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFF5F6F8),
+                      role: DunesColorRole.surface,
+                    ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 14,
                 vertical: 12,
@@ -1452,15 +1525,29 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: hasError
-                    ? const BorderSide(color: Color(0xFFE35D6A))
+                    ? BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFE35D6A),
+                          role: DunesColorRole.border,
+                        ),
+                      )
                     : BorderSide.none,
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
                   color: hasError
-                      ? const Color(0xFFE35D6A)
-                      : _themePurple.withValues(alpha: 0.4),
+                      ? DunesColors.resolve(
+                          context,
+                          const Color(0xFFE35D6A),
+                          role: DunesColorRole.border,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          _themePurple,
+                          role: DunesColorRole.border,
+                        ).withValues(alpha: 0.4),
                 ),
               ),
             ),
@@ -1469,7 +1556,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             const SizedBox(height: 6),
             Text(
               errorText,
-              style: const TextStyle(fontSize: 12, color: Color(0xFFE35D6A)),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolveNullable(context, Color(0xFFE35D6A)),
+              ),
             ),
           ],
         ],
@@ -1489,7 +1579,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       label: label,
       required: required,
       child: Material(
-        color: const Color(0xFFF5F6F8),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF5F6F8),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
@@ -1504,15 +1598,17 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                     value,
                     style: TextStyle(
                       fontSize: 14,
-                      color: placeholder ? DunesColors.text3 : DunesColors.text,
+                      color: placeholder
+                          ? DunesColors.resolve(context, DunesColors.text3)
+                          : DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                 ),
                 if (onTap != null)
-                  const Icon(
+                  Icon(
                     Icons.expand_more,
                     size: 20,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
               ],
             ),
@@ -1561,19 +1657,22 @@ class _Labeled extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             ),
             if (required)
-              const Text(
+              Text(
                 ' *',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFFE35D6A),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFE35D6A),
+                  ),
                 ),
               ),
           ],

@@ -8,7 +8,11 @@ Future<void> showApprovalTodoFlowGuide(BuildContext context) {
     context: context,
     builder: (ctx) {
       return Dialog(
-        backgroundColor: DunesColors.bgApp,
+        backgroundColor: DunesColors.resolve(
+          ctx,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: ConstrainedBox(
@@ -25,6 +29,7 @@ Future<void> showApprovalTodoFlowGuide(BuildContext context) {
                         style: DunesTypography.sans(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
+                          context: ctx,
                         ),
                       ),
                     ),
@@ -36,7 +41,14 @@ Future<void> showApprovalTodoFlowGuide(BuildContext context) {
                   ],
                 ),
               ),
-              const Divider(height: 1, color: DunesColors.borderSoft),
+              Divider(
+                height: 1,
+                color: DunesColors.resolve(
+                  ctx,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
               const Expanded(child: ApprovalTodoFlowGuide()),
             ],
           ),
@@ -80,7 +92,8 @@ class ApprovalTodoFlowGuide extends StatelessWidget {
           style: DunesTypography.sans(
             fontSize: 12,
             height: 1.55,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
           ),
         ),
       ],

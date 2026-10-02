@@ -404,7 +404,9 @@ class _NativeQianjiTaskPeoplePageState
   }
 
   List<TaskItem> _shareableGoals(TaskPersonRollup person) {
-    final saved = person.tasks.where((task) => task.id > 0).toList(growable: false);
+    final saved = person.tasks
+        .where((task) => task.id > 0)
+        .toList(growable: false);
     final mains = saved.where((task) => task.isMain).toList(growable: false);
     return mains.isNotEmpty ? mains : saved;
   }
@@ -487,7 +489,11 @@ class _NativeQianjiTaskPeoplePageState
   Widget build(BuildContext context) {
     final people = _people;
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -514,7 +520,7 @@ class _NativeQianjiTaskPeoplePageState
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: widget.onBack,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -522,25 +528,28 @@ class _NativeQianjiTaskPeoplePageState
                   Icon(
                     Icons.arrow_back_ios_new,
                     size: 14,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                   SizedBox(width: 2),
                   Text(
                     '饕',
-                    style: TextStyle(fontSize: 13, color: DunesColors.text2),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               '任务',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ),
@@ -568,7 +577,9 @@ class _NativeQianjiTaskPeoplePageState
       icon: Icon(
         icon,
         size: 18,
-        color: onTap == null ? DunesColors.text3 : DunesColors.text2,
+        color: onTap == null
+            ? DunesColors.resolve(context, DunesColors.text3)
+            : DunesColors.resolve(context, DunesColors.text2),
       ),
     );
   }
@@ -592,15 +603,37 @@ class _NativeQianjiTaskPeoplePageState
                       icon: const Icon(Icons.close_rounded, size: 18),
                     ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 10,
               ),
-              border: _fieldBorder(const Color(0xFFE8EAED)),
-              enabledBorder: _fieldBorder(const Color(0xFFE8EAED)),
-              focusedBorder: _fieldBorder(_themePurple),
+              border: _fieldBorder(
+                DunesColors.resolve(
+                  context,
+                  const Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
+              enabledBorder: _fieldBorder(
+                DunesColors.resolve(
+                  context,
+                  const Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
+              focusedBorder: _fieldBorder(
+                DunesColors.resolve(
+                  context,
+                  _themePurple,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
           ),
           if (departments.isNotEmpty) ...[
@@ -633,7 +666,9 @@ class _NativeQianjiTaskPeoplePageState
   OutlineInputBorder _fieldBorder(Color color) {
     return OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: color),
+      borderSide: BorderSide(
+        color: DunesColors.resolve(context, color, role: DunesColorRole.border),
+      ),
     );
   }
 
@@ -667,10 +702,10 @@ class _NativeQianjiTaskPeoplePageState
           ),
           Text(
             '$shown 人',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ],
@@ -684,7 +719,17 @@ class _NativeQianjiTaskPeoplePageState
     required VoidCallback onTap,
   }) {
     return Material(
-      color: selected ? const Color(0xFFF0EEF7) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EEF7),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -694,7 +739,17 @@ class _NativeQianjiTaskPeoplePageState
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? _themePurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -702,7 +757,9 @@ class _NativeQianjiTaskPeoplePageState
             style: TextStyle(
               fontSize: 12,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? _themePurple : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, _themePurple)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -719,13 +776,29 @@ class _NativeQianjiTaskPeoplePageState
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: Row(
         children: [
-          _stat('$doing', '进行中', DunesColors.blue),
+          _stat(
+            '$doing',
+            '进行中',
+            DunesColors.resolve(context, DunesColors.blue),
+          ),
           const SizedBox(width: 8),
-          _stat('$done', '已完成', DunesColors.green),
+          _stat(
+            '$done',
+            '已完成',
+            DunesColors.resolve(context, DunesColors.green),
+          ),
           const SizedBox(width: 8),
-          _stat('$overdue', '超期', DunesColors.coral),
+          _stat(
+            '$overdue',
+            '超期',
+            DunesColors.resolve(context, DunesColors.coral),
+          ),
           const SizedBox(width: 8),
-          _stat('$waiting', '待确认', DunesColors.amber),
+          _stat(
+            '$waiting',
+            '待确认',
+            DunesColors.resolve(context, DunesColors.amber),
+          ),
         ],
       ),
     );
@@ -736,9 +809,19 @@ class _NativeQianjiTaskPeoplePageState
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE8EAED)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -748,17 +831,17 @@ class _NativeQianjiTaskPeoplePageState
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
-                color: color,
+                color: DunesColors.resolveNullable(context, color),
                 height: 1.05,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             ),
           ],
@@ -782,7 +865,9 @@ class _NativeQianjiTaskPeoplePageState
           Text(
             friendlyErrorText(_error, fallback: '加载失败，请稍后重试'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -794,12 +879,14 @@ class _NativeQianjiTaskPeoplePageState
     if (people.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
+        children: [
           SizedBox(height: 120),
           Center(
             child: Text(
               '这个范围内暂无任务',
-              style: TextStyle(color: DunesColors.text3),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         ],
@@ -828,7 +915,11 @@ class _NativeQianjiTaskPeoplePageState
     final ordered = [...person.tasks]..sort(_compareTasks);
     final shareable = _shareableGoals(person);
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -843,7 +934,13 @@ class _NativeQianjiTaskPeoplePageState
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -891,9 +988,12 @@ class _NativeQianjiTaskPeoplePageState
                           ].join(' · '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                       ],
@@ -909,26 +1009,29 @@ class _NativeQianjiTaskPeoplePageState
                         minHeight: 36,
                       ),
                       padding: const EdgeInsets.all(6),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.ios_share_rounded,
                         size: 18,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     ),
                   Icon(
                     expanded ? Icons.expand_less : Icons.expand_more,
                     size: 18,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
                 read.why,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   height: 1.35,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
               const SizedBox(height: 10),
@@ -936,10 +1039,26 @@ class _NativeQianjiTaskPeoplePageState
               const SizedBox(height: 10),
               Row(
                 children: [
-                  _count(person.doing, '进行中', DunesColors.blue),
-                  _count(person.completed, '已完成', DunesColors.green),
-                  _count(person.overdue, '超期', DunesColors.coral),
-                  _count(person.subtaskCount, '子任务', _themePurple),
+                  _count(
+                    person.doing,
+                    '进行中',
+                    DunesColors.resolve(context, DunesColors.blue),
+                  ),
+                  _count(
+                    person.completed,
+                    '已完成',
+                    DunesColors.resolve(context, DunesColors.green),
+                  ),
+                  _count(
+                    person.overdue,
+                    '超期',
+                    DunesColors.resolve(context, DunesColors.coral),
+                  ),
+                  _count(
+                    person.subtaskCount,
+                    '子任务',
+                    DunesColors.resolve(context, _themePurple),
+                  ),
                 ],
               ),
               if (person.facts.isNotEmpty) ...[
@@ -949,18 +1068,32 @@ class _NativeQianjiTaskPeoplePageState
                   runSpacing: 6,
                   children: [
                     for (final fact in person.facts)
-                      _pill(fact, DunesColors.text2, const Color(0xFFF3F4F6)),
+                      _pill(
+                        fact,
+                        DunesColors.resolve(context, DunesColors.text2),
+                        DunesColors.resolve(context, const Color(0xFFF3F4F6)),
+                      ),
                   ],
                 ),
               ],
               if (expanded) ...[
                 const SizedBox(height: 10),
-                const Divider(height: 1, color: Color(0xFFE8EAED)),
+                Divider(
+                  height: 1,
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFE8EAED),
+                    role: DunesColorRole.border,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 if (ordered.isEmpty)
-                  const Text(
+                  Text(
                     '这个月没有任务明细',
-                    style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   )
                 else
                   for (final task in ordered) _taskRow(task),
@@ -990,7 +1123,11 @@ class _NativeQianjiTaskPeoplePageState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: soft,
+        color: DunesColors.resolveNullable(
+          context,
+          soft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(99),
       ),
       child: Text(
@@ -998,7 +1135,7 @@ class _NativeQianjiTaskPeoplePageState
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: color,
+          color: DunesColors.resolveNullable(context, color),
         ),
       ),
     );
@@ -1006,17 +1143,21 @@ class _NativeQianjiTaskPeoplePageState
 
   Widget _bar(TaskPersonRollup person) {
     final slices = <(int, Color)>[
-      (person.completed, DunesColors.green),
-      (person.doing, DunesColors.blue),
-      (person.overdue, DunesColors.coral),
-      (person.waiting, DunesColors.amber),
+      (person.completed, DunesColors.resolve(context, DunesColors.green)),
+      (person.doing, DunesColors.resolve(context, DunesColors.blue)),
+      (person.overdue, DunesColors.resolve(context, DunesColors.coral)),
+      (person.waiting, DunesColors.resolve(context, DunesColors.amber)),
     ];
     final sum = slices.fold<int>(0, (total, slice) => total + slice.$1);
     if (sum <= 0) {
       return Container(
         height: 8,
         decoration: BoxDecoration(
-          color: const Color(0xFFE8EAED),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(99),
         ),
       );
@@ -1031,7 +1172,13 @@ class _NativeQianjiTaskPeoplePageState
               if (slice.$1 > 0)
                 Expanded(
                   flex: slice.$1,
-                  child: ColoredBox(color: slice.$2),
+                  child: ColoredBox(
+                    color: DunesColors.resolve(
+                      context,
+                      slice.$2,
+                      role: DunesColorRole.surface,
+                    ),
+                  ),
                 ),
           ],
         ),
@@ -1049,14 +1196,17 @@ class _NativeQianjiTaskPeoplePageState
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: color,
+              color: DunesColors.resolveNullable(context, color),
               height: 1.1,
             ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -1092,9 +1242,9 @@ class _NativeQianjiTaskPeoplePageState
                   ),
                   Text(
                     hint,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 ],
@@ -1107,17 +1257,17 @@ class _NativeQianjiTaskPeoplePageState
                 visualDensity: VisualDensity.compact,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 padding: EdgeInsets.zero,
-                icon: const Icon(
+                icon: Icon(
                   Icons.ios_share_rounded,
                   size: 16,
-                  color: _themePurple,
+                  color: DunesColors.resolveNullable(context, _themePurple),
                 ),
               ),
             if (task.id > 0)
-              const Icon(
+              Icon(
                 Icons.chevron_right,
                 size: 16,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
           ],
         ),
@@ -1127,22 +1277,30 @@ class _NativeQianjiTaskPeoplePageState
 
   (String, Color, Color) _taskPill(TaskItem task) {
     if (_taskOverdueOpen(task)) {
-      return ('已超期', DunesColors.coral, DunesColors.coralSoft);
+      return (
+        '已超期',
+        DunesColors.resolve(context, DunesColors.coral),
+        DunesColors.resolve(context, DunesColors.coralSoft),
+      );
     }
     if (_taskWaiting(task)) {
       return (
         taskStatusLabel(task.status),
-        DunesColors.amber,
-        DunesColors.amberSoft,
+        DunesColors.resolve(context, DunesColors.amber),
+        DunesColors.resolve(context, DunesColors.amberSoft),
       );
     }
     if (_taskCompleted(task)) {
-      return ('已完成', DunesColors.green, DunesColors.greenSoft);
+      return (
+        '已完成',
+        DunesColors.resolve(context, DunesColors.green),
+        DunesColors.resolve(context, DunesColors.greenSoft),
+      );
     }
     return (
       taskStatusLabel(task.status),
-      DunesColors.blue,
-      DunesColors.blueSoft,
+      DunesColors.resolve(context, DunesColors.blue),
+      DunesColors.resolve(context, DunesColors.blueSoft),
     );
   }
 
@@ -1151,7 +1309,11 @@ class _NativeQianjiTaskPeoplePageState
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (ctx) => Material(
-          color: DunesColors.bgApp,
+          color: DunesColors.resolve(
+            ctx,
+            DunesColors.bgApp,
+            role: DunesColorRole.surface,
+          ),
           child: NativeTaskDetailView(
             session: widget.session,
             taskId: taskId,
@@ -1172,7 +1334,11 @@ class _NativeQianjiTaskPeoplePageState
     Navigator.of(ctx).push(
       MaterialPageRoute<void>(
         builder: (pageCtx) => Material(
-          color: DunesColors.bgApp,
+          color: DunesColors.resolve(
+            ctx,
+            DunesColors.bgApp,
+            role: DunesColorRole.surface,
+          ),
           child: NativeTaskActionView(
             session: widget.session,
             task: task,

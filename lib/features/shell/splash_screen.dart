@@ -10,8 +10,12 @@ class AppBootGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: DunesColors.bgApp,
+    return ColoredBox(
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: LoginFlow(),
     );
   }
@@ -49,11 +53,7 @@ class _PostLoginSplashOverlayState extends State<PostLoginSplashOverlay> {
 
 /// 启屏视觉（保留供以后恢复使用）。
 class SplashScreen extends StatelessWidget {
-  const SplashScreen({
-    super.key,
-    this.version = '',
-    this.exitAnimation,
-  });
+  const SplashScreen({super.key, this.version = '', this.exitAnimation});
 
   final String version;
   final Animation<double>? exitAnimation;
@@ -61,7 +61,11 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -71,7 +75,8 @@ class SplashScreen extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 36,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
             if (version.trim().isNotEmpty) ...[
@@ -80,7 +85,8 @@ class SplashScreen extends StatelessWidget {
                 'v$version',
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ],

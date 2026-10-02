@@ -30,39 +30,70 @@ class DunesShell extends StatefulWidget {
   State<DunesShell> createState() => _DunesShellState();
 }
 
-class _DunesShellState extends State<DunesShell> {
+class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
   late final DunesNavigationController _navigation;
 
   // 记录从左边缘开始的横向拖动累计位移，用于实现 iOS 左滑返回。
   double _edgeDragDx = 0;
+  bool _startingMobileEggs = false;
 
   @override
   void initState() {
     super.initState();
-    _navigation = DunesNavigationController(initialScreen: widget.initialScreen);
+    WidgetsBinding.instance.addObserver(this);
+    _navigation = DunesNavigationController(
+      initialScreen: widget.initialScreen,
+    );
     _bindUsage();
-    if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_startMobileEggs()));
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.android)) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_startMobileEggs()),
+      );
     }
   }
 
   Future<void> _startMobileEggs() async {
-    await AppEggThemeController.instance.load();
-    await ImEggSettings.instance.ensureLoaded(
-      apiBase: widget.session.apiBase,
-      token: widget.session.token,
-    );
-    if (!mounted) return;
-    final holidayShown = await ImEggSettings.instance.maybeShowHolidayWelcome(
-      context,
-      widget.session.userId,
-    );
-    if (!holidayShown && mounted) {
-      await ImEggSettings.instance.maybeShowDailyWelcome(
+    if (_startingMobileEggs) return;
+    _startingMobileEggs = true;
+    try {
+      await AppEggThemeController.instance.load();
+      await ImEggSettings.instance.ensureLoaded(
+        apiBase: widget.session.apiBase,
+        token: widget.session.token,
+      );
+      if (!mounted) return;
+      final holidayShown = await ImEggSettings.instance.maybeShowHolidayWelcome(
         context,
         widget.session.userId,
       );
+      if (!holidayShown && mounted) {
+        await ImEggSettings.instance.maybeShowDailyWelcome(
+          context,
+          widget.session.userId,
+        );
+      }
+    } finally {
+      _startingMobileEggs = false;
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.android)) {
+      unawaited(_startMobileEggs());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _navigation.dispose();
+    super.dispose();
   }
 
   @override

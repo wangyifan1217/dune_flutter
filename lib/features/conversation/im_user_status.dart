@@ -318,7 +318,11 @@ class ImStatusBadge extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(def.icon, size: iconSize, color: def.color),
+        Icon(
+          def.icon,
+          size: iconSize,
+          color: DunesColors.resolveNullable(context, def.color),
+        ),
         const SizedBox(width: 3),
         Text(
           def.label,
@@ -328,6 +332,7 @@ class ImStatusBadge extends StatelessWidget {
             fontSize: fontSize,
             fontWeight: FontWeight.w500,
             color: def.color,
+            context: context,
           ),
         ),
       ],

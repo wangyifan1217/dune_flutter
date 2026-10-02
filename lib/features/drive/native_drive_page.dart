@@ -170,7 +170,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
         tooltip: '创建共享空间',
         onPressed: _createSpace,
         icon: const Icon(Icons.add_rounded, size: 24),
-        color: DunesColors.text2,
+        color: DunesColors.resolve(context, DunesColors.text2),
       );
     }
     final canEdit = _space?.canEdit == true;
@@ -182,14 +182,14 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
             tooltip: '成员',
             onPressed: _showMembers,
             icon: const Icon(Icons.group_outlined, size: 22),
-            color: DunesColors.text2,
+            color: DunesColors.resolve(context, DunesColors.text2),
           ),
         if (_canManageMembers)
           IconButton(
             tooltip: '通知设置',
             onPressed: _showNotificationSettings,
             icon: const Icon(Icons.settings_outlined, size: 21),
-            color: DunesColors.text2,
+            color: DunesColors.resolve(context, DunesColors.text2),
           ),
         if (canEdit)
           // 相对加号左移，避免贴右缘时文字被裁切。
@@ -197,7 +197,13 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
             alignmentOffset: const Offset(-72, 4),
             style: MenuStyle(
               alignment: AlignmentDirectional.bottomEnd,
-              backgroundColor: const WidgetStatePropertyAll(Colors.white),
+              backgroundColor: WidgetStatePropertyAll(
+                DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
+              ),
               elevation: const WidgetStatePropertyAll(8),
               shadowColor: WidgetStatePropertyAll(
                 Colors.black.withValues(alpha: 0.12),
@@ -215,25 +221,25 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                 onPressed: () =>
                     controller.isOpen ? controller.close() : controller.open(),
                 icon: const Icon(Icons.add_rounded, size: 24),
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               );
             },
             menuChildren: [
               MenuItemButton(
                 onPressed: _upload,
-                leadingIcon: const Icon(
+                leadingIcon: Icon(
                   Icons.upload_file_outlined,
                   size: 18,
-                  color: _driveBlue,
+                  color: DunesColors.resolveNullable(context, _driveBlue),
                 ),
                 child: const Text('上传文件'),
               ),
               MenuItemButton(
                 onPressed: _createFolder,
-                leadingIcon: const Icon(
+                leadingIcon: Icon(
                   Icons.create_new_folder_outlined,
                   size: 18,
-                  color: _driveBlue,
+                  color: DunesColors.resolveNullable(context, _driveBlue),
                 ),
                 child: const Text('新建文件夹'),
               ),
@@ -531,7 +537,11 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
   Future<void> _showItemMenu(DriveItem item) async {
     final action = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
@@ -550,42 +560,45 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                 children: [
                   if (item.canEdit)
                     ListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.drive_file_rename_outline,
-                        color: _driveBlue,
+                        color: DunesColors.resolveNullable(context, _driveBlue),
                       ),
                       title: const Text('重命名'),
                       onTap: () => Navigator.pop(context, 'rename'),
                     ),
                   if (item.canEdit)
                     ListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.delete_outline,
-                        color: _driveBlue,
+                        color: DunesColors.resolveNullable(context, _driveBlue),
                       ),
                       title: const Text('移入回收站'),
                       onTap: () => Navigator.pop(context, 'trash'),
                     ),
                   if (!item.isFolder && item.canEdit)
                     ListTile(
-                      leading: const Icon(Icons.history, color: _driveBlue),
+                      leading: Icon(
+                        Icons.history,
+                        color: DunesColors.resolveNullable(context, _driveBlue),
+                      ),
                       title: const Text('版本历史'),
                       onTap: () => Navigator.pop(context, 'versions'),
                     ),
                   if (!item.isFolder && item.canEdit)
                     ListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.upload_file_outlined,
-                        color: _driveBlue,
+                        color: DunesColors.resolveNullable(context, _driveBlue),
                       ),
                       title: const Text('上传新版本'),
                       onTap: () => Navigator.pop(context, 'upload-version'),
                     ),
                   if (item.canEdit)
                     ListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.drive_file_move_outline,
-                        color: _driveBlue,
+                        color: DunesColors.resolveNullable(context, _driveBlue),
                       ),
                       title: const Text('移动 / 复制'),
                       onTap: () => Navigator.pop(context, 'move'),
@@ -593,9 +606,9 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                   // 文件：选会话以 IM 文件消息发送。
                   if (!item.isFolder)
                     ListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.chat_outlined,
-                        color: _driveBlue,
+                        color: DunesColors.resolveNullable(context, _driveBlue),
                       ),
                       title: const Text('发送到聊天'),
                       subtitle: const Text('选择会话，以文件消息推送'),
@@ -608,7 +621,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                         item.kbSavedCurrent
                             ? Icons.cloud_done_outlined
                             : Icons.cloud_upload_outlined,
-                        color: _driveBlue,
+                        color: DunesColors.resolveNullable(context, _driveBlue),
                       ),
                       title: Text(
                         item.kbSavedCurrent
@@ -626,7 +639,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                         item.downloadedCurrent
                             ? Icons.download_done_rounded
                             : Icons.download_outlined,
-                        color: _driveBlue,
+                        color: DunesColors.resolveNullable(context, _driveBlue),
                       ),
                       title: Text(
                         item.downloadedCurrent
@@ -781,7 +794,11 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
   Future<void> _confirmDeleteSpaceMenu(DriveSpace space) async {
     final action = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
       ),
@@ -790,9 +807,9 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.delete_outline,
-                color: Colors.redAccent,
+                color: DunesColors.resolve(ctx, Colors.redAccent),
               ),
               title: const Text('删除共享空间'),
               onTap: () => Navigator.pop(ctx, 'delete'),
@@ -818,7 +835,9 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            style: TextButton.styleFrom(
+              foregroundColor: DunesColors.resolve(ctx, Colors.redAccent),
+            ),
             child: const Text('删除'),
           ),
         ],
@@ -926,9 +945,9 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                   '${_space?.name ?? ''} / ${_folders.map((e) => e.name).join(' / ')}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ),
@@ -957,17 +976,21 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                   child: Container(
                     margin: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: _driveBlue.withValues(alpha: 0.08),
+                      color: DunesColors.resolve(
+                        context,
+                        _driveBlue,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: _driveBlue, width: 2),
                     ),
                     alignment: Alignment.center,
-                    child: const Text(
+                    child: Text(
                       '松开以上传文件',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: _driveBlue,
+                        color: DunesColors.resolveNullable(context, _driveBlue),
                       ),
                     ),
                   ),
@@ -979,14 +1002,22 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
     }
 
     final body = ColoredBox(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: Stack(
         children: [
           scrollBody,
           if (_busy)
             Positioned.fill(
               child: ColoredBox(
-                color: Colors.black.withValues(alpha: 0.06),
+                color: DunesColors.resolve(
+                  context,
+                  Colors.black,
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.06),
                 child: const Center(
                   child: SizedBox(
                     width: 28,
@@ -1011,10 +1042,23 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
       ],
     );
 
-    if (widget.embedded) return ColoredBox(color: Colors.white, child: content);
+    if (widget.embedded) {
+      return ColoredBox(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        child: content,
+      );
+    }
 
     return ColoredBox(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -1027,17 +1071,17 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                   IconButton(
                     onPressed: _goUp,
                     icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                   Expanded(
                     child: Text(
                       _headerTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ),
@@ -1063,14 +1107,21 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
         },
         decoration: InputDecoration(
           hintText: '搜索',
-          hintStyle: const TextStyle(color: DunesColors.text3, fontSize: 15),
+          hintStyle: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+            fontSize: 15,
+          ),
           isDense: true,
           filled: true,
-          fillColor: const Color(0xFFF3F4F6),
-          prefixIcon: const Icon(
+          fillColor: DunesColors.resolve(
+            context,
+            const Color(0xFFF3F4F6),
+            role: DunesColorRole.surface,
+          ),
+          prefixIcon: Icon(
             Icons.search,
             size: 20,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
@@ -1102,13 +1153,18 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.error_outline,
-                  color: Colors.redAccent,
+                  color: DunesColors.resolve(context, Colors.redAccent),
                   size: 36,
                 ),
                 const SizedBox(height: 10),
-                Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+                Text(
+                  _error!,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, Colors.redAccent),
+                  ),
+                ),
                 TextButton(onPressed: _load, child: const Text('重试')),
               ],
             ),
@@ -1142,21 +1198,27 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                 Icon(
                   Icons.cloud_outlined,
                   size: 48,
-                  color: _driveBlue.withValues(alpha: 0.45),
+                  color: DunesColors.resolve(
+                    context,
+                    _driveBlue,
+                  ).withValues(alpha: 0.45),
                 ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   '暂无微盘空间',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   '创建一个共享空间开始使用',
-                  style: TextStyle(fontSize: 13, color: DunesColors.text3),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextButton.icon(
@@ -1173,12 +1235,15 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
 
     if (q.isNotEmpty && personal.isEmpty && shared.isEmpty) {
       return [
-        const SliverFillRemaining(
+        SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
             child: Text(
               '没有符合条件的空间',
-              style: TextStyle(fontSize: 14, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 14,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         ),
@@ -1256,7 +1321,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                     title: '创建共享空间',
                     subtitle: '与同事协作共享文件',
                     icon: Icons.add_box_outlined,
-                    iconColor: DunesColors.text3,
+                    iconColor: DunesColors.resolve(context, DunesColors.text3),
                     onTap: _createSpace,
                   ),
               ],
@@ -1284,7 +1349,10 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
             child: Text(
               emptyHint,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 14,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         ),
@@ -1322,7 +1390,9 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                       size: 36,
                     ),
               icon: item.isFolder ? Icons.folder_rounded : null,
-              iconColor: item.isFolder ? _driveBlue : DunesColors.text2,
+              iconColor: item.isFolder
+                  ? DunesColors.resolve(context, _driveBlue)
+                  : DunesColors.resolve(context, DunesColors.text2),
               kbSaved: item.kbSavedCurrent,
               downloaded: item.downloadedCurrent,
               // PC：文件双击打开（对齐 IM）；APP：单击打开。文件夹始终单击进入。
@@ -1368,7 +1438,11 @@ class _DriveUploadProgressSliver extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF5F6F8),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF5F6F8),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Column(
@@ -1384,8 +1458,8 @@ class _DriveUploadProgressSliver extends StatelessWidget {
                                     : Icons.upload_file_outlined),
                           size: 18,
                           color: job.error != null
-                              ? Colors.redAccent
-                              : _driveBlue,
+                              ? DunesColors.resolve(context, Colors.redAccent)
+                              : DunesColors.resolve(context, _driveBlue),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -1408,8 +1482,11 @@ class _DriveUploadProgressSliver extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             color: job.error != null
-                                ? Colors.redAccent
-                                : DunesColors.text3,
+                                ? DunesColors.resolve(context, Colors.redAccent)
+                                : DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
                           ),
                         ),
                       ],
@@ -1422,10 +1499,14 @@ class _DriveUploadProgressSliver extends StatelessWidget {
                             ? 1
                             : job.progress.clamp(0.0, 1.0),
                         minHeight: 4,
-                        backgroundColor: const Color(0xFFE5E7EB),
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          const Color(0xFFE5E7EB),
+                          role: DunesColorRole.surface,
+                        ),
                         color: job.error != null
-                            ? Colors.redAccent
-                            : _driveBlue,
+                            ? DunesColors.resolve(context, Colors.redAccent)
+                            : DunesColors.resolve(context, _driveBlue),
                       ),
                     ),
                     if (job.error != null) ...[
@@ -1434,9 +1515,9 @@ class _DriveUploadProgressSliver extends StatelessWidget {
                         job.error!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: Colors.redAccent,
+                          color: DunesColors.resolve(context, Colors.redAccent),
                         ),
                       ),
                     ],
@@ -1460,10 +1541,10 @@ class _DriveSectionLabel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: DunesColors.text3,
+          color: DunesColors.resolve(context, DunesColors.text3),
         ),
       ),
     );
@@ -1480,7 +1561,10 @@ class _DriveEmptyHint extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Text(
         text,
-        style: const TextStyle(fontSize: 13, color: DunesColors.text3),
+        style: TextStyle(
+          fontSize: 13,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
       ),
     );
   }
@@ -1512,7 +1596,11 @@ class _DriveSpaceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
@@ -1524,10 +1612,18 @@ class _DriveSpaceRow extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.12),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    iconColor.withValues(alpha: 0.12),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: iconColor, size: 22),
+                child: Icon(
+                  icon,
+                  color: DunesColors.resolveNullable(context, iconColor),
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1538,10 +1634,10 @@ class _DriveSpaceRow extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1549,9 +1645,9 @@ class _DriveSpaceRow extends StatelessWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],
@@ -1569,9 +1665,9 @@ class _DriveSpaceRow extends StatelessWidget {
                       ownerName!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
                       ),
                     ),
                   ),
@@ -1586,7 +1682,7 @@ class _DriveSpaceRow extends StatelessWidget {
                     tooltip: '更多',
                     onPressed: onMore,
                     icon: const Icon(Icons.more_horiz_rounded, size: 20),
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
             ],
@@ -1627,7 +1723,11 @@ class _DriveFileRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: InkWell(
         onTap: onTap,
         onDoubleTap: onDoubleTap,
@@ -1638,7 +1738,13 @@ class _DriveFileRow extends StatelessWidget {
               SizedBox(
                 width: 36,
                 height: 36,
-                child: typeIcon ?? Icon(icon, color: iconColor, size: 28),
+                child:
+                    typeIcon ??
+                    Icon(
+                      icon,
+                      color: DunesColors.resolveNullable(context, iconColor),
+                      size: 28,
+                    ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1652,27 +1758,36 @@ class _DriveFileRow extends StatelessWidget {
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w500,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
                             ),
                           ),
                         ),
                         if (downloaded) ...[
                           const SizedBox(width: 6),
-                          const Icon(
+                          Icon(
                             Icons.download_done_rounded,
                             size: 16,
-                            color: _driveBlue,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _driveBlue,
+                            ),
                           ),
                         ],
                         if (kbSaved) ...[
                           const SizedBox(width: 6),
-                          const Icon(
+                          Icon(
                             Icons.cloud_done_outlined,
                             size: 16,
-                            color: _driveBlue,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _driveBlue,
+                            ),
                           ),
                         ],
                       ],
@@ -1682,9 +1797,9 @@ class _DriveFileRow extends StatelessWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],
@@ -1703,7 +1818,7 @@ class _DriveFileRow extends StatelessWidget {
                         ),
                         onPressed: onMore,
                         icon: const Icon(Icons.more_horiz_rounded, size: 22),
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
               ),
             ],

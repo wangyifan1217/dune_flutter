@@ -33,9 +33,19 @@ class XflowApprovalCategorySwitcher extends StatelessWidget {
       height: 42,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: XflowApprovalPalette.soft,
+        color: DunesColors.resolve(
+          context,
+          XflowApprovalPalette.soft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: XflowApprovalPalette.line),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            XflowApprovalPalette.line,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -95,12 +105,15 @@ class _XflowCategoryTab extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             gradient: selected
-                ? const LinearGradient(
+                ? LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      XflowApprovalPalette.accent,
-                      XflowApprovalPalette.accentDeep,
+                      DunesColors.resolve(context, XflowApprovalPalette.accent),
+                      DunesColors.resolve(
+                        context,
+                        XflowApprovalPalette.accentDeep,
+                      ),
                     ],
                   )
                 : null,
@@ -123,7 +136,10 @@ class _XflowCategoryTab extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: selected ? Colors.white : DunesColors.text2,
+                  color: selected
+                      ? DunesColors.resolve(context, Colors.white)
+                      : DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const SizedBox(width: 6),
@@ -133,8 +149,12 @@ class _XflowCategoryTab extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: selected
-                      ? Colors.white.withValues(alpha: .82)
-                      : DunesColors.text3,
+                      ? DunesColors.resolve(
+                          context,
+                          Colors.white,
+                        ).withValues(alpha: .82)
+                      : DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ],
@@ -163,8 +183,16 @@ class XflowApprovalGroupRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: XflowApprovalPalette.line)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              XflowApprovalPalette.line,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Wrap(
         spacing: 2,
@@ -219,8 +247,12 @@ class _XflowGroupTab extends StatelessWidget {
                             ? FontWeight.w700
                             : FontWeight.w500,
                         color: selected
-                            ? XflowApprovalPalette.accentDeep
-                            : DunesColors.text2,
+                            ? DunesColors.resolve(
+                                context,
+                                XflowApprovalPalette.accentDeep,
+                              )
+                            : DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -230,8 +262,12 @@ class _XflowGroupTab extends StatelessWidget {
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: selected
-                            ? XflowApprovalPalette.accent
-                            : DunesColors.text3,
+                            ? DunesColors.resolve(
+                                context,
+                                XflowApprovalPalette.accent,
+                              )
+                            : DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
                       ),
                     ),
                   ],
@@ -241,7 +277,10 @@ class _XflowGroupTab extends StatelessWidget {
                   duration: const Duration(milliseconds: 160),
                   height: 2,
                   width: selected ? 26 : 0,
-                  color: XflowApprovalPalette.accent,
+                  color: DunesColors.resolve(
+                    context,
+                    XflowApprovalPalette.accent,
+                  ),
                 ),
                 const SizedBox(height: 1),
               ],

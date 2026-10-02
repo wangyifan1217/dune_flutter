@@ -11,12 +11,20 @@ class QianjiPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = iterating ? DunesColors.blueSoft : DunesColors.greenSoft;
-    final fg = iterating ? DunesColors.blue : DunesColors.green;
+    final bg = iterating
+        ? DunesColors.resolve(context, DunesColors.blueSoft)
+        : DunesColors.resolve(context, DunesColors.greenSoft);
+    final fg = iterating
+        ? DunesColors.resolve(context, DunesColors.blue)
+        : DunesColors.resolve(context, DunesColors.green);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: bg,
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -25,6 +33,7 @@ class QianjiPill extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w600,
           color: fg,
+          context: context,
         ),
       ),
     );
@@ -48,8 +57,16 @@ class QianjiCrumbBar extends StatelessWidget {
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -61,13 +78,17 @@ class QianjiCrumbBar extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.chevron_left_rounded, color: DunesColors.accent),
+                  Icon(
+                    Icons.chevron_left_rounded,
+                    color: DunesColors.resolve(context, DunesColors.accent),
+                  ),
                   Text(
                     backLabel,
                     style: DunesTypography.sans(
                       fontSize: 14,
-                      color: DunesColors.accent,
+                      color: DunesColors.resolve(context, DunesColors.accent),
                       fontWeight: FontWeight.w500,
+                      context: context,
                     ),
                   ),
                 ],
@@ -76,7 +97,11 @@ class QianjiCrumbBar extends StatelessWidget {
           ),
           Text(
             ' / ',
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
           Flexible(
             child: Text(
@@ -84,8 +109,9 @@ class QianjiCrumbBar extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: DunesTypography.sans(
                 fontSize: 14,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
                 fontWeight: FontWeight.w500,
+                context: context,
               ),
             ),
           ),
@@ -113,9 +139,19 @@ class QianjiSectionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,7 +163,8 @@ class QianjiSectionCard extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
               const Spacer(),
@@ -160,7 +197,11 @@ class QianjiInfoRow extends StatelessWidget {
             width: 72,
             child: Text(
               label,
-              style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
+              ),
             ),
           ),
           Expanded(
@@ -170,7 +211,10 @@ class QianjiInfoRow extends StatelessWidget {
                 fontSize: 13,
                 height: 1.4,
                 fontWeight: accent ? FontWeight.w600 : FontWeight.w500,
-                color: accent ? DunesColors.accentDeep : DunesColors.text,
+                color: accent
+                    ? DunesColors.resolve(context, DunesColors.accentDeep)
+                    : DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
           ),
@@ -199,10 +243,10 @@ class QianjiGanttBlock extends StatelessWidget {
   final bool showLegend;
 
   Color _color(QianjiGanttState state) => switch (state) {
-        QianjiGanttState.done => DunesColors.green,
-        QianjiGanttState.active => DunesColors.blue,
-        QianjiGanttState.pending => DunesColors.border,
-      };
+    QianjiGanttState.done => DunesColors.green,
+    QianjiGanttState.active => DunesColors.blue,
+    QianjiGanttState.pending => DunesColors.border,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -210,23 +254,38 @@ class QianjiGanttBlock extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.bar_chart_rounded, size: 14, color: DunesColors.text2),
+              Icon(
+                Icons.bar_chart_rounded,
+                size: 14,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
               const SizedBox(width: 4),
               Text(
                 '开发甘特图',
                 style: DunesTypography.sans(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const Spacer(),
@@ -235,8 +294,9 @@ class QianjiGanttBlock extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 11,
                   color: currentLabel.contains('完成')
-                      ? DunesColors.green
-                      : DunesColors.blue,
+                      ? DunesColors.resolve(context, DunesColors.green)
+                      : DunesColors.resolve(context, DunesColors.blue),
+                  context: context,
                 ),
               ),
             ],
@@ -245,11 +305,14 @@ class QianjiGanttBlock extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                _legend(DunesColors.green, '已完成'),
+                _legend(DunesColors.resolve(context, DunesColors.green), '已完成'),
                 const SizedBox(width: 12),
-                _legend(DunesColors.blue, '进行中'),
+                _legend(DunesColors.resolve(context, DunesColors.blue), '进行中'),
                 const SizedBox(width: 12),
-                _legend(DunesColors.border, '待开始'),
+                _legend(
+                  DunesColors.resolve(context, DunesColors.border),
+                  '待开始',
+                ),
               ],
             ),
           ],
@@ -264,7 +327,8 @@ class QianjiGanttBlock extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: DunesTypography.sans(
                       fontSize: 10,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ),
@@ -282,7 +346,8 @@ class QianjiGanttBlock extends StatelessWidget {
                       bar.name,
                       style: DunesTypography.sans(
                         fontSize: 11,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
                       ),
                     ),
                   ),
@@ -295,7 +360,11 @@ class QianjiGanttBlock extends StatelessWidget {
                             children: [
                               Container(
                                 decoration: BoxDecoration(
-                                  color: DunesColors.bgSoft,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.bgSoft,
+                                    role: DunesColorRole.surface,
+                                  ),
                                   borderRadius: BorderRadius.circular(5),
                                 ),
                               ),
@@ -306,7 +375,11 @@ class QianjiGanttBlock extends StatelessWidget {
                                   bottom: 0,
                                   child: Container(
                                     width: 1.5,
-                                    color: DunesColors.coral.withValues(alpha: 0.7),
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.coral,
+                                      role: DunesColorRole.surface,
+                                    ).withValues(alpha: 0.7),
                                   ),
                                 ),
                               Positioned(
@@ -316,7 +389,11 @@ class QianjiGanttBlock extends StatelessWidget {
                                 bottom: 0,
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: _color(bar.state),
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      _color(bar.state),
+                                      role: DunesColorRole.surface,
+                                    ),
                                     borderRadius: BorderRadius.circular(5),
                                   ),
                                 ),
@@ -343,7 +420,11 @@ class QianjiGanttBlock extends StatelessWidget {
                       width: 7,
                       height: 7,
                       decoration: BoxDecoration(
-                        color: _color(p.state),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _color(p.state),
+                          role: DunesColorRole.surface,
+                        ),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -356,8 +437,9 @@ class QianjiGanttBlock extends StatelessWidget {
                             ? FontWeight.w600
                             : FontWeight.w400,
                         color: p.state == QianjiGanttState.active
-                            ? DunesColors.blue
-                            : DunesColors.text3,
+                            ? DunesColors.resolve(context, DunesColors.blue)
+                            : DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
                       ),
                     ),
                   ],

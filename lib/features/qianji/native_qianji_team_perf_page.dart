@@ -49,7 +49,11 @@ class _NativeQianjiTeamPerfPageState extends State<NativeQianjiTeamPerfPage> {
     final members = _members;
 
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -100,13 +104,16 @@ class _NativeQianjiTeamPerfPageState extends State<NativeQianjiTeamPerfPage> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Row(
-                        children: const [
+                        children: [
                           Expanded(
                             child: _ProgressRing(
                               percent: 0.70,
                               value: '70%',
                               label: '自评完成',
-                              color: QianjiPerfTheme.purple,
+                              color: DunesColors.resolve(
+                                context,
+                                QianjiPerfTheme.purple,
+                              ),
                             ),
                           ),
                           Expanded(
@@ -114,7 +121,10 @@ class _NativeQianjiTeamPerfPageState extends State<NativeQianjiTeamPerfPage> {
                               percent: 0.50,
                               value: '50%',
                               label: '主管评分',
-                              color: DunesColors.green,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.green,
+                              ),
                             ),
                           ),
                         ],
@@ -133,7 +143,11 @@ class _NativeQianjiTeamPerfPageState extends State<NativeQianjiTeamPerfPage> {
                                 '当前筛选暂无人员',
                                 style: DunesTypography.sans(
                                   fontSize: 13,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -171,8 +185,16 @@ class _CycleRow extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: cycle.running
-                  ? QianjiPerfTheme.purpleSoft
-                  : DunesColors.greenSoft,
+                  ? DunesColors.resolve(
+                      context,
+                      QianjiPerfTheme.purpleSoft,
+                      role: DunesColorRole.surface,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      DunesColors.greenSoft,
+                      role: DunesColorRole.surface,
+                    ),
               borderRadius: BorderRadius.circular(11),
             ),
             child: Text(
@@ -181,8 +203,9 @@ class _CycleRow extends StatelessWidget {
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: cycle.running
-                    ? QianjiPerfTheme.purple
-                    : DunesColors.green,
+                    ? DunesColors.resolve(context, QianjiPerfTheme.purple)
+                    : DunesColors.resolve(context, DunesColors.green),
+                context: context,
               ),
             ),
           ),
@@ -196,7 +219,8 @@ class _CycleRow extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -204,7 +228,8 @@ class _CycleRow extends StatelessWidget {
                   cycle.meta,
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ],
@@ -218,7 +243,8 @@ class _CycleRow extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: QianjiPerfTheme.purple,
+                  color: DunesColors.resolve(context, QianjiPerfTheme.purple),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 4),
@@ -248,7 +274,11 @@ class _MemberRow extends StatelessWidget {
             height: 38,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: member.avatarColor,
+              color: DunesColors.resolveNullable(
+                context,
+                member.avatarColor,
+                role: DunesColorRole.surface,
+              ),
               shape: BoxShape.circle,
             ),
             child: Text(
@@ -258,7 +288,8 @@ class _MemberRow extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: DunesColors.resolve(context, Colors.white),
+                context: context,
               ),
             ),
           ),
@@ -272,7 +303,8 @@ class _MemberRow extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -280,7 +312,8 @@ class _MemberRow extends StatelessWidget {
                   member.role,
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ],
@@ -294,14 +327,27 @@ class _MemberRow extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: isS ? QianjiPerfTheme.purple : DunesColors.green,
+                  color: isS
+                      ? DunesColors.resolve(context, QianjiPerfTheme.purple)
+                      : DunesColors.resolve(context, DunesColors.green),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 3),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isS ? QianjiPerfTheme.purpleSoft : DunesColors.greenSoft,
+                  color: isS
+                      ? DunesColors.resolve(
+                          context,
+                          QianjiPerfTheme.purpleSoft,
+                          role: DunesColorRole.surface,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          DunesColors.greenSoft,
+                          role: DunesColorRole.surface,
+                        ),
                   borderRadius: BorderRadius.circular(7),
                 ),
                 child: Text(
@@ -309,7 +355,10 @@ class _MemberRow extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: isS ? QianjiPerfTheme.purple : DunesColors.green,
+                    color: isS
+                        ? DunesColors.resolve(context, QianjiPerfTheme.purple)
+                        : DunesColors.resolve(context, DunesColors.green),
+                    context: context,
                   ),
                 ),
               ),
@@ -332,7 +381,17 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: running ? DunesColors.amberSoft : DunesColors.greenSoft,
+        color: running
+            ? DunesColors.resolve(
+                context,
+                DunesColors.amberSoft,
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                DunesColors.greenSoft,
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -340,7 +399,10 @@ class _Badge extends StatelessWidget {
         style: DunesTypography.sans(
           fontSize: 10,
           fontWeight: FontWeight.w600,
-          color: running ? DunesColors.amber : DunesColors.green,
+          color: running
+              ? DunesColors.resolve(context, DunesColors.amber)
+              : DunesColors.resolve(context, DunesColors.green),
+          context: context,
         ),
       ),
     );
@@ -373,7 +435,11 @@ class _ProgressRing extends StatelessWidget {
               CircularProgressIndicator(
                 value: percent,
                 strokeWidth: 6,
-                backgroundColor: DunesColors.bgSoft,
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.bgSoft,
+                  role: DunesColorRole.surface,
+                ),
                 color: color,
               ),
               Text(
@@ -381,7 +447,8 @@ class _ProgressRing extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
             ],
@@ -390,7 +457,11 @@ class _ProgressRing extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           label,
-          style: DunesTypography.sans(fontSize: 11, color: DunesColors.text2),
+          style: DunesTypography.sans(
+            fontSize: 11,
+            color: DunesColors.resolve(context, DunesColors.text2),
+            context: context,
+          ),
         ),
       ],
     );

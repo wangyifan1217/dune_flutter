@@ -226,22 +226,41 @@ class QianjiPerfNavBar extends StatelessWidget {
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
           Material(
-            color: DunesColors.bgSoft,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.bgSoft,
+              role: DunesColorRole.surface,
+            ),
             shape: const CircleBorder(),
             child: InkWell(
               customBorder: const CircleBorder(),
               onTap: onBack,
-              child: const SizedBox(
+              child: SizedBox(
                 width: 32,
                 height: 32,
-                child: Icon(Icons.chevron_left_rounded, color: DunesColors.text2),
+                child: Icon(
+                  Icons.chevron_left_rounded,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
               ),
             ),
           ),
@@ -252,7 +271,8 @@ class QianjiPerfNavBar extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
           ),
@@ -266,7 +286,11 @@ class QianjiPerfNavBar extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: QianjiPerfTheme.purple,
+                      color: DunesColors.resolve(
+                        context,
+                        QianjiPerfTheme.purple,
+                      ),
+                      context: context,
                     ),
                   ),
           ),
@@ -312,7 +336,11 @@ class QianjiPerfOverviewCard extends StatelessWidget {
               height: 140,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.10),
+                color: DunesColors.resolveNullable(
+                  context,
+                  Colors.white.withValues(alpha: 0.10),
+                  role: DunesColorRole.surface,
+                ),
               ),
             ),
           ),
@@ -324,7 +352,11 @@ class QianjiPerfOverviewCard extends StatelessWidget {
               height: 110,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.08),
+                color: DunesColors.resolveNullable(
+                  context,
+                  Colors.white.withValues(alpha: 0.08),
+                  role: DunesColorRole.surface,
+                ),
               ),
             ),
           ),
@@ -338,7 +370,11 @@ class QianjiPerfOverviewCard extends StatelessWidget {
                     label,
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.85),
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                      ).withValues(alpha: 0.85),
+                      context: context,
                     ),
                   ),
                   if (linkLabel != null) ...[
@@ -350,8 +386,9 @@ class QianjiPerfOverviewCard extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
                           letterSpacing: 0.2,
+                          context: context,
                         ),
                       ),
                     ),
@@ -364,7 +401,8 @@ class QianjiPerfOverviewCard extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 14),
@@ -376,7 +414,11 @@ class QianjiPerfOverviewCard extends StatelessWidget {
                         width: 1,
                         height: 42,
                         margin: const EdgeInsets.symmetric(horizontal: 10),
-                        color: Colors.white.withValues(alpha: 0.25),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Colors.white.withValues(alpha: 0.25),
+                          role: DunesColorRole.surface,
+                        ),
                       ),
                     Expanded(
                       child: Column(
@@ -386,7 +428,11 @@ class QianjiPerfOverviewCard extends StatelessWidget {
                             stats[i].label,
                             style: DunesTypography.sans(
                               fontSize: 11,
-                              color: Colors.white.withValues(alpha: 0.8),
+                              color: DunesColors.resolve(
+                                context,
+                                Colors.white,
+                              ).withValues(alpha: 0.8),
+                              context: context,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -395,7 +441,8 @@ class QianjiPerfOverviewCard extends StatelessWidget {
                             style: DunesTypography.sans(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                              color: DunesColors.resolve(context, Colors.white),
+                              context: context,
                             ),
                           ),
                           Text(
@@ -403,6 +450,7 @@ class QianjiPerfOverviewCard extends StatelessWidget {
                             style: DunesTypography.sans(
                               fontSize: 10,
                               color: Colors.white.withValues(alpha: 0.75),
+                              context: context,
                             ),
                           ),
                         ],
@@ -493,9 +541,19 @@ class QianjiPerfSectionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,7 +565,8 @@ class QianjiPerfSectionCard extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
               const Spacer(),
@@ -516,7 +575,8 @@ class QianjiPerfSectionCard extends StatelessWidget {
                   trailing!,
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: QianjiPerfTheme.purple,
+                    color: DunesColors.resolve(context, QianjiPerfTheme.purple),
+                    context: context,
                   ),
                 ),
             ],

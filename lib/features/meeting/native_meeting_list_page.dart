@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -294,7 +294,8 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         } else if (_totalCount < _rows.length) {
           _totalCount = _rows.length;
         }
-        _hasMore = appended.isNotEmpty &&
+        _hasMore =
+            appended.isNotEmpty &&
             result.items.length >= _pageSize &&
             _rows.length < _totalCount;
       });
@@ -322,7 +323,13 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: DunesColors.coral),
+            style: FilledButton.styleFrom(
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                DunesColors.coral,
+                role: DunesColorRole.surface,
+              ),
+            ),
             child: const Text('删除'),
           ),
         ],
@@ -522,15 +529,31 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                 },
               ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         contentPadding: const EdgeInsets.symmetric(vertical: 0),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: DunesColors.borderSoft),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: DunesColors.borderSoft),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
       ),
     );
@@ -540,9 +563,10 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     return switch (job.phase) {
       MeetingUploadPhase.pending =>
         job.error != null && job.error!.isNotEmpty ? '上传重试中' : '准备上传中',
-      MeetingUploadPhase.uploading => job.uploadProgressPercent <= 0
-          ? '正在准备上传'
-          : '录音上传中 ${job.uploadProgressPercent}%',
+      MeetingUploadPhase.uploading =>
+        job.uploadProgressPercent <= 0
+            ? '正在准备上传'
+            : '录音上传中 ${job.uploadProgressPercent}%',
       MeetingUploadPhase.attaching => '正在保存',
       MeetingUploadPhase.failed => '上传失败',
       MeetingUploadPhase.done => '草稿',
@@ -551,18 +575,25 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
 
   Color _uploadStatusColor(MeetingUploadJob job) {
     return switch (job.phase) {
-      MeetingUploadPhase.failed => DunesColors.coral,
-      MeetingUploadPhase.attaching => DunesColors.amber,
-      _ => DunesColors.brandPurple,
+      MeetingUploadPhase.failed => DunesColors.resolve(
+        context,
+        DunesColors.coral,
+      ),
+      MeetingUploadPhase.attaching => DunesColors.resolve(
+        context,
+        DunesColors.amber,
+      ),
+      _ => DunesColors.resolve(context, DunesColors.brandPurple),
     };
   }
 
   Color _statusColor(String status) {
     return switch (status.toUpperCase()) {
-      'GENERATED' => DunesColors.green,
-      'TRANSCRIBING' || 'GENERATING' => DunesColors.amber,
-      'FAILED' => DunesColors.coral,
-      _ => DunesColors.text3,
+      'GENERATED' => DunesColors.resolve(context, DunesColors.green),
+      'TRANSCRIBING' ||
+      'GENERATING' => DunesColors.resolve(context, DunesColors.amber),
+      'FAILED' => DunesColors.resolve(context, DunesColors.coral),
+      _ => DunesColors.resolve(context, DunesColors.text3),
     };
   }
 
@@ -570,7 +601,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   Widget build(BuildContext context) {
     final canCreate = widget.onCreate != null;
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
         leading: BackButton(onPressed: widget.onBack),
         title: const Text('会议纪要'),
@@ -603,8 +638,12 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       floatingActionButton: canCreate && !_selecting
           ? FloatingActionButton.large(
               onPressed: _onCreatePressed,
-              backgroundColor: DunesColors.brandPurple,
-              foregroundColor: Colors.white,
+              backgroundColor: DunesColors.resolve(
+                context,
+                DunesColors.brandPurple,
+                role: DunesColorRole.surface,
+              ),
+              foregroundColor: DunesColors.resolve(context, Colors.white),
               child: Icon(
                 isDesktopCommOnly
                     ? Icons.upload_file_rounded
@@ -700,7 +739,8 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
             style: DunesTypography.sans(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
           const SizedBox(height: 10),
@@ -724,7 +764,8 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                   isDesktopCommOnly ? '滚动加载更多' : '下滑加载更多',
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -737,7 +778,8 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                   '没有更多会议记录了',
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -752,8 +794,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF7B5CD8), Color(0xFF6A4FA0)],
+        gradient: LinearGradient(
+          colors: [
+            DunesColors.resolve(context, Color(0xFF7B5CD8)),
+            DunesColors.resolve(context, Color(0xFF6A4FA0)),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -764,10 +809,18 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
+              color: DunesColors.resolveNullable(
+                context,
+                Colors.white.withValues(alpha: 0.16),
+                role: DunesColorRole.surface,
+              ),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.mic_rounded, color: Colors.white, size: 28),
+            child: Icon(
+              Icons.mic_rounded,
+              color: DunesColors.resolve(context, Colors.white),
+              size: 28,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -779,7 +832,8 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                   style: DunesTypography.sans(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -787,7 +841,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                   '录音转写 · 智能摘要 · 待办提取',
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.82),
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                    ).withValues(alpha: 0.82),
+                    context: context,
                   ),
                 ),
               ],
@@ -809,20 +867,35 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
-          Icon(icon, size: 36, color: DunesColors.brandPurple),
+          Icon(
+            icon,
+            size: 36,
+            color: DunesColors.resolve(context, DunesColors.brandPurple),
+          ),
           const SizedBox(height: 12),
           Text(
             title,
             style: DunesTypography.sans(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           const SizedBox(height: 8),
@@ -831,8 +904,9 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
             textAlign: TextAlign.center,
             style: DunesTypography.sans(
               fontSize: 13,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
               height: 1.5,
+              context: context,
             ),
           ),
           if (actionLabel != null && onAction != null) ...[
@@ -840,8 +914,12 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
             FilledButton(
               onPressed: onAction,
               style: FilledButton.styleFrom(
-                backgroundColor: DunesColors.brandPurple,
-                foregroundColor: Colors.white,
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurple,
+                  role: DunesColorRole.surface,
+                ),
+                foregroundColor: DunesColors.resolve(context, Colors.white),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
                   vertical: 12,
@@ -882,7 +960,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
@@ -914,7 +996,13 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: DunesColors.borderSoft),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Row(
               children: [
@@ -924,8 +1012,8 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                         ? Icons.check_circle
                         : Icons.circle_outlined,
                     color: _selectedMeetingIds.contains(row.meetingId)
-                        ? DunesColors.brandPurple
-                        : DunesColors.text3,
+                        ? DunesColors.resolve(context, DunesColors.brandPurple)
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                   const SizedBox(width: 10),
                 ],
@@ -933,12 +1021,19 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: DunesColors.brandPurpleSoft,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleSoft,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.graphic_eq_rounded,
-                    color: DunesColors.brandPurple,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurple,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -953,7 +1048,8 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                         style: DunesTypography.sans(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -961,7 +1057,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                         row.displayTime,
                         style: DunesTypography.sans(
                           fontSize: 11,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -978,9 +1078,16 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                           child: LinearProgressIndicator(
                             value: uploadJob.uploadProgressPercent / 100,
                             minHeight: 4,
-                            backgroundColor: DunesColors.borderSoft,
-                            valueColor: const AlwaysStoppedAnimation<Color>(
-                              DunesColors.brandPurple,
+                            backgroundColor: DunesColors.resolve(
+                              context,
+                              DunesColors.borderSoft,
+                              role: DunesColorRole.surface,
+                            ),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              DunesColors.resolve(
+                                context,
+                                DunesColors.brandPurple,
+                              ),
                             ),
                           ),
                         ),
@@ -998,7 +1105,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          statusColor.withValues(alpha: 0.12),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
@@ -1007,6 +1118,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                           color: statusColor,
+                          context: context,
                         ),
                       ),
                     ),
@@ -1016,7 +1128,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                         '${row.asrProgress}%',
                         style: DunesTypography.sans(
                           fontSize: 10,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -1029,13 +1145,15 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                       : null,
                   icon: const Icon(Icons.delete_outline_rounded, size: 20),
                   color: deletingDisabled
-                      ? DunesColors.border
-                      : DunesColors.text3,
+                      ? DunesColors.resolve(context, DunesColors.border)
+                      : DunesColors.resolve(context, DunesColors.text3),
                   tooltip: deletingDisabled ? '上传处理中，暂不可删除' : '删除',
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: enabled ? DunesColors.text3 : DunesColors.border,
+                  color: enabled
+                      ? DunesColors.resolve(context, DunesColors.text3)
+                      : DunesColors.resolve(context, DunesColors.border),
                 ),
               ],
             ),

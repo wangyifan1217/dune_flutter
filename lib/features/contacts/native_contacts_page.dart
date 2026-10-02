@@ -96,6 +96,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   Set<int> _onlineUsers = <int>{};
   Map<int, ImUserStatusValue> _imStatuses = <int, ImUserStatusValue>{};
   Set<int> _selectedUserIds = <int>{};
+
   /// 跨搜索保留已见过的联系人，避免已选成员头像/姓名退化成 userId。
   final Map<int, NativeContact> _knownContacts = <int, NativeContact>{};
 
@@ -351,7 +352,8 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     if (!contact.enabled || contact.userId <= 0) {
       return;
     }
-    if (!widget.allowSelfInPickMode && contact.userId == widget.session.userId) {
+    if (!widget.allowSelfInPickMode &&
+        contact.userId == widget.session.userId) {
       return;
     }
     _rememberContacts([contact]);
@@ -386,6 +388,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
       if (widget.allowSelfInPickMode) return true;
       return c.userId != widget.session.userId;
     }
+
     void walk(NativeDepartment dep) {
       all.addAll(dep.users.where(selectable));
       for (final child in dep.children) {
@@ -492,7 +495,11 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -564,7 +571,11 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
         .where((id) => id > 0 && id != widget.session.userId)
         .toList(growable: false);
     if (ids.length < widget.minPickCount) {
-      showDunesToast(context, '群聊至少选择 ${widget.minPickCount} 位同事', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '群聊至少选择 ${widget.minPickCount} 位同事',
+        kind: DunesToastKind.error,
+      );
       return;
     }
     final previewNames = ids
@@ -612,7 +623,11 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6F8),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       resizeToAvoidBottomInset: false,
       body: SafeArea(
         bottom: false,
@@ -623,7 +638,11 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ColoredBox(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 child: ContactsHeader(
                   total: _total,
                   onBack: _handleBack,
@@ -632,7 +651,8 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                   groupPickTitle: widget.groupPickTitle,
                   groupPickSubtitle: widget.groupPickSubtitle,
                   creating: _creating,
-                  onCreateGroup: widget.onOpenGroupChat == null ||
+                  onCreateGroup:
+                      widget.onOpenGroupChat == null ||
                           widget.onPickCompleted != null
                       ? null
                       : _enterGroupPickMode,
@@ -653,7 +673,11 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
               ),
               if (_searchOpen || _groupPickMode)
                 ColoredBox(
-                  color: Colors.white,
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                     child: Container(
@@ -662,15 +686,22 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF5F6F8),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFF5F6F8),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.search_rounded,
                             size: 18,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -678,7 +709,10 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                               controller: _searchController,
                               onChanged: _onSearchChanged,
                               autofocus: _searchOpen && !_groupPickMode,
-                              style: DunesTypography.sans(fontSize: 14),
+                              style: DunesTypography.sans(
+                                fontSize: 14,
+                                context: context,
+                              ),
                               textInputAction: TextInputAction.search,
                               decoration: InputDecoration(
                                 isDense: true,
@@ -686,7 +720,11 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                                 hintText: '搜索姓名',
                                 hintStyle: DunesTypography.sans(
                                   fontSize: 14,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -730,7 +768,8 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
               '通讯录加载失败',
               style: DunesTypography.sans(
                 fontSize: 15,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
             const SizedBox(height: 8),
@@ -738,7 +777,8 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
               _error!,
               style: DunesTypography.sans(
                 fontSize: 12,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
             const SizedBox(height: 10),
@@ -758,12 +798,14 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
           OrgSectionLabel(total: _total),
           if (searching) ...[
             if (_searchItems.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.all(24),
                 child: Center(
                   child: Text(
                     '无匹配联系人',
-                    style: TextStyle(color: DunesColors.text3),
+                    style: TextStyle(
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                 ),
               )
@@ -771,32 +813,43 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
                   children: [
                     for (var i = 0; i < _searchItems.length; i++) ...[
                       if (i > 0)
-                        const Divider(
+                        Divider(
                           height: 1,
                           thickness: 1,
                           indent: 66,
-                          color: Color(0xFFF0F1F3),
+                          color: DunesColors.resolve(
+                            context,
+                            Color(0xFFF0F1F3),
+                            role: DunesColorRole.border,
+                          ),
                         ),
                       ContactRowTile(
                         contact: _searchItems[i],
                         currentUserId: widget.session.userId,
-                        showOnline:
-                            _onlineUsers.contains(_searchItems[i].userId),
+                        showOnline: _onlineUsers.contains(
+                          _searchItems[i].userId,
+                        ),
                         imStatus: _imStatuses[_searchItems[i].userId],
-                        onOpenProfile: () =>
-                            widget.onOpenContact(_withLiveStatus(_searchItems[i])),
+                        onOpenProfile: () => widget.onOpenContact(
+                          _withLiveStatus(_searchItems[i]),
+                        ),
                         onMessage: () => _startPrivateChat(_searchItems[i]),
                         avatarService: _convService,
                         pickMode: _groupPickMode,
-                        selected:
-                            _selectedUserIds.contains(_searchItems[i].userId),
+                        selected: _selectedUserIds.contains(
+                          _searchItems[i].userId,
+                        ),
                         onToggleSelect: () => _toggleSelected(_searchItems[i]),
                         allowSelfInPickMode: widget.allowSelfInPickMode,
                       ),
@@ -805,12 +858,14 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                 ),
               ),
           ] else if (_departments.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(24),
               child: Center(
                 child: Text(
                   '暂无组织数据',
-                  style: TextStyle(color: DunesColors.text3),
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
               ),
             )
@@ -818,17 +873,25 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 children: [
                   for (var i = 0; i < _departments.length; i++) ...[
                     if (i > 0)
-                      const Divider(
+                      Divider(
                         height: 1,
                         thickness: 1,
-                        color: Color(0xFFF0F1F3),
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFF0F1F3),
+                          role: DunesColorRole.border,
+                        ),
                       ),
                     DeptBlockTile(
                       department: _departments[i],
@@ -853,18 +916,26 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 children: [
                   for (var i = 0; i < _externalContacts.length; i++) ...[
                     if (i > 0)
-                      const Divider(
+                      Divider(
                         height: 1,
                         thickness: 1,
                         indent: 66,
-                        color: Color(0xFFF0F1F3),
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFF0F1F3),
+                          role: DunesColorRole.border,
+                        ),
                       ),
                     ContactRowTile(
                       contact: _externalContacts[i],
@@ -876,8 +947,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                       onOpenProfile: () => widget.onOpenContact(
                         _withLiveStatus(_externalContacts[i]),
                       ),
-                      onMessage: () =>
-                          _startPrivateChat(_externalContacts[i]),
+                      onMessage: () => _startPrivateChat(_externalContacts[i]),
                       avatarService: _convService,
                       pickMode: _groupPickMode,
                       selected: _selectedUserIds.contains(
@@ -931,12 +1001,14 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
     final ids = widget.selectedUserIds.toList()..sort();
     final q = _keyword.trim().toLowerCase();
     if (q.isEmpty) return ids;
-    return ids.where((id) {
-      final name = (widget.resolveContact(id)?.displayName ?? '$id')
-          .trim()
-          .toLowerCase();
-      return name.contains(q);
-    }).toList(growable: false);
+    return ids
+        .where((id) {
+          final name = (widget.resolveContact(id)?.displayName ?? '$id')
+              .trim()
+              .toLowerCase();
+          return name.contains(q);
+        })
+        .toList(growable: false);
   }
 
   @override
@@ -959,7 +1031,11 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD5D7DE),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFD5D7DE),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
@@ -975,7 +1051,8 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                         style: DunesTypography.sans(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                     ),
@@ -985,7 +1062,11 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                         '完成',
                         style: DunesTypography.sans(
                           fontSize: 14,
-                          color: const Color(0xFF7B5CD8),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF7B5CD8),
+                          ),
+                          context: context,
                         ),
                       ),
                     ),
@@ -997,19 +1078,23 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                 child: TextField(
                   controller: _searchController,
                   onChanged: (v) => setState(() => _keyword = v),
-                  style: DunesTypography.sans(fontSize: 14),
+                  style: DunesTypography.sans(fontSize: 14, context: context),
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
                     isDense: true,
                     hintText: '搜索已选成员姓名',
                     hintStyle: DunesTypography.sans(
                       fontSize: 14,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.search,
                       size: 20,
-                      color: Color(0xFF9CA3AF),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF9CA3AF),
+                      ),
                     ),
                     suffixIcon: _keyword.trim().isEmpty
                         ? null
@@ -1021,7 +1106,11 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                             icon: const Icon(Icons.close, size: 18),
                           ),
                     filled: true,
-                    fillColor: const Color(0xFFF5F6F8),
+                    fillColor: DunesColors.resolve(
+                      context,
+                      const Color(0xFFF5F6F8),
+                      role: DunesColorRole.surface,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide.none,
@@ -1033,7 +1122,14 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                   ),
                 ),
               ),
-              const Divider(height: 1, color: Color(0xFFE8E9ED)),
+              Divider(
+                height: 1,
+                color: DunesColors.resolve(
+                  context,
+                  Color(0xFFE8E9ED),
+                  role: DunesColorRole.border,
+                ),
+              ),
               Flexible(
                 child: ids.isEmpty
                     ? Padding(
@@ -1042,7 +1138,11 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                           _keyword.trim().isEmpty ? '暂无已选成员' : '未找到匹配成员',
                           style: DunesTypography.sans(
                             fontSize: 14,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
                         ),
                       )
@@ -1050,9 +1150,13 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                         shrinkWrap: true,
                         padding: const EdgeInsets.fromLTRB(16, 4, 12, 16),
                         itemCount: ids.length,
-                        separatorBuilder: (_, __) => const Divider(
+                        separatorBuilder: (_, __) => Divider(
                           height: 1,
-                          color: Color(0xFFF0F1F5),
+                          color: DunesColors.resolve(
+                            context,
+                            Color(0xFFF0F1F5),
+                            role: DunesColorRole.border,
+                          ),
                         ),
                         itemBuilder: (context, index) {
                           final id = ids[index];
@@ -1073,8 +1177,7 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                               setState(() {});
                             },
                             child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 10),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
                               child: Row(
                                 children: [
                                   ImUserAvatar(
@@ -1082,8 +1185,7 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                                     seed: id,
                                     size: 40,
                                     avatarPreset: contact?.avatarPreset,
-                                    avatarObjectKey:
-                                        contact?.avatarObjectKey,
+                                    avatarObjectKey: contact?.avatarObjectKey,
                                     avatarService: widget.avatarService,
                                   ),
                                   const SizedBox(width: 12),
@@ -1098,7 +1200,11 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                                           overflow: TextOverflow.ellipsis,
                                           style: DunesTypography.sans(
                                             fontSize: 15,
-                                            color: DunesColors.text,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              DunesColors.text,
+                                            ),
+                                            context: context,
                                           ),
                                         ),
                                         if (subtitle.isNotEmpty) ...[
@@ -1109,7 +1215,11 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                                             overflow: TextOverflow.ellipsis,
                                             style: DunesTypography.sans(
                                               fontSize: 12,
-                                              color: DunesColors.text3,
+                                              color: DunesColors.resolve(
+                                                context,
+                                                DunesColors.text3,
+                                              ),
+                                              context: context,
                                             ),
                                           ),
                                         ],
@@ -1120,14 +1230,21 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                                   Container(
                                     width: 22,
                                     height: 22,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF9CA3AF),
+                                    decoration: BoxDecoration(
+                                      color: DunesColors.resolveNullable(
+                                        context,
+                                        Color(0xFF9CA3AF),
+                                        role: DunesColorRole.surface,
+                                      ),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.close,
                                       size: 14,
-                                      color: Colors.white,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        Colors.white,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -1169,16 +1286,29 @@ class _SelectedMembersBar extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE8E9ED))),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE8E9ED),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: selectedUserIds.isEmpty
           ? Text(
               '请选择群成员',
               style: DunesTypography.sans(
                 fontSize: 13,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             )
           : SingleChildScrollView(
@@ -1201,10 +1331,12 @@ class _SelectedMembersBar extends StatelessWidget {
                                   ),
                                   seed: id,
                                   size: 40,
-                                  avatarPreset:
-                                      resolveContact(id)?.avatarPreset,
-                                  avatarObjectKey:
-                                      resolveContact(id)?.avatarObjectKey,
+                                  avatarPreset: resolveContact(
+                                    id,
+                                  )?.avatarPreset,
+                                  avatarObjectKey: resolveContact(
+                                    id,
+                                  )?.avatarObjectKey,
                                   avatarService: avatarService,
                                 ),
                                 Positioned(
@@ -1213,14 +1345,21 @@ class _SelectedMembersBar extends StatelessWidget {
                                   child: Container(
                                     width: 16,
                                     height: 16,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF9CA3AF),
+                                    decoration: BoxDecoration(
+                                      color: DunesColors.resolveNullable(
+                                        context,
+                                        Color(0xFF9CA3AF),
+                                        role: DunesColorRole.surface,
+                                      ),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.close,
                                       size: 11,
-                                      color: Colors.white,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        Colors.white,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1236,7 +1375,11 @@ class _SelectedMembersBar extends StatelessWidget {
                                 textAlign: TextAlign.center,
                                 style: DunesTypography.sans(
                                   fontSize: 11,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -1271,7 +1414,11 @@ class _BulkSelectBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Row(
@@ -1283,7 +1430,8 @@ class _BulkSelectBar extends StatelessWidget {
                 '全选',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
             ),
@@ -1295,7 +1443,8 @@ class _BulkSelectBar extends StatelessWidget {
                 '清空已选',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
             ),
@@ -1307,7 +1456,8 @@ class _BulkSelectBar extends StatelessWidget {
                 '列表显示',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
             ),

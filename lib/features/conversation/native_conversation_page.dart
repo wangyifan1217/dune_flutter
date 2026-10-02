@@ -266,7 +266,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   }
 
   void _handleSwipePointerMove(PointerMoveEvent event) {
-    if (_swipeStartX == null || _swipeStartY == null || _swipeIsVertical) return;
+    if (_swipeStartX == null || _swipeStartY == null || _swipeIsVertical) {
+      return;
+    }
     final dx = event.position.dx - _swipeStartX!;
     final dy = event.position.dy - _swipeStartY!;
     if (dx < -16) _swipeMovedLeft = true;
@@ -591,7 +593,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return _markedUnreadIds.contains(conversation.id);
   }
 
-  Future<void> _setMarkedUnread(NativeConversation conversation, bool marked) async {
+  Future<void> _setMarkedUnread(
+    NativeConversation conversation,
+    bool marked,
+  ) async {
     if (conversation.id <= 0) return;
     _rememberMarkedUnread(conversation.id, marked);
     if (!mounted) return;
@@ -616,7 +621,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   }
 
   Future<void> _onInboxUnreadAction(NativeConversation conversation) async {
-    final mark = conversation.unreadCount <= 0 && !_showsMarkedUnreadDot(conversation);
+    final mark =
+        conversation.unreadCount <= 0 && !_showsMarkedUnreadDot(conversation);
     if (mark) {
       await _setMarkedUnread(conversation, true);
       return;
@@ -634,7 +640,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     Offset position,
     NativeConversation conversation,
   ) async {
-    final mark = conversation.unreadCount <= 0 && !_showsMarkedUnreadDot(conversation);
+    final mark =
+        conversation.unreadCount <= 0 && !_showsMarkedUnreadDot(conversation);
     final selected = await showMenu<bool>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -644,10 +651,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         position.dy,
       ),
       items: [
-        PopupMenuItem<bool>(
-          value: true,
-          child: Text(mark ? '标为未读' : '标为已读'),
-        ),
+        PopupMenuItem<bool>(value: true, child: Text(mark ? '标为未读' : '标为已读')),
       ],
     );
     if (selected == true) await _onInboxUnreadAction(conversation);
@@ -1818,20 +1822,22 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     );
 
     final canMarkUnread = c.id > 0;
-    final markLabel =
-        c.unreadCount <= 0 && !_showsMarkedUnreadDot(c) ? '标为未读' : '标为已读';
+    final markLabel = c.unreadCount <= 0 && !_showsMarkedUnreadDot(c)
+        ? '标为未读'
+        : '标为已读';
     Widget inboxChild = dropChild;
     if (canMarkUnread && isDesktopCommOnly) {
       inboxChild = GestureDetector(
-        onSecondaryTapDown: (details) => unawaited(
-          _showInboxUnreadMenu(details.globalPosition, c),
-        ),
+        onSecondaryTapDown: (details) =>
+            unawaited(_showInboxUnreadMenu(details.globalPosition, c)),
         child: dropChild,
       );
     } else if (canMarkUnread || allowSwipeDelete) {
       inboxChild = SwipeableChatInboxRow(
         onDelete: allowSwipeDelete ? () => _hideConversation(c) : null,
-        onMarkUnread: canMarkUnread ? () => unawaited(_onInboxUnreadAction(c)) : null,
+        onMarkUnread: canMarkUnread
+            ? () => unawaited(_onInboxUnreadAction(c))
+            : null,
         markUnreadLabel: markLabel,
         child: dropChild,
       );
@@ -1882,10 +1888,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 ? chats.first.sortTimestamp
                 : _duneAnnouncementSortTs,
             pinned: false,
-            leading: const Icon(
+            leading: Icon(
               Icons.chat_bubble_outline,
               size: 11,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
             rows: chatRows,
           ),
@@ -1910,10 +1916,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           count: approvals.length,
           timestamp: approvals.first.sortTimestamp,
           pinned: true,
-          leading: const Icon(
+          leading: Icon(
             Icons.route_outlined,
             size: 11,
-            color: DunesColors.accent,
+            color: DunesColors.resolve(context, DunesColors.accent),
           ),
           rows: convRows(approvals),
         ),
@@ -1924,10 +1930,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           count: chatRows.length,
           timestamp: sectionTs,
           pinned: false,
-          leading: const Icon(
+          leading: Icon(
             Icons.chat_bubble_outline,
             size: 11,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
           ),
           rows: chatRows,
         ),
@@ -2104,7 +2110,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       // 搜索聚焦时键盘不顶起底部 Tab，与灯塔页一致。
       resizeToAvoidBottomInset: false,
       body: SafeArea(
@@ -2119,54 +2129,54 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
             behavior: HitTestBehavior.translucent,
             child: Column(
-            children: [
-              ChatInboxHeader(
-                onOpenContacts: widget.onOpenContacts,
-                onNewChat: widget.onOpenNewChat,
-                showNovaLeading: isDesktopCommOnly,
-                onQuickMeeting:
-                    isDesktopCommOnly || widget.session.isExternalUser
-                    ? null
-                    : widget.onQuickMeeting,
-                onOpenNova: widget.session.isExternalUser
-                    ? null
-                    : _openNovaConversation,
-                onOpenFavorites: widget.onOpenFavorites,
-                onOpenDailyReport: widget.session.isExternalUser
-                    ? null
-                    : widget.onOpenDailyReport,
-                onOpenAiSummary: widget.session.isExternalUser
-                    ? null
-                    : () => unawaited(_openAiSummaryHub()),
-                onSelectImStatus: (status) =>
-                    unawaited(_setSelfImStatus(status)),
-                selfImStatus: _selfImStatus,
-                novaThinking: widget.session.isExternalUser
-                    ? false
-                    : _novaGeneratingFor(
-                        _primaryAiConversation(_items),
-                      ).generating,
-                novaUnread: widget.session.isExternalUser
-                    ? false
-                    : NovaBackgroundCoordinator.instance.hasUnreadReply,
-              ),
-              ChatInboxSearchBar(
-                controller: widget.onOpenGlobalSearch == null
-                    ? _searchController
-                    : null,
-                onChanged: widget.onOpenGlobalSearch == null
-                    ? _onSearchChanged
-                    : null,
-                onTap: widget.onOpenGlobalSearch,
-              ),
-              Expanded(child: _buildBody()),
-            ],
+              children: [
+                ChatInboxHeader(
+                  onOpenContacts: widget.onOpenContacts,
+                  onNewChat: widget.onOpenNewChat,
+                  showNovaLeading: isDesktopCommOnly,
+                  onQuickMeeting:
+                      isDesktopCommOnly || widget.session.isExternalUser
+                      ? null
+                      : widget.onQuickMeeting,
+                  onOpenNova: widget.session.isExternalUser
+                      ? null
+                      : _openNovaConversation,
+                  onOpenFavorites: widget.onOpenFavorites,
+                  onOpenDailyReport: widget.session.isExternalUser
+                      ? null
+                      : widget.onOpenDailyReport,
+                  onOpenAiSummary: widget.session.isExternalUser
+                      ? null
+                      : () => unawaited(_openAiSummaryHub()),
+                  onSelectImStatus: (status) =>
+                      unawaited(_setSelfImStatus(status)),
+                  selfImStatus: _selfImStatus,
+                  novaThinking: widget.session.isExternalUser
+                      ? false
+                      : _novaGeneratingFor(
+                          _primaryAiConversation(_items),
+                        ).generating,
+                  novaUnread: widget.session.isExternalUser
+                      ? false
+                      : NovaBackgroundCoordinator.instance.hasUnreadReply,
+                ),
+                ChatInboxSearchBar(
+                  controller: widget.onOpenGlobalSearch == null
+                      ? _searchController
+                      : null,
+                  onChanged: widget.onOpenGlobalSearch == null
+                      ? _onSearchChanged
+                      : null,
+                  onTap: widget.onOpenGlobalSearch,
+                ),
+                Expanded(child: _buildBody()),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildBody() {
     if (_loading && _items.isEmpty) {
@@ -2205,20 +2215,23 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             label: '联系人',
             count: contactRows.length,
             pinned: false,
-            leading: const Icon(
+            leading: Icon(
               Icons.person_outline_rounded,
               size: 11,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
           ),
         );
         if (_contactSearching && contactRows.isEmpty) {
           children.add(
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Text(
                 '正在搜索联系人…',
-                style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ),
           );
@@ -2233,12 +2246,15 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         _contactHits.isEmpty &&
         !_contactSearching) {
       children.add(
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(horizontal: 16, vertical: 28),
           child: Center(
             child: Text(
               '无匹配的会话或联系人',
-              style: TextStyle(fontSize: 13, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         ),
@@ -2284,7 +2300,10 @@ class _ErrorPanel extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               error,
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             const SizedBox(height: 14),
             OutlinedButton(onPressed: onRetry, child: const Text('重试')),

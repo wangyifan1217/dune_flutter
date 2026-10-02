@@ -232,7 +232,11 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
           Container(
             margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
             decoration: BoxDecoration(
-              color: DunesColors.bgSoft,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.bgSoft,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(10),
             ),
             child: TabBar(
@@ -240,14 +244,22 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
               indicatorSize: TabBarIndicatorSize.tab,
               dividerColor: Colors.transparent,
               indicator: BoxDecoration(
-                color: DunesColors.accentSoft,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.accentSoft,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
-              labelColor: DunesColors.accentDeep,
-              unselectedLabelColor: DunesColors.text3,
+              labelColor: DunesColors.resolve(context, DunesColors.accentDeep),
+              unselectedLabelColor: DunesColors.resolve(
+                context,
+                DunesColors.text3,
+              ),
               labelStyle: DunesTypography.sans(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
+                context: context,
               ),
               tabs: [
                 Tab(
@@ -287,8 +299,13 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
       );
     }
     if (_notifications.isEmpty) {
-      return const Center(
-        child: Text('暂无系统通告', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '暂无系统通告',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     return RefreshIndicator(
@@ -321,8 +338,13 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
       return _ErrorState(error: _broadcastError!, onRetry: _loadBroadcast);
     }
     if (_broadcastMessages.isEmpty) {
-      return const Center(
-        child: Text('暂无公司广播', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '暂无公司广播',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     final title = _broadcast?.title.trim();
@@ -367,8 +389,12 @@ class _AnnouncementTabLabel extends StatelessWidget {
           Container(
             width: 7,
             height: 7,
-            decoration: const BoxDecoration(
-              color: DunesColors.coral,
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.coral,
+                role: DunesColorRole.surface,
+              ),
               shape: BoxShape.circle,
             ),
           ),
@@ -390,7 +416,12 @@ class _ErrorState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(error, style: const TextStyle(color: DunesColors.text3)),
+          Text(
+            error,
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
+          ),
           const SizedBox(height: 10),
           OutlinedButton(onPressed: onRetry, child: const Text('重试')),
         ],

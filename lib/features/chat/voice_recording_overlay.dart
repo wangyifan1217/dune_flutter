@@ -119,7 +119,15 @@ class _VoiceRecordingOverlayState extends State<VoiceRecordingOverlay>
         fit: StackFit.expand,
         children: [
           // 压暗会话内容，但不能拦截输入栏的拖动手势。
-          const IgnorePointer(child: ColoredBox(color: Color(0x73000000))),
+          IgnorePointer(
+            child: ColoredBox(
+              color: DunesColors.resolve(
+                context,
+                Color(0x73000000),
+                role: DunesColorRole.surface,
+              ),
+            ),
+          ),
           IgnorePointer(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 170),
@@ -129,7 +137,10 @@ class _VoiceRecordingOverlayState extends State<VoiceRecordingOverlay>
                 return FadeTransition(
                   opacity: animation,
                   child: ScaleTransition(
-                    scale: Tween<double>(begin: 0.94, end: 1).animate(animation),
+                    scale: Tween<double>(
+                      begin: 0.94,
+                      end: 1,
+                    ).animate(animation),
                     child: child,
                   ),
                 );
@@ -180,8 +191,7 @@ class _RecordingCenterPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final remainSec =
-        ((kVoiceRecordMaxDurationMs - durationMs) / 1000).ceil();
+    final remainSec = ((kVoiceRecordMaxDurationMs - durationMs) / 1000).ceil();
     final tip = remainSec <= 10 && remainSec > 0
         ? '还可以说 $remainSec 秒'
         : '松手发送，上滑选择';
@@ -193,7 +203,11 @@ class _RecordingCenterPanel extends StatelessWidget {
             width: 148,
             height: 148,
             decoration: BoxDecoration(
-              color: const Color(0xD926262A),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xD926262A),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Stack(
@@ -220,7 +234,7 @@ class _RecordingCenterPanel extends StatelessWidget {
                           barCount: 7,
                           maxHeight: 38,
                           barWidth: 3.5,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -229,7 +243,8 @@ class _RecordingCenterPanel extends StatelessWidget {
                         style: DunesTypography.mono(
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
+                          context: context,
                         ),
                       ),
                     ],
@@ -244,6 +259,7 @@ class _RecordingCenterPanel extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 13,
               color: Colors.white.withValues(alpha: 0.6),
+              context: context,
             ),
           ),
         ],
@@ -299,8 +315,7 @@ class _VoiceActionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
-    final remainSec =
-        ((kVoiceRecordMaxDurationMs - durationMs) / 1000).ceil();
+    final remainSec = ((kVoiceRecordMaxDurationMs - durationMs) / 1000).ceil();
     final hint = remainSec <= 10 && remainSec > 0
         ? '还可以说 $remainSec 秒'
         : switch (action) {
@@ -312,8 +327,12 @@ class _VoiceActionPanel extends StatelessWidget {
       alignment: Alignment.bottomCenter,
       child: Container(
         height: kVoiceRecordingOverlayHeight,
-        decoration: const BoxDecoration(
-          color: Color(0xF226262A),
+        decoration: BoxDecoration(
+          color: DunesColors.resolveNullable(
+            context,
+            Color(0xF226262A),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
@@ -323,7 +342,11 @@ class _VoiceActionPanel extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0x2EFFFFFF),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0x2EFFFFFF),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(15),
               ),
               child: Row(
@@ -337,7 +360,7 @@ class _VoiceActionPanel extends StatelessWidget {
                       barCount: 4,
                       maxHeight: 14,
                       barWidth: 2,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -346,7 +369,8 @@ class _VoiceActionPanel extends StatelessWidget {
                     style: DunesTypography.mono(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w500,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
+                      context: context,
                     ),
                   ),
                 ],
@@ -394,6 +418,7 @@ class _VoiceActionPanel extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 13,
                         color: Colors.white.withValues(alpha: 0.55),
+                        context: context,
                       ),
                     ),
                     const Spacer(),
@@ -402,6 +427,7 @@ class _VoiceActionPanel extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 13,
                         color: Colors.white.withValues(alpha: 0.55),
+                        context: context,
                       ),
                     ),
                   ],
@@ -426,7 +452,11 @@ class _VoiceActionCircle extends StatelessWidget {
     final (label, icon) = switch (action) {
       VoiceHoldAction.send => (
         '发送',
-        const Icon(Icons.check_rounded, size: 30, color: Colors.white),
+        Icon(
+          Icons.check_rounded,
+          size: 30,
+          color: DunesColors.resolve(context, Colors.white),
+        ),
       ),
       VoiceHoldAction.transcribe => (
         '转文字',
@@ -435,19 +465,24 @@ class _VoiceActionCircle extends StatelessWidget {
           style: DunesTypography.sans(
             fontSize: 26,
             fontWeight: FontWeight.w600,
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
+            context: context,
           ),
         ),
       ),
       VoiceHoldAction.cancel => (
         '取消',
-        const Icon(Icons.close_rounded, size: 30, color: Colors.white),
+        Icon(
+          Icons.close_rounded,
+          size: 30,
+          color: DunesColors.resolve(context, Colors.white),
+        ),
       ),
       _ => ('', const SizedBox.shrink()),
     };
     final highlightColor = action == VoiceHoldAction.cancel
-        ? _kWeChatRed
-        : _kWeChatGreen;
+        ? DunesColors.resolve(context, _kWeChatRed)
+        : DunesColors.resolve(context, _kWeChatGreen);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -460,7 +495,13 @@ class _VoiceActionCircle extends StatelessWidget {
             height: 62,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: highlighted ? highlightColor : const Color(0xFF3A3A3C),
+              color: highlighted
+                  ? highlightColor
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFF3A3A3C),
+                      role: DunesColorRole.surface,
+                    ),
             ),
             alignment: Alignment.center,
             child: icon,
@@ -473,8 +514,9 @@ class _VoiceActionCircle extends StatelessWidget {
             fontSize: 12.5,
             fontWeight: FontWeight.w500,
             color: highlighted
-                ? Colors.white
+                ? DunesColors.resolve(context, Colors.white)
                 : Colors.white.withValues(alpha: 0.6),
+            context: context,
           ),
         ),
       ],
@@ -492,15 +534,21 @@ class _BlinkDot extends StatelessWidget {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
-        final opacity = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(controller.value * math.pi * 2));
+        final opacity =
+            0.35 +
+            0.65 * (0.5 + 0.5 * math.sin(controller.value * math.pi * 2));
         return Opacity(
           opacity: opacity,
           child: Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: _kWeChatRed,
+              color: DunesColors.resolveNullable(
+                context,
+                _kWeChatRed,
+                role: DunesColorRole.surface,
+              ),
             ),
           ),
         );
@@ -540,7 +588,11 @@ class _WaveBars extends StatelessWidget {
               width: barWidth,
               height: maxHeight * 0.25 + wave.abs() * maxHeight * 0.75,
               decoration: BoxDecoration(
-                color: color,
+                color: DunesColors.resolveNullable(
+                  context,
+                  color,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(barWidth),
               ),
             );
@@ -559,23 +611,31 @@ class VoiceTranscribingIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox.expand(
       child: ColoredBox(
-        color: const Color(0x59000000),
+        color: DunesColors.resolve(
+          context,
+          const Color(0x59000000),
+          role: DunesColorRole.surface,
+        ),
         child: Center(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
             decoration: BoxDecoration(
-              color: const Color(0xE626262A),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xE626262A),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 24,
                   height: 24,
                   child: CircularProgressIndicator(
                     strokeWidth: 2.4,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -583,7 +643,8 @@ class VoiceTranscribingIndicator extends StatelessWidget {
                   '语音转文字中…',
                   style: DunesTypography.sans(
                     fontSize: 14,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
+                    context: context,
                   ),
                 ),
               ],

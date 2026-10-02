@@ -76,9 +76,19 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         Container(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
           decoration: BoxDecoration(
-            color: XfProposalUi.card,
+            color: DunesColors.resolve(
+              context,
+              XfProposalUi.card,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(21),
-            border: Border.all(color: XfProposalUi.lineSoft),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                XfProposalUi.lineSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             children: [
@@ -136,17 +146,33 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       padding: const EdgeInsets.all(10),
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: XfProposalUi.cardAlt,
+        color: DunesColors.resolve(
+          context,
+          XfProposalUi.cardAlt,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: XfProposalUi.line),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            XfProposalUi.line,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
           Row(
             children: [
-              Text('提案完整度', style: DunesTypography.sans(fontSize: 11)),
+              Text(
+                '提案完整度',
+                style: DunesTypography.sans(fontSize: 11, context: context),
+              ),
               const Spacer(),
-              Text('${p.pct}%', style: DunesTypography.sans(fontSize: 11)),
+              Text(
+                '${p.pct}%',
+                style: DunesTypography.sans(fontSize: 11, context: context),
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -155,8 +181,12 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
             child: LinearProgressIndicator(
               value: p.pct / 100,
               minHeight: 4,
-              backgroundColor: Colors.black.withValues(alpha: 0.06),
-              color: XfProposalUi.coral,
+              backgroundColor: DunesColors.resolve(
+                context,
+                Colors.black,
+                role: DunesColorRole.surface,
+              ).withValues(alpha: 0.06),
+              color: DunesColors.resolve(context, XfProposalUi.coral),
             ),
           ),
           const SizedBox(height: 6),
@@ -167,7 +197,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                   '业务 ${p.bizDone} / ${p.bizTotal}',
                   style: DunesTypography.sans(
                     fontSize: 10,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -176,7 +207,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                   '财务 ${p.finDone} / ${p.finTotal}',
                   style: DunesTypography.sans(
                     fontSize: 10,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -201,9 +233,19 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: XfProposalUi.cardAlt,
+        color: DunesColors.resolve(
+          context,
+          XfProposalUi.cardAlt,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: XfProposalUi.line),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            XfProposalUi.line,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Wrap(
         spacing: 6,
@@ -360,8 +402,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                       connector,
                       style: DunesTypography.mono(
                         fontSize: 11,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                         fontWeight: FontWeight.w600,
+                        context: context,
                       ),
                     ),
                   )
@@ -384,8 +427,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                     textAlign: TextAlign.center,
                     style: DunesTypography.mono(
                       fontSize: 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                       fontWeight: FontWeight.w600,
+                      context: context,
                     ),
                   ),
                 ),
@@ -400,24 +444,47 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   Widget _sectionField(XflowField field) {
     final tone = (field.raw['tone'] ?? field.raw['sectionStyle'] ?? '')
         .toString();
-    Color borderColor = XfProposalUi.coral;
-    if (tone == 'green' || tone == 'fin') borderColor = DunesColors.green;
-    if (tone == 'amber') borderColor = DunesColors.amber;
-    if (tone == 'blue') borderColor = DunesColors.blue;
+    Color borderColor = DunesColors.resolve(context, XfProposalUi.coral);
+    if (tone == 'green' || tone == 'fin')
+      borderColor = DunesColors.resolve(context, DunesColors.green);
+    if (tone == 'amber')
+      borderColor = DunesColors.resolve(context, DunesColors.amber);
+    if (tone == 'blue') {
+      borderColor = DunesColors.resolve(context, DunesColors.blue);
+    }
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 10),
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [DunesColors.bgSoft, DunesColors.bgSoft.withValues(alpha: 0)],
+          colors: [
+            DunesColors.resolve(context, DunesColors.bgSoft),
+            DunesColors.resolve(
+              context,
+              DunesColors.bgSoft,
+            ).withValues(alpha: 0),
+          ],
           stops: const [0, 0.8],
         ),
-        border: Border(left: BorderSide(color: borderColor, width: 3)),
+        border: Border(
+          left: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              borderColor,
+              role: DunesColorRole.border,
+            ),
+            width: 3,
+          ),
+        ),
       ),
       child: Text(
         field.label.isEmpty ? '分组' : field.label,
-        style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600),
+        style: DunesTypography.sans(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          context: context,
+        ),
       ),
     );
   }
@@ -453,13 +520,13 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     Color onColor(String lv) {
       switch (lv) {
         case 'S':
-          return const Color(0xFFE85D4C);
+          return DunesColors.resolve(context, const Color(0xFFE85D4C));
         case 'A':
-          return const Color(0xFFD4A017);
+          return DunesColors.resolve(context, const Color(0xFFD4A017));
         case 'B':
-          return const Color(0xFF3B6FD4);
+          return DunesColors.resolve(context, const Color(0xFF3B6FD4));
         default:
-          return const Color(0xFF2D8A5E);
+          return DunesColors.resolve(context, const Color(0xFF2D8A5E));
       }
     }
 
@@ -480,10 +547,22 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                     alignment: Alignment.center,
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     decoration: BoxDecoration(
-                      color: current == lv ? onColor(lv) : DunesColors.bgSoft,
+                      color: current == lv
+                          ? onColor(lv)
+                          : DunesColors.resolve(
+                              context,
+                              DunesColors.bgSoft,
+                              role: DunesColorRole.surface,
+                            ),
                       borderRadius: BorderRadius.circular(5),
                       border: Border.all(
-                        color: current == lv ? onColor(lv) : DunesColors.border,
+                        color: current == lv
+                            ? onColor(lv)
+                            : DunesColors.resolve(
+                                context,
+                                DunesColors.border,
+                                role: DunesColorRole.border,
+                              ),
                       ),
                     ),
                     child: Text(
@@ -491,7 +570,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                       style: DunesTypography.sans(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: current == lv ? Colors.white : DunesColors.text2,
+                        color: current == lv
+                            ? DunesColors.resolve(context, Colors.white)
+                            : DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
                       ),
                     ),
                   ),
@@ -563,8 +645,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                 overflow: TextOverflow.ellipsis,
                 style: xfInputTextStyle().copyWith(
                   color: date == null
-                      ? DunesColors.text3
-                      : (readonly ? DunesColors.text2 : DunesColors.text),
+                      ? DunesColors.resolve(context, DunesColors.text3)
+                      : (readonly
+                            ? DunesColors.resolve(context, DunesColors.text2)
+                            : DunesColors.resolve(context, DunesColors.text)),
                 ),
               ),
             ),
@@ -574,8 +658,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                   : Icons.calendar_today_outlined,
               size: 14,
               color: readonly
-                  ? DunesColors.text3.withValues(alpha: 0.65)
-                  : DunesColors.text3,
+                  ? DunesColors.resolve(
+                      context,
+                      DunesColors.text3,
+                    ).withValues(alpha: 0.65)
+                  : DunesColors.resolve(context, DunesColors.text3),
             ),
           ],
         ),
@@ -617,13 +704,27 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
         decoration: BoxDecoration(
-          color: DunesColors.bgSoft,
+          color: DunesColors.resolve(
+            context,
+            DunesColors.bgSoft,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFE4DEF5)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE4DEF5),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Text(
           text.isEmpty ? '—' : text,
-          style: DunesTypography.mono(fontSize: 13, color: DunesColors.text2),
+          style: DunesTypography.mono(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text2),
+            context: context,
+          ),
         ),
       ),
       inRow: inRow,
@@ -825,9 +926,19 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -850,7 +961,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
               style: DunesTypography.sans(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
             const SizedBox(height: 4),
@@ -935,11 +1047,17 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
             borderRadius: BorderRadius.circular(4),
             child: DecoratedBox(
               decoration: BoxDecoration(
-                border: Border.all(color: DunesColors.borderSoft),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               child: Table(
                 border: TableBorder.all(
-                  color: DunesColors.borderSoft,
+                  color: DunesColors.resolve(context, DunesColors.borderSoft),
                   width: 1,
                 ),
                 defaultVerticalAlignment: TableCellVerticalAlignment.middle,
@@ -950,7 +1068,13 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                 },
                 children: [
                   TableRow(
-                    decoration: const BoxDecoration(color: DunesColors.bgSoft),
+                    decoration: BoxDecoration(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.bgSoft,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                     children: [
                       for (final col in cols)
                         Padding(
@@ -960,7 +1084,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                             style: DunesTypography.sans(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -1018,7 +1146,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     return TextFormField(
       key: ValueKey('matrix_${fieldKey}_${ri}_$colKey'),
       initialValue: value,
-      style: DunesTypography.sans(fontSize: 11, color: DunesColors.text),
+      style: DunesTypography.sans(
+        fontSize: 11,
+        color: DunesColors.resolve(context, DunesColors.text),
+        context: context,
+      ),
       decoration: xfMatrixCellDecoration(hint: col['placeholder']?.toString()),
       onTapOutside: _dismissKeyboardOnTapOutside,
       onChanged: (v) {
@@ -1090,9 +1222,19 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1105,7 +1247,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
               ),
@@ -1259,10 +1402,18 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: DunesColors.borderSoft.withValues(alpha: 0.6),
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ).withValues(alpha: 0.6),
         ),
       ),
       child: _dynCellsBar(fieldKey, cols, rows, ri, onRemove: onRemove),
@@ -1410,7 +1561,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         readonly: colField.readonly,
         decoration: decoration,
         style: matrix
-            ? DunesTypography.sans(fontSize: 11, color: DunesColors.text)
+            ? DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
+              )
             : xfDynInputTextStyle(),
         onChanged: setVal,
       );
@@ -1433,7 +1588,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
             initialValue: value,
             decoration: decoration,
             style: matrix
-                ? DunesTypography.sans(fontSize: 11, color: DunesColors.text)
+                ? DunesTypography.sans(
+                    fontSize: 11,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
+                  )
                 : xfDynInputTextStyle(),
             onTapOutside: _dismissKeyboardOnTapOutside,
             onChanged: setVal,
@@ -1468,8 +1627,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                 overflow: TextOverflow.ellipsis,
                 style: style.copyWith(
                   color: date == null
-                      ? DunesColors.text3
-                      : (readonly ? DunesColors.text2 : DunesColors.text),
+                      ? DunesColors.resolve(context, DunesColors.text3)
+                      : (readonly
+                            ? DunesColors.resolve(context, DunesColors.text2)
+                            : DunesColors.resolve(context, DunesColors.text)),
                 ),
               ),
             ),
@@ -1478,7 +1639,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                   ? Icons.lock_clock_outlined
                   : Icons.calendar_today_outlined,
               size: 14,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
           ],
         ),
@@ -1617,19 +1778,36 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                         tag,
                         style: DunesTypography.sans(
                           fontSize: 11,
-                          color: XfProposalUi.coral,
+                          color: DunesColors.resolve(
+                            context,
+                            XfProposalUi.coral,
+                          ),
+                          context: context,
                         ),
                       ),
                       deleteIcon: field.readonly
                           ? null
-                          : const Icon(
+                          : Icon(
                               Icons.close,
                               size: 14,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                       onDeleted: field.readonly ? null : () => removeTag(tag),
-                      backgroundColor: XfProposalUi.coralSoft,
-                      side: const BorderSide(color: Color(0xFFE4DEF5)),
+                      backgroundColor: DunesColors.resolve(
+                        context,
+                        XfProposalUi.coralSoft,
+                        role: DunesColorRole.surface,
+                      ),
+                      side: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFE4DEF5),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,
                     ),
@@ -1649,15 +1827,26 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
               decoration: BoxDecoration(
-                color: DunesColors.bgSoft,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.bgSoft,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: DunesColors.border),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.border,
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               child: Text(
                 field.placeholder.isEmpty ? '—' : field.placeholder,
                 style: DunesTypography.sans(
                   fontSize: 12.5,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ),
@@ -1702,10 +1891,30 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
           vertical: compact ? 5 : 5,
         ),
         decoration: BoxDecoration(
-          color: selected ? XfProposalUi.coralSoft : DunesColors.bgSoft,
+          color: selected
+              ? DunesColors.resolve(
+                  context,
+                  XfProposalUi.coralSoft,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  DunesColors.bgSoft,
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(7),
           border: Border.all(
-            color: selected ? XfProposalUi.coral : DunesColors.border,
+            color: selected
+                ? DunesColors.resolve(
+                    context,
+                    XfProposalUi.coral,
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    DunesColors.border,
+                    role: DunesColorRole.border,
+                  ),
           ),
         ),
         child: Text(
@@ -1714,7 +1923,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
           style: DunesTypography.sans(
             fontSize: compact ? 10 : 11,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            color: selected ? XfProposalUi.coral : DunesColors.text2,
+            color: selected
+                ? DunesColors.resolve(context, XfProposalUi.coral)
+                : DunesColors.resolve(context, DunesColors.text2),
+            context: context,
           ),
         ),
       ),
@@ -1747,8 +1959,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
               overflow: TextOverflow.ellipsis,
               style: DunesTypography.sans(
                 fontSize: 9.5,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
                 height: 1.3,
+                context: context,
               ),
             ),
           ),
@@ -1759,8 +1972,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   bool _hasValue(dynamic v) {
     if (v == null) return false;
     if (v is Map &&
-        (v['userId'] != null || v['id'] != null || v['name'] != null))
+        (v['userId'] != null || v['id'] != null || v['name'] != null)) {
       return true;
+    }
     if (v is String) return v.trim().isNotEmpty;
     if (v is List) return v.isNotEmpty;
     if (v is Map) return v.isNotEmpty;
@@ -1953,12 +2167,15 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
                     minHeight: 32,
                   ),
                   suffixIcon: widget.readonly
-                      ? const Padding(
+                      ? Padding(
                           padding: EdgeInsets.only(right: 8),
                           child: Icon(
                             Icons.keyboard_arrow_down_rounded,
                             size: 18,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         )
                       : Row(
@@ -1970,10 +2187,13 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
                                 padding: EdgeInsets.zero,
                                 visualDensity: VisualDensity.compact,
                                 constraints: xfCompactSuffixConstraints,
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.close_rounded,
                                   size: 18,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
                                 ),
                                 onPressed: _clear,
                               ),
@@ -1987,7 +2207,10 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
                                     ? Icons.keyboard_arrow_up_rounded
                                     : Icons.keyboard_arrow_down_rounded,
                                 size: 18,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
                               ),
                               onPressed: () {
                                 if (_expanded) {
@@ -2020,7 +2243,8 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
               '未找到匹配选项，请换个关键词',
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],
@@ -2256,7 +2480,8 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
               '未找到匹配人员，请换个关键词',
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],
@@ -2630,8 +2855,9 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
                 final title = (row['title'] ?? row['name'] ?? '')
                     .toString()
                     .trim();
-                if (code.isNotEmpty && title.isNotEmpty)
+                if (code.isNotEmpty && title.isNotEmpty) {
                   return '$code · $title';
+                }
                 return code.isNotEmpty ? code : title;
               },
               onSelect: (i) => _selectProposal(_results[i]),
@@ -2642,7 +2868,8 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
               '无匹配提案',
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],
@@ -2990,7 +3217,8 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
               '无匹配结果',
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],

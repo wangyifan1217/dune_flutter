@@ -36,7 +36,7 @@ class XflowBillCascadeField extends StatelessWidget {
           Text(
             '未关联',
             style: xfInputTextStyle().copyWith(
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
               fontSize: 12,
             ),
           ),
@@ -86,8 +86,15 @@ class XflowBillCascadeField extends StatelessWidget {
         final width = size.width < 560 ? size.width - 32 : 520.0;
         final height = (size.height * 0.86).clamp(420.0, 720.0);
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          backgroundColor: XfProposalUi.card,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
+          backgroundColor: DunesColors.resolve(
+            ctx,
+            XfProposalUi.card,
+            role: DunesColorRole.surface,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -268,7 +275,10 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
     final exists = _picked.any((e) => xflowBillHasId(e, id));
     setState(() {
       if (exists) {
-        _picked = [for (final e in _picked) if (!xflowBillHasId(e, id)) e];
+        _picked = [
+          for (final e in _picked)
+            if (!xflowBillHasId(e, id)) e,
+        ];
       } else {
         _picked = [
           ..._picked,
@@ -304,12 +314,15 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
                   style: DunesTypography.sans(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
+                    context: context,
                   ),
                 ),
               ),
               Text(
                 '已选 ${_picked.length} 笔',
-                style: xfInputTextStyle().copyWith(color: DunesColors.text3),
+                style: xfInputTextStyle().copyWith(
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, _picked),
@@ -343,7 +356,8 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
                 child: _BillInlineSelect(
                   value: _projectName,
                   hint: _loadingProjects ? '加载项目…' : '请选择',
-                  enabled: _typeCode != null &&
+                  enabled:
+                      _typeCode != null &&
                       !_loadingProjects &&
                       widget.service != null,
                   items: [
@@ -360,10 +374,7 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
               ),
               _filterField(
                 label: '账单周期',
-                child: _BillInlineMonth(
-                  value: _periodMonth,
-                  onTap: _pickMonth,
-                ),
+                child: _BillInlineMonth(value: _periodMonth, onTap: _pickMonth),
               ),
               _filterField(
                 label: '关键词',
@@ -371,19 +382,21 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
                   child: TextField(
                     controller: _queryCtrl,
                     style: xfInputTextStyle(),
-                    decoration: xfInputDecoration(
-                      hint: '我方主体、对方主体、周期或账单号',
-                    ).copyWith(
-                      suffixIcon: IconButton(
-                        tooltip: '搜索',
-                        onPressed: _search,
-                        icon: const Icon(
-                          Icons.search_rounded,
-                          size: 18,
-                          color: DunesColors.text3,
+                    decoration: xfInputDecoration(hint: '我方主体、对方主体、周期或账单号')
+                        .copyWith(
+                          suffixIcon: IconButton(
+                            tooltip: '搜索',
+                            onPressed: _search,
+                            icon: Icon(
+                              Icons.search_rounded,
+                              size: 18,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
                     onSubmitted: (_) => _search(),
                   ),
                 ),
@@ -393,7 +406,9 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     _error!,
-                    style: xfInputTextStyle().copyWith(color: DunesColors.coral),
+                    style: xfInputTextStyle().copyWith(
+                      color: DunesColors.resolve(context, DunesColors.coral),
+                    ),
                   ),
                 ),
               if (_loadingRows)
@@ -412,7 +427,9 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     '请先选类型',
-                    style: xfInputTextStyle().copyWith(color: DunesColors.text3),
+                    style: xfInputTextStyle().copyWith(
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                 )
               else if (_rows.isEmpty)
@@ -420,7 +437,9 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     '没有匹配的账单',
-                    style: xfInputTextStyle().copyWith(color: DunesColors.text3),
+                    style: xfInputTextStyle().copyWith(
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                 )
               else
@@ -483,9 +502,19 @@ class _SelectedBillTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -498,7 +527,8 @@ class _SelectedBillTile extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
               ),
@@ -512,7 +542,8 @@ class _SelectedBillTile extends StatelessWidget {
               xflowBillTypeProjectLine(row),
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],
@@ -553,10 +584,30 @@ class _ResultBillTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
           decoration: BoxDecoration(
-            color: selected ? DunesColors.accentSoft : Colors.white,
+            color: selected
+                ? DunesColors.resolve(
+                    context,
+                    DunesColors.accentSoft,
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? DunesColors.accent : DunesColors.border,
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      DunesColors.accent,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      DunesColors.border,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Column(
@@ -570,7 +621,8 @@ class _ResultBillTile extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                     ),
                   ),
@@ -579,7 +631,9 @@ class _ResultBillTile extends StatelessWidget {
                         ? Icons.check_circle_rounded
                         : Icons.circle_outlined,
                     size: 18,
-                    color: selected ? DunesColors.accent : DunesColors.text3,
+                    color: selected
+                        ? DunesColors.resolve(context, DunesColors.accent)
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ],
               ),
@@ -589,7 +643,8 @@ class _ResultBillTile extends StatelessWidget {
                   xflowBillTypeProjectLine(row),
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ],
@@ -685,43 +740,50 @@ class _BillInlineSelectState extends State<_BillInlineSelect> {
             maxLines: 4,
             enableInteractiveSelection: false,
             style: xfInputTextStyle(),
-            decoration: xfInputDecoration(
-              hint: widget.hint,
-              readonly: !widget.enabled,
-            ).copyWith(
-              suffixIconConstraints: const BoxConstraints(minWidth: 72),
-              suffixIcon: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (hasText && widget.enabled)
-                    IconButton(
-                      tooltip: '清除',
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        size: 18,
-                        color: DunesColors.text3,
+            decoration:
+                xfInputDecoration(
+                  hint: widget.hint,
+                  readonly: !widget.enabled,
+                ).copyWith(
+                  suffixIconConstraints: const BoxConstraints(minWidth: 72),
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (hasText && widget.enabled)
+                        IconButton(
+                          tooltip: '清除',
+                          icon: Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                          ),
+                          onPressed: () {
+                            widget.onChanged(null);
+                            setState(() => _expanded = true);
+                          },
+                        ),
+                      IconButton(
+                        tooltip: _expanded ? '收起' : '展开',
+                        icon: Icon(
+                          _expanded
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
+                        onPressed: !widget.enabled
+                            ? null
+                            : () => setState(() => _expanded = !_expanded),
                       ),
-                      onPressed: () {
-                        widget.onChanged(null);
-                        setState(() => _expanded = true);
-                      },
-                    ),
-                  IconButton(
-                    tooltip: _expanded ? '收起' : '展开',
-                    icon: Icon(
-                      _expanded
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_down_rounded,
-                      size: 18,
-                      color: DunesColors.text3,
-                    ),
-                    onPressed: !widget.enabled
-                        ? null
-                        : () => setState(() => _expanded = !_expanded),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
           ),
           if (showMenu) ...[
             const SizedBox(height: 6),
@@ -762,10 +824,10 @@ class _BillInlineMonth extends StatelessWidget {
                 style: xfInputTextStyle(),
               ),
             ),
-            const Icon(
+            Icon(
               Icons.calendar_today_outlined,
               size: 14,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
           ],
         ),
@@ -805,7 +867,11 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
     final minYear = now.year - 5;
     final maxYear = now.year + 1;
     return Dialog(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -828,6 +894,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
                     style: DunesTypography.sans(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
+                      context: context,
                     ),
                   ),
                 ),
@@ -856,13 +923,29 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: m == _month && _year == widget.initial.year
-                            ? DunesColors.accentSoft
-                            : DunesColors.bgSoft,
+                            ? DunesColors.resolve(
+                                context,
+                                DunesColors.accentSoft,
+                                role: DunesColorRole.surface,
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                DunesColors.bgSoft,
+                                role: DunesColorRole.surface,
+                              ),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: m == _month && _year == widget.initial.year
-                              ? DunesColors.accent
-                              : DunesColors.borderSoft,
+                              ? DunesColors.resolve(
+                                  context,
+                                  DunesColors.accent,
+                                  role: DunesColorRole.border,
+                                )
+                              : DunesColors.resolve(
+                                  context,
+                                  DunesColors.borderSoft,
+                                  role: DunesColorRole.border,
+                                ),
                         ),
                       ),
                       child: Text(
@@ -871,8 +954,12 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: m == _month && _year == widget.initial.year
-                              ? DunesColors.accentDeep
-                              : DunesColors.text,
+                              ? DunesColors.resolve(
+                                  context,
+                                  DunesColors.accentDeep,
+                                )
+                              : DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                     ),
@@ -920,7 +1007,8 @@ class XflowBillAmountGrid extends StatelessWidget {
                     labels[i],
                     style: DunesTypography.sans(
                       fontSize: compact ? 10 : 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -930,8 +1018,9 @@ class XflowBillAmountGrid extends StatelessWidget {
                       fontSize: compact ? 12 : 13,
                       fontWeight: FontWeight.w700,
                       color: i == labels.length - 1
-                          ? DunesColors.accentDeep
-                          : DunesColors.text,
+                          ? DunesColors.resolve(context, DunesColors.accentDeep)
+                          : DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                   ),
                 ],
@@ -967,7 +1056,11 @@ class XflowBillAmountSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: DunesColors.accentSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.accentSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(9),
       ),
       child: Row(
@@ -978,7 +1071,8 @@ class XflowBillAmountSummary extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
           ),
@@ -987,7 +1081,8 @@ class XflowBillAmountSummary extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: DunesColors.accentDeep,
+              color: DunesColors.resolve(context, DunesColors.accentDeep),
+              context: context,
             ),
           ),
         ],

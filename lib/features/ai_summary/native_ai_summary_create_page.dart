@@ -25,6 +25,7 @@ class NativeAiSummaryCreatePage extends StatefulWidget {
   final AuthSession session;
   final VoidCallback onBack;
   final ValueChanged<AiSummaryItem> onCreated;
+
   /// 从 IM 会话进入时预绑的会话 ID。
   final List<int> initialConversationIds;
 
@@ -40,7 +41,8 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
 
   List<AiSummaryTemplate> _templates = const <AiSummaryTemplate>[];
   final Set<int> _selectedIds = <int>{};
-  List<NativeConversation> _selectedConversations = const <NativeConversation>[];
+  List<NativeConversation> _selectedConversations =
+      const <NativeConversation>[];
   late DateTime _rangeStart;
   late DateTime _rangeEnd;
   String _templateId = 'custom';
@@ -55,9 +57,7 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
     _rangeEnd = _rangeStart;
     _service = AiSummaryService(session: widget.session);
     _conversations = ConversationService(session: widget.session);
-    _selectedIds.addAll(
-      widget.initialConversationIds.where((id) => id > 0),
-    );
+    _selectedIds.addAll(widget.initialConversationIds.where((id) => id > 0));
     _loadMeta();
   }
 
@@ -134,34 +134,72 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
     final base = Theme.of(context);
     return base.copyWith(
       colorScheme: base.colorScheme.copyWith(
-        primary: DunesColors.brandPurple,
-        onPrimary: Colors.white,
-        secondary: DunesColors.brandPurpleDeep,
-        surface: Colors.white,
+        primary: DunesColors.resolve(
+          context,
+          DunesColors.brandPurple,
+          role: DunesColorRole.surface,
+        ),
+        onPrimary: DunesColors.resolve(context, Colors.white),
+        secondary: DunesColors.resolve(
+          context,
+          DunesColors.brandPurpleDeep,
+          role: DunesColorRole.surface,
+        ),
+        surface: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
       ),
       datePickerTheme: DatePickerThemeData(
-        headerBackgroundColor: DunesColors.brandPurple,
-        headerForegroundColor: Colors.white,
-        todayForegroundColor: WidgetStateProperty.all(DunesColors.brandPurple),
+        headerBackgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.brandPurple,
+          role: DunesColorRole.surface,
+        ),
+        headerForegroundColor: DunesColors.resolve(context, Colors.white),
+        todayForegroundColor: WidgetStateProperty.all(
+          DunesColors.resolve(context, DunesColors.brandPurple),
+        ),
         todayBackgroundColor: WidgetStateProperty.all(
-          DunesColors.brandPurpleSoft,
+          DunesColors.resolve(
+            context,
+            DunesColors.brandPurpleSoft,
+            role: DunesColorRole.surface,
+          ),
         ),
         dayForegroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return Colors.white;
+          if (states.contains(WidgetState.selected)) {
+            return DunesColors.resolve(context, Colors.white);
+          }
           return null;
         }),
         dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return DunesColors.brandPurple;
+            return DunesColors.resolve(
+              context,
+              DunesColors.brandPurple,
+              role: DunesColorRole.surface,
+            );
           }
           return null;
         }),
-        rangeSelectionBackgroundColor: DunesColors.brandPurpleSoft,
+        rangeSelectionBackgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.brandPurpleSoft,
+          role: DunesColorRole.surface,
+        ),
         confirmButtonStyle: TextButton.styleFrom(
-          foregroundColor: DunesColors.brandPurple,
+          foregroundColor: DunesColors.resolve(
+            context,
+            DunesColors.brandPurple,
+          ),
         ),
         cancelButtonStyle: TextButton.styleFrom(
-          foregroundColor: DunesColors.brandPurple,
+          foregroundColor: DunesColors.resolve(
+            context,
+            DunesColors.brandPurple,
+          ),
         ),
       ),
     );
@@ -257,8 +295,7 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
     final confirmed = await confirmAiSummaryAction(
       context: context,
       title: '开始总结',
-      message:
-          '将对 ${_selectedIds.length} 个会话（$_rangeLabel）生成智能总结，确认开始？',
+      message: '将对 ${_selectedIds.length} 个会话（$_rangeLabel）生成智能总结，确认开始？',
       confirmLabel: '开始总结',
     );
     if (!confirmed || !mounted) return;
@@ -275,9 +312,7 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
       );
       if (!mounted) return;
       AiSummaryStatusBus.instance.publish(
-        item.isGenerating
-            ? item.copyWith(summaryPreview: '正在生成…')
-            : item,
+        item.isGenerating ? item.copyWith(summaryPreview: '正在生成…') : item,
       );
       widget.onCreated(item);
     } catch (e) {
@@ -307,7 +342,11 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -323,7 +362,10 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
                   TextButton.icon(
                     onPressed: _pickRange,
                     style: TextButton.styleFrom(
-                      foregroundColor: DunesColors.brandPurple,
+                      foregroundColor: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
+                      ),
                     ),
                     icon: const Icon(Icons.date_range_outlined, size: 16),
                     label: Text(_rangeLabel),
@@ -344,13 +386,18 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
                           style: DunesTypography.sans(
                             fontSize: 22,
                             fontWeight: FontWeight.w600,
+                            context: context,
                           ),
                           decoration: InputDecoration(
                             hintText: '输入聊天内你想总结的主题',
                             hintStyle: DunesTypography.sans(
                               fontSize: 22,
                               fontWeight: FontWeight.w500,
-                              color: const Color(0xFFC4C4C4),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFC4C4C4),
+                              ),
+                              context: context,
                             ),
                             border: InputBorder.none,
                           ),
@@ -374,9 +421,16 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
                             ),
                             label: const Text('添加会话'),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: DunesColors.brandPurpleDeep,
-                              side: const BorderSide(
-                                color: DunesColors.brandPurpleLine,
+                              foregroundColor: DunesColors.resolve(
+                                context,
+                                DunesColors.brandPurpleDeep,
+                              ),
+                              side: BorderSide(
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.brandPurpleLine,
+                                  role: DunesColorRole.border,
+                                ),
                               ),
                             ),
                           ),
@@ -387,7 +441,11 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
                           style: DunesTypography.sans(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: const Color(0xFF6B7280),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFF6B7280),
+                            ),
+                            context: context,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -410,9 +468,15 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
               top: false,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: Color(0xFFF0F0F0)),
+                    top: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFF0F0F0),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                   ),
                 ),
                 child: Row(
@@ -432,8 +496,16 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
                       child: FilledButton(
                         onPressed: _canSubmit ? _submit : null,
                         style: FilledButton.styleFrom(
-                          backgroundColor: DunesColors.brandPurple,
-                          disabledBackgroundColor: const Color(0xFFE5E7EB),
+                          backgroundColor: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                            role: DunesColorRole.surface,
+                          ),
+                          disabledBackgroundColor: DunesColors.resolve(
+                            context,
+                            const Color(0xFFE5E7EB),
+                            role: DunesColorRole.surface,
+                          ),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                         child: Text(
@@ -481,7 +553,17 @@ class _TemplateTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? DunesColors.brandPurpleSoft : const Color(0xFFF7F8FA),
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              DunesColors.brandPurpleSoft,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF7F8FA),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -490,7 +572,11 @@ class _TemplateTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           child: Row(
             children: [
-              Icon(_icon, size: 22, color: const Color(0xFF4B5563)),
+              Icon(
+                _icon,
+                size: 22,
+                color: DunesColors.resolve(context, const Color(0xFF4B5563)),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -501,6 +587,7 @@ class _TemplateTile extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -508,17 +595,21 @@ class _TemplateTile extends StatelessWidget {
                       template.subtitle,
                       style: DunesTypography.sans(
                         fontSize: 12.5,
-                        color: const Color(0xFF9CA3AF),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF9CA3AF),
+                        ),
+                        context: context,
                       ),
                     ),
                   ],
                 ),
               ),
               if (selected)
-                const Icon(
+                Icon(
                   Icons.check_circle,
                   size: 18,
-                  color: DunesColors.brandPurple,
+                  color: DunesColors.resolve(context, DunesColors.brandPurple),
                 ),
             ],
           ),

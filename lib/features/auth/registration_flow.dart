@@ -174,7 +174,9 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
           children: [
             Align(
               alignment: Alignment.centerLeft,
-              child: AuthBackButton(onPressed: () => Navigator.of(context).pop()),
+              child: AuthBackButton(
+                onPressed: () => Navigator.of(context).pop(),
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -182,6 +184,7 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
               style: DunesTypography.sans(
                 fontSize: 22,
                 fontWeight: FontWeight.w600,
+                context: context,
               ),
             ),
             const SizedBox(height: 12),
@@ -189,8 +192,9 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
               '您的注册申请已提交，管理员审核通过后将自动进入 App。',
               style: DunesTypography.sans(
                 fontSize: 14,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
                 height: 1.5,
+                context: context,
               ),
             ),
             if (_error != null) ...[
@@ -199,7 +203,8 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
                 _error!,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.coral,
+                  color: DunesColors.resolve(context, DunesColors.coral),
+                  context: context,
                 ),
               ),
             ],
@@ -238,6 +243,7 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
             style: DunesTypography.sans(
               fontSize: 22,
               fontWeight: FontWeight.w600,
+              context: context,
             ),
           ),
           const SizedBox(height: 8),
@@ -245,7 +251,8 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
             '由 $inviter 邀请注册外部用户账号',
             style: DunesTypography.sans(
               fontSize: 14,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
             ),
           ),
           const SizedBox(height: 24),
@@ -267,19 +274,28 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F7),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF5F5F7),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
-                const Icon(Icons.person_outline, size: 20, color: DunesColors.text3),
+                Icon(
+                  Icons.person_outline,
+                  size: 20,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     '邀请人：$inviter',
                     style: DunesTypography.sans(
                       fontSize: 15,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                      context: context,
                     ),
                   ),
                 ),

@@ -67,7 +67,9 @@ class _NativeBroadcastPageState extends State<NativeBroadcastPage> {
     setState(() => _readIds = {..._readIds, m.id});
     await _BroadcastReadStorage.add(m.id);
     // 全部消息已读后，顺带把会话标记为已读，清除列表未读角标。
-    final allRead = _messages.every((x) => x.id <= 0 || _readIds.contains(x.id));
+    final allRead = _messages.every(
+      (x) => x.id <= 0 || _readIds.contains(x.id),
+    );
     if (allRead && _convId > 0) {
       try {
         await _service.markConversationRead(_convId);
@@ -153,7 +155,12 @@ class _NativeBroadcastPageState extends State<NativeBroadcastPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: const TextStyle(color: DunesColors.text3)),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
+            ),
             const SizedBox(height: 10),
             OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
@@ -161,8 +168,13 @@ class _NativeBroadcastPageState extends State<NativeBroadcastPage> {
       );
     }
     if (_messages.isEmpty) {
-      return const Center(
-        child: Text('暂无广播消息', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '暂无广播消息',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     return RefreshIndicator(
@@ -209,13 +221,15 @@ abstract final class _BroadcastReadStorage {
 
   static Future<void> add(int messageId) async {
     if (messageId <= 0) return;
-    final ids = await load()..add(messageId);
+    final ids = await load()
+      ..add(messageId);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(ids.toList()));
   }
 
   static Future<void> addAll(Set<int> messageIds) async {
-    final ids = await load()..addAll(messageIds.where((id) => id > 0));
+    final ids = await load()
+      ..addAll(messageIds.where((id) => id > 0));
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(ids.toList()));
   }

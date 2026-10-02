@@ -162,15 +162,18 @@ class _InAppMessageBannerOverlayState extends State<_InAppMessageBannerOverlay>
         height: size,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(size * .18),
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF2F8F7E), Color(0xFF5EAEDE)],
+            colors: [
+              DunesColors.resolve(context, Color(0xFF2F8F7E)),
+              DunesColors.resolve(context, Color(0xFF5EAEDE)),
+            ],
           ),
         ),
-        child: const Icon(
+        child: Icon(
           Icons.assignment_turned_in_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 17,
         ),
       );
@@ -181,15 +184,18 @@ class _InAppMessageBannerOverlayState extends State<_InAppMessageBannerOverlay>
         height: size,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(size * .18),
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF8C5A91), Color(0xFFC17B7B)],
+            colors: [
+              DunesColors.resolve(context, Color(0xFF8C5A91)),
+              DunesColors.resolve(context, Color(0xFFC17B7B)),
+            ],
           ),
         ),
-        child: const Icon(
+        child: Icon(
           Icons.insights_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: 17,
         ),
       );
@@ -243,7 +249,11 @@ class _InAppMessageBannerOverlayState extends State<_InAppMessageBannerOverlay>
                 onTap: () => _close(act: true),
                 child: Ink(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: const [
                       BoxShadow(
@@ -273,8 +283,12 @@ class _InAppMessageBannerOverlayState extends State<_InAppMessageBannerOverlay>
                                 style: DunesTypography.sans(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w600,
-                                  color: DunesColors.text,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text,
+                                  ),
                                   height: 1.25,
+                                  context: context,
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -286,8 +300,12 @@ class _InAppMessageBannerOverlayState extends State<_InAppMessageBannerOverlay>
                                 overflow: TextOverflow.ellipsis,
                                 style: DunesTypography.sans(
                                   fontSize: 13,
-                                  color: DunesColors.text2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text2,
+                                  ),
                                   height: 1.3,
+                                  context: context,
                                 ),
                               ),
                             ],

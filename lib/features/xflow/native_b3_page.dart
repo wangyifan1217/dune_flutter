@@ -157,14 +157,18 @@ class _NativeB3PageState extends State<NativeB3Page> {
     final searching = _search.text.trim().isNotEmpty;
     final isAdm = _category == 'adm';
     return DecoratedBox(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Color(0xFFEFE9FB),
-            XflowApprovalPalette.page,
-            Color(0xFFFBFAF6),
+            DunesColors.resolve(context, Color(0xFFEFE9FB)),
+            DunesColors.resolve(
+              context,
+              XflowApprovalPalette.page,
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(context, Color(0xFFFBFAF6)),
           ],
           stops: [0, .28, .62],
         ),
@@ -211,11 +215,20 @@ class _NativeB3PageState extends State<NativeB3Page> {
                           XflowWfListSearch(
                             controller: _search,
                             hint: '搜索审批名称、场景或说明…',
-                            fillColor: Colors.white,
-                            borderColor: XflowApprovalPalette.line,
-                            iconColor: XflowApprovalPalette.accent.withValues(
-                              alpha: .6,
+                            fillColor: DunesColors.resolve(
+                              context,
+                              Colors.white,
+                              role: DunesColorRole.surface,
                             ),
+                            borderColor: DunesColors.resolve(
+                              context,
+                              XflowApprovalPalette.line,
+                              role: DunesColorRole.border,
+                            ),
+                            iconColor: DunesColors.resolve(
+                              context,
+                              XflowApprovalPalette.accent,
+                            ).withValues(alpha: .6),
                           ),
                           const SizedBox(height: 12),
                           if (visibleTemplates.isEmpty)
@@ -253,16 +266,30 @@ class _NativeB3PageState extends State<NativeB3Page> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: XflowApprovalPalette.line),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            XflowApprovalPalette.line,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Text(
         _search.text.trim().isNotEmpty
             ? '没有找到匹配的审批'
             : (_category == 'adm' ? '当前目录暂无非业务审批' : '当前目录暂无业务审批'),
         textAlign: TextAlign.center,
-        style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+        style: DunesTypography.sans(
+          fontSize: 13,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
+        ),
       ),
     );
   }

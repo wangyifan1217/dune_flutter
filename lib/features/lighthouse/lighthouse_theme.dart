@@ -49,8 +49,13 @@ abstract final class LhColors {
 
 /// 灯塔排版 —— 与全站 [DunesTypography] 同一套 Geist / Geist Mono。
 abstract final class LhTypography {
-  static TextStyle number({double size = 30, Color color = LhColors.ink}) =>
+  static TextStyle number({
+    BuildContext? context,
+    double size = 30,
+    Color color = LhColors.ink,
+  }) =>
       DunesTypography.sans(
+        context: context,
         fontSize: size,
         fontWeight: FontWeight.w700,
         letterSpacing: -0.3,
@@ -61,6 +66,7 @@ abstract final class LhTypography {
       );
 
   static TextStyle mono({
+    BuildContext? context,
     double size = 10,
     Color color = LhColors.mute,
     double? letterSpacing,
@@ -68,6 +74,7 @@ abstract final class LhTypography {
     double? height,
   }) =>
       DunesTypography.mono(
+        context: context,
         fontSize: size,
         fontWeight: weight,
         letterSpacing: letterSpacing,
@@ -79,6 +86,7 @@ abstract final class LhTypography {
       );
 
   static TextStyle sans({
+    BuildContext? context,
     double size = 12,
     Color color = LhColors.ink,
     FontWeight weight = FontWeight.w400,
@@ -86,6 +94,7 @@ abstract final class LhTypography {
     double? height,
     FontStyle? fontStyle,
   }) => DunesTypography.sans(
+    context: context,
     fontSize: size,
     fontWeight: weight,
     letterSpacing: letterSpacing,

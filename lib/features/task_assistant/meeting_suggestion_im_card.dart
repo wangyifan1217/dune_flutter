@@ -30,7 +30,8 @@ class MeetingSuggestionImCard extends StatefulWidget {
   final Future<void> Function()? onOpenMeeting;
 
   @override
-  State<MeetingSuggestionImCard> createState() => _MeetingSuggestionImCardState();
+  State<MeetingSuggestionImCard> createState() =>
+      _MeetingSuggestionImCardState();
 }
 
 class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
@@ -96,10 +97,7 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
       await _refresh();
     } catch (e) {
       if (mounted) {
-        showDunesCenterToast(
-          context,
-          friendlyErrorText(e, fallback: '创建失败'),
-        );
+        showDunesCenterToast(context, friendlyErrorText(e, fallback: '创建失败'));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -115,10 +113,7 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
       await _refresh();
     } catch (e) {
       if (mounted) {
-        showDunesCenterToast(
-          context,
-          friendlyErrorText(e, fallback: '操作失败'),
-        );
+        showDunesCenterToast(context, friendlyErrorText(e, fallback: '操作失败'));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -151,10 +146,7 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
       await _refresh();
     } catch (e) {
       if (mounted) {
-        showDunesCenterToast(
-          context,
-          friendlyErrorText(e, fallback: '全部创建失败'),
-        );
+        showDunesCenterToast(context, friendlyErrorText(e, fallback: '全部创建失败'));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -164,7 +156,11 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
   Future<(String, DateTime)?> _pickSnooze() {
     return showModalBottomSheet<(String, DateTime)>(
       context: context,
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -181,9 +177,12 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   '到点后任务助手会再提醒一次，建议先不处理。',
-                  style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.resolve(ctx, DunesColors.text3),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 for (final preset in const ['2h', 'tomorrow9', '3d9'])
@@ -191,10 +190,10 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: OutlinedButton(
                       onPressed: () {
-                        Navigator.pop(
-                          ctx,
-                          (preset, meetingSuggestionRemindAt(preset)),
-                        );
+                        Navigator.pop(ctx, (
+                          preset,
+                          meetingSuggestionRemindAt(preset),
+                        ));
                       },
                       child: Text(meetingSnoozePresetLabel(preset)),
                     ),
@@ -208,13 +207,10 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
                       lastDate: DateTime.now().add(const Duration(days: 30)),
                     );
                     if (picked == null || !ctx.mounted) return;
-                    Navigator.pop(
-                      ctx,
-                      (
-                        'custom',
-                        DateTime(picked.year, picked.month, picked.day, 9),
-                      ),
-                    );
+                    Navigator.pop(ctx, (
+                      'custom',
+                      DateTime(picked.year, picked.month, picked.day, 9),
+                    ));
                   },
                   child: const Text('自定义日期（当天 9:00）'),
                 ),
@@ -267,10 +263,7 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
       await _refresh();
     } catch (e) {
       if (mounted) {
-        showDunesCenterToast(
-          context,
-          friendlyErrorText(e, fallback: '延迟通知失败'),
-        );
+        showDunesCenterToast(context, friendlyErrorText(e, fallback: '延迟通知失败'));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -290,7 +283,10 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
         TextButton(
           onPressed: () => setState(() => _expanded = true),
           style: TextButton.styleFrom(
-            foregroundColor: DunesColors.brandPurpleDeep,
+            foregroundColor: DunesColors.resolve(
+              context,
+              DunesColors.brandPurpleDeep,
+            ),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
           ),
@@ -300,7 +296,7 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
         TextButton(
           onPressed: () => setState(() => _expanded = false),
           style: TextButton.styleFrom(
-            foregroundColor: DunesColors.text2,
+            foregroundColor: DunesColors.resolve(context, DunesColors.text2),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
           ),
@@ -313,9 +309,19 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
         width: 320,
         padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: DunesColors.borderSoft),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         // 展开后不要内嵌 ListView：内外层抢滚动会让任务助手上滑卡住并闪。
         child: Column(
@@ -330,10 +336,10 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
   Widget _headerRow() {
     return Row(
       children: [
-        const Icon(
+        Icon(
           Icons.task_alt_outlined,
           size: 16,
-          color: DunesColors.brandPurple,
+          color: DunesColors.resolve(context, DunesColors.brandPurple),
         ),
         const SizedBox(width: 6),
         const Text(
@@ -374,24 +380,27 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
             Expanded(
               child: Text(
                 '${widget.meetingTitle} · ${_items.length} 条待创建',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
             ),
-            const Text(
+            Text(
               '会议纪要',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.brandPurpleDeep,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurpleDeep,
+                ),
               ),
             ),
-            const Icon(
+            Icon(
               Icons.chevron_right,
               size: 16,
-              color: DunesColors.brandPurpleDeep,
+              color: DunesColors.resolve(context, DunesColors.brandPurpleDeep),
             ),
           ],
         ),
@@ -406,7 +415,11 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -416,10 +429,7 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
             s.suggestedTitle,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
           if (s.decisionExcerpt.trim().isNotEmpty) ...[
             const SizedBox(height: 4),
@@ -427,9 +437,9 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
               '来源：${s.decisionExcerpt}',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
             ),
           ],
@@ -437,9 +447,9 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
           if (snoozed != null)
             Text(
               '将在 ${formatMeetingSnoozeAt(snoozed)} 再提醒',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             )
           else
@@ -451,7 +461,11 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
               children: [
                 FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: DunesColors.brandPurple,
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurple,
+                      role: DunesColorRole.surface,
+                    ),
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: _busy ? null : () => _accept(s),

@@ -230,7 +230,11 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   Future<void> _openTimeRangeSheet() async {
     final action = await showModalBottomSheet<_TimeRangeSheetAction>(
       context: context,
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -283,43 +287,77 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
         return Theme(
           data: base.copyWith(
             colorScheme: base.colorScheme.copyWith(
-              primary: DunesColors.accent,
-              onPrimary: Colors.white,
-              surface: DunesColors.bgApp,
-              onSurface: DunesColors.text,
+              primary: DunesColors.resolve(
+                context,
+                DunesColors.accent,
+                role: DunesColorRole.surface,
+              ),
+              onPrimary: DunesColors.resolve(context, Colors.white),
+              surface: DunesColors.resolve(
+                context,
+                DunesColors.bgApp,
+                role: DunesColorRole.surface,
+              ),
+              onSurface: DunesColors.resolve(context, DunesColors.text),
             ),
             datePickerTheme: DatePickerThemeData(
-              backgroundColor: DunesColors.bgApp,
-              headerBackgroundColor: DunesColors.bgSoft,
-              headerForegroundColor: DunesColors.text,
-              rangeSelectionBackgroundColor: DunesColors.accentSoft,
+              backgroundColor: DunesColors.resolve(
+                context,
+                DunesColors.bgApp,
+                role: DunesColorRole.surface,
+              ),
+              headerBackgroundColor: DunesColors.resolve(
+                context,
+                DunesColors.bgSoft,
+                role: DunesColorRole.surface,
+              ),
+              headerForegroundColor: DunesColors.resolve(
+                context,
+                DunesColors.text,
+              ),
+              rangeSelectionBackgroundColor: DunesColors.resolve(
+                context,
+                DunesColors.accentSoft,
+                role: DunesColorRole.surface,
+              ),
               rangeSelectionOverlayColor: WidgetStateProperty.all(
-                DunesColors.accent.withValues(alpha: 0.08),
+                DunesColors.resolve(
+                  context,
+                  DunesColors.accent,
+                ).withValues(alpha: 0.08),
               ),
               dayForegroundColor: WidgetStateProperty.resolveWith((states) {
                 if (states.contains(WidgetState.selected)) {
-                  return Colors.white;
+                  return DunesColors.resolve(context, Colors.white);
                 }
                 if (states.contains(WidgetState.disabled)) {
-                  return DunesColors.text3;
+                  return DunesColors.resolve(context, DunesColors.text3);
                 }
-                return DunesColors.text;
+                return DunesColors.resolve(context, DunesColors.text);
               }),
               dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
                 if (states.contains(WidgetState.selected)) {
-                  return DunesColors.accent;
+                  return DunesColors.resolve(
+                    context,
+                    DunesColors.accent,
+                    role: DunesColorRole.surface,
+                  );
                 }
                 return Colors.transparent;
               }),
               todayForegroundColor: WidgetStateProperty.resolveWith((states) {
                 if (states.contains(WidgetState.selected)) {
-                  return Colors.white;
+                  return DunesColors.resolve(context, Colors.white);
                 }
-                return DunesColors.accent;
+                return DunesColors.resolve(context, DunesColors.accent);
               }),
               todayBackgroundColor: WidgetStateProperty.resolveWith((states) {
                 if (states.contains(WidgetState.selected)) {
-                  return DunesColors.accent;
+                  return DunesColors.resolve(
+                    context,
+                    DunesColors.accent,
+                    role: DunesColorRole.surface,
+                  );
                 }
                 return Colors.transparent;
               }),
@@ -536,7 +574,11 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
       inputFocused: _queryFocusNode.hasFocus,
     );
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       resizeToAvoidBottomInset: true,
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
@@ -559,7 +601,8 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
                         style: DunesTypography.sans(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                     ),
@@ -574,15 +617,19 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: DunesColors.bgSoft,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.bgSoft,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.search,
                         size: 16,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -602,7 +649,11 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
                           },
                           style: DunesTypography.sans(
                             fontSize: 13,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                            context: context,
                           ),
                           decoration: InputDecoration(
                             isDense: true,
@@ -610,7 +661,11 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
                             hintText: '搜消息 / 文件 / @mention',
                             hintStyle: DunesTypography.sans(
                               fontSize: 13,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
                             ),
                             contentPadding: EdgeInsets.zero,
                           ),
@@ -624,10 +679,13 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
                             setState(() => _selectedFilter = null);
                             _search();
                           },
-                          child: const Icon(
+                          child: Icon(
                             Icons.close,
                             size: 16,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                     ],
@@ -674,7 +732,10 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
       return Center(
         child: Text(
           _error!,
-          style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       );
     }
@@ -687,7 +748,10 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
       return Center(
         child: Text(
           emptyText,
-          style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       );
     }
@@ -715,7 +779,8 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
                 ),
               ),
@@ -886,11 +951,23 @@ class _ChatSearchMediaTile extends StatelessWidget {
         : message.payload;
     final publicUrl = ConversationService.mediaPublicImageUrl(payload);
     Widget child = Container(
-      color: isVideo ? const Color(0xFF2A2A2A) : DunesColors.bgSoft,
+      color: isVideo
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFF2A2A2A),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              DunesColors.bgSoft,
+              role: DunesColorRole.surface,
+            ),
       alignment: Alignment.center,
       child: Icon(
         isVideo ? Icons.videocam_outlined : Icons.image_outlined,
-        color: isVideo ? Colors.white54 : DunesColors.text3,
+        color: isVideo
+            ? DunesColors.resolve(context, Colors.white54)
+            : DunesColors.resolve(context, DunesColors.text3),
       ),
     );
     if (publicUrl != null && publicUrl.isNotEmpty) {
@@ -907,7 +984,11 @@ class _ChatSearchMediaTile extends StatelessWidget {
         builder: (_, snapshot) {
           if (!snapshot.hasData) {
             return Container(
-              color: DunesColors.bgSoft,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.bgSoft,
+                role: DunesColorRole.surface,
+              ),
               alignment: Alignment.center,
               child: const SizedBox(
                 width: 18,
@@ -937,10 +1018,10 @@ class _ChatSearchMediaTile extends StatelessWidget {
             children: [
               child,
               if (isVideo)
-                const Center(
+                Center(
                   child: Icon(
                     Icons.play_circle_fill_rounded,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
                     size: 38,
                   ),
                 ),
@@ -952,8 +1033,8 @@ class _ChatSearchMediaTile extends StatelessWidget {
                   message.senderName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, Colors.white),
                     fontSize: 10,
                     shadows: [Shadow(blurRadius: 3, color: Colors.black)],
                   ),
@@ -989,7 +1070,11 @@ class ChatSearchHitCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Material(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onTap,
@@ -998,7 +1083,13 @@ class ChatSearchHitCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: DunesColors.borderSoft),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1008,13 +1099,20 @@ class ChatSearchHitCard extends StatelessWidget {
                       width: 34,
                       height: 34,
                       decoration: BoxDecoration(
-                        color: DunesColors.accentSoft,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.accentSoft,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(9),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.chat_bubble_outline,
                         size: 16,
-                        color: DunesColors.accentDeep,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.accentDeep,
+                        ),
                       ),
                     ),
                 const SizedBox(width: 10),
@@ -1032,6 +1130,7 @@ class ChatSearchHitCard extends StatelessWidget {
                               style: DunesTypography.sans(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
+                                context: context,
                               ),
                             ),
                           ),
@@ -1040,7 +1139,11 @@ class ChatSearchHitCard extends StatelessWidget {
                               timeLabel,
                               style: DunesTypography.mono(
                                 fontSize: 9.5,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                                context: context,
                               ),
                             ),
                         ],
@@ -1053,15 +1156,23 @@ class ChatSearchHitCard extends StatelessWidget {
                               text: body,
                               style: DunesTypography.sans(
                                 fontSize: 12.5,
-                                color: DunesColors.text2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
                                 height: 1.35,
+                                context: context,
                               ),
                             ),
                             TextSpan(
                               text: '  → 点击定位',
                               style: DunesTypography.mono(
                                 fontSize: 9,
-                                color: DunesColors.accentDeep,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.accentDeep,
+                                ),
+                                context: context,
                               ),
                             ),
                           ],
@@ -1135,7 +1246,8 @@ class _ChatHistoryCategoryGrid extends StatelessWidget {
             textAlign: TextAlign.center,
             style: DunesTypography.sans(
               fontSize: 11.5,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
             ),
           ),
           const SizedBox(height: 10),
@@ -1144,8 +1256,8 @@ class _ChatHistoryCategoryGrid extends StatelessWidget {
               Expanded(
                 child: _CategoryTile(
                   icon: Icons.calendar_month_outlined,
-                  tint: DunesColors.accentDeep,
-                  soft: DunesColors.accentSoft,
+                  tint: DunesColors.resolve(context, DunesColors.accentDeep),
+                  soft: DunesColors.resolve(context, DunesColors.accentSoft),
                   title: '日期',
                   selected: timeActive,
                   onTap: onSelectTime,
@@ -1167,7 +1279,14 @@ class _ChatHistoryCategoryGrid extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          const Divider(height: 1, color: DunesColors.borderSoft),
+          Divider(
+            height: 1,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
         ],
       ),
     );
@@ -1200,7 +1319,11 @@ class _CategoryTile extends StatelessWidget {
         duration: const Duration(milliseconds: 160),
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? soft : Colors.transparent,
+          color: DunesColors.resolveNullable(
+            context,
+            selected ? soft : Colors.transparent,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -1209,10 +1332,18 @@ class _CategoryTile extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: soft,
+                color: DunesColors.resolveNullable(
+                  context,
+                  soft,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: tint, size: 22),
+              child: Icon(
+                icon,
+                color: DunesColors.resolveNullable(context, tint),
+                size: 22,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
@@ -1223,8 +1354,11 @@ class _CategoryTile extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 10.5,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                color: selected ? DunesColors.text : DunesColors.text2,
+                color: selected
+                    ? DunesColors.resolve(context, DunesColors.text)
+                    : DunesColors.resolve(context, DunesColors.text2),
                 height: 1.15,
+                context: context,
               ),
             ),
           ],
@@ -1252,7 +1386,11 @@ class _ChatHistoryTimeRangeChip extends StatelessWidget {
       child: Align(
         alignment: Alignment.centerLeft,
         child: Material(
-          color: DunesColors.accentSoft,
+          color: DunesColors.resolve(
+            context,
+            DunesColors.accentSoft,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             onTap: onTap,
@@ -1262,10 +1400,10 @@ class _ChatHistoryTimeRangeChip extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.calendar_today_outlined,
                     size: 13,
-                    color: DunesColors.accentDeep,
+                    color: DunesColors.resolve(context, DunesColors.accentDeep),
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -1273,19 +1411,26 @@ class _ChatHistoryTimeRangeChip extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: DunesColors.accentDeep,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.accentDeep,
+                      ),
+                      context: context,
                     ),
                   ),
                   const SizedBox(width: 4),
                   GestureDetector(
                     onTap: onClear,
                     behavior: HitTestBehavior.opaque,
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.all(4),
                       child: Icon(
                         Icons.close,
                         size: 14,
-                        color: DunesColors.accentDeep,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.accentDeep,
+                        ),
                       ),
                     ),
                   ),
@@ -1344,7 +1489,11 @@ class _ChatHistoryTimeRangeSheet extends StatelessWidget {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: DunesColors.borderSoft,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -1356,7 +1505,8 @@ class _ChatHistoryTimeRangeSheet extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
             const SizedBox(height: 14),
@@ -1390,7 +1540,8 @@ class _ChatHistoryTimeRangeSheet extends StatelessWidget {
                   '清除时间筛选',
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -1420,7 +1571,17 @@ class _TimeRangeOption extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: selected ? DunesColors.accentSoft : DunesColors.bgSoft,
+        color: selected
+            ? DunesColors.resolve(
+                context,
+                DunesColors.accentSoft,
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                DunesColors.bgSoft,
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onTap,
@@ -1440,7 +1601,8 @@ class _TimeRangeOption extends StatelessWidget {
                           fontWeight: selected
                               ? FontWeight.w600
                               : FontWeight.w400,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                       if (subtitle != null) ...[
@@ -1449,7 +1611,11 @@ class _TimeRangeOption extends StatelessWidget {
                           subtitle!,
                           style: DunesTypography.sans(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],
@@ -1457,10 +1623,10 @@ class _TimeRangeOption extends StatelessWidget {
                   ),
                 ),
                 if (selected)
-                  const Icon(
+                  Icon(
                     Icons.check_rounded,
                     size: 18,
-                    color: DunesColors.accentDeep,
+                    color: DunesColors.resolve(context, DunesColors.accentDeep),
                   ),
               ],
             ),

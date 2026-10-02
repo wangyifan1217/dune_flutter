@@ -50,29 +50,45 @@ class SuperviseSortMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return Theme(
       data: Theme.of(context).copyWith(
-        highlightColor: DunesColors.brandPurpleSoft,
-        hoverColor: DunesColors.brandPurpleSoft,
-        splashColor: DunesColors.brandPurpleSoft.withValues(alpha: 0.5),
+        highlightColor: DunesColors.resolve(
+          context,
+          DunesColors.brandPurpleSoft,
+        ),
+        hoverColor: DunesColors.resolve(context, DunesColors.brandPurpleSoft),
+        splashColor: DunesColors.resolve(
+          context,
+          DunesColors.brandPurpleSoft,
+        ).withValues(alpha: 0.5),
         colorScheme: Theme.of(context).colorScheme.copyWith(
           primary: _themePurple,
-          onPrimary: Colors.white,
+          onPrimary: DunesColors.resolve(context, Colors.white),
           secondary: _themePurple,
-          surface: Colors.white,
-          onSurface: DunesColors.text,
+          surface: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          onSurface: DunesColors.resolve(context, DunesColors.text),
         ),
         popupMenuTheme: PopupMenuThemeData(
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           surfaceTintColor: Colors.transparent,
           shadowColor: const Color(0x28000000),
           elevation: 8,
-          textStyle: const TextStyle(
+          textStyle: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: _cardBorder),
+            side: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                _cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ),
       ),
@@ -92,10 +108,13 @@ class SuperviseSortMenu extends StatelessWidget {
                   SizedBox(
                     width: 16,
                     child: o.id == selectedId
-                        ? const Icon(
+                        ? Icon(
                             Icons.check_rounded,
                             size: 16,
-                            color: _themePurple,
+                            color: DunesColors.resolveNullable(
+                              ctx,
+                              _themePurple,
+                            ),
                           )
                         : null,
                   ),
@@ -108,8 +127,8 @@ class SuperviseSortMenu extends StatelessWidget {
                           ? FontWeight.w700
                           : FontWeight.w500,
                       color: o.id == selectedId
-                          ? _themePurple
-                          : DunesColors.text,
+                          ? DunesColors.resolve(ctx, _themePurple)
+                          : DunesColors.resolve(ctx, DunesColors.text),
                     ),
                   ),
                 ],
@@ -120,7 +139,11 @@ class SuperviseSortMenu extends StatelessWidget {
           height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: _cardBorder),
           ),
@@ -129,17 +152,17 @@ class SuperviseSortMenu extends StatelessWidget {
             children: [
               Text(
                 superviseSortLabel(options, selectedId),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 2),
-              const Icon(
+              Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 18,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
             ],
           ),

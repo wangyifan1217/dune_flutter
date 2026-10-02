@@ -37,7 +37,7 @@ class NativeContactProfilePage extends StatefulWidget {
   final int? conversationId;
   final ValueChanged<int>? onOpenSearch;
   final void Function({required int conversationId, bool? muted, bool? pinned})?
-      onChatSettingsChanged;
+  onChatSettingsChanged;
 
   /// 企微式：头像旁「+」→ 通讯录选人，与当前联系人组成群聊。
   final ValueChanged<NativeContact>? onCreateGroupWithContact;
@@ -146,7 +146,8 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
                 digits,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ),
@@ -255,14 +256,17 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
   @override
   Widget build(BuildContext context) {
     final hint = widget.contactHint;
-    final subtitle = (_contact?.department ?? hint?.department ?? '')
-        .trim()
-        .isNotEmpty
+    final subtitle =
+        (_contact?.department ?? hint?.department ?? '').trim().isNotEmpty
         ? (_contact?.department ?? hint?.department)!.trim()
         : '联系人';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F2),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF2F2F2),
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -281,10 +285,10 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
           strokeWidth: 2,
-          color: DunesColors.accent,
+          color: DunesColors.resolve(context, DunesColors.accent),
         ),
       );
     }
@@ -295,7 +299,10 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
           children: [
             Text(
               _error ?? '联系人不存在',
-              style: const TextStyle(color: DunesColors.text3, fontSize: 12),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+                fontSize: 12,
+              ),
             ),
             const SizedBox(height: 10),
             OutlinedButton(onPressed: widget.onBack, child: const Text('返回')),
@@ -337,8 +344,9 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
             style: DunesTypography.sans(
               fontSize: 15,
               color: phone.isEmpty
-                  ? const Color(0xFF888888)
-                  : DunesColors.blue,
+                  ? DunesColors.resolve(context, const Color(0xFF888888))
+                  : DunesColors.resolve(context, DunesColors.blue),
+              context: context,
             ),
           ),
           onTap: phone.isEmpty ? null : () => _onPhoneTap(phone),
@@ -350,7 +358,8 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
             department.isEmpty ? '-' : department,
             style: DunesTypography.sans(
               fontSize: 15,
-              color: const Color(0xFF888888),
+              color: DunesColors.resolve(context, const Color(0xFF888888)),
+              context: context,
             ),
           ),
         ),
@@ -361,7 +370,8 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
             title.isEmpty ? '-' : title,
             style: DunesTypography.sans(
               fontSize: 15,
-              color: const Color(0xFF888888),
+              color: DunesColors.resolve(context, const Color(0xFF888888)),
+              context: context,
             ),
           ),
         ),
@@ -435,7 +445,11 @@ class _ProfileHero extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -489,7 +503,11 @@ class _ProfileHero extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF191919),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF191919),
+                    ),
+                    context: context,
                   ),
                 ),
                 if (status.showsBadge) ...[
@@ -504,7 +522,11 @@ class _ProfileHero extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: DunesTypography.sans(
                       fontSize: 13,
-                      color: const Color(0xFF888888),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF888888),
+                      ),
+                      context: context,
                     ),
                   ),
                 ],
@@ -538,14 +560,24 @@ class _ProfileAddCell extends StatelessWidget {
             width: size,
             height: size,
             decoration: BoxDecoration(
-              color: const Color(0xFFF7F7F7),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF7F7F7),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(radius),
-              border: Border.all(color: const Color(0xFFE5E5E5)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE5E5E5),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Icon(
               Icons.add,
               size: size * 0.48,
-              color: const Color(0xFF888888),
+              color: DunesColors.resolve(context, const Color(0xFF888888)),
             ),
           ),
         ),
@@ -565,7 +597,11 @@ class _ProfileMessageAction extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Material(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         child: InkWell(
           onTap: onTap,
           child: Container(
@@ -577,7 +613,8 @@ class _ProfileMessageAction extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
-                color: DunesColors.accent,
+                color: DunesColors.resolve(context, DunesColors.accent),
+                context: context,
               ),
             ),
           ),

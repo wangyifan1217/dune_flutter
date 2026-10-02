@@ -36,11 +36,7 @@ class _NativeRobotRunPageState extends State<NativeRobotRunPage> {
       '质检通过：关键字段齐全，无明显缺漏。',
       '已推送到「产品周会」会话，delivery=ok',
     ],
-    'sc_cursor': [
-      'Cron 触发成功，period=本周',
-      '汇总 12 个账号，异常用量 2 个。',
-      '周报已发送给管理员。',
-    ],
+    'sc_cursor': ['Cron 触发成功，period=本周', '汇总 12 个账号，异常用量 2 个。', '周报已发送给管理员。'],
   };
 
   @override
@@ -77,7 +73,9 @@ class _NativeRobotRunPageState extends State<NativeRobotRunPage> {
       setState(() {
         if (_cursor >= 0 && _cursor < _nodes.length) {
           final replies = _demoReplies[_scenario.id] ?? const <String>[];
-          final reply = _cursor < replies.length ? replies[_cursor] : '节点输出（静态预览）';
+          final reply = _cursor < replies.length
+              ? replies[_cursor]
+              : '节点输出（静态预览）';
           _nodes[_cursor] = _nodes[_cursor].copyWith(
             status: RobotNodeStatus.success,
             reply: reply,
@@ -99,11 +97,17 @@ class _NativeRobotRunPageState extends State<NativeRobotRunPage> {
 
   @override
   Widget build(BuildContext context) {
-    final done = _nodes.where((n) => n.status == RobotNodeStatus.success).length;
+    final done = _nodes
+        .where((n) => n.status == RobotNodeStatus.success)
+        .length;
     final progress = _nodes.isEmpty ? 0.0 : done / _nodes.length;
 
     return ColoredBox(
-      color: RobotTheme.pageBg,
+      color: DunesColors.resolve(
+        context,
+        RobotTheme.pageBg,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -142,8 +146,17 @@ class _NativeRobotRunPageState extends State<NativeRobotRunPage> {
                         child: OutlinedButton(
                           onPressed: widget.onBack,
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: RobotTheme.purple,
-                            side: const BorderSide(color: RobotTheme.purple),
+                            foregroundColor: DunesColors.resolve(
+                              context,
+                              RobotTheme.purple,
+                            ),
+                            side: BorderSide(
+                              color: DunesColors.resolve(
+                                context,
+                                RobotTheme.purple,
+                                role: DunesColorRole.border,
+                              ),
+                            ),
                             minimumSize: const Size.fromHeight(44),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -157,7 +170,11 @@ class _NativeRobotRunPageState extends State<NativeRobotRunPage> {
                         child: FilledButton(
                           onPressed: _startDemo,
                           style: FilledButton.styleFrom(
-                            backgroundColor: RobotTheme.purple,
+                            backgroundColor: DunesColors.resolve(
+                              context,
+                              RobotTheme.purple,
+                              role: DunesColorRole.surface,
+                            ),
                             minimumSize: const Size.fromHeight(44),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -194,14 +211,16 @@ class _NativeRobotRunPageState extends State<NativeRobotRunPage> {
                   style: DunesTypography.sans(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
-                    color: RobotTheme.text,
+                    color: DunesColors.resolve(context, RobotTheme.text),
+                    context: context,
                   ),
                 ),
                 Text(
                   'N8N 节点状态 · 静态模拟',
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: RobotTheme.text3,
+                    color: DunesColors.resolve(context, RobotTheme.text3),
+                    context: context,
                   ),
                 ),
               ],
@@ -232,15 +251,25 @@ class _ProgressBanner extends StatelessWidget {
     final statusText = finished
         ? '全部节点已完成'
         : running
-            ? '正在执行…'
-            : '准备启动';
+        ? '正在执行…'
+        : '准备启动';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: RobotTheme.cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            RobotTheme.cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,7 +279,8 @@ class _ProgressBanner extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: RobotTheme.text,
+              color: DunesColors.resolve(context, RobotTheme.text),
+              context: context,
             ),
           ),
           const SizedBox(height: 4),
@@ -258,7 +288,10 @@ class _ProgressBanner extends StatelessWidget {
             statusText,
             style: DunesTypography.sans(
               fontSize: 12,
-              color: finished ? const Color(0xFF2E7544) : RobotTheme.purple,
+              color: finished
+                  ? DunesColors.resolve(context, const Color(0xFF2E7544))
+                  : DunesColors.resolve(context, RobotTheme.purple),
+              context: context,
             ),
           ),
           const SizedBox(height: 10),
@@ -267,8 +300,12 @@ class _ProgressBanner extends StatelessWidget {
             child: LinearProgressIndicator(
               value: finished ? 1 : progress.clamp(0.05, 1),
               minHeight: 6,
-              backgroundColor: RobotTheme.purpleSoft,
-              color: RobotTheme.purple,
+              backgroundColor: DunesColors.resolve(
+                context,
+                RobotTheme.purpleSoft,
+                role: DunesColorRole.surface,
+              ),
+              color: DunesColors.resolve(context, RobotTheme.purple),
             ),
           ),
         ],
@@ -299,15 +336,27 @@ class _NodeTile extends StatelessWidget {
             width: 28,
             child: Column(
               children: [
-                Icon(robotStatusIcon(node.status), size: 22, color: color),
+                Icon(
+                  robotStatusIcon(node.status),
+                  size: 22,
+                  color: DunesColors.resolveNullable(context, color),
+                ),
                 if (!isLast)
                   Expanded(
                     child: Container(
                       width: 2,
                       margin: const EdgeInsets.symmetric(vertical: 4),
                       color: node.status == RobotNodeStatus.success
-                          ? const Color(0xFF2E7544).withValues(alpha: 0.35)
-                          : const Color(0xFFE0E2E6),
+                          ? DunesColors.resolve(
+                              context,
+                              const Color(0xFF2E7544),
+                              role: DunesColorRole.surface,
+                            ).withValues(alpha: 0.35)
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFFE0E2E6),
+                              role: DunesColorRole.surface,
+                            ),
                     ),
                   ),
               ],
@@ -319,12 +368,24 @@ class _NodeTile extends StatelessWidget {
               margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: node.status == RobotNodeStatus.running
-                      ? RobotTheme.purple.withValues(alpha: 0.45)
-                      : RobotTheme.cardBorder,
+                      ? DunesColors.resolve(
+                          context,
+                          RobotTheme.purple,
+                          role: DunesColorRole.border,
+                        ).withValues(alpha: 0.45)
+                      : DunesColors.resolve(
+                          context,
+                          RobotTheme.cardBorder,
+                          role: DunesColorRole.border,
+                        ),
                 ),
               ),
               child: Column(
@@ -337,14 +398,22 @@ class _NodeTile extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: RobotTheme.text,
+                          color: DunesColors.resolve(context, RobotTheme.text),
+                          context: context,
                         ),
                       ),
                       const Spacer(),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.12),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            color.withValues(alpha: 0.12),
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -352,7 +421,7 @@ class _NodeTile extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: color,
+                            color: DunesColors.resolveNullable(context, color),
                           ),
                         ),
                       ),
@@ -364,7 +433,8 @@ class _NodeTile extends StatelessWidget {
                     '${node.durationLabel.isEmpty ? '' : ' · ${node.durationLabel}'}',
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: RobotTheme.text3,
+                      color: DunesColors.resolve(context, RobotTheme.text3),
+                      context: context,
                     ),
                   ),
                   if (node.reply.isNotEmpty) ...[
@@ -373,7 +443,11 @@ class _NodeTile extends StatelessWidget {
                       width: double.infinity,
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF7F8FA),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFF7F8FA),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
@@ -381,7 +455,8 @@ class _NodeTile extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 12,
                           height: 1.45,
-                          color: RobotTheme.text2,
+                          color: DunesColors.resolve(context, RobotTheme.text2),
+                          context: context,
                         ),
                       ),
                     ),
@@ -394,7 +469,10 @@ class _NodeTile extends StatelessWidget {
                           height: 14,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: RobotTheme.purple,
+                            color: DunesColors.resolve(
+                              context,
+                              RobotTheme.purple,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -402,7 +480,11 @@ class _NodeTile extends StatelessWidget {
                           '节点执行中，等待 N8N 回调…',
                           style: DunesTypography.sans(
                             fontSize: 12,
-                            color: RobotTheme.purple,
+                            color: DunesColors.resolve(
+                              context,
+                              RobotTheme.purple,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],

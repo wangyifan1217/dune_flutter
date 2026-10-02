@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import 'lighthouse_hero_metric.dart';
 import 'lighthouse_theme.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 灯塔 · BI 视图 (v2 · 并入灯塔视觉体系)
@@ -825,7 +826,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     );
     // 挂在一级页里时外面已经有 SafeArea。独立打开才自己垫。
     return Scaffold(
-      backgroundColor: LhColors.mist,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.mist,
+        role: DunesColorRole.surface,
+      ),
       body: widget.topChrome == null
           ? SafeArea(bottom: false, child: body)
           : body,
@@ -838,7 +843,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     final chrome = widget.topChrome;
     if (chrome != null) {
       return ColoredBox(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -854,8 +863,12 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 ),
                 child: widget.periodBar!,
               ),
-            const ColoredBox(
-              color: LhColors.line2,
+            ColoredBox(
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ),
               child: SizedBox(height: 0.5),
             ),
           ],
@@ -864,9 +877,22 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     }
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 10, 11),
-      decoration: const BoxDecoration(
-        color: LhColors.paper,
-        border: Border(bottom: BorderSide(color: LhColors.line2, width: 0.5)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -874,10 +900,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             'BI 视图',
             style: LhTypography.sans(
               size: 17,
-              color: LhBiPlum.primary,
+              color: DunesColors.resolve(context, LhBiPlum.primary),
               weight: FontWeight.w800,
               letterSpacing: 0.4,
               height: 1.0,
+              context: context,
             ),
           ),
           const SizedBox(width: 7),
@@ -885,7 +912,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               'ANALYTICS',
-              style: _mono(size: 8.5, color: LhColors.mute2, spacing: 1.5),
+              style: _mono(
+                size: 8.5,
+                color: DunesColors.resolve(context, LhColors.mute2),
+                spacing: 1.5,
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -921,9 +952,20 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: LhBiPlum.lavender,
+        color: DunesColors.resolve(
+          context,
+          LhBiPlum.lavender,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: LhBiPlum.heroEdge, width: 0.7),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhBiPlum.heroEdge,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -931,8 +973,12 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           Container(
             width: 5,
             height: 5,
-            decoration: const BoxDecoration(
-              color: LhBiPlum.primary,
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                context,
+                LhBiPlum.primary,
+                role: DunesColorRole.surface,
+              ),
               shape: BoxShape.circle,
             ),
           ),
@@ -942,7 +988,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               widget.rangeLabel,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: _mono(size: 9.5, color: LhBiPlum.deep, spacing: 0.2),
+              style: _mono(
+                size: 9.5,
+                color: DunesColors.resolve(context, LhBiPlum.deep),
+                spacing: 0.2,
+              ),
             ),
           ),
         ],
@@ -968,17 +1018,39 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         width: 30,
         height: 30,
         decoration: BoxDecoration(
-          color: active ? LhBiPlum.mist : LhColors.paper,
+          color: active
+              ? DunesColors.resolve(
+                  context,
+                  LhBiPlum.mist,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  LhColors.paper,
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(15),
           border: Border.all(
-            color: active ? LhBiPlum.primary : LhColors.line2,
+            color: active
+                ? DunesColors.resolve(
+                    context,
+                    LhBiPlum.primary,
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.border,
+                  ),
             width: active ? 1 : 0.7,
           ),
         ),
         child: Icon(
           icon,
           size: 15,
-          color: active ? LhBiPlum.primary : LhColors.mute,
+          color: active
+              ? DunesColors.resolve(context, LhBiPlum.primary)
+              : DunesColors.resolve(context, LhColors.mute),
         ),
       ),
     );
@@ -989,9 +1061,20 @@ class _LhBiViewPageState extends State<LhBiViewPage>
   Widget _controlCard() {
     return Container(
       decoration: BoxDecoration(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: LhColors.line2, width: 0.7),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
       ),
       padding: EdgeInsets.fromLTRB(6, 6, 6, _isNetTa ? 6 : 8),
       child: Column(
@@ -1007,7 +1090,14 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           // 净TA 之下没有分类条也没有指标条，那条分隔线就没有东西可分隔了。
           if (_categories.isNotEmpty || !_isNetTa) ...[
             const SizedBox(height: 7),
-            Container(height: 0.5, color: LhColors.line2),
+            Container(
+              height: 0.5,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ),
+            ),
           ],
           if (_categories.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -1022,7 +1112,14 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               ],
             ]),
             const SizedBox(height: 7),
-            Container(height: 0.5, color: LhColors.line2),
+            Container(
+              height: 0.5,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ),
+            ),
           ],
           // 净TA 不出指标条：净额 / 流入 / 流出 在 hero 上一次给全，
           // 让人在三个读数之间来回点，本身就是分析效率的损耗。
@@ -1081,7 +1178,13 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: on ? LhBiPlum.lavender : Colors.transparent,
+          color: on
+              ? DunesColors.resolve(
+                  context,
+                  LhBiPlum.lavender,
+                  role: DunesColorRole.surface,
+                )
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -1092,8 +1195,12 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               Container(
                 width: 5,
                 height: 5,
-                decoration: const BoxDecoration(
-                  color: LhBiPlum.primary,
+                decoration: BoxDecoration(
+                  color: DunesColors.resolve(
+                    context,
+                    LhBiPlum.primary,
+                    role: DunesColorRole.surface,
+                  ),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -1103,7 +1210,9 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               widget.dimLabel(dim),
               style: _sans(
                 size: 12.5,
-                color: on ? LhBiPlum.deep : LhColors.mute,
+                color: on
+                    ? DunesColors.resolve(context, LhBiPlum.deep)
+                    : DunesColors.resolve(context, LhColors.mute),
                 weight: on ? FontWeight.w700 : FontWeight.w500,
               ),
             ),
@@ -1127,9 +1236,20 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       height: 36,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: LhColors.line2, width: 0.7),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
       ),
       child: Row(
         children: [
@@ -1145,12 +1265,20 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: c.key == breakKey
-                          ? LhBiPlum.lavender
+                          ? DunesColors.resolve(
+                              context,
+                              LhBiPlum.lavender,
+                              role: DunesColorRole.surface,
+                            )
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: c.key == breakKey
-                            ? LhBiPlum.primary
+                            ? DunesColors.resolve(
+                                context,
+                                LhBiPlum.primary,
+                                role: DunesColorRole.border,
+                              )
                             : Colors.transparent,
                         width: 1,
                       ),
@@ -1160,8 +1288,8 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       style: _sans(
                         size: 11.5,
                         color: c.key == breakKey
-                            ? LhBiPlum.deep
-                            : LhColors.mute,
+                            ? DunesColors.resolve(context, LhBiPlum.deep)
+                            : DunesColors.resolve(context, LhColors.mute),
                         weight: c.key == breakKey
                             ? FontWeight.w700
                             : FontWeight.w500,
@@ -1188,10 +1316,30 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         padding: const EdgeInsets.symmetric(horizontal: 10),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: on ? LhBiPlum.mist : LhColors.paper,
+          color: on
+              ? DunesColors.resolve(
+                  context,
+                  LhBiPlum.mist,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  LhColors.paper,
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: on ? LhBiPlum.primary : LhColors.line2,
+            color: on
+                ? DunesColors.resolve(
+                    context,
+                    LhBiPlum.primary,
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.border,
+                  ),
             width: on ? 1 : 0.7,
           ),
         ),
@@ -1199,7 +1347,9 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           label,
           style: _sans(
             size: 11,
-            color: on ? LhBiPlum.deep : LhColors.ink2,
+            color: on
+                ? DunesColors.resolve(context, LhBiPlum.deep)
+                : DunesColors.resolve(context, LhColors.ink2),
             weight: on ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
@@ -1219,9 +1369,20 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
       decoration: BoxDecoration(
-        color: LhBiPlum.heroFill,
+        color: DunesColors.resolve(
+          context,
+          LhBiPlum.heroFill,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
-        border: Border.all(color: LhBiPlum.heroEdge, width: 0.8),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhBiPlum.heroEdge,
+            role: DunesColorRole.border,
+          ),
+          width: 0.8,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1233,15 +1394,19 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 width: lighthouseHeroMastheadLabelIconSize,
                 height: lighthouseHeroMastheadLabelIconSize,
                 decoration: BoxDecoration(
-                  color: LhBiPlum.primary,
+                  color: DunesColors.resolve(
+                    context,
+                    LhBiPlum.primary,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(
                     lighthouseHeroMastheadLabelRadius,
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.insights_rounded,
                   size: 11,
-                  color: LhColors.paper,
+                  color: DunesColors.resolve(context, LhColors.paper),
                 ),
               ),
               const SizedBox(width: 7),
@@ -1253,7 +1418,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   overflow: TextOverflow.ellipsis,
                   style: _sans(
                     size: lighthouseHeroMastheadLabelFontSize,
-                    color: LhColors.ink,
+                    color: DunesColors.resolve(context, LhColors.ink),
                     weight: FontWeight.w600,
                   ),
                 ),
@@ -1266,7 +1431,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             children: [
               Text(
                 parts.text,
-                style: LhTypography.number(size: 30, color: LhBiPlum.heroNum),
+                style: LhTypography.number(
+                  size: 30,
+                  color: DunesColors.resolve(context, LhBiPlum.heroNum),
+                  context: context,
+                ),
               ),
               if (parts.unit.isNotEmpty) ...[
                 const SizedBox(width: 2),
@@ -1276,7 +1445,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     parts.unit,
                     style: _sans(
                       size: 11,
-                      color: LhColors.mute,
+                      color: DunesColors.resolve(context, LhColors.mute),
                       weight: FontWeight.w500,
                     ),
                   ),
@@ -1289,7 +1458,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             // 「前三名占规模」原来挤在这一行，现在是下面的「集中度」磁贴，
             // 同一个数不在两处出现。
             '共 ${items.length} 项 · ${widget.periodLabel}',
-            style: _mono(size: 9.5, color: LhColors.mute, spacing: 0.1),
+            style: _mono(
+              size: 9.5,
+              color: DunesColors.resolve(context, LhColors.mute),
+              spacing: 0.1,
+            ),
           ),
         ],
       ),
@@ -1367,7 +1540,9 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             headline: losers.isEmpty
                 ? (text: '0', unit: '')
                 : lhBiParts(lossSum, isRate: false),
-            headlineColor: losers.isEmpty ? null : LhColors.neg,
+            headlineColor: losers.isEmpty
+                ? null
+                : DunesColors.resolve(context, LhColors.neg),
           ),
         ),
       ],
@@ -1387,7 +1562,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     return Container(
       padding: const EdgeInsets.fromLTRB(9, 9, 8, 10),
       decoration: BoxDecoration(
-        color: LhBiSection.tint(sectionKey),
+        color: DunesColors.resolveNullable(
+          context,
+          LhBiSection.tint(sectionKey),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
         border: Border.all(color: LhBiSection.edge(sectionKey), width: 0.8),
       ),
@@ -1403,7 +1582,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             overflow: TextOverflow.ellipsis,
             style: _sans(
               size: lighthouseHeroMetricLabelFontSize,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w500,
             ),
           ),
@@ -1415,7 +1594,8 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               overflow: TextOverflow.ellipsis,
               style: _sans(
                 size: lighthouseHeroMetricValueFontSize - 1,
-                color: headlineColor ?? LhColors.ink,
+                color:
+                    headlineColor ?? DunesColors.resolve(context, LhColors.ink),
                 weight: FontWeight.w700,
               ),
             )
@@ -1430,7 +1610,10 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     overflow: TextOverflow.ellipsis,
                     style: LhTypography.number(
                       size: lighthouseHeroMetricValueFontSize + 2,
-                      color: headlineColor ?? LhColors.ink,
+                      color:
+                          headlineColor ??
+                          DunesColors.resolve(context, LhColors.ink),
+                      context: context,
                     ),
                   ),
                 ),
@@ -1442,7 +1625,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       headline.unit,
                       style: _sans(
                         size: 8,
-                        color: LhColors.mute,
+                        color: DunesColors.resolve(context, LhColors.mute),
                         weight: FontWeight.w500,
                       ),
                     ),
@@ -1462,7 +1645,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           width: lighthouseHeroSectionIconSize,
           height: lighthouseHeroSectionIconSize,
           decoration: BoxDecoration(
-            color: LhBiSection.accent(sectionKey),
+            color: DunesColors.resolveNullable(
+              context,
+              LhBiSection.accent(sectionKey),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(5),
           ),
           child: Icon(
@@ -1470,7 +1657,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             // 图标跟着问题走，不跟着底色走。
             icon ?? LhBiSection.icon(sectionKey),
             size: 10.5,
-            color: LhColors.paper,
+            color: DunesColors.resolve(context, LhColors.paper),
           ),
         ),
         const SizedBox(width: 6),
@@ -1485,6 +1672,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               weight: FontWeight.w700,
               letterSpacing: 0.2,
               height: 1.0,
+              context: context,
             ),
           ),
         ),
@@ -1504,9 +1692,20 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     final radius = BorderRadius.circular(lighthouseHeroCardRadius);
     return Container(
       decoration: BoxDecoration(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: radius,
-        border: Border.all(color: LhColors.line2, width: 0.7),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1520,13 +1719,17 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   width: lighthouseHeroSectionIconSize,
                   height: lighthouseHeroSectionIconSize,
                   decoration: BoxDecoration(
-                    color: LhBiSection.accent(sectionKey),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      LhBiSection.accent(sectionKey),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: Icon(
                     LhBiSection.icon(sectionKey),
                     size: 10.5,
-                    color: LhColors.paper,
+                    color: DunesColors.resolve(context, LhColors.paper),
                   ),
                 ),
                 const SizedBox(width: 7),
@@ -1537,7 +1740,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     overflow: TextOverflow.ellipsis,
                     style: _sans(
                       size: 12.5,
-                      color: LhColors.ink,
+                      color: DunesColors.resolve(context, LhColors.ink),
                       weight: FontWeight.w700,
                     ),
                   ),
@@ -1563,12 +1766,23 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             //   对它断言 borderRadius == null —— 两者写在同一个 BoxDecoration 里，
             //   build 能过，paint 一定抛。整张 BI 页四张图卡都吃这个结论，
             //   于是页面开得出来却什么都画不出来，看上去就是「打不开」。
-            Container(height: 0.6, color: LhBiSection.edge(sectionKey)),
+            Container(
+              height: 0.6,
+              color: DunesColors.resolveNullable(
+                context,
+                LhBiSection.edge(sectionKey),
+                role: DunesColorRole.surface,
+              ),
+            ),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(12, 9, 12, 11),
               decoration: BoxDecoration(
-                color: LhBiSection.tint(sectionKey),
+                color: DunesColors.resolveNullable(
+                  context,
+                  LhBiSection.tint(sectionKey),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(lighthouseHeroCardRadius),
                   bottomRight: Radius.circular(lighthouseHeroCardRadius),
@@ -1611,7 +1825,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           name: built[i].name,
           value: built[i].value,
           color: built[i].name.startsWith('其他 ')
-              ? LhBiPalette.other
+              ? DunesColors.resolve(context, LhBiPalette.other)
               : LhBiPalette.slot(i),
         ),
     ];
@@ -1695,7 +1909,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                           '${lhBiCrossDims(_dim).map((e) => e.label).join(' / ')}'
                     : '已锁定「$_drillName」· 再点一次解除',
                 textAlign: TextAlign.center,
-                style: _mono(size: 8.5, color: LhColors.mute2, spacing: 0.2),
+                style: _mono(
+                  size: 8.5,
+                  color: DunesColors.resolve(context, LhColors.mute2),
+                  spacing: 0.2,
+                ),
               ),
             ],
             // 拆分条接在双栏正下方 —— 右卡给的是「这一片是谁、多少、占多少」，
@@ -1711,7 +1929,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 padding: const EdgeInsets.only(top: 6, left: 2, right: 2),
                 child: Text(
                   '另有 ${lossItems.length} 项亏损 ${lhBiMoney(lossSum)}，已计入圆心合计',
-                  style: _mono(size: 9, color: LhColors.pos, spacing: 0.1),
+                  style: _mono(
+                    size: 9,
+                    color: DunesColors.resolve(context, LhColors.pos),
+                    spacing: 0.1,
+                  ),
                 ),
               ),
             if (_showsWindowIncrements) ...[
@@ -1753,13 +1975,13 @@ class _LhBiViewPageState extends State<LhBiViewPage>
   Color _healthColor(String level) {
     switch (level) {
       case 'risk':
-        return LhColors.neg;
+        return DunesColors.resolve(context, LhColors.neg);
       case 'watch':
-        return LhColors.copper;
+        return DunesColors.resolve(context, LhColors.copper);
       default:
         // 「健康」不能用绿 —— 这个 App 里绿是「跌」和「现金流」的语义色，
         // 拿它表示状况好会和环比箭头撞含义。用灯塔紫。
-        return LhBiPlum.primary;
+        return DunesColors.resolve(context, LhBiPlum.primary);
     }
   }
 
@@ -1797,7 +2019,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         return Container(
           padding: const EdgeInsets.fromLTRB(11, 10, 10, 8),
           decoration: BoxDecoration(
-            color: LhBiSection.tint('scale'),
+            color: DunesColors.resolveNullable(
+              context,
+              LhBiSection.tint('scale'),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
             border: Border.all(color: LhBiSection.edge('scale'), width: 0.8),
           ),
@@ -1811,13 +2037,17 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     width: lighthouseHeroSectionIconSize,
                     height: lighthouseHeroSectionIconSize,
                     decoration: BoxDecoration(
-                      color: accent,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        accent,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(5),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.description_outlined,
                       size: 10.5,
-                      color: LhColors.paper,
+                      color: DunesColors.resolve(context, LhColors.paper),
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -1835,6 +2065,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                         weight: FontWeight.w700,
                         letterSpacing: 0.2,
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                   ),
@@ -1847,7 +2078,14 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               const SizedBox(height: 9),
               _reportBody(rep, busy, t),
               const SizedBox(height: 9),
-              Container(height: 0.7, color: LhBiSection.edge('scale')),
+              Container(
+                height: 0.7,
+                color: DunesColors.resolveNullable(
+                  context,
+                  LhBiSection.edge('scale'),
+                  role: DunesColorRole.surface,
+                ),
+              ),
               const SizedBox(height: 6),
               _reportFooter(rep, busy),
             ],
@@ -1861,7 +2099,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.11),
+        color: DunesColors.resolveNullable(
+          context,
+          accent.withValues(alpha: 0.11),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(5),
         border: Border.all(color: accent.withValues(alpha: 0.3), width: 0.7),
       ),
@@ -1890,7 +2132,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           busy
               ? '正在生成${_reportGrainGuess}…'
               : '还没有${_reportGrainGuess}，点右下角生成。',
-          style: _mono(size: 9.5, color: LhColors.mute2, spacing: 0.1),
+          style: _mono(
+            size: 9.5,
+            color: DunesColors.resolve(context, LhColors.mute2),
+            spacing: 0.1,
+          ),
         ),
       );
     }
@@ -1899,7 +2145,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text(
           '这一档没有可报的内容。',
-          style: _mono(size: 9.5, color: LhColors.mute2, spacing: 0.1),
+          style: _mono(
+            size: 9.5,
+            color: DunesColors.resolve(context, LhColors.mute2),
+            spacing: 0.1,
+          ),
         ),
       );
     }
@@ -1924,7 +2174,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       width: 3,
                       height: 3,
                       decoration: BoxDecoration(
-                        color: LhBiPlum.primary.withValues(alpha: 0.55),
+                        color: DunesColors.resolve(
+                          context,
+                          LhBiPlum.primary,
+                          role: DunesColorRole.surface,
+                        ).withValues(alpha: 0.55),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -1935,9 +2189,10 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       rep.lines[i],
                       style: LhTypography.sans(
                         size: 10.5,
-                        color: LhColors.ink2,
+                        color: DunesColors.resolve(context, LhColors.ink2),
                         weight: FontWeight.w500,
                         height: 1.45,
+                        context: context,
                       ),
                     ),
                   ),
@@ -1969,7 +2224,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             key: ValueKey('bi-report-foot-${bits.join()}'),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: _mono(size: 8.5, color: LhColors.mute2, spacing: 0.1),
+            style: _mono(
+              size: 8.5,
+              color: DunesColors.resolve(context, LhColors.mute2),
+              spacing: 0.1,
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -1985,14 +2244,20 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     child: CircularProgressIndicator(
                       strokeWidth: 1.6,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        LhBiPlum.primary.withValues(alpha: 0.7),
+                        DunesColors.resolve(
+                          context,
+                          LhBiPlum.primary,
+                        ).withValues(alpha: 0.7),
                       ),
                     ),
                   )
                 : Icon(
                     Icons.refresh_rounded,
                     size: 15,
-                    color: LhBiPlum.primary.withValues(alpha: 0.85),
+                    color: DunesColors.resolve(
+                      context,
+                      LhBiPlum.primary,
+                    ).withValues(alpha: 0.85),
                   ),
           ),
         ),
@@ -2020,7 +2285,9 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     for (final s in slices) {
       final sweep = (s.value / total) * math.pi * 2;
       if (a >= acc && a < acc + sweep) {
-        if (s.color == LhBiPalette.other) return; // 「其他」是聚合，没有实体可钻
+        if (s.color == DunesColors.resolve(context, LhBiPalette.other)) {
+          return;
+        } // 「其他」是聚合，没有实体可钻
         _toggleDrill(s.name);
         return;
       }
@@ -2063,7 +2330,10 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         child: Center(
           child: Text(
             '正在取${b.label}明细…',
-            style: _mono(size: 9.5, color: LhColors.mute2),
+            style: _mono(
+              size: 9.5,
+              color: DunesColors.resolve(context, LhColors.mute2),
+            ),
           ),
         ),
       );
@@ -2073,7 +2343,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         child: Text(
           '「$name」在当前区间没有${b.label}拆分数据。\n'
           '后端 detail 未下发该维度时这里就是空的，不做估算。',
-          style: _mono(size: 9.5, color: LhColors.mute2, spacing: 0.1),
+          style: _mono(
+            size: 9.5,
+            color: DunesColors.resolve(context, LhColors.mute2),
+            spacing: 0.1,
+          ),
         ),
       );
     } else {
@@ -2099,9 +2373,20 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       margin: const EdgeInsets.only(top: 6),
       padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
       decoration: BoxDecoration(
-        color: LhBiPlum.mist,
+        color: DunesColors.resolve(
+          context,
+          LhBiPlum.mist,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: LhBiPlum.heroEdge, width: 0.7),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhBiPlum.heroEdge,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2109,7 +2394,15 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         children: [
           Row(
             children: [
-              Container(width: 2, height: 10, color: LhBiPlum.primary),
+              Container(
+                width: 2,
+                height: 10,
+                color: DunesColors.resolve(
+                  context,
+                  LhBiPlum.primary,
+                  role: DunesColorRole.surface,
+                ),
+              ),
               const SizedBox(width: 6),
               Flexible(
                 child: LhScrollText(
@@ -2119,7 +2412,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   overflow: TextOverflow.ellipsis,
                   style: _sans(
                     size: 11,
-                    color: LhBiPlum.deep,
+                    color: DunesColors.resolve(context, LhBiPlum.deep),
                     weight: FontWeight.w700,
                   ),
                 ),
@@ -2127,16 +2420,19 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               const SizedBox(width: 8),
               Text(
                 _metric.label,
-                style: _mono(size: 8.5, color: LhColors.mute2),
+                style: _mono(
+                  size: 8.5,
+                  color: DunesColors.resolve(context, LhColors.mute2),
+                ),
               ),
               const SizedBox(width: 8),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => setState(() => _drillName = null),
-                child: const Icon(
+                child: Icon(
                   Icons.close_rounded,
                   size: 14,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                 ),
               ),
             ],
@@ -2152,7 +2448,10 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               padding: const EdgeInsets.only(top: 6),
               child: Text(
                 '共 ${rows.length} 个${b.label}，按 ${_metric.label} 取前 ${shown.length} 个',
-                style: _mono(size: 8.5, color: LhColors.mute2),
+                style: _mono(
+                  size: 8.5,
+                  color: DunesColors.resolve(context, LhColors.mute2),
+                ),
               ),
             ),
         ],
@@ -2221,7 +2520,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         textAlign: TextAlign.right,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: _mono(size: size, color: color ?? LhColors.ink, spacing: 0),
+        style: _mono(
+          size: size,
+          color: color ?? DunesColors.resolve(context, LhColors.ink),
+          spacing: 0,
+        ),
       ),
     );
   }
@@ -2238,7 +2541,12 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       mainAxisSize: MainAxisSize.min,
       children: [
         _legendNumCell(_legendValueW, value, size: size),
-        _legendNumCell(_legendPctW, pct, color: LhColors.mute, size: size),
+        _legendNumCell(
+          _legendPctW,
+          pct,
+          color: DunesColors.resolve(context, LhColors.mute),
+          size: size,
+        ),
         if (windows) ...[
           _legendNumCell(_legendWinW, day ?? '—', size: size),
           _legendNumCell(_legendWinW, month ?? '—', size: size),
@@ -2249,7 +2557,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
 
   Widget _legendHeader() {
     final windows = _showsWindowIncrements;
-    TextStyle headStyle() => _mono(size: 8, color: LhColors.mute2, spacing: 0);
+    TextStyle headStyle() => _mono(
+      size: 8,
+      color: DunesColors.resolve(context, LhColors.mute2),
+      spacing: 0,
+    );
     Widget head(double w, String t) => SizedBox(
       width: w,
       child: Text(
@@ -2285,7 +2597,14 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     final total = lhBiSignedTotal(items.map((e) => e.value));
     return Column(
       children: [
-        Container(height: 0.7, color: LhColors.line2),
+        Container(
+          height: 0.7,
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.surface,
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
           child: Row(
@@ -2296,7 +2615,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   '合计',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: _mono(size: 9.5, color: LhColors.mute, spacing: 0.1),
+                  style: _mono(
+                    size: 9.5,
+                    color: DunesColors.resolve(context, LhColors.mute),
+                    spacing: 0.1,
+                  ),
                 ),
               ),
               _legendNumericCols(
@@ -2315,7 +2638,8 @@ class _LhBiViewPageState extends State<LhBiViewPage>
 
   Widget _legendRow(_Slice s, double total, int index) {
     final pct = total > 0 ? s.value / total * 100 : 0.0;
-    final drillable = s.color != LhBiPalette.other;
+    final drillable =
+        s.color != DunesColors.resolve(context, LhBiPalette.other);
     final on = drillable && _drillName == s.name;
     final day = _showsWindowIncrements ? _windowMetric(s.name, 'day') : null;
     final month = _showsWindowIncrements
@@ -2329,7 +2653,13 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         margin: const EdgeInsets.only(bottom: 4),
         padding: const EdgeInsets.fromLTRB(6, 5, 6, 5),
         decoration: BoxDecoration(
-          color: on ? LhBiPlum.lavender : Colors.transparent,
+          color: on
+              ? DunesColors.resolve(
+                  context,
+                  LhBiPlum.lavender,
+                  role: DunesColorRole.surface,
+                )
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
         ),
         child: Row(
@@ -2338,7 +2668,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               width: 9,
               height: 9,
               decoration: BoxDecoration(
-                color: s.color,
+                color: DunesColors.resolveNullable(
+                  context,
+                  s.color,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(2.5),
               ),
             ),
@@ -2350,7 +2684,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 overflow: TextOverflow.ellipsis,
                 style: _sans(
                   size: 11,
-                  color: LhColors.ink2,
+                  color: DunesColors.resolve(context, LhColors.ink2),
                   weight: FontWeight.w500,
                 ),
               ),
@@ -2370,7 +2704,9 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                           ? Icons.expand_less_rounded
                           : Icons.chevron_right_rounded,
                       size: 14,
-                      color: on ? LhBiPlum.primary : LhColors.mute2,
+                      color: on
+                          ? DunesColors.resolve(context, LhBiPlum.primary)
+                          : DunesColors.resolve(context, LhColors.mute2),
                     )
                   : null,
             ),
@@ -2468,7 +2804,9 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     final retention = gross > 0 ? net.abs() / gross * 100 : 0.0;
     // 符号单独画，数字取绝对值 —— 否则负数会出现「−-12.3」。
     final parts = lhBiParts(net.abs(), isRate: false);
-    final netColor = net >= 0 ? LhBiFlow.inflowOn : LhBiFlow.outflowOn;
+    final netColor = net >= 0
+        ? DunesColors.resolve(context, LhBiFlow.inflowOn)
+        : DunesColors.resolve(context, LhBiFlow.outflowOn);
     final inFlex = gross > 0 ? (totalIn / gross * 1000).round() : 1;
     final outFlex = gross > 0 ? (totalOut / gross * 1000).round() : 1;
 
@@ -2478,17 +2816,28 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       children: [
         Text(
           label,
-          style: _mono(size: 8.5, color: LhBiFlow.mute, spacing: 0.8),
+          style: _mono(
+            size: 8.5,
+            color: DunesColors.resolve(context, LhBiFlow.mute),
+            spacing: 0.8,
+          ),
         ),
         const SizedBox(height: 4),
-        Text(value, style: LhTypography.number(size: 15, color: color)),
+        Text(
+          value,
+          style: LhTypography.number(size: 15, color: color, context: context),
+        ),
       ],
     );
 
     return Container(
       padding: const EdgeInsets.fromLTRB(15, 14, 15, 15),
       decoration: BoxDecoration(
-        color: LhBiFlow.ink,
+        color: DunesColors.resolve(
+          context,
+          LhBiFlow.ink,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
       ),
       child: Column(
@@ -2502,15 +2851,19 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 height: lighthouseHeroMastheadLabelIconSize,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: LhBiFlow.inflow,
+                  color: DunesColors.resolve(
+                    context,
+                    LhBiFlow.inflow,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(
                     lighthouseHeroMastheadLabelRadius,
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.swap_vert_rounded,
                   size: 12,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
                 ),
               ),
               const SizedBox(width: 7),
@@ -2518,14 +2871,18 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 '净TA · 资金流',
                 style: _sans(
                   size: lighthouseHeroMastheadLabelFontSize,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
                   weight: FontWeight.w600,
                 ),
               ),
               const Spacer(),
               Text(
                 widget.rangeLabel,
-                style: _mono(size: 9, color: LhBiFlow.mute, spacing: 0.4),
+                style: _mono(
+                  size: 9,
+                  color: DunesColors.resolve(context, LhBiFlow.mute),
+                  spacing: 0.4,
+                ),
               ),
             ],
           ),
@@ -2535,7 +2892,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             children: [
               Text(
                 '${net >= 0 ? '' : '−'}${parts.text}',
-                style: LhTypography.number(size: 32, color: netColor),
+                style: LhTypography.number(
+                  size: 32,
+                  color: netColor,
+                  context: context,
+                ),
               ),
               if (parts.unit.isNotEmpty) ...[
                 const SizedBox(width: 3),
@@ -2545,7 +2906,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     parts.unit,
                     style: _sans(
                       size: 11,
-                      color: LhBiFlow.mute,
+                      color: DunesColors.resolve(context, LhBiFlow.mute),
                       weight: FontWeight.w500,
                     ),
                   ),
@@ -2572,12 +2933,24 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 children: [
                   Expanded(
                     flex: outFlex < 1 ? 1 : outFlex,
-                    child: const ColoredBox(color: LhBiFlow.outflowOn),
+                    child: ColoredBox(
+                      color: DunesColors.resolve(
+                        context,
+                        LhBiFlow.outflowOn,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 2),
                   Expanded(
                     flex: inFlex < 1 ? 1 : inFlex,
-                    child: const ColoredBox(color: LhBiFlow.inflowOn),
+                    child: ColoredBox(
+                      color: DunesColors.resolve(
+                        context,
+                        LhBiFlow.inflowOn,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -2588,16 +2961,24 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: read('流出', lhBiMoney(totalOut), LhBiFlow.outflowOn),
+                child: read(
+                  '流出',
+                  lhBiMoney(totalOut),
+                  DunesColors.resolve(context, LhBiFlow.outflowOn),
+                ),
               ),
               Expanded(
-                child: read('流入', lhBiMoney(totalIn), LhBiFlow.inflowOn),
+                child: read(
+                  '流入',
+                  lhBiMoney(totalIn),
+                  DunesColors.resolve(context, LhBiFlow.inflowOn),
+                ),
               ),
               Expanded(
                 child: read(
                   '净留存率',
                   '${retention.toStringAsFixed(1)}%',
-                  Colors.white,
+                  DunesColors.resolve(context, Colors.white),
                 ),
               ),
             ],
@@ -2606,7 +2987,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           Text(
             '净留存率＝净额 ÷ 资金总流动（${lhBiMoney(gross)}）'
             '，衡量这段时间流过的钱最后留下多少。',
-            style: _mono(size: 8.5, color: LhBiFlow.mute, spacing: 0.1),
+            style: _mono(
+              size: 8.5,
+              color: DunesColors.resolve(context, LhBiFlow.mute),
+              spacing: 0.1,
+            ),
           ),
         ],
       ),
@@ -2726,8 +3111,8 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 items: items,
                 maxAbs: maxAbs,
                 progress: Curves.easeOutCubic.transform(_anim.value),
-                gain: LhBiFlow.inflow,
-                loss: LhBiFlow.outflow,
+                gain: DunesColors.resolve(context, LhBiFlow.inflow),
+                loss: DunesColors.resolve(context, LhBiFlow.outflow),
                 gainLabel: '流入',
                 lossLabel: '流出',
               ),
@@ -2801,9 +3186,20 @@ class _LhBiViewPageState extends State<LhBiViewPage>
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
-        border: Border.all(color: LhBiFlow.edge, width: 0.8),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhBiFlow.edge,
+            role: DunesColorRole.border,
+          ),
+          width: 0.8,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2819,14 +3215,25 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   height: lighthouseHeroSectionIconSize,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: LhBiFlow.tint,
+                    color: DunesColors.resolve(
+                      context,
+                      LhBiFlow.tint,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: LhBiFlow.edge, width: 0.8),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        LhBiFlow.edge,
+                        role: DunesColorRole.border,
+                      ),
+                      width: 0.8,
+                    ),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.water_drop_outlined,
                     size: 11,
-                    color: LhBiFlow.inflow,
+                    color: DunesColors.resolve(context, LhBiFlow.inflow),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -2839,14 +3246,17 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                         title,
                         style: _sans(
                           size: 12.5,
-                          color: LhColors.ink,
+                          color: DunesColors.resolve(context, LhColors.ink),
                           weight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 3),
                       Text(
                         subtitle,
-                        style: _mono(size: 8.5, color: LhColors.mute2),
+                        style: _mono(
+                          size: 8.5,
+                          color: DunesColors.resolve(context, LhColors.mute2),
+                        ),
                       ),
                     ],
                   ),
@@ -2860,14 +3270,18 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               child: Container(
                 padding: const EdgeInsets.fromLTRB(9, 7, 9, 8),
                 decoration: BoxDecoration(
-                  color: LhBiFlow.tint,
+                  color: DunesColors.resolve(
+                    context,
+                    LhBiFlow.tint,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   insight,
                   style: _sans(
                     size: 10.5,
-                    color: LhColors.ink2,
+                    color: DunesColors.resolve(context, LhColors.ink2),
                     weight: FontWeight.w500,
                   ),
                 ),
@@ -2889,9 +3303,20 @@ class _LhBiViewPageState extends State<LhBiViewPage>
 
     return Container(
       decoration: BoxDecoration(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: radius,
-        border: Border.all(color: LhColors.line2, width: 0.7),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2904,10 +3329,28 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           Container(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
             decoration: BoxDecoration(
-              color: LhColors.mist,
-              border: const Border(
-                top: BorderSide(color: LhColors.line2, width: 0.5),
-                bottom: BorderSide(color: LhColors.line2, width: 0.5),
+              color: DunesColors.resolve(
+                context,
+                LhColors.mist,
+                role: DunesColorRole.surface,
+              ),
+              border: Border(
+                top: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 0.5,
+                ),
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 0.5,
+                ),
               ),
             ),
             child: Row(
@@ -2949,7 +3392,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   bottom: BorderSide(
                     color: i == rows.length - 1
                         ? Colors.transparent
-                        : LhColors.line2.withValues(alpha: 0.6),
+                        : DunesColors.resolve(
+                            context,
+                            LhColors.line2,
+                            role: DunesColorRole.border,
+                          ).withValues(alpha: 0.6),
                     width: 0.5,
                   ),
                 ),
@@ -2962,7 +3409,9 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       '${i + 1}',
                       style: _mono(
                         size: 10,
-                        color: i < 3 ? LhBiPlum.primary : LhColors.mute2,
+                        color: i < 3
+                            ? DunesColors.resolve(context, LhBiPlum.primary)
+                            : DunesColors.resolve(context, LhColors.mute2),
                         weight: i < 3 ? FontWeight.w700 : FontWeight.w500,
                         spacing: 0,
                       ),
@@ -2975,7 +3424,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       overflow: TextOverflow.ellipsis,
                       style: _sans(
                         size: 11,
-                        color: LhColors.ink,
+                        color: DunesColors.resolve(context, LhColors.ink),
                         weight: FontWeight.w500,
                       ),
                     ),
@@ -2985,7 +3434,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     child: Text(
                       lhBiValue(rows[i].value, isRate: _metric.isRate),
                       textAlign: TextAlign.right,
-                      style: _mono(size: 10, color: LhColors.ink, spacing: 0),
+                      style: _mono(
+                        size: 10,
+                        color: DunesColors.resolve(context, LhColors.ink),
+                        spacing: 0,
+                      ),
                     ),
                   ),
                   SizedBox(
@@ -2995,7 +3448,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                           ? lhBiPct(rows[i].scale.abs() / total * 100)
                           : '—',
                       textAlign: TextAlign.right,
-                      style: _mono(size: 10, color: LhColors.mute, spacing: 0),
+                      style: _mono(
+                        size: 10,
+                        color: DunesColors.resolve(context, LhColors.mute),
+                        spacing: 0,
+                      ),
                     ),
                   ),
                   SizedBox(
@@ -3006,8 +3463,8 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       style: _mono(
                         size: 10,
                         color: rows[i].profit < 0
-                            ? LhColors.neg
-                            : LhColors.ink2,
+                            ? DunesColors.resolve(context, LhColors.neg)
+                            : DunesColors.resolve(context, LhColors.ink2),
                         spacing: 0,
                       ),
                     ),
@@ -3024,21 +3481,42 @@ class _LhBiViewPageState extends State<LhBiViewPage>
 
   Widget _noData(String text) => Padding(
     padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
-    child: Text(text, style: _mono(size: 10, color: LhColors.mute2)),
+    child: Text(
+      text,
+      style: _mono(
+        size: 10,
+        color: DunesColors.resolve(context, LhColors.mute2),
+      ),
+    ),
   );
 
   Widget _emptyCard() => Container(
     padding: const EdgeInsets.symmetric(vertical: 44, horizontal: 20),
     decoration: BoxDecoration(
-      color: LhColors.paper,
+      color: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
-      border: Border.all(color: LhColors.line2, width: 0.7),
+      border: Border.all(
+        color: DunesColors.resolve(
+          context,
+          LhColors.line2,
+          role: DunesColorRole.border,
+        ),
+        width: 0.7,
+      ),
     ),
     child: Center(
       child: Text(
         '当前区间下没有可分析的数据。\n换个区间或维度再看。',
         textAlign: TextAlign.center,
-        style: _mono(size: 11, color: LhColors.mute2, spacing: 0.2),
+        style: _mono(
+          size: 11,
+          color: DunesColors.resolve(context, LhColors.mute2),
+          spacing: 0.2,
+        ),
       ),
     ),
   );
@@ -3046,15 +3524,30 @@ class _LhBiViewPageState extends State<LhBiViewPage>
   Widget _loadingCard() => Container(
     padding: const EdgeInsets.symmetric(vertical: 44, horizontal: 20),
     decoration: BoxDecoration(
-      color: LhColors.paper,
+      color: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
-      border: Border.all(color: LhColors.line2, width: 0.7),
+      border: Border.all(
+        color: DunesColors.resolve(
+          context,
+          LhColors.line2,
+          role: DunesColorRole.border,
+        ),
+        width: 0.7,
+      ),
     ),
     child: Center(
       child: Text(
         '数据同步中…',
         textAlign: TextAlign.center,
-        style: _mono(size: 11, color: LhColors.mute2, spacing: 0.2),
+        style: _mono(
+          size: 11,
+          color: DunesColors.resolve(context, LhColors.mute2),
+          spacing: 0.2,
+        ),
       ),
     ),
   );
@@ -3067,7 +3560,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 '流入为正、流出为负，瀑布按五类映射顺序累加，不做估算。'
           : '口径与列表一致：${widget.periodLabel} · ${widget.rangeLabel}。'
                 '构成环按正值拆分，圆心与合计同口径（含亏损）。比率指标不参与加总。',
-      style: _mono(size: 8.5, color: LhColors.mute2, spacing: 0.1),
+      style: _mono(
+        size: 8.5,
+        color: DunesColors.resolve(context, LhColors.mute2),
+        spacing: 0.1,
+      ),
     ),
   );
 }

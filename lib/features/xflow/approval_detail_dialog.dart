@@ -42,9 +42,12 @@ Future<void> showApprovalDetailOverlay({
             Navigator.of(ctx).maybePop();
           }
         }
+
         return Dialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 36, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 36,
+            vertical: 24,
+          ),
           backgroundColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -54,7 +57,11 @@ Future<void> showApprovalDetailOverlay({
               minHeight: 480,
             ),
             child: Material(
-              color: DunesColors.bgApp,
+              color: DunesColors.resolve(
+                ctx,
+                DunesColors.bgApp,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
               clipBehavior: Clip.antiAlias,
               child: hostFor(close),
@@ -68,7 +75,11 @@ Future<void> showApprovalDetailOverlay({
   return Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
       builder: (ctx) => Material(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          ctx,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         child: hostFor(() {
           if (Navigator.of(ctx).canPop()) {
             Navigator.of(ctx).pop();
@@ -180,10 +191,8 @@ class _ApprovalDetailOverlayHostState
 
 /// 覆盖层内返回：关闭弹窗/路由，不改动宿主导航栈。
 class _DialogBackNav extends DunesNavigationController {
-  _DialogBackNav({
-    required this.onClose,
-    required String backScreen,
-  }) : super(initialScreen: backScreen);
+  _DialogBackNav({required this.onClose, required String backScreen})
+    : super(initialScreen: backScreen);
 
   final VoidCallback onClose;
 

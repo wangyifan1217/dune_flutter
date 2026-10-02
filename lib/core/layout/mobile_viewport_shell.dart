@@ -31,7 +31,11 @@ class MobileViewportShell extends StatelessWidget {
         Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
     final height = mediaQuery.size.height;
     return ColoredBox(
-      color: palette.page,
+      color: DunesColors.resolve(
+        context,
+        palette.page,
+        role: DunesColorRole.surface,
+      ),
       child: Center(
         child: SizedBox(
           width: phoneWidth,

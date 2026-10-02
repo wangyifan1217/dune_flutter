@@ -125,7 +125,9 @@ class CashFlowAiController extends ChangeNotifier {
     String id,
     int seq,
   ) async {
-    final deadline = DateTime.now().add(const Duration(minutes: 3, seconds: 30));
+    final deadline = DateTime.now().add(
+      const Duration(minutes: 3, seconds: 30),
+    );
     while (!_shutdownFlag && seq == _seq && DateTime.now().isBefore(deadline)) {
       final job = await api.getAnalyze(id);
       if (job.isDone || job.isFailed) return job;
@@ -233,7 +235,8 @@ class _CashFlowAiSheetState extends State<CashFlowAiSheet> {
     final messages = widget.controller.messages;
     final subtitle = [
       '统计区间 ${widget.rangeLabel}',
-      if ((widget.companyLabel ?? '').trim().isNotEmpty) widget.companyLabel!.trim(),
+      if ((widget.companyLabel ?? '').trim().isNotEmpty)
+        widget.companyLabel!.trim(),
     ].join(' · ');
     return Padding(
       padding: EdgeInsets.only(bottom: inset),
@@ -246,7 +249,11 @@ class _CashFlowAiSheetState extends State<CashFlowAiSheet> {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: _cardBorder,
+                color: DunesColors.resolveNullable(
+                  context,
+                  _cardBorder,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(99),
               ),
             ),
@@ -254,25 +261,35 @@ class _CashFlowAiSheetState extends State<CashFlowAiSheet> {
               padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
               child: Row(
                 children: [
-                  const Icon(Icons.auto_awesome, size: 18, color: _themePurple),
+                  Icon(
+                    Icons.auto_awesome,
+                    size: 18,
+                    color: DunesColors.resolveNullable(context, _themePurple),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'AI分析',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
                           ),
                         ),
                         Text(
                           subtitle,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                       ],
@@ -282,16 +299,20 @@ class _CashFlowAiSheetState extends State<CashFlowAiSheet> {
                     IconButton(
                       tooltip: '清空会话',
                       onPressed: widget.controller.clear,
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.delete_outline,
                         size: 20,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   IconButton(
                     tooltip: '关闭',
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, size: 20, color: DunesColors.text3),
+                    icon: Icon(
+                      Icons.close,
+                      size: 20,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                 ],
               ),
@@ -303,7 +324,8 @@ class _CashFlowAiSheetState extends State<CashFlowAiSheet> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 children: [
                   if (messages.isEmpty && !busy) const _IdleHint(),
-                  for (final message in messages) _MessageBubble(message: message),
+                  for (final message in messages)
+                    _MessageBubble(message: message),
                   if (busy) const _LoadingBubble(),
                 ],
               ),
@@ -315,11 +337,7 @@ class _CashFlowAiSheetState extends State<CashFlowAiSheet> {
                 runSpacing: 8,
                 children: [
                   for (final q in _presetQuestions)
-                    _PromptChip(
-                      label: q,
-                      enabled: !busy,
-                      onTap: () => _ask(q),
-                    ),
+                    _PromptChip(label: q, enabled: !busy, onTap: () => _ask(q)),
                 ],
               ),
             ),
@@ -340,27 +358,52 @@ class _CashFlowAiSheetState extends State<CashFlowAiSheet> {
                         onSubmitted: (_) => _ask(_input.text),
                         decoration: InputDecoration(
                           hintText: busy ? '后台分析中，关闭后仍会继续' : '自己提问，例如现金够不够用',
-                          hintStyle: const TextStyle(
+                          hintStyle: TextStyle(
                             fontSize: 13,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                           filled: true,
-                          fillColor: const Color(0xFFF5F6F8),
+                          fillColor: DunesColors.resolve(
+                            context,
+                            const Color(0xFFF5F6F8),
+                            role: DunesColorRole.surface,
+                          ),
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 10,
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: _cardBorder),
+                            borderSide: BorderSide(
+                              color: DunesColors.resolve(
+                                context,
+                                _cardBorder,
+                                role: DunesColorRole.border,
+                              ),
+                            ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: _cardBorder),
+                            borderSide: BorderSide(
+                              color: DunesColors.resolve(
+                                context,
+                                _cardBorder,
+                                role: DunesColorRole.border,
+                              ),
+                            ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: _themePurple),
+                            borderSide: BorderSide(
+                              color: DunesColors.resolve(
+                                context,
+                                _themePurple,
+                                role: DunesColorRole.border,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -370,10 +413,15 @@ class _CashFlowAiSheetState extends State<CashFlowAiSheet> {
                       onPressed: busy ? null : () => _ask(_input.text),
                       style: IconButton.styleFrom(
                         backgroundColor: _themePurple,
-                        disabledBackgroundColor: _themePurple.withValues(
-                          alpha: 0.35,
+                        disabledBackgroundColor: DunesColors.resolve(
+                          context,
+                          _themePurple,
+                          role: DunesColorRole.surface,
+                        ).withValues(alpha: 0.35),
+                        foregroundColor: DunesColors.resolve(
+                          context,
+                          Colors.white,
                         ),
-                        foregroundColor: Colors.white,
                       ),
                       icon: const Icon(Icons.send_rounded, size: 18),
                     ),
@@ -393,7 +441,7 @@ class _IdleHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.fromLTRB(4, 8, 4, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -403,13 +451,17 @@ class _IdleHint extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           SizedBox(height: 6),
           Text(
             '关掉窗口后分析仍会在后台继续，再打开能看到记录。右上角可清空会话。',
-            style: TextStyle(fontSize: 13, height: 1.45, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.45,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -432,8 +484,16 @@ class _PromptChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: enabled
-          ? _themePurple.withValues(alpha: 0.08)
-          : const Color(0xFFF5F6F8),
+          ? DunesColors.resolve(
+              context,
+              _themePurple,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.08)
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF5F6F8),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: enabled ? onTap : null,
@@ -444,8 +504,16 @@ class _PromptChip extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
               color: enabled
-                  ? _themePurple.withValues(alpha: 0.28)
-                  : _cardBorder,
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    ).withValues(alpha: 0.28)
+                  : DunesColors.resolve(
+                      context,
+                      _cardBorder,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -453,7 +521,9 @@ class _PromptChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: enabled ? _themePurple : DunesColors.text3,
+              color: enabled
+                  ? DunesColors.resolve(context, _themePurple)
+                  : DunesColors.resolve(context, DunesColors.text3),
             ),
           ),
         ),
@@ -467,7 +537,7 @@ class _LoadingBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
@@ -482,7 +552,10 @@ class _LoadingBubble extends StatelessWidget {
           SizedBox(width: 8),
           Text(
             '已提交，DeepSeek 后台分析中…',
-            style: TextStyle(fontSize: 13, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -509,15 +582,35 @@ class _MessageBubble extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: isUser
-                  ? _themePurple.withValues(alpha: 0.10)
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.surface,
+                    ).withValues(alpha: 0.10)
                   : message.error
-                  ? DunesColors.coralSoft
-                  : const Color(0xFFF7F6FB),
+                  ? DunesColors.resolve(
+                      context,
+                      DunesColors.coralSoft,
+                      role: DunesColorRole.surface,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFF7F6FB),
+                      role: DunesColorRole.surface,
+                    ),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: message.error
-                    ? DunesColors.coral.withValues(alpha: 0.35)
-                    : _cardBorder,
+                    ? DunesColors.resolve(
+                        context,
+                        DunesColors.coral,
+                        role: DunesColorRole.border,
+                      ).withValues(alpha: 0.35)
+                    : DunesColors.resolve(
+                        context,
+                        _cardBorder,
+                        role: DunesColorRole.border,
+                      ),
               ),
             ),
             child: Padding(
@@ -531,8 +624,8 @@ class _MessageBubble extends StatelessWidget {
                           fontSize: 13,
                           height: 1.45,
                           color: message.error
-                              ? DunesColors.coral
-                              : DunesColors.text,
+                              ? DunesColors.resolve(context, DunesColors.coral)
+                              : DunesColors.resolve(context, DunesColors.text),
                         ),
                       ),
                     )

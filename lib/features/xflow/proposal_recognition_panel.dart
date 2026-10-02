@@ -85,7 +85,9 @@ class _XfDetRecognitionPanelState extends State<XfDetRecognitionPanel> {
       }
       if (!mounted) return;
       setState(() {
-        _archive = raw == null ? null : ProposalArchiveData.fromArchiveResponse(raw);
+        _archive = raw == null
+            ? null
+            : ProposalArchiveData.fromArchiveResponse(raw);
         _loading = false;
       });
     } catch (e) {
@@ -199,7 +201,11 @@ class _XfDetRecognitionPanelState extends State<XfDetRecognitionPanel> {
                 if (_error != null) ...[
                   Text(
                     '识别详情加载失败，以下为已提交摘要',
-                    style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+                    style: DunesTypography.sans(
+                      fontSize: 11,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
+                    ),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -207,7 +213,8 @@ class _XfDetRecognitionPanelState extends State<XfDetRecognitionPanel> {
                   summaryFields: _summaryConfig,
                   previewSectionConfig: _previewConfig,
                   summaryData: _summaryData,
-                  sections: _archive?.previewSections(_previewConfig) ?? const [],
+                  sections:
+                      _archive?.previewSections(_previewConfig) ?? const [],
                   archiveId: _archive?.archiveId ?? '',
                   fileName: _archive?.fileName ?? '',
                   fileSize: _archive?.fileSize ?? '',
@@ -215,7 +222,8 @@ class _XfDetRecognitionPanelState extends State<XfDetRecognitionPanel> {
                   initialExpandedSectionIds: _initialExpandedIds,
                   resolveAssetUrl: widget.service.resolveProposalAssetUrl,
                   authenticatedImageHeaders: widget.service.authImageHeaders,
-                  onPreviewTap: _archive != null && _archive!.archiveId.isNotEmpty
+                  onPreviewTap:
+                      _archive != null && _archive!.archiveId.isNotEmpty
                       ? () => _openExcelPreview(_archive!)
                       : null,
                 ),

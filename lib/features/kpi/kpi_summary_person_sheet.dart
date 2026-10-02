@@ -133,7 +133,11 @@ class _KpiSummaryPersonSheetState extends State<KpiSummaryPersonSheet> {
     return Padding(
       padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 8),
       child: Material(
-        color: const Color(0xFFF7F4FC),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF7F4FC),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         clipBehavior: Clip.antiAlias,
         child: SizedBox(
@@ -145,7 +149,11 @@ class _KpiSummaryPersonSheetState extends State<KpiSummaryPersonSheet> {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: DunesColors.borderSoft,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(99),
                 ),
               ),
@@ -165,7 +173,8 @@ class _KpiSummaryPersonSheetState extends State<KpiSummaryPersonSheet> {
                         style: DunesTypography.sans(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                     ),
@@ -177,7 +186,14 @@ class _KpiSummaryPersonSheetState extends State<KpiSummaryPersonSheet> {
                   ],
                 ),
               ),
-              const Divider(height: 1, color: DunesColors.borderSoft),
+              Divider(
+                height: 1,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
               Expanded(child: _body()),
             ],
           ),
@@ -202,7 +218,8 @@ class _KpiSummaryPersonSheetState extends State<KpiSummaryPersonSheet> {
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 14,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 12),
@@ -220,7 +237,11 @@ class _KpiSummaryPersonSheetState extends State<KpiSummaryPersonSheet> {
       return Center(
         child: Text(
           '该月暂无绩效明细',
-          style: DunesTypography.sans(fontSize: 14, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 14,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       );
     }

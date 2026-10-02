@@ -491,14 +491,26 @@ class _NativeQianjiCashFlowBoardPageState
           data: base.copyWith(
             colorScheme: base.colorScheme.copyWith(
               primary: _themePurple,
-              onPrimary: Colors.white,
+              onPrimary: DunesColors.resolve(ctx, Colors.white),
               surfaceTint: Colors.transparent,
             ),
             datePickerTheme: base.datePickerTheme.copyWith(
-              rangeSelectionBackgroundColor: const Color(0xFFEFEAFA),
-              backgroundColor: Colors.white,
-              headerBackgroundColor: Colors.white,
-              headerForegroundColor: DunesColors.text,
+              rangeSelectionBackgroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFEFEAFA),
+                role: DunesColorRole.surface,
+              ),
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
+              headerBackgroundColor: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
+              headerForegroundColor: DunesColors.resolve(ctx, DunesColors.text),
             ),
           ),
           child: child!,
@@ -526,7 +538,11 @@ class _NativeQianjiCashFlowBoardPageState
     return Stack(
       children: [
         ColoredBox(
-          color: _pageBg,
+          color: DunesColors.resolve(
+            context,
+            _pageBg,
+            role: DunesColorRole.surface,
+          ),
           child: SafeArea(
             bottom: false,
             child: Column(
@@ -636,29 +652,36 @@ class _NativeQianjiCashFlowBoardPageState
     final back = InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: widget.onBack,
-      child: const Padding(
+      child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
+            Icon(
+              Icons.arrow_back_ios_new,
+              size: 14,
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
             SizedBox(width: 2),
             Text(
               '饕',
-              style: TextStyle(fontSize: 13, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
           ],
         ),
       ),
     );
-    const title = Text(
+    final title = Text(
       '公司账户资金流向',
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.w700,
-        color: _themePurple,
+        color: DunesColors.resolveNullable(context, _themePurple),
       ),
     );
     final actions = <Widget>[
@@ -666,13 +689,21 @@ class _NativeQianjiCashFlowBoardPageState
       IconButton(
         tooltip: '各板块怎么算',
         onPressed: _showBoardGuide,
-        icon: const Icon(Icons.info_outline, size: 20, color: _themePurple),
+        icon: Icon(
+          Icons.info_outline,
+          size: 20,
+          color: DunesColors.resolveNullable(context, _themePurple),
+        ),
       ),
       _AiAnalyzeChip(key: _aiKey, onTap: _openAiAnalyze),
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: DunesColors.amberSoft,
+          color: DunesColors.resolve(
+            context,
+            DunesColors.amberSoft,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
@@ -680,7 +711,7 @@ class _NativeQianjiCashFlowBoardPageState
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: DunesColors.amber,
+            color: DunesColors.resolve(context, DunesColors.amber),
           ),
         ),
       ),
@@ -698,7 +729,7 @@ class _NativeQianjiCashFlowBoardPageState
                   children: [
                     back,
                     const SizedBox(width: 8),
-                    const Expanded(child: title),
+                    Expanded(child: title),
                   ],
                 ),
                 Padding(
@@ -718,7 +749,7 @@ class _NativeQianjiCashFlowBoardPageState
             children: [
               back,
               const SizedBox(width: 8),
-              const Expanded(child: title),
+              Expanded(child: title),
               ...actions,
             ],
           );
@@ -731,16 +762,26 @@ class _NativeQianjiCashFlowBoardPageState
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
       decoration: BoxDecoration(
-        color: DunesColors.coralSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.coralSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: DunesColors.coral.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.coral,
+            role: DunesColorRole.border,
+          ).withValues(alpha: 0.35),
+        ),
       ),
       child: Text(
         '流水加载失败：$_error',
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12.5,
           height: 1.45,
-          color: DunesColors.coral,
+          color: DunesColors.resolve(context, DunesColors.coral),
         ),
       ),
     );
@@ -752,7 +793,11 @@ class _NativeQianjiCashFlowBoardPageState
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -781,7 +826,11 @@ class _NativeQianjiCashFlowBoardPageState
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -813,7 +862,11 @@ class _NativeQianjiCashFlowBoardPageState
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -844,7 +897,11 @@ class _NativeQianjiCashFlowBoardPageState
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -865,7 +922,11 @@ class _NativeQianjiCashFlowBoardPageState
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -882,24 +943,31 @@ class _NativeQianjiCashFlowBoardPageState
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: _cardBorder,
+                        color: DunesColors.resolveNullable(
+                          ctx,
+                          _cardBorder,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
+                  Text(
                     '各板块怎么展示',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(ctx, DunesColors.text),
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     '数据来自银行流水 bank_flow_sub，随顶部统计区间变化。',
-                    style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.resolve(ctx, DunesColors.text3),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   const _GuideItem(
@@ -969,18 +1037,35 @@ class _NativeQianjiCashFlowBoardPageState
                     label: Text(p.$2),
                     selected: _preset == p.$1,
                     onSelected: (_) => _setPreset(p.$1),
-                    selectedColor: DunesColors.brandPurpleSoft,
+                    selectedColor: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleSoft,
+                    ),
                     labelStyle: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: _preset == p.$1 ? _themePurple : DunesColors.text2,
+                      color: _preset == p.$1
+                          ? DunesColors.resolve(context, _themePurple)
+                          : DunesColors.resolve(context, DunesColors.text2),
                     ),
                     side: BorderSide(
                       color: _preset == p.$1
-                          ? DunesColors.brandPurpleLine
-                          : _cardBorder,
+                          ? DunesColors.resolve(
+                              context,
+                              DunesColors.brandPurpleLine,
+                              role: DunesColorRole.border,
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              _cardBorder,
+                              role: DunesColorRole.border,
+                            ),
                     ),
-                    backgroundColor: Colors.white,
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ),
                     visualDensity: VisualDensity.compact,
                   ),
                 ),
@@ -992,7 +1077,10 @@ class _NativeQianjiCashFlowBoardPageState
           children: [
             Text(
               '统计区间 $_rangeLabel',
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             const Spacer(),
             if (_entityId != null || _flowId != null)
@@ -1023,7 +1111,11 @@ class _NativeQianjiCashFlowBoardPageState
       key: _kpiKey,
       padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
@@ -1034,20 +1126,20 @@ class _NativeQianjiCashFlowBoardPageState
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: Row(
               children: [
-                const Text(
+                Text(
                   '集团总览',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   entity == null ? _rangeLabel : entity.name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ],
@@ -1069,24 +1161,24 @@ class _NativeQianjiCashFlowBoardPageState
                     value: _fmtWan(net, signed: true),
                     sub: '流入 − 流出',
                     valueColor: net >= 0
-                        ? DunesColors.green
-                        : DunesColors.coral,
+                        ? DunesColors.resolve(context, DunesColors.green)
+                        : DunesColors.resolve(context, DunesColors.coral),
                   ),
                   _KpiCell(
                     label: '经营净现金流',
                     value: _fmtWan(operating, signed: true),
                     sub: '不含融资/投资/往来',
                     valueColor: operating >= 0
-                        ? DunesColors.green
-                        : DunesColors.coral,
+                        ? DunesColors.resolve(context, DunesColors.green)
+                        : DunesColors.resolve(context, DunesColors.coral),
                   ),
                   _KpiCell(
                     label: '需关注账户',
                     value: '$alertCount',
                     sub: alertCount > 0 ? alertHint : '暂无异常',
                     valueColor: alertCount > 0
-                        ? DunesColors.amber
-                        : DunesColors.green,
+                        ? DunesColors.resolve(context, DunesColors.amber)
+                        : DunesColors.resolve(context, DunesColors.green),
                     onTap: () => _showAlertAccounts(),
                   ),
                 ];
@@ -1121,25 +1213,32 @@ class _NativeQianjiCashFlowBoardPageState
       key: _healthKey,
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '账户健康',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             '按最新余额划分。点偏低 / 备付可看名单。',
-            style: TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 10),
           LayoutBuilder(
@@ -1148,17 +1247,17 @@ class _NativeQianjiCashFlowBoardPageState
                 _HealthTile(
                   label: '账户总数',
                   value: '$total',
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
                 _HealthTile(
                   label: '余额正常',
                   value: '$healthy',
-                  color: DunesColors.green,
+                  color: DunesColors.resolve(context, DunesColors.green),
                 ),
                 _HealthTile(
                   label: '余额偏低',
                   value: '$low',
-                  color: DunesColors.coral,
+                  color: DunesColors.resolve(context, DunesColors.coral),
                   onTap: low > 0
                       ? () => _showAlertAccounts(reason: '余额偏低')
                       : null,
@@ -1166,7 +1265,7 @@ class _NativeQianjiCashFlowBoardPageState
                 _HealthTile(
                   label: '备付账户',
                   value: '$reserve',
-                  color: DunesColors.amber,
+                  color: DunesColors.resolve(context, DunesColors.amber),
                   onTap: reserve > 0
                       ? () => _showAlertAccounts(reason: '备付账户')
                       : null,
@@ -1270,25 +1369,32 @@ class _NativeQianjiCashFlowBoardPageState
       key: _insightKey,
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '区间要点',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             '点卡片可跳到走势、科目或流水搜索。',
-            style: TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 10),
           LayoutBuilder(
@@ -1343,7 +1449,11 @@ class _NativeQianjiCashFlowBoardPageState
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
@@ -1357,13 +1467,24 @@ class _NativeQianjiCashFlowBoardPageState
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
               ),
               const SizedBox(width: 8),
-              Container(width: 16, height: 2, color: _themePurple),
+              Container(
+                width: 16,
+                height: 2,
+                color: DunesColors.resolveNullable(
+                  context,
+                  _themePurple,
+                  role: DunesColorRole.surface,
+                ),
+              ),
               const Spacer(),
               Text(
                 hover == null
                     ? '期末 ${_fmtWan(points.isEmpty ? 0 : points.last.cash)}'
                     : '${_fmtTrendLabel(hover.date)}  ${_fmtWan(hover.cash)}',
-                style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
               ),
             ],
           ),
@@ -1386,16 +1507,22 @@ class _NativeQianjiCashFlowBoardPageState
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
               ),
               const SizedBox(width: 10),
-              _LegendDot(color: DunesColors.green, label: '流入'),
+              _LegendDot(
+                color: DunesColors.resolve(context, DunesColors.green),
+                label: '流入',
+              ),
               const SizedBox(width: 10),
-              _LegendDot(color: DunesColors.coral, label: '流出'),
+              _LegendDot(
+                color: DunesColors.resolve(context, DunesColors.coral),
+                label: '流出',
+              ),
               const Spacer(),
               if (hover != null)
                 Text(
                   '入 ${_fmtWan(hover.inflow)}  出 ${_fmtWan(hover.outflow)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                 ),
             ],
@@ -1425,7 +1552,11 @@ class _NativeQianjiCashFlowBoardPageState
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
@@ -1456,11 +1587,14 @@ class _NativeQianjiCashFlowBoardPageState
           ),
           const SizedBox(height: 8),
           if (rows.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(16),
               child: Text(
                 '没有匹配的主体',
-                style: TextStyle(fontSize: 13, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             )
           else
@@ -1470,7 +1604,7 @@ class _NativeQianjiCashFlowBoardPageState
                 return Column(
                   children: [
                     if (!compact)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.fromLTRB(6, 4, 6, 8),
                         child: Row(
                           children: [
@@ -1480,7 +1614,10 @@ class _NativeQianjiCashFlowBoardPageState
                                 '主体',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1490,7 +1627,10 @@ class _NativeQianjiCashFlowBoardPageState
                                 '占合计',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1502,7 +1642,10 @@ class _NativeQianjiCashFlowBoardPageState
                                 textAlign: TextAlign.right,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1514,7 +1657,10 @@ class _NativeQianjiCashFlowBoardPageState
                                 textAlign: TextAlign.right,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1544,14 +1690,14 @@ class _NativeQianjiCashFlowBoardPageState
         final wide = c.maxWidth >= 720;
         final inflow = _FlowPanel(
           title: '流入',
-          color: DunesColors.green,
+          color: DunesColors.resolve(context, DunesColors.green),
           items: _inflows,
           selectedId: _flowId,
           onSelect: _selectFlow,
         );
         final outflow = _FlowPanel(
           title: '流出',
-          color: DunesColors.coral,
+          color: DunesColors.resolve(context, DunesColors.coral),
           items: _outflows,
           selectedId: _flowId,
           onSelect: _selectFlow,
@@ -1565,7 +1711,7 @@ class _NativeQianjiCashFlowBoardPageState
                 child: _DonutCard(
                   title: '流入构成',
                   items: _inflows,
-                  color: DunesColors.green,
+                  color: DunesColors.resolve(context, DunesColors.green),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1578,7 +1724,7 @@ class _NativeQianjiCashFlowBoardPageState
                 child: _DonutCard(
                   title: '流出构成',
                   items: _outflows,
-                  color: DunesColors.coral,
+                  color: DunesColors.resolve(context, DunesColors.coral),
                 ),
               ),
             ],
@@ -1592,7 +1738,7 @@ class _NativeQianjiCashFlowBoardPageState
                   child: _DonutCard(
                     title: '流入构成',
                     items: _inflows,
-                    color: DunesColors.green,
+                    color: DunesColors.resolve(context, DunesColors.green),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1600,7 +1746,7 @@ class _NativeQianjiCashFlowBoardPageState
                   child: _DonutCard(
                     title: '流出构成',
                     items: _outflows,
-                    color: DunesColors.coral,
+                    color: DunesColors.resolve(context, DunesColors.coral),
                   ),
                 ),
               ],
@@ -1624,7 +1770,11 @@ class _NativeQianjiCashFlowBoardPageState
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
@@ -1655,11 +1805,14 @@ class _NativeQianjiCashFlowBoardPageState
           ),
           const SizedBox(height: 6),
           if (rows.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(16),
               child: Text(
                 '没有匹配的对手方',
-                style: TextStyle(fontSize: 13, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             )
           else
@@ -1677,11 +1830,14 @@ class _NativeQianjiCashFlowBoardPageState
                           c.name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             height: 1.35,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
                           ),
                         ),
                       ),
@@ -1696,8 +1852,8 @@ class _NativeQianjiCashFlowBoardPageState
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: c.amountWan >= 0
-                              ? DunesColors.green
-                              : DunesColors.coral,
+                              ? DunesColors.resolve(context, DunesColors.green)
+                              : DunesColors.resolve(context, DunesColors.coral),
                         ),
                       ),
                     ),
@@ -1714,7 +1870,11 @@ class _NativeQianjiCashFlowBoardPageState
     final pages = _txnPageCount;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
@@ -1755,7 +1915,10 @@ class _NativeQianjiCashFlowBoardPageState
                 _txnLoading
                     ? '正在加载流水…'
                     : (_txnQuery.isEmpty ? '当前筛选下暂无流水' : '没有匹配「$_txnQuery」的流水'),
-                style: const TextStyle(fontSize: 13, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             )
           else
@@ -1779,13 +1942,20 @@ class _NativeQianjiCashFlowBoardPageState
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
       child: Text(
         text,
-        style: const TextStyle(fontSize: 13, color: DunesColors.text3),
+        style: TextStyle(
+          fontSize: 13,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
       ),
     );
   }
@@ -1803,7 +1973,11 @@ class _TourEntryChip extends StatelessWidget {
       child: Tooltip(
         message: '操作指引',
         child: Material(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(999),
           child: InkWell(
             onTap: onTap,
@@ -1812,19 +1986,29 @@ class _TourEntryChip extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: _themePurple.withValues(alpha: 0.35)),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    _themePurple,
+                    role: DunesColorRole.border,
+                  ).withValues(alpha: 0.35),
+                ),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.flag_outlined, size: 13, color: _themePurple),
+                  Icon(
+                    Icons.flag_outlined,
+                    size: 13,
+                    color: DunesColors.resolveNullable(context, _themePurple),
+                  ),
                   SizedBox(width: 4),
                   Text(
                     '指引',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: _themePurple,
+                      color: DunesColors.resolveNullable(context, _themePurple),
                     ),
                   ),
                 ],
@@ -1845,7 +2029,11 @@ class _AiAnalyzeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: _themePurple.withValues(alpha: 0.10),
+      color: DunesColors.resolve(
+        context,
+        _themePurple,
+        role: DunesColorRole.surface,
+      ).withValues(alpha: 0.10),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: onTap,
@@ -1854,19 +2042,29 @@ class _AiAnalyzeChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: _themePurple.withValues(alpha: 0.35)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                _themePurple,
+                role: DunesColorRole.border,
+              ).withValues(alpha: 0.35),
+            ),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.auto_awesome, size: 13, color: _themePurple),
+              Icon(
+                Icons.auto_awesome,
+                size: 13,
+                color: DunesColors.resolveNullable(context, _themePurple),
+              ),
               SizedBox(width: 4),
               Text(
                 'AI分析',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: _themePurple,
+                  color: DunesColors.resolveNullable(context, _themePurple),
                 ),
               ),
             ],
@@ -1892,19 +2090,19 @@ class _GuideItem extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 4),
           Text(
             body,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
               height: 1.5,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ],
@@ -1942,25 +2140,36 @@ class _SectionTitle extends StatelessWidget {
           width: 28,
           height: 28,
           decoration: BoxDecoration(
-            color: _themePurple.withValues(alpha: 0.12),
+            color: DunesColors.resolve(
+              context,
+              _themePurple,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(_icon, size: 16, color: _themePurple),
+          child: Icon(
+            _icon,
+            size: 16,
+            color: DunesColors.resolveNullable(context, _themePurple),
+          ),
         ),
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             hint,
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ),
       ],
@@ -1995,17 +2204,17 @@ class _KpiCell extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ),
               if (onTap != null)
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   size: 16,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
             ],
           ),
@@ -2015,7 +2224,8 @@ class _KpiCell extends StatelessWidget {
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: valueColor ?? DunesColors.text,
+              color:
+                  valueColor ?? DunesColors.resolve(context, DunesColors.text),
               height: 1.15,
             ),
           ),
@@ -2024,7 +2234,10 @@ class _KpiCell extends StatelessWidget {
             sub,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -2068,10 +2281,18 @@ class _EntityRow extends StatelessWidget {
     final nameStyle = TextStyle(
       fontSize: 13,
       fontWeight: FontWeight.w600,
-      color: selected ? _themePurple : DunesColors.text,
+      color: selected
+          ? DunesColors.resolve(context, _themePurple)
+          : DunesColors.resolve(context, DunesColors.text),
     );
     return Material(
-      color: selected ? DunesColors.brandPurpleSoft : Colors.transparent,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              DunesColors.brandPurpleSoft,
+              role: DunesColorRole.surface,
+            )
+          : Colors.transparent,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -2096,7 +2317,12 @@ class _EntityRow extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: selected ? _themePurple : DunesColors.text2,
+                            color: selected
+                                ? DunesColors.resolve(context, _themePurple)
+                                : DunesColors.resolve(
+                                    context,
+                                    DunesColors.text2,
+                                  ),
                           ),
                         ),
                         const Spacer(),
@@ -2113,8 +2339,14 @@ class _EntityRow extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             color: entity.netWan >= 0
-                                ? DunesColors.green
-                                : DunesColors.coral,
+                                ? DunesColors.resolve(
+                                    context,
+                                    DunesColors.green,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    DunesColors.coral,
+                                  ),
                           ),
                         ),
                       ],
@@ -2134,7 +2366,9 @@ class _EntityRow extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: selected ? _themePurple : DunesColors.text2,
+                          color: selected
+                              ? DunesColors.resolve(context, _themePurple)
+                              : DunesColors.resolve(context, DunesColors.text2),
                         ),
                       ),
                     ),
@@ -2159,8 +2393,8 @@ class _EntityRow extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           color: entity.netWan >= 0
-                              ? DunesColors.green
-                              : DunesColors.coral,
+                              ? DunesColors.resolve(context, DunesColors.green)
+                              : DunesColors.resolve(context, DunesColors.coral),
                         ),
                       ),
                     ),
@@ -2193,7 +2427,11 @@ class _FlowPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
@@ -2205,7 +2443,14 @@ class _FlowPanel extends StatelessWidget {
               Container(
                 width: 8,
                 height: 8,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolveNullable(
+                    context,
+                    color,
+                    role: DunesColorRole.surface,
+                  ),
+                  shape: BoxShape.circle,
+                ),
               ),
               const SizedBox(width: 8),
               Text(
@@ -2221,7 +2466,7 @@ class _FlowPanel extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: color,
+                  color: DunesColors.resolveNullable(context, color),
                 ),
               ),
             ],
@@ -2260,7 +2505,11 @@ class _FlowRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final pct = total <= 0 ? 0.0 : item.amountWan / total;
     return Material(
-      color: selected ? color.withValues(alpha: 0.08) : Colors.transparent,
+      color: DunesColors.resolveNullable(
+        context,
+        selected ? color.withValues(alpha: 0.08) : Colors.transparent,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -2275,7 +2524,11 @@ class _FlowRow extends StatelessWidget {
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: color,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        color,
+                        role: DunesColorRole.surface,
+                      ),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -2291,9 +2544,9 @@ class _FlowRow extends StatelessWidget {
                   ),
                   Text(
                     _fmtWan(item.amountWan),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -2302,9 +2555,9 @@ class _FlowRow extends StatelessWidget {
                     child: Text(
                       '${(pct * 100).round()}%',
                       textAlign: TextAlign.right,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ),
@@ -2334,13 +2587,23 @@ class _Bar extends StatelessWidget {
         height: 8,
         child: Stack(
           children: [
-            const ColoredBox(
-              color: Color(0xFFF0EEF7),
+            ColoredBox(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFF0EEF7),
+                role: DunesColorRole.surface,
+              ),
               child: SizedBox.expand(),
             ),
             FractionallySizedBox(
               widthFactor: ratio.clamp(0.02, 1),
-              child: ColoredBox(color: color.withValues(alpha: 0.85)),
+              child: ColoredBox(
+                color: DunesColors.resolve(
+                  context,
+                  color.withValues(alpha: 0.85),
+                  role: DunesColorRole.surface,
+                ),
+              ),
             ),
           ],
         ),
@@ -2356,23 +2619,33 @@ class _TxnHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF8F7FB),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFF8F7FB),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
       ),
-      child: const Row(
+      child: Row(
         children: [
           SizedBox(
             width: 88,
             child: Text(
               '日期',
-              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
           Expanded(
             child: Text(
               '账户 / 摘要',
-              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
           SizedBox(
@@ -2380,7 +2653,10 @@ class _TxnHeader extends StatelessWidget {
             child: Text(
               '金额',
               textAlign: TextAlign.right,
-              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         ],
@@ -2399,7 +2675,17 @@ class _TxnRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final inflow = txn.amountWan >= 0;
     return Container(
-      color: zebra ? const Color(0xFFFAFAFC) : Colors.white,
+      color: zebra
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFFAFAFC),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2408,7 +2694,10 @@ class _TxnRow extends StatelessWidget {
             width: 88,
             child: Text(
               txn.date,
-              style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
           ),
           Expanded(
@@ -2430,10 +2719,10 @@ class _TxnRow extends StatelessWidget {
                   '${txn.counterparty} · ${txn.memo}',
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     height: 1.35,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ],
@@ -2447,7 +2736,9 @@ class _TxnRow extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: inflow ? DunesColors.green : DunesColors.coral,
+                color: inflow
+                    ? DunesColors.resolve(context, DunesColors.green)
+                    : DunesColors.resolve(context, DunesColors.coral),
               ),
             ),
           ),
@@ -2478,8 +2769,16 @@ class _TxnPager extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Color(0xFFE8EAED))),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -2493,10 +2792,10 @@ class _TxnPager extends StatelessWidget {
             child: Text(
               '共 $total 笔 · 第 $page / $totalPages 页',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
             ),
           ),
@@ -2531,16 +2830,19 @@ class _TxnPagerBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = enabled
-        ? DunesColors.text2
-        : DunesColors.text3.withValues(alpha: 0.5);
+        ? DunesColors.resolve(context, DunesColors.text2)
+        : DunesColors.resolve(
+            context,
+            DunesColors.text3,
+          ).withValues(alpha: 0.5);
     final children = <Widget>[
-      Icon(icon, size: 18, color: color),
+      Icon(icon, size: 18, color: DunesColors.resolveNullable(context, color)),
       Text(
         label,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: color,
+          color: DunesColors.resolveNullable(context, color),
         ),
       ),
     ];
@@ -2634,19 +2936,22 @@ class _ListTools extends StatelessWidget {
           textInputAction: TextInputAction.search,
           onChanged: onChanged,
           onSubmitted: onSubmitted,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             height: 1.2,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
           ),
           decoration: InputDecoration(
             isDense: true,
             hintText: hint,
-            hintStyle: const TextStyle(fontSize: 13, color: DunesColors.text3),
-            prefixIcon: const Icon(
+            hintStyle: TextStyle(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
+            prefixIcon: Icon(
               Icons.search_rounded,
               size: 18,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
             prefixIconConstraints: const BoxConstraints(
               minWidth: 36,
@@ -2658,29 +2963,52 @@ class _ListTools extends StatelessWidget {
                     tooltip: '清除',
                     visualDensity: VisualDensity.compact,
                     onPressed: onClear,
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close_rounded,
                       size: 16,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
             filled: true,
-            fillColor: Colors.white,
+            fillColor: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
               vertical: 9,
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: _cardBorder),
+              borderSide: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  _cardBorder,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: _cardBorder),
+              borderSide: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  _cardBorder,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: _themePurple, width: 1.2),
+              borderSide: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  _themePurple,
+                  role: DunesColorRole.border,
+                ),
+                width: 1.2,
+              ),
             ),
           ),
         );
@@ -2688,29 +3016,45 @@ class _ListTools extends StatelessWidget {
     );
     final sort = Theme(
       data: Theme.of(context).copyWith(
-        highlightColor: DunesColors.brandPurpleSoft,
-        hoverColor: DunesColors.brandPurpleSoft,
-        splashColor: DunesColors.brandPurpleSoft.withValues(alpha: 0.5),
+        highlightColor: DunesColors.resolve(
+          context,
+          DunesColors.brandPurpleSoft,
+        ),
+        hoverColor: DunesColors.resolve(context, DunesColors.brandPurpleSoft),
+        splashColor: DunesColors.resolve(
+          context,
+          DunesColors.brandPurpleSoft,
+        ).withValues(alpha: 0.5),
         colorScheme: Theme.of(context).colorScheme.copyWith(
           primary: _themePurple,
-          onPrimary: Colors.white,
+          onPrimary: DunesColors.resolve(context, Colors.white),
           secondary: _themePurple,
-          surface: Colors.white,
-          onSurface: DunesColors.text,
+          surface: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          onSurface: DunesColors.resolve(context, DunesColors.text),
         ),
         popupMenuTheme: PopupMenuThemeData(
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           surfaceTintColor: Colors.transparent,
           shadowColor: const Color(0x28000000),
           elevation: 8,
-          textStyle: const TextStyle(
+          textStyle: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: _cardBorder),
+            side: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                _cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ),
       ),
@@ -2730,10 +3074,13 @@ class _ListTools extends StatelessWidget {
                   SizedBox(
                     width: 16,
                     child: o.id == selectedId
-                        ? const Icon(
+                        ? Icon(
                             Icons.check_rounded,
                             size: 16,
-                            color: _themePurple,
+                            color: DunesColors.resolveNullable(
+                              ctx,
+                              _themePurple,
+                            ),
                           )
                         : null,
                   ),
@@ -2746,8 +3093,8 @@ class _ListTools extends StatelessWidget {
                           ? FontWeight.w700
                           : FontWeight.w500,
                       color: o.id == selectedId
-                          ? _themePurple
-                          : DunesColors.text,
+                          ? DunesColors.resolve(ctx, _themePurple)
+                          : DunesColors.resolve(ctx, DunesColors.text),
                     ),
                   ),
                 ],
@@ -2758,7 +3105,11 @@ class _ListTools extends StatelessWidget {
           height: 38,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: _cardBorder),
           ),
@@ -2767,17 +3118,17 @@ class _ListTools extends StatelessWidget {
             children: [
               Text(
                 sortLabel,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 2),
-              const Icon(
+              Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 18,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
             ],
           ),
@@ -2828,7 +3179,11 @@ class _HealthTile extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
       margin: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F7FB),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF8F7FB),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -2836,7 +3191,10 @@ class _HealthTile extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -2844,7 +3202,7 @@ class _HealthTile extends StatelessWidget {
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: color,
+              color: DunesColors.resolveNullable(context, color),
             ),
           ),
         ],
@@ -2884,7 +3242,11 @@ class _InsightTile extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F7FB),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF8F7FB),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -2892,23 +3254,29 @@ class _InsightTile extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 2),
           Text(
             sub,
-            style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
         ],
       ),
@@ -2992,7 +3360,11 @@ class _AlertAccountsSheetState extends State<_AlertAccountsSheet> {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: _cardBorder,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    _cardBorder,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(99),
                 ),
               ),
@@ -3008,16 +3380,19 @@ class _AlertAccountsSheetState extends State<_AlertAccountsSheet> {
                               ? '需关注账户'
                               : '需关注账户 · ${widget.alerts.length}')
                         : '$reason · ${rows.length}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     '点一行看该账户余额轨迹。',
-                    style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   _ListTools(
@@ -3056,20 +3431,26 @@ class _AlertAccountsSheetState extends State<_AlertAccountsSheet> {
                         child: Text(
                           widget.count > 0 ? '账户名单需要更新服务后才能展示' : '当前筛选下暂无异常账户',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                       ),
                     )
                   : rows.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         '没有匹配的账户',
                         style: TextStyle(
                           fontSize: 13,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     )
@@ -3167,12 +3548,22 @@ class _LegendDot extends StatelessWidget {
         Container(
           width: 8,
           height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: DunesColors.resolveNullable(
+              context,
+              color,
+              role: DunesColorRole.surface,
+            ),
+            shape: BoxShape.circle,
+          ),
         ),
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 11,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       ],
     );
@@ -3195,7 +3586,11 @@ class _DonutCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
@@ -3781,7 +4176,11 @@ class _TrackSheetState extends State<_TrackSheet> {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: _cardBorder,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      _cardBorder,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -3789,16 +4188,19 @@ class _TrackSheetState extends State<_TrackSheet> {
               const SizedBox(height: 14),
               Text(
                 widget.title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 widget.subtitle,
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -3807,10 +4209,10 @@ class _TrackSheetState extends State<_TrackSheet> {
                   if ((widget.companyLabel ?? '').trim().isNotEmpty)
                     widget.companyLabel!.trim(),
                 ].join(' · '),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(height: 12),
@@ -3825,15 +4227,17 @@ class _TrackSheetState extends State<_TrackSheet> {
                     ),
                     Icon(
                       Icons.arrow_right_alt_rounded,
-                      color: delta >= 0 ? DunesColors.green : DunesColors.coral,
+                      color: delta >= 0
+                          ? DunesColors.resolve(context, DunesColors.green)
+                          : DunesColors.resolve(context, DunesColors.coral),
                     ),
                     Expanded(
                       child: _TrackStat(
                         label: '终点',
                         value: _fmtWan(end.cash),
                         valueColor: delta >= 0
-                            ? DunesColors.green
-                            : DunesColors.coral,
+                            ? DunesColors.resolve(context, DunesColors.green)
+                            : DunesColors.resolve(context, DunesColors.coral),
                       ),
                     ),
                     Expanded(
@@ -3841,8 +4245,8 @@ class _TrackSheetState extends State<_TrackSheet> {
                         label: '区间变化',
                         value: _fmtWan(delta, signed: true),
                         valueColor: delta >= 0
-                            ? DunesColors.green
-                            : DunesColors.coral,
+                            ? DunesColors.resolve(context, DunesColors.green)
+                            : DunesColors.resolve(context, DunesColors.coral),
                       ),
                     ),
                   ],
@@ -3863,20 +4267,26 @@ class _TrackSheetState extends State<_TrackSheet> {
                                 ? '账户轨迹需要更新服务后才能展示'
                                 : '轨迹加载失败：${widget.error}',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
                         ),
                       )
                     : points.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           '当前区间没有轨迹点',
                           style: TextStyle(
                             fontSize: 13,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                       )
@@ -3887,10 +4297,13 @@ class _TrackSheetState extends State<_TrackSheet> {
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Text(
                                 '${cur.date.month.toString().padLeft(2, '0')}-${cur.date.day.toString().padLeft(2, '0')}  余额 ${_fmtWan(cur.cash)}  入 ${_fmtWan(cur.inflow)}  出 ${_fmtWan(cur.outflow)}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: DunesColors.text2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text2,
+                                  ),
                                 ),
                               ),
                             ),
@@ -3929,7 +4342,10 @@ class _TrackStat extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 11,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
         const SizedBox(height: 2),
         Text(
@@ -3937,7 +4353,7 @@ class _TrackStat extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: valueColor ?? DunesColors.text,
+            color: valueColor ?? DunesColors.resolve(context, DunesColors.text),
           ),
         ),
       ],
@@ -4157,10 +4573,10 @@ class _AlertAccountTile extends StatelessWidget {
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       title: Text(
         account.accountNo.isEmpty ? '未知账号' : account.accountNo,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w700,
-          color: DunesColors.text,
+          color: DunesColors.resolve(context, DunesColors.text),
         ),
       ),
       subtitle: Padding(
@@ -4173,7 +4589,10 @@ class _AlertAccountTile extends StatelessWidget {
                 account.company,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
               ),
             const SizedBox(height: 6),
             Wrap(
@@ -4187,15 +4606,19 @@ class _AlertAccountTile extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: DunesColors.amberSoft,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.amberSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(99),
                     ),
                     child: Text(
                       reason,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.amber,
+                        color: DunesColors.resolve(context, DunesColors.amber),
                       ),
                     ),
                   ),
@@ -4212,14 +4635,16 @@ class _AlertAccountTile extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: low ? DunesColors.coral : DunesColors.amber,
+              color: low
+                  ? DunesColors.resolve(context, DunesColors.coral)
+                  : DunesColors.resolve(context, DunesColors.amber),
             ),
           ),
           const SizedBox(width: 4),
-          const Icon(
+          Icon(
             Icons.timeline_rounded,
             size: 16,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
           ),
         ],
       ),

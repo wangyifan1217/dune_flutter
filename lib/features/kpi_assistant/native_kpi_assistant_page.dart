@@ -403,7 +403,11 @@ class _NativeKpiAssistantPageState extends State<NativeKpiAssistantPage> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFE35D6A),
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFE35D6A),
+                role: DunesColorRole.surface,
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('清空'),
@@ -462,7 +466,11 @@ class _NativeKpiAssistantPageState extends State<NativeKpiAssistantPage> {
     }
 
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -483,10 +491,13 @@ class _NativeKpiAssistantPageState extends State<NativeKpiAssistantPage> {
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(
+                      : Icon(
                           Icons.delete_sweep_outlined,
                           size: 22,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
                         ),
                 ),
               ],
@@ -506,13 +517,16 @@ class _NativeKpiAssistantPageState extends State<NativeKpiAssistantPage> {
       );
     }
     if (_messages.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 28),
           child: Text(
             '考核人发布本月结果后，绩效会发到这里。点卡片可看分项、等级和考核人，并确认已知悉。',
             textAlign: TextAlign.center,
-            style: TextStyle(color: DunesColors.text3, height: 1.5),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text3),
+              height: 1.5,
+            ),
           ),
         ),
       );

@@ -132,16 +132,16 @@ class _QianjiReqPoolPaneState extends State<QianjiReqPoolPane> {
   }
 
   void _openList() => setState(() {
-        _page = _ReqPoolPage.list;
-        _selected = null;
-      });
+    _page = _ReqPoolPage.list;
+    _selected = null;
+  });
 
   void _openEntry() => setState(() => _page = _ReqPoolPage.entry);
 
   void _openDetail(QianjiRequirement item) => setState(() {
-        _selected = item;
-        _page = _ReqPoolPage.detail;
-      });
+    _selected = item;
+    _page = _ReqPoolPage.detail;
+  });
 
   Future<void> _submitEntry(Map<String, dynamic> body) async {
     setState(() => _mutating = true);
@@ -154,20 +154,24 @@ class _QianjiReqPoolPaneState extends State<QianjiReqPoolPane> {
         _page = _ReqPoolPage.list;
         _selected = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已提交至需求池')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已提交至需求池')));
       await _load();
     } catch (e) {
       if (!mounted) return;
       setState(() => _mutating = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('提交失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('提交失败: $e')));
     }
   }
 
-  Future<void> _markStatus(QianjiRequirement item, String status, {String? note}) async {
+  Future<void> _markStatus(
+    QianjiRequirement item,
+    String status, {
+    String? note,
+  }) async {
     setState(() => _mutating = true);
     try {
       await _api.updateRequirement(item.id, {
@@ -187,14 +191,16 @@ class _QianjiReqPoolPaneState extends State<QianjiReqPoolPane> {
         _statusVoided => '已作废',
         _ => '已更新',
       };
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(label)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(label)));
       await _load();
     } catch (e) {
       if (!mounted) return;
       setState(() => _mutating = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('操作失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
     }
   }
 
@@ -202,36 +208,36 @@ class _QianjiReqPoolPaneState extends State<QianjiReqPoolPane> {
   Widget build(BuildContext context) {
     return switch (_page) {
       _ReqPoolPage.list => _ReqPoolListView(
-          stats: _stats,
-          tab: _tab,
-          priorityFilter: _priorityFilter,
-          searchController: _search,
-          items: _items,
-          loading: _loading,
-          error: _error,
-          onTab: _setTab,
-          onPriority: _setPriority,
-          onSearchSubmit: _applySearch,
-          onClear: _clearSearchAndRefresh,
-          onRefresh: _load,
-          onEntry: _openEntry,
-          onOpen: _openDetail,
-        ),
+        stats: _stats,
+        tab: _tab,
+        priorityFilter: _priorityFilter,
+        searchController: _search,
+        items: _items,
+        loading: _loading,
+        error: _error,
+        onTab: _setTab,
+        onPriority: _setPriority,
+        onSearchSubmit: _applySearch,
+        onClear: _clearSearchAndRefresh,
+        onRefresh: _load,
+        onEntry: _openEntry,
+        onOpen: _openDetail,
+      ),
       _ReqPoolPage.entry => _ReqEntryView(
-          products: _products,
-          submitting: _mutating,
-          defaultSubmitter: (widget.session.displayName ?? '').trim().isNotEmpty
-              ? widget.session.displayName!.trim()
-              : '当前用户',
-          onCancel: _openList,
-          onSubmit: _submitEntry,
-        ),
+        products: _products,
+        submitting: _mutating,
+        defaultSubmitter: (widget.session.displayName ?? '').trim().isNotEmpty
+            ? widget.session.displayName!.trim()
+            : '当前用户',
+        onCancel: _openList,
+        onSubmit: _submitEntry,
+      ),
       _ReqPoolPage.detail => _ReqDetailView(
-          item: _selected!,
-          mutating: _mutating,
-          onBack: _openList,
-          onMark: _markStatus,
-        ),
+        item: _selected!,
+        mutating: _mutating,
+        onBack: _openList,
+        onMark: _markStatus,
+      ),
     };
   }
 }
@@ -272,13 +278,21 @@ class _ReqPoolListView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
         children: [
-          const Text(
+          Text(
             '人员需求录入入口 · 待处理 / 已处理 / 已拒绝 / 作废 · 指派接收人处理',
-            style: TextStyle(fontSize: 13, color: DunesColors.text3, height: 1.3),
+            style: TextStyle(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              height: 1.3,
+            ),
           ),
           const SizedBox(height: 12),
           Row(
@@ -297,7 +311,10 @@ class _ReqPoolListView extends StatelessWidget {
                   icon: Icons.check_circle_outline,
                   title: '已处理',
                   value: '${stats.done}',
-                  valueColor: const Color(0xFF3CBFA9),
+                  valueColor: DunesColors.resolve(
+                    context,
+                    const Color(0xFF3CBFA9),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -306,7 +323,10 @@ class _ReqPoolListView extends StatelessWidget {
                   icon: Icons.cancel_outlined,
                   title: '已拒绝',
                   value: '${stats.rejected}',
-                  valueColor: const Color(0xFFE35D6A),
+                  valueColor: DunesColors.resolve(
+                    context,
+                    const Color(0xFFE35D6A),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -315,7 +335,7 @@ class _ReqPoolListView extends StatelessWidget {
                   icon: Icons.delete_outline,
                   title: '作废',
                   value: '${stats.voided}',
-                  valueColor: DunesColors.text3,
+                  valueColor: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
             ],
@@ -324,9 +344,19 @@ class _ReqPoolListView extends StatelessWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE8EAED)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Row(
               children: [
@@ -335,23 +365,39 @@ class _ReqPoolListView extends StatelessWidget {
                     controller: searchController,
                     decoration: InputDecoration(
                       hintText: '搜索说明 / 编号 / 提出人 / 接收人 / 平台等',
-                      hintStyle: const TextStyle(color: DunesColors.text3, fontSize: 13),
+                      hintStyle: TextStyle(
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        fontSize: 13,
+                      ),
                       isDense: true,
                       filled: true,
-                      fillColor: const Color(0xFFF5F6F8),
-                      prefixIcon: const Icon(Icons.search, size: 20, color: DunesColors.text3),
+                      fillColor: DunesColors.resolve(
+                        context,
+                        const Color(0xFFF5F6F8),
+                        role: DunesColorRole.surface,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        size: 20,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide.none,
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                     ),
                     onSubmitted: (_) => onSearchSubmit(),
                   ),
                 ),
                 const SizedBox(width: 10),
                 _WorkbenchFormDropdownInline<String?>(
-                  label: priorityFilter == null ? '全部优先级' : _priorityText(priorityFilter!),
+                  label: priorityFilter == null
+                      ? '全部优先级'
+                      : _priorityText(priorityFilter!),
                   value: priorityFilter,
                   items: const [
                     (null, '全部优先级'),
@@ -365,12 +411,18 @@ class _ReqPoolListView extends StatelessWidget {
                 IconButton(
                   tooltip: '清除筛选',
                   onPressed: onClear,
-                  icon: const Icon(Icons.clear_rounded, color: DunesColors.text2),
+                  icon: Icon(
+                    Icons.clear_rounded,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                  ),
                 ),
                 IconButton(
                   tooltip: '刷新',
                   onPressed: onRefresh,
-                  icon: const Icon(Icons.refresh_rounded, color: DunesColors.text2),
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                  ),
                 ),
                 const SizedBox(width: 4),
                 FilledButton.icon(
@@ -379,8 +431,13 @@ class _ReqPoolListView extends StatelessWidget {
                   label: const Text('人员需求录入'),
                   style: FilledButton.styleFrom(
                     backgroundColor: _themePurple,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ],
@@ -389,9 +446,19 @@ class _ReqPoolListView extends StatelessWidget {
           const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE8EAED)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Column(
               children: [
@@ -424,45 +491,81 @@ class _ReqPoolListView extends StatelessWidget {
                         onTap: () => onTab(_statusVoided),
                       ),
                       const Spacer(),
-                      const Text(
+                      Text(
                         '指派给我的 · 按提出时间正序',
-                        style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: Color(0xFFE8EAED)),
+                Divider(
+                  height: 1,
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFE8EAED),
+                    role: DunesColorRole.border,
+                  ),
+                ),
                 if (loading)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 56),
-                    child: Center(child: CircularProgressIndicator(color: _themePurple)),
+                    child: Center(
+                      child: CircularProgressIndicator(color: _themePurple),
+                    ),
                   )
                 else if (error != null)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 48,
+                      horizontal: 24,
+                    ),
                     child: Column(
                       children: [
-                        const Icon(Icons.error_outline, color: Colors.redAccent, size: 36),
+                        Icon(
+                          Icons.error_outline,
+                          color: DunesColors.resolve(context, Colors.redAccent),
+                          size: 36,
+                        ),
                         const SizedBox(height: 10),
                         Text(
                           error!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                          style: TextStyle(
+                            color: DunesColors.resolve(
+                              context,
+                              Colors.redAccent,
+                            ),
+                            fontSize: 13,
+                          ),
                         ),
-                        TextButton(onPressed: onRefresh, child: const Text('重试')),
+                        TextButton(
+                          onPressed: onRefresh,
+                          child: const Text('重试'),
+                        ),
                       ],
                     ),
                   )
                 else if (items.isEmpty)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(vertical: 48),
                     child: Text(
                       '暂无需求',
-                      style: TextStyle(fontSize: 14, color: DunesColors.text3),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
                   )
                 else
-                  ...items.map((item) => _ReqRow(item: item, onOpen: () => onOpen(item))),
+                  ...items.map(
+                    (item) => _ReqRow(item: item, onOpen: () => onOpen(item)),
+                  ),
               ],
             ),
           ),
@@ -490,18 +593,38 @@ class _ReqStatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: DunesColors.text3),
+              Icon(
+                icon,
+                size: 16,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
               const SizedBox(width: 6),
-              Text(title, style: const TextStyle(fontSize: 12, color: DunesColors.text3)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -510,7 +633,7 @@ class _ReqStatCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w700,
-              color: valueColor,
+              color: DunesColors.resolveNullable(context, valueColor),
               height: 1.1,
             ),
           ),
@@ -550,23 +673,35 @@ class _ReqTab extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    color: selected ? _themePurple : DunesColors.text3,
+                    color: selected
+                        ? DunesColors.resolve(context, _themePurple)
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
                 if (count > 0 && selected) ...[
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 1,
+                    ),
                     decoration: BoxDecoration(
-                      color: _themePurple.withValues(alpha: 0.12),
+                      color: DunesColors.resolve(
+                        context,
+                        _themePurple,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
                       '$count',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     ),
                   ),
@@ -579,7 +714,13 @@ class _ReqTab extends StatelessWidget {
               width: 28,
               height: 2.5,
               decoration: BoxDecoration(
-                color: selected ? _themePurple : Colors.transparent,
+                color: selected
+                    ? DunesColors.resolve(
+                        context,
+                        _themePurple,
+                        role: DunesColorRole.surface,
+                      )
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -602,8 +743,16 @@ class _ReqRow extends StatelessWidget {
       onTap: onOpen,
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: Color(0xFFF0F1F3))),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFF0F1F3),
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -619,14 +768,24 @@ class _ReqRow extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.push_pin, size: 12, color: _themePurple.withValues(alpha: 0.85)),
+                          Icon(
+                            Icons.push_pin,
+                            size: 12,
+                            color: DunesColors.resolve(
+                              context,
+                              _themePurple,
+                            ).withValues(alpha: 0.85),
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             '指派给我',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: _themePurple.withValues(alpha: 0.9),
+                              color: DunesColors.resolve(
+                                context,
+                                _themePurple,
+                              ).withValues(alpha: 0.9),
                             ),
                           ),
                         ],
@@ -636,10 +795,10 @@ class _ReqRow extends StatelessWidget {
                     item.summary,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                       height: 1.35,
                     ),
                   ),
@@ -651,22 +810,38 @@ class _ReqRow extends StatelessWidget {
               width: 132,
               child: Text(
                 item.code,
-                style: const TextStyle(fontSize: 11, color: DunesColors.text3, fontFamily: 'monospace'),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  fontFamily: 'monospace',
+                ),
               ),
             ),
             SizedBox(
               width: 56,
-              child: Align(alignment: Alignment.centerLeft, child: _PriorityChip(item.priority)),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _PriorityChip(item.priority),
+              ),
             ),
             const SizedBox(width: 8),
             SizedBox(
               width: 64,
-              child: Align(alignment: Alignment.centerLeft, child: _StatusChip(item.status)),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _StatusChip(item.status),
+              ),
             ),
             const SizedBox(width: 8),
             SizedBox(
               width: 56,
-              child: Text(item.submitter, style: const TextStyle(fontSize: 12, color: DunesColors.text2)),
+              child: Text(
+                item.submitter,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
+              ),
             ),
             SizedBox(
               width: 56,
@@ -674,8 +849,12 @@ class _ReqRow extends StatelessWidget {
                 item.receiver,
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: item.assignedToMe ? FontWeight.w600 : FontWeight.w400,
-                  color: item.assignedToMe ? _themePurple : DunesColors.text2,
+                  fontWeight: item.assignedToMe
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                  color: item.assignedToMe
+                      ? DunesColors.resolve(context, _themePurple)
+                      : DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
             ),
@@ -683,13 +862,21 @@ class _ReqRow extends StatelessWidget {
               width: 88,
               child: Text(
                 _fmtDue(item.dueDate),
-                style: const TextStyle(fontSize: 11, color: DunesColors.text3, fontFamily: 'monospace'),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  fontFamily: 'monospace',
+                ),
               ),
             ),
             IconButton(
               tooltip: '查看详情',
               onPressed: onOpen,
-              icon: const Icon(Icons.visibility_outlined, size: 18, color: DunesColors.text3),
+              icon: Icon(
+                Icons.visibility_outlined,
+                size: 18,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ],
         ),
@@ -811,45 +998,69 @@ class _ReqEntryViewState extends State<_ReqEntryView> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       '人员需求录入',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: DunesColors.text),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                      ),
                     ),
                     SizedBox(height: 4),
                     Text(
                       '提交至需求任务池 · 关联平台 / 产品 / 能力 · 编号由系统生成',
-                      style: TextStyle(fontSize: 13, color: DunesColors.text3),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
                   ],
                 ),
               ),
               TextButton(
                 onPressed: widget.submitting ? null : widget.onCancel,
-                child: const Text('取消', style: TextStyle(color: DunesColors.text2)),
+                child: Text(
+                  '取消',
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
               FilledButton(
                 onPressed: widget.submitting ? null : _submit,
                 style: FilledButton.styleFrom(
                   backgroundColor: _themePurple,
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
                 child: widget.submitting
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: DunesColors.resolve(context, Colors.white),
+                        ),
                       )
                     : const Text('提交至需求池'),
               ),
@@ -860,9 +1071,19 @@ class _ReqEntryViewState extends State<_ReqEntryView> {
             constraints: const BoxConstraints(maxWidth: 760),
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE8EAED)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Column(
               children: [
@@ -881,7 +1102,9 @@ class _ReqEntryViewState extends State<_ReqEntryView> {
                     Expanded(
                       child: _LabeledSelect(
                         label: '关联产品',
-                        value: _productOptions.contains(_product) ? _product : '不关联',
+                        value: _productOptions.contains(_product)
+                            ? _product
+                            : '不关联',
                         items: _productOptions,
                         onChanged: (v) => setState(() => _product = v),
                       ),
@@ -890,7 +1113,9 @@ class _ReqEntryViewState extends State<_ReqEntryView> {
                     Expanded(
                       child: _LabeledSelect(
                         label: '关联能力',
-                        value: _capabilityOptions.contains(_capability) ? _capability : '不关联',
+                        value: _capabilityOptions.contains(_capability)
+                            ? _capability
+                            : '不关联',
                         items: _capabilityOptions,
                         onChanged: (v) => setState(() => _capability = v),
                       ),
@@ -901,7 +1126,13 @@ class _ReqEntryViewState extends State<_ReqEntryView> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _LabeledField(label: '需求接收人', controller: _receiver, hint: '接收人姓名')),
+                    Expanded(
+                      child: _LabeledField(
+                        label: '需求接收人',
+                        controller: _receiver,
+                        hint: '接收人姓名',
+                      ),
+                    ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: _LabeledPrioritySelect(
@@ -911,7 +1142,13 @@ class _ReqEntryViewState extends State<_ReqEntryView> {
                       ),
                     ),
                     const SizedBox(width: 14),
-                    Expanded(child: _LabeledField(label: '期望上线时间', controller: _due, hint: 'YYYY-MM-DD')),
+                    Expanded(
+                      child: _LabeledField(
+                        label: '期望上线时间',
+                        controller: _due,
+                        hint: 'YYYY-MM-DD',
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -950,7 +1187,12 @@ class _ReqDetailView extends StatefulWidget {
   final QianjiRequirement item;
   final bool mutating;
   final VoidCallback onBack;
-  final Future<void> Function(QianjiRequirement item, String status, {String? note}) onMark;
+  final Future<void> Function(
+    QianjiRequirement item,
+    String status, {
+    String? note,
+  })
+  onMark;
 
   @override
   State<_ReqDetailView> createState() => _ReqDetailViewState();
@@ -980,7 +1222,11 @@ class _ReqDetailViewState extends State<_ReqDetailView> {
     final proposal = item.proposalLabel.trim();
     final task = item.taskLabel.trim();
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
         children: [
@@ -991,14 +1237,21 @@ class _ReqDetailViewState extends State<_ReqDetailView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '需求详情',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: DunesColors.text),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${item.code} · ${item.submitter}提出 · ${_fmtDateTime(item.submittedAt)}',
-                      style: const TextStyle(fontSize: 13, color: DunesColors.text3),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
                   ],
                 ),
@@ -1010,50 +1263,100 @@ class _ReqDetailViewState extends State<_ReqDetailView> {
                 icon: const Icon(Icons.arrow_back, size: 16),
                 label: const Text('返回'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: DunesColors.text2,
-                  side: const BorderSide(color: Color(0xFFE8EAED)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  foregroundColor: DunesColors.resolve(
+                    context,
+                    DunesColors.text2,
+                  ),
+                  side: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
               if (item.status == _statusPending) ...[
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: canAct
-                      ? () => widget.onMark(item, _statusDone, note: _note.text.trim())
+                      ? () => widget.onMark(
+                          item,
+                          _statusDone,
+                          note: _note.text.trim(),
+                        )
                       : null,
                   style: FilledButton.styleFrom(
                     backgroundColor: _themePurple,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   child: widget.mutating
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: DunesColors.resolve(context, Colors.white),
+                          ),
                         )
                       : const Text('标记已处理'),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton(
                   onPressed: canAct
-                      ? () => widget.onMark(item, _statusRejected, note: _note.text.trim())
+                      ? () => widget.onMark(
+                          item,
+                          _statusRejected,
+                          note: _note.text.trim(),
+                        )
                       : null,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFB42318),
-                    side: const BorderSide(color: Color(0xFFFECACA)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      const Color(0xFFB42318),
+                    ),
+                    side: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFFECACA),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   child: const Text('拒绝'),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton(
                   onPressed: canAct
-                      ? () => widget.onMark(item, _statusVoided, note: _note.text.trim())
+                      ? () => widget.onMark(
+                          item,
+                          _statusVoided,
+                          note: _note.text.trim(),
+                        )
                       : null,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: DunesColors.text2,
-                    side: const BorderSide(color: Color(0xFFE8EAED)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      DunesColors.text2,
+                    ),
+                    side: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFE8EAED),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   child: const Text('作废'),
                 ),
@@ -1075,23 +1378,55 @@ class _ReqDetailViewState extends State<_ReqDetailView> {
                         children: [
                           Row(
                             children: [
-                              Expanded(child: _AssocCell(label: '关联平台', value: _displayAssoc(item.platform))),
+                              Expanded(
+                                child: _AssocCell(
+                                  label: '关联平台',
+                                  value: _displayAssoc(item.platform),
+                                ),
+                              ),
                               const SizedBox(width: 10),
-                              Expanded(child: _AssocCell(label: '关联产品', value: _displayAssoc(item.product))),
+                              Expanded(
+                                child: _AssocCell(
+                                  label: '关联产品',
+                                  value: _displayAssoc(item.product),
+                                ),
+                              ),
                               const SizedBox(width: 10),
-                              Expanded(child: _AssocCell(label: '关联能力', value: _displayAssoc(item.capability))),
+                              Expanded(
+                                child: _AssocCell(
+                                  label: '关联能力',
+                                  value: _displayAssoc(item.capability),
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 8),
-                          _Kv(label: '需求接收人', value: item.receiver, accent: true),
-                          _Kv(label: '需求优先级', valueWidget: _PriorityChip(item.priority)),
+                          _Kv(
+                            label: '需求接收人',
+                            value: item.receiver,
+                            accent: true,
+                          ),
+                          _Kv(
+                            label: '需求优先级',
+                            valueWidget: _PriorityChip(item.priority),
+                          ),
                           _Kv(label: '期望上线时间', value: _fmtDue(item.dueDate)),
                           _Kv(label: '提出人', value: item.submitter),
-                          _Kv(label: '提出时间', value: _fmtDateTime(item.submittedAt), mono: true),
-                          _Kv(label: '需求说明', value: item.summary, multiline: true),
+                          _Kv(
+                            label: '提出时间',
+                            value: _fmtDateTime(item.submittedAt),
+                            mono: true,
+                          ),
+                          _Kv(
+                            label: '需求说明',
+                            value: item.summary,
+                            multiline: true,
+                          ),
                           _Kv(
                             label: '需求背景',
-                            value: item.background.trim().isEmpty ? '—' : item.background,
+                            value: item.background.trim().isEmpty
+                                ? '—'
+                                : item.background,
                             multiline: true,
                             last: true,
                           ),
@@ -1104,7 +1439,10 @@ class _ReqDetailViewState extends State<_ReqDetailView> {
                       icon: Icons.history,
                       child: Column(
                         children: [
-                          _Kv(label: '当前状态', valueWidget: _StatusChip(item.status)),
+                          _Kv(
+                            label: '当前状态',
+                            valueWidget: _StatusChip(item.status),
+                          ),
                           _Kv(
                             label: '说明',
                             value: item.note.isNotEmpty
@@ -1125,12 +1463,24 @@ class _ReqDetailViewState extends State<_ReqDetailView> {
                         controller: _note,
                         maxLines: 4,
                         enabled: canAct,
-                        style: const TextStyle(fontSize: 13, color: DunesColors.text),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                        ),
                         decoration: InputDecoration(
                           hintText: '选填 · 拒绝或作废时说明原因',
-                          hintStyle: TextStyle(color: DunesColors.text3.withValues(alpha: 0.85)),
+                          hintStyle: TextStyle(
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ).withValues(alpha: 0.85),
+                          ),
                           filled: true,
-                          fillColor: const Color(0xFFF5F6F8),
+                          fillColor: DunesColors.resolve(
+                            context,
+                            const Color(0xFFF5F6F8),
+                            role: DunesColorRole.surface,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: BorderSide.none,
@@ -1151,12 +1501,23 @@ class _ReqDetailViewState extends State<_ReqDetailView> {
                       title: '关联提案',
                       icon: Icons.description_outlined,
                       child: proposal.isEmpty
-                          ? const Text('暂无关联提案', style: TextStyle(fontSize: 13, color: DunesColors.text3))
+                          ? Text(
+                              '暂无关联提案',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                              ),
+                            )
                           : _SideLinkCard(
                               code: proposal,
                               name: '审批通过后需求将同步至版本记录；关联任务全部上线后自动标记为已上线',
                               chip: '迭代审批',
-                              meta: item.status == _statusPending ? '审批中' : '已归档',
+                              meta: item.status == _statusPending
+                                  ? '审批中'
+                                  : '已归档',
                             ),
                     ),
                     const SizedBox(height: 12),
@@ -1169,40 +1530,69 @@ class _ReqDetailViewState extends State<_ReqDetailView> {
                           if (task.isNotEmpty) ...[
                             Text(
                               task,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: DunesColors.text,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
                               decoration: BoxDecoration(
-                                color: _themePurple.withValues(alpha: 0.08),
+                                color: DunesColors.resolve(
+                                  context,
+                                  _themePurple,
+                                  role: DunesColorRole.surface,
+                                ).withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 children: [
                                   Text(
                                     item.code,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
-                                      color: _themePurple,
+                                      color: DunesColors.resolveNullable(
+                                        context,
+                                        _themePurple,
+                                      ),
                                       fontFamily: 'monospace',
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  const Text('本需求', style: TextStyle(fontSize: 12, color: DunesColors.text2)),
+                                  Text(
+                                    '本需求',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text2,
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
                             const SizedBox(height: 10),
                           ],
-                          const Text(
+                          Text(
                             '提案审批填写时，在任务内容下通过「从需求池选择」关联；详情页只读展示。',
-                            style: TextStyle(fontSize: 12, color: DunesColors.text3, height: 1.55),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              height: 1.55,
+                            ),
                           ),
                         ],
                       ),
@@ -1219,7 +1609,11 @@ class _ReqDetailViewState extends State<_ReqDetailView> {
 }
 
 class _DetailCard extends StatelessWidget {
-  const _DetailCard({required this.title, required this.icon, required this.child});
+  const _DetailCard({
+    required this.title,
+    required this.icon,
+    required this.child,
+  });
 
   final String title;
   final IconData icon;
@@ -1230,9 +1624,19 @@ class _DetailCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1241,17 +1645,35 @@ class _DetailCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
             child: Row(
               children: [
-                Icon(icon, size: 16, color: DunesColors.text3),
+                Icon(
+                  icon,
+                  size: 16,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: DunesColors.text),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                  ),
                 ),
               ],
             ),
           ),
-          const Divider(height: 1, color: Color(0xFFE8EAED)),
-          Padding(padding: const EdgeInsets.fromLTRB(16, 14, 16, 16), child: child),
+          Divider(
+            height: 1,
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: child,
+          ),
         ],
       ),
     );
@@ -1269,19 +1691,33 @@ class _AssocCell extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F6F8),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF5F6F8),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: DunesColors.text3)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
+          ),
           const SizedBox(height: 6),
           Text(
             value,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: DunesColors.text),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.resolve(context, DunesColors.text),
+            ),
           ),
         ],
       ),
@@ -1315,17 +1751,36 @@ class _Kv extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        border: last ? null : const Border(bottom: BorderSide(color: Color(0xFFF0F1F3))),
+        border: last
+            ? null
+            : Border(
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFF0F1F3),
+                    role: DunesColorRole.border,
+                  ),
+                ),
+              ),
       ),
       child: Row(
-        crossAxisAlignment: multiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        crossAxisAlignment: multiline
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 96,
-            child: Text(label, style: const TextStyle(fontSize: 12, color: DunesColors.text3)),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
+            ),
           ),
           Expanded(
-            child: valueWidget ??
+            child:
+                valueWidget ??
                 Text(
                   value ?? '—',
                   style: TextStyle(
@@ -1333,10 +1788,10 @@ class _Kv extends StatelessWidget {
                     height: multiline ? 1.55 : 1.3,
                     fontWeight: accent ? FontWeight.w600 : FontWeight.w500,
                     color: muted
-                        ? DunesColors.text3
+                        ? DunesColors.resolve(context, DunesColors.text3)
                         : accent
-                            ? _themePurple
-                            : DunesColors.text,
+                        ? DunesColors.resolve(context, _themePurple)
+                        : DunesColors.resolve(context, DunesColors.text),
                     fontFamily: mono ? 'monospace' : null,
                   ),
                 ),
@@ -1366,40 +1821,71 @@ class _SideLinkCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F7FB),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF8F7FB),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             code,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: _themePurple,
+              color: DunesColors.resolveNullable(context, _themePurple),
               fontFamily: 'monospace',
             ),
           ),
           const SizedBox(height: 6),
-          Text(name, style: const TextStyle(fontSize: 12, color: DunesColors.text2, height: 1.45)),
+          Text(
+            name,
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              height: 1.45,
+            ),
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: _themePurple.withValues(alpha: 0.1),
+                  color: DunesColors.resolve(
+                    context,
+                    _themePurple,
+                    role: DunesColorRole.surface,
+                  ).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   chip,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _themePurple),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolveNullable(context, _themePurple),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
-              Text(meta, style: const TextStyle(fontSize: 12, color: DunesColors.text3)),
+              Text(
+                meta,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
+              ),
             ],
           ),
         ],
@@ -1415,14 +1901,40 @@ class _PriorityChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (text, bg, fg) = switch (priority) {
-      _priorityHigh => ('高', const Color(0xFFFAECE7), const Color(0xFF993C1D)),
-      _priorityLow => ('低', const Color(0xFFF0F1F3), DunesColors.text2),
-      _ => ('中', const Color(0xFFFAEEDA), const Color(0xFF7A4E0F)),
+      _priorityHigh => (
+        '高',
+        DunesColors.resolve(context, const Color(0xFFFAECE7)),
+        DunesColors.resolve(context, const Color(0xFF993C1D)),
+      ),
+      _priorityLow => (
+        '低',
+        DunesColors.resolve(context, const Color(0xFFF0F1F3)),
+        DunesColors.resolve(context, DunesColors.text2),
+      ),
+      _ => (
+        '中',
+        DunesColors.resolve(context, const Color(0xFFFAEEDA)),
+        DunesColors.resolve(context, const Color(0xFF7A4E0F)),
+      ),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: DunesColors.resolveNullable(context, fg),
+        ),
+      ),
     );
   }
 }
@@ -1434,15 +1946,45 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (text, bg, fg) = switch (status) {
-      _statusDone => ('已处理', const Color(0xFFE1F5EE), const Color(0xFF085041)),
-      _statusRejected => ('已拒绝', const Color(0xFFFAECE7), const Color(0xFF993C1D)),
-      _statusVoided => ('作废', const Color(0xFFF0F1F3), DunesColors.text3),
-      _ => ('待处理', _themePurple.withValues(alpha: 0.12), _themePurple),
+      _statusDone => (
+        '已处理',
+        DunesColors.resolve(context, const Color(0xFFE1F5EE)),
+        DunesColors.resolve(context, const Color(0xFF085041)),
+      ),
+      _statusRejected => (
+        '已拒绝',
+        DunesColors.resolve(context, const Color(0xFFFAECE7)),
+        DunesColors.resolve(context, const Color(0xFF993C1D)),
+      ),
+      _statusVoided => (
+        '作废',
+        DunesColors.resolve(context, const Color(0xFFF0F1F3)),
+        DunesColors.resolve(context, DunesColors.text3),
+      ),
+      _ => (
+        '待处理',
+        DunesColors.resolve(context, _themePurple).withValues(alpha: 0.12),
+        DunesColors.resolve(context, _themePurple),
+      ),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: DunesColors.resolveNullable(context, fg),
+        ),
+      ),
     );
   }
 }
@@ -1472,38 +2014,103 @@ class _LabeledField extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: DunesColors.text2)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
+            ),
             if (required)
-              const Text(' *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFE35D6A))),
+              Text(
+                ' *',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFE35D6A),
+                  ),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
           maxLines: maxLines,
-          style: const TextStyle(fontSize: 14, color: DunesColors.text),
+          style: TextStyle(
+            fontSize: 14,
+            color: DunesColors.resolve(context, DunesColors.text),
+          ),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: DunesColors.text3.withValues(alpha: 0.85)),
+            hintStyle: TextStyle(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.text3,
+              ).withValues(alpha: 0.85),
+            ),
             filled: true,
-            fillColor: hasError ? const Color(0xFFFFF1F2) : const Color(0xFFF5F6F8),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+            fillColor: hasError
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFFFF1F2),
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    const Color(0xFFF5F6F8),
+                    role: DunesColorRole.surface,
+                  ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: hasError ? const BorderSide(color: Color(0xFFE35D6A)) : BorderSide.none,
+              borderSide: hasError
+                  ? BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFE35D6A),
+                        role: DunesColorRole.border,
+                      ),
+                    )
+                  : BorderSide.none,
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
-                color: hasError ? const Color(0xFFE35D6A) : _themePurple.withValues(alpha: 0.4),
+                color: hasError
+                    ? DunesColors.resolve(
+                        context,
+                        const Color(0xFFE35D6A),
+                        role: DunesColorRole.border,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        _themePurple,
+                        role: DunesColorRole.border,
+                      ).withValues(alpha: 0.4),
               ),
             ),
           ),
         ),
         if (hasError) ...[
           const SizedBox(height: 6),
-          Text(errorText!, style: const TextStyle(fontSize: 12, color: Color(0xFFE35D6A))),
+          Text(
+            errorText!,
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolveNullable(context, Color(0xFFE35D6A)),
+            ),
+          ),
         ],
       ],
     );
@@ -1528,7 +2135,14 @@ class _LabeledSelect extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: DunesColors.text2)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
+        ),
         const SizedBox(height: 8),
         _WorkbenchFormDropdownInline<String>(
           label: value,
@@ -1558,7 +2172,14 @@ class _LabeledPrioritySelect extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: DunesColors.text2)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
+        ),
         const SizedBox(height: 8),
         _WorkbenchFormDropdownInline<String>(
           label: _priorityText(value),
@@ -1597,18 +2218,38 @@ class _WorkbenchFormDropdownInline<T> extends StatelessWidget {
     return MenuAnchor(
       alignmentOffset: const Offset(0, 6),
       style: MenuStyle(
-        backgroundColor: const WidgetStatePropertyAll(Colors.white),
+        backgroundColor: WidgetStatePropertyAll(
+          DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+        ),
         elevation: const WidgetStatePropertyAll(8),
-        shadowColor: WidgetStatePropertyAll(Colors.black.withValues(alpha: 0.12)),
+        shadowColor: WidgetStatePropertyAll(
+          Colors.black.withValues(alpha: 0.12),
+        ),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
-        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: 6),
+        ),
       ),
       builder: (context, controller, child) {
         final open = controller.isOpen;
         return Material(
-          color: open ? _themePurple.withValues(alpha: 0.08) : const Color(0xFFF5F6F8),
+          color: open
+              ? DunesColors.resolve(
+                  context,
+                  _themePurple,
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.08)
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFFF5F6F8),
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
@@ -1616,11 +2257,20 @@ class _WorkbenchFormDropdownInline<T> extends StatelessWidget {
             child: Container(
               width: fullWidth ? double.infinity : null,
               height: fullWidth ? 44 : null,
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: fullWidth ? 0 : 10),
+              padding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: fullWidth ? 0 : 10,
+              ),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: open ? _themePurple.withValues(alpha: 0.35) : Colors.transparent,
+                  color: open
+                      ? DunesColors.resolve(
+                          context,
+                          _themePurple,
+                          role: DunesColorRole.border,
+                        ).withValues(alpha: 0.35)
+                      : Colors.transparent,
                 ),
               ),
               child: Row(
@@ -1634,14 +2284,20 @@ class _WorkbenchFormDropdownInline<T> extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: open ? FontWeight.w600 : FontWeight.w500,
-                        color: open ? _themePurple : DunesColors.text,
+                        color: open
+                            ? DunesColors.resolve(context, _themePurple)
+                            : DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ),
                   Icon(
-                    open ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                    open
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
                     size: 18,
-                    color: open ? _themePurple : DunesColors.text3,
+                    color: open
+                        ? DunesColors.resolve(context, _themePurple)
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ],
               ),
@@ -1655,22 +2311,44 @@ class _WorkbenchFormDropdownInline<T> extends StatelessWidget {
             onPressed: () => onChanged(item.$1),
             style: ButtonStyle(
               backgroundColor: WidgetStateProperty.resolveWith((states) {
-                if (item.$1 == value) return _themePurple.withValues(alpha: 0.1);
-                if (states.contains(WidgetState.hovered)) return const Color(0xFFF5F6F8);
+                if (item.$1 == value) {
+                  return DunesColors.resolve(
+                    context,
+                    _themePurple,
+                    role: DunesColorRole.surface,
+                  ).withValues(alpha: 0.1);
+                }
+                if (states.contains(WidgetState.hovered)) {
+                  return DunesColors.resolve(
+                    context,
+                    const Color(0xFFF5F6F8),
+                    role: DunesColorRole.surface,
+                  );
+                }
                 return Colors.transparent;
               }),
-              padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 14, vertical: 10)),
+              padding: const WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
               minimumSize: const WidgetStatePropertyAll(Size(140, 40)),
             ),
             trailingIcon: item.$1 == value
-                ? const Icon(Icons.check_rounded, size: 16, color: _themePurple)
+                ? Icon(
+                    Icons.check_rounded,
+                    size: 16,
+                    color: DunesColors.resolveNullable(context, _themePurple),
+                  )
                 : null,
             child: Text(
               item.$2,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: item.$1 == value ? FontWeight.w600 : FontWeight.w400,
-                color: item.$1 == value ? _themePurple : DunesColors.text,
+                fontWeight: item.$1 == value
+                    ? FontWeight.w600
+                    : FontWeight.w400,
+                color: item.$1 == value
+                    ? DunesColors.resolve(context, _themePurple)
+                    : DunesColors.resolve(context, DunesColors.text),
               ),
             ),
           ),
@@ -1680,10 +2358,10 @@ class _WorkbenchFormDropdownInline<T> extends StatelessWidget {
 }
 
 String _priorityText(String p) => switch (p) {
-      _priorityHigh => '高',
-      _priorityLow => '低',
-      _ => '中',
-    };
+  _priorityHigh => '高',
+  _priorityLow => '低',
+  _ => '中',
+};
 
 String _fmtDate(DateTime d) {
   return '${d.year.toString().padLeft(4, '0')}-'

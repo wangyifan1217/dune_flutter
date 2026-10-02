@@ -24,7 +24,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import 'package:flutter/material.dart';
-import 'lighthouse_theme.dart'; // 假定同目录; 你可以调整路径
+import 'lighthouse_theme.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
+// 假定同目录; 你可以调整路径
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 数据模型
@@ -457,17 +459,37 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: LhColors.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFFFFDF7),
-              Color(0xFFFCF8EC),
-              Color(0xFFF5EEDA),
-              Color(0xFFEBE2CC),
+              DunesColors.resolve(
+                context,
+                Color(0xFFFFFDF7),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFFCF8EC),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFF5EEDA),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFEBE2CC),
+                role: DunesColorRole.surface,
+              ),
             ],
             stops: [0.0, 0.32, 0.7, 1.0],
           ),
@@ -496,7 +518,15 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
         children: [
           buildBackButton(onTap: () => Navigator.of(context).pop()),
           const SizedBox(width: 12),
-          Container(width: 1, height: 14, color: const Color(0xFFDDD5C0)),
+          Container(
+            width: 1,
+            height: 14,
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFDDD5C0),
+              role: DunesColorRole.surface,
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -507,9 +537,10 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                   '合同用印 · CONTRACT SEALING',
                   style: LhTypography.mono(
                     size: 8.5,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                     weight: FontWeight.w700,
                     letterSpacing: 1.6,
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -517,8 +548,9 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                   '${_apps.length} 项  ·  ${_apps.where((a) => a.status == SealStatus.approving).length} 审批中',
                   style: LhTypography.sans(
                     size: 10.5,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     weight: FontWeight.w500,
+                    context: context,
                   ),
                 ),
               ],
@@ -530,9 +562,13 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => _SearchPage(allApps: _apps)),
             ),
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.all(8),
-              child: Icon(Icons.search_rounded, size: 18, color: LhColors.ink),
+              child: Icon(
+                Icons.search_rounded,
+                size: 18,
+                color: DunesColors.resolve(context, LhColors.ink),
+              ),
             ),
           ),
         ],
@@ -543,10 +579,24 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
   // ── Segmented tabs ─────────────────────────────────────────────
   Widget _buildSegmentedTabs() {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: Color(0xFFDDD5C0), width: 1),
-          bottom: BorderSide(color: Color(0xFFDDD5C0), width: 1),
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFDDD5C0),
+              role: DunesColorRole.border,
+            ),
+            width: 1,
+          ),
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFDDD5C0),
+              role: DunesColorRole.border,
+            ),
+            width: 1,
+          ),
         ),
       ),
       child: Padding(
@@ -568,9 +618,12 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                           _segTabs[i],
                           style: LhTypography.sans(
                             size: 12,
-                            color: isOn ? LhColors.ink : LhColors.mute,
+                            color: isOn
+                                ? DunesColors.resolve(context, LhColors.ink)
+                                : DunesColors.resolve(context, LhColors.mute),
                             weight: isOn ? FontWeight.w700 : FontWeight.w500,
                             letterSpacing: 0.5,
+                            context: context,
                           ),
                         ),
                       ),
@@ -580,7 +633,14 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                         bottom: -1,
                         left: 0,
                         right: 0,
-                        child: Container(height: 2, color: LhColors.copper),
+                        child: Container(
+                          height: 2,
+                          color: DunesColors.resolve(
+                            context,
+                            LhColors.copper,
+                            role: DunesColorRole.surface,
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -629,9 +689,12 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                         label,
                         style: LhTypography.sans(
                           size: 10.5,
-                          color: isOn ? LhColors.copper : LhColors.mute,
+                          color: isOn
+                              ? DunesColors.resolve(ctx, LhColors.copper)
+                              : DunesColors.resolve(ctx, LhColors.mute),
                           weight: isOn ? FontWeight.w700 : FontWeight.w500,
                           letterSpacing: 0.3,
+                          context: ctx,
                         ),
                       ),
                     ),
@@ -640,7 +703,14 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                         bottom: 0,
                         left: 4,
                         right: 4,
-                        child: Container(height: 1.5, color: LhColors.copper),
+                        child: Container(
+                          height: 1.5,
+                          color: DunesColors.resolve(
+                            ctx,
+                            LhColors.copper,
+                            role: DunesColorRole.surface,
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -661,7 +731,11 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
           padding: const EdgeInsets.only(bottom: 40),
           child: Text(
             '暂无匹配的用印申请',
-            style: LhTypography.sans(size: 12, color: LhColors.mute2),
+            style: LhTypography.sans(
+              size: 12,
+              color: DunesColors.resolve(context, LhColors.mute2),
+              context: context,
+            ),
           ),
         ),
       );
@@ -706,9 +780,12 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                     (i + 1).toString().padLeft(2, '0'),
                     style: LhTypography.mono(
                       size: 11.5,
-                      color: i < 3 ? LhColors.copper : LhColors.mute2,
+                      color: i < 3
+                          ? DunesColors.resolve(context, LhColors.copper)
+                          : DunesColors.resolve(context, LhColors.mute2),
                       weight: i < 3 ? FontWeight.w700 : FontWeight.w500,
                       letterSpacing: 0.2,
+                      context: context,
                     ),
                   ),
                 ),
@@ -724,9 +801,10 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                         a.id,
                         style: LhTypography.mono(
                           size: 8.5,
-                          color: LhColors.mute2,
+                          color: DunesColors.resolve(context, LhColors.mute2),
                           weight: FontWeight.w700,
                           letterSpacing: 0.6,
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -735,10 +813,11 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                         a.partyB,
                         style: LhTypography.sans(
                           size: 12.5,
-                          color: LhColors.ink,
+                          color: DunesColors.resolve(context, LhColors.ink),
                           weight: FontWeight.w700,
                           height: 1.15,
                           letterSpacing: -0.1,
+                          context: context,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -749,8 +828,9 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                         '${a.contractType} · ${a.purpose}',
                         style: LhTypography.sans(
                           size: 9.5,
-                          color: LhColors.mute,
+                          color: DunesColors.resolve(context, LhColors.mute),
                           weight: FontWeight.w500,
+                          context: context,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -770,9 +850,10 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                       '金额 AMOUNT',
                       style: LhTypography.mono(
                         size: 7.5,
-                        color: LhColors.mute,
+                        color: DunesColors.resolve(context, LhColors.mute),
                         weight: FontWeight.w700,
                         letterSpacing: 0.6,
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -785,7 +866,8 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                                 : _fmtAmount(a.amount!),
                             style: LhTypography.number(
                               size: 16,
-                              color: LhColors.ink,
+                              color: DunesColors.resolve(context, LhColors.ink),
+                              context: context,
                             ),
                           ),
                           if (a.amount != null)
@@ -793,8 +875,12 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                               text: ' 元',
                               style: LhTypography.sans(
                                 size: 9,
-                                color: LhColors.mute,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.mute,
+                                ),
                                 weight: FontWeight.w500,
+                                context: context,
                               ),
                             ),
                         ],
@@ -808,10 +894,11 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                       style: LhTypography.mono(
                         size: 8.5,
                         color: a.startDate == null
-                            ? LhColors.neg
-                            : LhColors.mute2,
+                            ? DunesColors.resolve(context, LhColors.neg)
+                            : DunesColors.resolve(context, LhColors.mute2),
                         weight: FontWeight.w600,
                         letterSpacing: 0.2,
+                        context: context,
                       ),
                     ),
                   ],
@@ -837,16 +924,25 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
           );
           if (newApp != null) setState(() => _apps.insert(0, newApp));
         },
-        backgroundColor: LhColors.copper,
+        backgroundColor: DunesColors.resolve(
+          context,
+          LhColors.copper,
+          role: DunesColorRole.surface,
+        ),
         elevation: 4,
-        icon: const Icon(Icons.add, size: 18, color: Colors.white),
+        icon: Icon(
+          Icons.add,
+          size: 18,
+          color: DunesColors.resolve(context, Colors.white),
+        ),
         label: Text(
           '新建用印申请',
           style: LhTypography.sans(
             size: 11.5,
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
             weight: FontWeight.w700,
             letterSpacing: 0.6,
+            context: context,
           ),
         ),
       ),
@@ -874,13 +970,28 @@ class _SealApplicationDetailPageState
   Widget build(BuildContext context) {
     final a = _app;
     return Scaffold(
-      backgroundColor: LhColors.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFFFFDF7), Color(0xFFEBE2CC)],
+            colors: [
+              DunesColors.resolve(
+                context,
+                Color(0xFFFFFDF7),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFEBE2CC),
+                role: DunesColorRole.surface,
+              ),
+            ],
           ),
         ),
         child: SafeArea(
@@ -931,9 +1042,10 @@ class _SealApplicationDetailPageState
           '用印详情 · L2',
           style: LhTypography.mono(
             size: 8.5,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w700,
             letterSpacing: 1.4,
+            context: context,
           ),
         ),
       ],
@@ -953,9 +1065,10 @@ class _SealApplicationDetailPageState
               a.id,
               style: LhTypography.mono(
                 size: 9,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w700,
                 letterSpacing: 1.0,
+                context: context,
               ),
             ),
             const SizedBox(width: 8),
@@ -967,10 +1080,11 @@ class _SealApplicationDetailPageState
           a.purpose,
           style: LhTypography.sans(
             size: 18,
-            color: LhColors.ink,
+            color: DunesColors.resolve(context, LhColors.ink),
             weight: FontWeight.w700,
             height: 1.2,
             letterSpacing: -0.2,
+            context: context,
           ),
         ),
         const SizedBox(height: 4),
@@ -978,16 +1092,25 @@ class _SealApplicationDetailPageState
           a.contractType,
           style: LhTypography.mono(
             size: 9,
-            color: LhColors.copper,
+            color: DunesColors.resolve(context, LhColors.copper),
             weight: FontWeight.w700,
             letterSpacing: 1.0,
+            context: context,
           ),
         ),
         const SizedBox(height: 10),
         Row(
           children: [
             Expanded(child: _miniStat('金额', _fmtAmount(a.amount ?? 0), '元')),
-            Container(height: 26, width: 1, color: const Color(0xFFDDD5C0)),
+            Container(
+              height: 26,
+              width: 1,
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFDDD5C0),
+                role: DunesColorRole.surface,
+              ),
+            ),
             Expanded(
               child: _miniStat(
                 '期限',
@@ -997,7 +1120,15 @@ class _SealApplicationDetailPageState
                 a.startDate != null && a.endDate != null ? '年' : '',
               ),
             ),
-            Container(height: 26, width: 1, color: const Color(0xFFDDD5C0)),
+            Container(
+              height: 26,
+              width: 1,
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFDDD5C0),
+                role: DunesColorRole.surface,
+              ),
+            ),
             Expanded(
               child: _miniStat(
                 '审批',
@@ -1020,9 +1151,10 @@ class _SealApplicationDetailPageState
           label,
           style: LhTypography.mono(
             size: 7.5,
-            color: LhColors.mute,
+            color: DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w700,
             letterSpacing: 0.6,
+            context: context,
           ),
         ),
         const SizedBox(height: 3),
@@ -1031,14 +1163,19 @@ class _SealApplicationDetailPageState
             children: [
               TextSpan(
                 text: num,
-                style: LhTypography.number(size: 14, color: LhColors.ink),
+                style: LhTypography.number(
+                  size: 14,
+                  color: DunesColors.resolve(context, LhColors.ink),
+                  context: context,
+                ),
               ),
               TextSpan(
                 text: unit,
                 style: LhTypography.sans(
                   size: 9,
-                  color: LhColors.mute,
+                  color: DunesColors.resolve(context, LhColors.mute),
                   weight: FontWeight.w500,
+                  context: context,
                 ),
               ),
             ],
@@ -1052,9 +1189,10 @@ class _SealApplicationDetailPageState
     label,
     style: LhTypography.mono(
       size: 8.5,
-      color: LhColors.mute,
+      color: DunesColors.resolve(context, LhColors.mute),
       weight: FontWeight.w700,
       letterSpacing: 1.6,
+      context: context,
     ),
   );
 
@@ -1102,8 +1240,9 @@ class _SealApplicationDetailPageState
               label,
               style: LhTypography.sans(
                 size: 10,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w600,
+                context: context,
               ),
             ),
           ),
@@ -1112,9 +1251,12 @@ class _SealApplicationDetailPageState
               value,
               style: LhTypography.sans(
                 size: 11.5,
-                color: highlight ? LhColors.neg : LhColors.ink,
+                color: highlight
+                    ? DunesColors.resolve(context, LhColors.neg)
+                    : DunesColors.resolve(context, LhColors.ink),
                 weight: highlight ? FontWeight.w700 : FontWeight.w600,
                 height: 1.3,
+                context: context,
               ),
             ),
           ),
@@ -1137,10 +1279,10 @@ class _SealApplicationDetailPageState
           final done = step.action == ApprovalAction.approved;
           final rejected = step.action == ApprovalAction.rejected;
           final Color dotColor = rejected
-              ? LhColors.neg
+              ? DunesColors.resolve(context, LhColors.neg)
               : done
-              ? LhColors.copper
-              : LhColors.mute2;
+              ? DunesColors.resolve(context, LhColors.copper)
+              : DunesColors.resolve(context, LhColors.mute2);
           return IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1154,7 +1296,11 @@ class _SealApplicationDetailPageState
                         width: 8,
                         height: 8,
                         decoration: BoxDecoration(
-                          color: done ? dotColor : Colors.transparent,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            done ? dotColor : Colors.transparent,
+                            role: DunesColorRole.surface,
+                          ),
                           border: Border.all(color: dotColor, width: 1.4),
                           borderRadius: BorderRadius.circular(4),
                         ),
@@ -1163,7 +1309,11 @@ class _SealApplicationDetailPageState
                         Expanded(
                           child: Container(
                             width: 1,
-                            color: const Color(0xFFDDD5C0),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFDDD5C0),
+                              role: DunesColorRole.surface,
+                            ),
                           ),
                         ),
                     ],
@@ -1182,8 +1332,12 @@ class _SealApplicationDetailPageState
                               step.role,
                               style: LhTypography.sans(
                                 size: 11.5,
-                                color: LhColors.ink,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.ink,
+                                ),
                                 weight: FontWeight.w700,
+                                context: context,
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -1191,8 +1345,12 @@ class _SealApplicationDetailPageState
                               step.approver,
                               style: LhTypography.sans(
                                 size: 10.5,
-                                color: LhColors.mute,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.mute,
+                                ),
                                 weight: FontWeight.w500,
+                                context: context,
                               ),
                             ),
                             const Spacer(),
@@ -1201,8 +1359,12 @@ class _SealApplicationDetailPageState
                                 _fmtDate(step.at!),
                                 style: LhTypography.mono(
                                   size: 8.5,
-                                  color: LhColors.mute2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.mute2,
+                                  ),
                                   weight: FontWeight.w600,
+                                  context: context,
                                 ),
                               ),
                           ],
@@ -1213,12 +1375,13 @@ class _SealApplicationDetailPageState
                           style: LhTypography.mono(
                             size: 9,
                             color: rejected
-                                ? LhColors.neg
+                                ? DunesColors.resolve(context, LhColors.neg)
                                 : done
-                                ? LhColors.copper
-                                : LhColors.mute2,
+                                ? DunesColors.resolve(context, LhColors.copper)
+                                : DunesColors.resolve(context, LhColors.mute2),
                             weight: FontWeight.w700,
                             letterSpacing: 0.5,
+                            context: context,
                           ),
                         ),
                         if (step.comment != null) ...[
@@ -1227,9 +1390,13 @@ class _SealApplicationDetailPageState
                             '「${step.comment}」',
                             style: LhTypography.sans(
                               size: 10.5,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                               weight: FontWeight.w500,
                               height: 1.35,
+                              context: context,
                             ),
                           ),
                         ],
@@ -1268,8 +1435,9 @@ class _SealApplicationDetailPageState
           '无附件',
           style: LhTypography.sans(
             size: 11,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w500,
+            context: context,
           ),
         ),
       );
@@ -1288,7 +1456,7 @@ class _SealApplicationDetailPageState
                     Icon(
                       Icons.description_outlined,
                       size: 15,
-                      color: LhColors.mute,
+                      color: DunesColors.resolve(context, LhColors.mute),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1296,8 +1464,9 @@ class _SealApplicationDetailPageState
                         f,
                         style: LhTypography.sans(
                           size: 11,
-                          color: LhColors.ink2,
+                          color: DunesColors.resolve(context, LhColors.ink2),
                           weight: FontWeight.w600,
+                          context: context,
                         ),
                       ),
                     ),
@@ -1305,9 +1474,10 @@ class _SealApplicationDetailPageState
                       '预览 ›',
                       style: LhTypography.mono(
                         size: 9,
-                        color: LhColors.copper,
+                        color: DunesColors.resolve(context, LhColors.copper),
                         weight: FontWeight.w700,
                         letterSpacing: 0.4,
+                        context: context,
                       ),
                     ),
                   ],
@@ -1328,9 +1498,22 @@ class _SealApplicationDetailPageState
     );
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-      decoration: const BoxDecoration(
-        color: Color(0xFFFEFCF5),
-        border: Border(top: BorderSide(color: Color(0xFFDDD5C0), width: 1)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFFEFCF5),
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFDDD5C0),
+              role: DunesColorRole.border,
+            ),
+            width: 1,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -1339,9 +1522,10 @@ class _SealApplicationDetailPageState
               '待你审批 · ${nextStep.role}',
               style: LhTypography.sans(
                 size: 10.5,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w600,
                 letterSpacing: 0.3,
+                context: context,
               ),
             ),
           ),
@@ -1354,8 +1538,9 @@ class _SealApplicationDetailPageState
                 '驳回',
                 style: LhTypography.sans(
                   size: 12,
-                  color: LhColors.neg,
+                  color: DunesColors.resolve(context, LhColors.neg),
                   weight: FontWeight.w700,
+                  context: context,
                 ),
               ),
             ),
@@ -1367,16 +1552,21 @@ class _SealApplicationDetailPageState
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: LhColors.copper,
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.copper,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(5),
               ),
               child: Text(
                 '通过',
                 style: LhTypography.sans(
                   size: 12,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
                   weight: FontWeight.w700,
                   letterSpacing: 0.5,
+                  context: context,
                 ),
               ),
             ),
@@ -1438,15 +1628,20 @@ class _SealApplicationDetailPageState
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.add, size: 12, color: LhColors.copper),
+                    Icon(
+                      Icons.add,
+                      size: 12,
+                      color: DunesColors.resolve(context, LhColors.copper),
+                    ),
                     const SizedBox(width: 2),
                     Text(
                       '发起借阅',
                       style: LhTypography.sans(
                         size: 10,
-                        color: LhColors.copper,
+                        color: DunesColors.resolve(context, LhColors.copper),
                         weight: FontWeight.w700,
                         letterSpacing: 0.3,
+                        context: context,
                       ),
                     ),
                   ],
@@ -1464,8 +1659,9 @@ class _SealApplicationDetailPageState
               a.canBorrow ? '暂无借阅记录  ·  tap 发起借阅生成带水印的电子件' : '合同尚未通过审批,暂不可借阅',
               style: LhTypography.sans(
                 size: 10.5,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
           )
@@ -1489,9 +1685,13 @@ class _SealApplicationDetailPageState
                             r.id,
                             style: LhTypography.mono(
                               size: 8.5,
-                              color: LhColors.mute2,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute2,
+                              ),
                               weight: FontWeight.w700,
                               letterSpacing: 0.6,
+                              context: context,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -1502,12 +1702,28 @@ class _SealApplicationDetailPageState
                             ),
                             decoration: BoxDecoration(
                               color: r.isExpired
-                                  ? LhColors.mute2.withAlpha(20)
-                                  : LhColors.copper.withAlpha(15),
+                                  ? DunesColors.resolve(
+                                      context,
+                                      LhColors.mute2,
+                                      role: DunesColorRole.surface,
+                                    ).withAlpha(20)
+                                  : DunesColors.resolve(
+                                      context,
+                                      LhColors.copper,
+                                      role: DunesColorRole.surface,
+                                    ).withAlpha(15),
                               border: Border.all(
                                 color: r.isExpired
-                                    ? LhColors.mute2
-                                    : LhColors.copper.withAlpha(120),
+                                    ? DunesColors.resolve(
+                                        context,
+                                        LhColors.mute2,
+                                        role: DunesColorRole.border,
+                                      )
+                                    : DunesColors.resolve(
+                                        context,
+                                        LhColors.copper,
+                                        role: DunesColorRole.border,
+                                      ).withAlpha(120),
                                 width: 0.6,
                               ),
                               borderRadius: BorderRadius.circular(2),
@@ -1517,10 +1733,17 @@ class _SealApplicationDetailPageState
                               style: LhTypography.sans(
                                 size: 7.5,
                                 color: r.isExpired
-                                    ? LhColors.mute
-                                    : LhColors.copper,
+                                    ? DunesColors.resolve(
+                                        context,
+                                        LhColors.mute,
+                                      )
+                                    : DunesColors.resolve(
+                                        context,
+                                        LhColors.copper,
+                                      ),
                                 weight: FontWeight.w700,
                                 letterSpacing: 0.4,
+                                context: context,
                               ),
                             ),
                           ),
@@ -1529,9 +1752,13 @@ class _SealApplicationDetailPageState
                             r.medium,
                             style: LhTypography.mono(
                               size: 8.5,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                               weight: FontWeight.w600,
                               letterSpacing: 0.3,
+                              context: context,
                             ),
                           ),
                         ],
@@ -1541,9 +1768,10 @@ class _SealApplicationDetailPageState
                         r.borrowerUnit,
                         style: LhTypography.sans(
                           size: 12,
-                          color: LhColors.ink,
+                          color: DunesColors.resolve(context, LhColors.ink),
                           weight: FontWeight.w700,
                           height: 1.2,
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -1551,8 +1779,9 @@ class _SealApplicationDetailPageState
                         r.purpose,
                         style: LhTypography.sans(
                           size: 10,
-                          color: LhColors.mute,
+                          color: DunesColors.resolve(context, LhColors.mute),
                           weight: FontWeight.w500,
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -1560,9 +1789,10 @@ class _SealApplicationDetailPageState
                         '${_fmtDate(r.borrowedAt)} → ${_fmtDate(r.expiresAt)}  ·  下载 ${r.downloadCount} 次',
                         style: LhTypography.mono(
                           size: 8.5,
-                          color: LhColors.mute2,
+                          color: DunesColors.resolve(context, LhColors.mute2),
                           weight: FontWeight.w600,
                           letterSpacing: 0.2,
+                          context: context,
                         ),
                       ),
                     ],
@@ -1626,13 +1856,28 @@ class _CreateSealApplicationPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: LhColors.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFFFFDF7), Color(0xFFEBE2CC)],
+            colors: [
+              DunesColors.resolve(
+                context,
+                Color(0xFFFFFDF7),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFEBE2CC),
+                role: DunesColorRole.surface,
+              ),
+            ],
           ),
         ),
         child: SafeArea(
@@ -1648,9 +1893,10 @@ class _CreateSealApplicationPageState
                       '新建申请',
                       style: LhTypography.mono(
                         size: 8.5,
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(context, LhColors.mute2),
                         weight: FontWeight.w700,
                         letterSpacing: 1.4,
+                        context: context,
                       ),
                     ),
                   ],
@@ -1675,9 +1921,13 @@ class _CreateSealApplicationPageState
                                   '编号 · AUTO ID',
                                   style: LhTypography.mono(
                                     size: 8.5,
-                                    color: LhColors.mute,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      LhColors.mute,
+                                    ),
                                     weight: FontWeight.w700,
                                     letterSpacing: 1.4,
+                                    context: context,
                                   ),
                                 ),
                                 const SizedBox(height: 5),
@@ -1685,9 +1935,13 @@ class _CreateSealApplicationPageState
                                   _autoId,
                                   style: LhTypography.mono(
                                     size: 16,
-                                    color: LhColors.ink,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      LhColors.ink,
+                                    ),
                                     weight: FontWeight.w700,
                                     letterSpacing: 0.4,
+                                    context: context,
                                   ),
                                 ),
                               ],
@@ -1698,9 +1952,13 @@ class _CreateSealApplicationPageState
                               textAlign: TextAlign.right,
                               style: LhTypography.sans(
                                 size: 9.5,
-                                color: LhColors.copper,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.copper,
+                                ),
                                 weight: FontWeight.w600,
                                 height: 1.3,
+                                context: context,
                               ),
                             ),
                           ],
@@ -1745,9 +2003,10 @@ class _CreateSealApplicationPageState
                         '⚠  日期必填。避免归档时反复翻查合同正文推算',
                         style: LhTypography.sans(
                           size: 9.5,
-                          color: LhColors.neg,
+                          color: DunesColors.resolve(context, LhColors.neg),
                           weight: FontWeight.w600,
                           letterSpacing: 0.3,
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -1769,8 +2028,12 @@ class _CreateSealApplicationPageState
                                 '→',
                                 style: LhTypography.mono(
                                   size: 15,
-                                  color: LhColors.mute2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.mute2,
+                                  ),
                                   weight: FontWeight.w600,
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -1797,13 +2060,20 @@ class _CreateSealApplicationPageState
                         width: double.infinity,
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
+                          gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [Color(0xFFFFFFFC), Color(0xFFF2EFDF)],
+                            colors: [
+                              DunesColors.resolve(context, Color(0xFFFFFFFC)),
+                              DunesColors.resolve(context, Color(0xFFF2EFDF)),
+                            ],
                           ),
                           border: Border.all(
-                            color: const Color(0xFFDDD5C0),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFDDD5C0),
+                              role: DunesColorRole.border,
+                            ),
                             width: 1,
                             style: BorderStyle.solid,
                           ),
@@ -1814,15 +2084,22 @@ class _CreateSealApplicationPageState
                             Icon(
                               Icons.upload_file_outlined,
                               size: 22,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                             ),
                             const SizedBox(height: 6),
                             Text(
                               '点击上传合同扫描件',
                               style: LhTypography.sans(
                                 size: 11,
-                                color: LhColors.ink2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.ink2,
+                                ),
                                 weight: FontWeight.w600,
+                                context: context,
                               ),
                             ),
                             const SizedBox(height: 3),
@@ -1830,9 +2107,13 @@ class _CreateSealApplicationPageState
                               '支持 PDF / JPG · 系统自动 OCR 抽取字段',
                               style: LhTypography.mono(
                                 size: 8.5,
-                                color: LhColors.mute2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.mute2,
+                                ),
                                 weight: FontWeight.w500,
                                 letterSpacing: 0.3,
+                                context: context,
                               ),
                             ),
                           ],
@@ -1845,10 +2126,21 @@ class _CreateSealApplicationPageState
               // Submit bar
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFEFCF5),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFFEFCF5),
+                    role: DunesColorRole.surface,
+                  ),
                   border: Border(
-                    top: BorderSide(color: Color(0xFFDDD5C0), width: 1),
+                    top: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFDDD5C0),
+                        role: DunesColorRole.border,
+                      ),
+                      width: 1,
+                    ),
                   ),
                 ),
                 child: Row(
@@ -1865,8 +2157,9 @@ class _CreateSealApplicationPageState
                           '存草稿',
                           style: LhTypography.sans(
                             size: 12,
-                            color: LhColors.mute,
+                            color: DunesColors.resolve(context, LhColors.mute),
                             weight: FontWeight.w700,
+                            context: context,
                           ),
                         ),
                       ),
@@ -1879,8 +2172,9 @@ class _CreateSealApplicationPageState
                           '请补齐 * 必填项',
                           style: LhTypography.sans(
                             size: 10,
-                            color: LhColors.neg,
+                            color: DunesColors.resolve(context, LhColors.neg),
                             weight: FontWeight.w600,
+                            context: context,
                           ),
                         ),
                       ),
@@ -1921,16 +2215,27 @@ class _CreateSealApplicationPageState
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: _canSubmit ? LhColors.copper : LhColors.mute2,
+                          color: _canSubmit
+                              ? DunesColors.resolve(
+                                  context,
+                                  LhColors.copper,
+                                  role: DunesColorRole.surface,
+                                )
+                              : DunesColors.resolve(
+                                  context,
+                                  LhColors.mute2,
+                                  role: DunesColorRole.surface,
+                                ),
                           borderRadius: BorderRadius.circular(5),
                         ),
                         child: Text(
                           '提交审批',
                           style: LhTypography.sans(
                             size: 12,
-                            color: Colors.white,
+                            color: DunesColors.resolve(context, Colors.white),
                             weight: FontWeight.w700,
                             letterSpacing: 0.5,
+                            context: context,
                           ),
                         ),
                       ),
@@ -1949,9 +2254,10 @@ class _CreateSealApplicationPageState
     label,
     style: LhTypography.mono(
       size: 8.5,
-      color: LhColors.mute,
+      color: DunesColors.resolve(context, LhColors.mute),
       weight: FontWeight.w700,
       letterSpacing: 1.6,
+      context: context,
     ),
   );
 
@@ -1970,8 +2276,11 @@ class _CreateSealApplicationPageState
           label,
           style: LhTypography.sans(
             size: 10,
-            color: missing ? LhColors.neg : LhColors.mute,
+            color: missing
+                ? DunesColors.resolve(context, LhColors.neg)
+                : DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w600,
+            context: context,
           ),
         ),
         const SizedBox(height: 4),
@@ -1980,8 +2289,9 @@ class _CreateSealApplicationPageState
           keyboardType: keyboard,
           style: LhTypography.sans(
             size: 12,
-            color: LhColors.ink,
+            color: DunesColors.resolve(context, LhColors.ink),
             weight: FontWeight.w600,
+            context: context,
           ),
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
@@ -1989,24 +2299,52 @@ class _CreateSealApplicationPageState
             hintText: hint,
             hintStyle: LhTypography.sans(
               size: 11,
-              color: LhColors.mute2,
+              color: DunesColors.resolve(context, LhColors.mute2),
               weight: FontWeight.w500,
+              context: context,
             ),
             contentPadding: const EdgeInsets.symmetric(vertical: 5),
             border: UnderlineInputBorder(
               borderSide: BorderSide(
-                color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
+                color: missing
+                    ? DunesColors.resolve(
+                        context,
+                        LhColors.neg,
+                        role: DunesColorRole.border,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFFDDD5C0),
+                        role: DunesColorRole.border,
+                      ),
                 width: 1,
               ),
             ),
             enabledBorder: UnderlineInputBorder(
               borderSide: BorderSide(
-                color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
+                color: missing
+                    ? DunesColors.resolve(
+                        context,
+                        LhColors.neg,
+                        role: DunesColorRole.border,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFFDDD5C0),
+                        role: DunesColorRole.border,
+                      ),
                 width: 1,
               ),
             ),
-            focusedBorder: const UnderlineInputBorder(
-              borderSide: BorderSide(color: LhColors.copper, width: 1.5),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.copper,
+                  role: DunesColorRole.border,
+                ),
+                width: 1.5,
+              ),
             ),
           ),
         ),
@@ -2027,16 +2365,28 @@ class _CreateSealApplicationPageState
           label,
           style: LhTypography.sans(
             size: 10,
-            color: LhColors.mute,
+            color: DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w600,
+            context: context,
           ),
         ),
         const SizedBox(height: 4),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: const Color(0xFFFEFCF5),
-            border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFFEFCF5),
+              role: DunesColorRole.surface,
+            ),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFDDD5C0),
+                role: DunesColorRole.border,
+              ),
+              width: 1,
+            ),
             borderRadius: BorderRadius.circular(5),
           ),
           child: DropdownButtonHideUnderline(
@@ -2044,7 +2394,11 @@ class _CreateSealApplicationPageState
               value: value,
               isDense: true,
               isExpanded: true,
-              icon: Icon(Icons.arrow_drop_down, color: LhColors.mute, size: 18),
+              icon: Icon(
+                Icons.arrow_drop_down,
+                color: DunesColors.resolve(context, LhColors.mute),
+                size: 18,
+              ),
               items: options
                   .map(
                     (o) => DropdownMenuItem(
@@ -2053,8 +2407,9 @@ class _CreateSealApplicationPageState
                         o,
                         style: LhTypography.sans(
                           size: 12,
-                          color: LhColors.ink,
+                          color: DunesColors.resolve(context, LhColors.ink),
                           weight: FontWeight.w600,
+                          context: context,
                         ),
                       ),
                     ),
@@ -2083,8 +2438,11 @@ class _CreateSealApplicationPageState
           label,
           style: LhTypography.sans(
             size: 10,
-            color: missing ? LhColors.neg : LhColors.mute,
+            color: missing
+                ? DunesColors.resolve(context, LhColors.neg)
+                : DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w600,
+            context: context,
           ),
         ),
         const SizedBox(height: 4),
@@ -2102,9 +2460,23 @@ class _CreateSealApplicationPageState
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFFEFCF5),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFFEFCF5),
+                role: DunesColorRole.surface,
+              ),
               border: Border.all(
-                color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
+                color: missing
+                    ? DunesColors.resolve(
+                        context,
+                        LhColors.neg,
+                        role: DunesColorRole.border,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFFDDD5C0),
+                        role: DunesColorRole.border,
+                      ),
                 width: 1,
               ),
               borderRadius: BorderRadius.circular(5),
@@ -2116,16 +2488,19 @@ class _CreateSealApplicationPageState
                     value == null ? '请选择' : _fmtDate(value),
                     style: LhTypography.mono(
                       size: 11,
-                      color: value == null ? LhColors.mute2 : LhColors.ink,
+                      color: value == null
+                          ? DunesColors.resolve(context, LhColors.mute2)
+                          : DunesColors.resolve(context, LhColors.ink),
                       weight: FontWeight.w600,
                       letterSpacing: 0.3,
+                      context: context,
                     ),
                   ),
                 ),
                 Icon(
                   Icons.calendar_month_outlined,
                   size: 14,
-                  color: LhColors.mute,
+                  color: DunesColors.resolve(context, LhColors.mute),
                 ),
               ],
             ),
@@ -2184,13 +2559,33 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
     final records = _allRecords;
     final borrowable = _borrowable;
     return Scaffold(
-      backgroundColor: LhColors.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFFFFDF7), Color(0xFFFCF8EC), Color(0xFFF5EEDA)],
+            colors: [
+              DunesColors.resolve(
+                context,
+                Color(0xFFFFFDF7),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFFCF8EC),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFF5EEDA),
+                role: DunesColorRole.surface,
+              ),
+            ],
           ),
         ),
         child: SafeArea(
@@ -2205,7 +2600,11 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                     Container(
                       width: 1,
                       height: 14,
-                      color: const Color(0xFFDDD5C0),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFDDD5C0),
+                        role: DunesColorRole.surface,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -2216,9 +2615,13 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                             '合同借阅 · CONTRACT BORROW',
                             style: LhTypography.mono(
                               size: 8.5,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                               weight: FontWeight.w700,
                               letterSpacing: 1.6,
+                              context: context,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -2226,8 +2629,12 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                             '${records.length} 条记录  ·  ${records.where((e) => !e.record.isExpired).length} 有效中',
                             style: LhTypography.sans(
                               size: 10.5,
-                              color: LhColors.mute2,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute2,
+                              ),
                               weight: FontWeight.w500,
+                              context: context,
                             ),
                           ),
                         ],
@@ -2244,9 +2651,10 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                       '我的借阅 · MY BORROWS',
                       style: LhTypography.mono(
                         size: 8,
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(context, LhColors.mute2),
                         weight: FontWeight.w700,
                         letterSpacing: 1.4,
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -2259,8 +2667,9 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                           '暂无借阅记录  ·  下方选择合同发起带水印电子件',
                           style: LhTypography.sans(
                             size: 10.5,
-                            color: LhColors.mute2,
+                            color: DunesColors.resolve(context, LhColors.mute2),
                             weight: FontWeight.w500,
+                            context: context,
                           ),
                         ),
                       )
@@ -2286,9 +2695,13 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                         r.id,
                                         style: LhTypography.mono(
                                           size: 8.5,
-                                          color: LhColors.mute2,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            LhColors.mute2,
+                                          ),
                                           weight: FontWeight.w700,
                                           letterSpacing: 0.6,
+                                          context: context,
                                         ),
                                       ),
                                       const SizedBox(width: 8),
@@ -2299,14 +2712,28 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: r.isExpired
-                                              ? LhColors.mute2.withAlpha(20)
-                                              : LhColors.copper.withAlpha(15),
+                                              ? DunesColors.resolve(
+                                                  context,
+                                                  LhColors.mute2,
+                                                  role: DunesColorRole.surface,
+                                                ).withAlpha(20)
+                                              : DunesColors.resolve(
+                                                  context,
+                                                  LhColors.copper,
+                                                  role: DunesColorRole.surface,
+                                                ).withAlpha(15),
                                           border: Border.all(
                                             color: r.isExpired
-                                                ? LhColors.mute2
-                                                : LhColors.copper.withAlpha(
-                                                    120,
-                                                  ),
+                                                ? DunesColors.resolve(
+                                                    context,
+                                                    LhColors.mute2,
+                                                    role: DunesColorRole.border,
+                                                  )
+                                                : DunesColors.resolve(
+                                                    context,
+                                                    LhColors.copper,
+                                                    role: DunesColorRole.border,
+                                                  ).withAlpha(120),
                                             width: 0.6,
                                           ),
                                           borderRadius: BorderRadius.circular(
@@ -2318,9 +2745,16 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                           style: LhTypography.sans(
                                             size: 7.5,
                                             color: r.isExpired
-                                                ? LhColors.mute
-                                                : LhColors.copper,
+                                                ? DunesColors.resolve(
+                                                    context,
+                                                    LhColors.mute,
+                                                  )
+                                                : DunesColors.resolve(
+                                                    context,
+                                                    LhColors.copper,
+                                                  ),
                                             weight: FontWeight.w700,
+                                            context: context,
                                           ),
                                         ),
                                       ),
@@ -2329,8 +2763,12 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                         r.medium,
                                         style: LhTypography.sans(
                                           size: 8.5,
-                                          color: LhColors.mute2,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            LhColors.mute2,
+                                          ),
                                           weight: FontWeight.w500,
+                                          context: context,
                                         ),
                                       ),
                                     ],
@@ -2340,8 +2778,12 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                     r.borrowerUnit,
                                     style: LhTypography.sans(
                                       size: 12,
-                                      color: LhColors.ink,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        LhColors.ink,
+                                      ),
                                       weight: FontWeight.w700,
+                                      context: context,
                                     ),
                                   ),
                                   const SizedBox(height: 2),
@@ -2349,8 +2791,12 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                     r.purpose,
                                     style: LhTypography.sans(
                                       size: 9.5,
-                                      color: LhColors.mute,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        LhColors.mute,
+                                      ),
                                       weight: FontWeight.w500,
+                                      context: context,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -2358,8 +2804,12 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                     '${a.id}  ·  ${a.partyB}',
                                     style: LhTypography.mono(
                                       size: 8,
-                                      color: LhColors.mute2,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        LhColors.mute2,
+                                      ),
                                       weight: FontWeight.w500,
+                                      context: context,
                                     ),
                                   ),
                                   const SizedBox(height: 2),
@@ -2367,8 +2817,12 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                     '下载 ${r.downloadCount} 次',
                                     style: LhTypography.mono(
                                       size: 8.5,
-                                      color: LhColors.mute2,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        LhColors.mute2,
+                                      ),
                                       weight: FontWeight.w600,
+                                      context: context,
                                     ),
                                   ),
                                 ],
@@ -2382,9 +2836,10 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                       '发起借阅 · NEW BORROW',
                       style: LhTypography.mono(
                         size: 8,
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(context, LhColors.mute2),
                         weight: FontWeight.w700,
                         letterSpacing: 1.4,
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -2415,9 +2870,13 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                           a.id,
                                           style: LhTypography.mono(
                                             size: 9,
-                                            color: LhColors.mute2,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              LhColors.mute2,
+                                            ),
                                             weight: FontWeight.w700,
                                             letterSpacing: 0.5,
+                                            context: context,
                                           ),
                                         ),
                                         const SizedBox(height: 3),
@@ -2425,8 +2884,12 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                           a.partyB,
                                           style: LhTypography.sans(
                                             size: 12.5,
-                                            color: LhColors.ink,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              LhColors.ink,
+                                            ),
                                             weight: FontWeight.w700,
+                                            context: context,
                                           ),
                                         ),
                                         const SizedBox(height: 2),
@@ -2434,8 +2897,12 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                           a.purpose,
                                           style: LhTypography.sans(
                                             size: 9.5,
-                                            color: LhColors.mute,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              LhColors.mute,
+                                            ),
                                             weight: FontWeight.w500,
+                                            context: context,
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -2448,7 +2915,10 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                   Icon(
                                     Icons.add,
                                     size: 16,
-                                    color: LhColors.copper,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      LhColors.copper,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -2655,17 +3125,37 @@ class _SearchPageState extends State<_SearchPage> {
   Widget build(BuildContext context) {
     final results = _results;
     return Scaffold(
-      backgroundColor: LhColors.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFFFFDF7),
-              Color(0xFFFCF8EC),
-              Color(0xFFF5EEDA),
-              Color(0xFFEBE2CC),
+              DunesColors.resolve(
+                context,
+                Color(0xFFFFFDF7),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFFCF8EC),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFF5EEDA),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFEBE2CC),
+                role: DunesColorRole.surface,
+              ),
             ],
             stops: [0.0, 0.32, 0.7, 1.0],
           ),
@@ -2687,9 +3177,17 @@ class _SearchPageState extends State<_SearchPage> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFEFCF5),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFFEFCF5),
+                            role: DunesColorRole.surface,
+                          ),
                           border: Border.all(
-                            color: const Color(0xFFDDD5C0),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFDDD5C0),
+                              role: DunesColorRole.border,
+                            ),
                             width: 1,
                           ),
                           borderRadius: BorderRadius.circular(5),
@@ -2699,7 +3197,10 @@ class _SearchPageState extends State<_SearchPage> {
                             Icon(
                               Icons.search_rounded,
                               size: 15,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                             ),
                             const SizedBox(width: 6),
                             Expanded(
@@ -2708,16 +3209,24 @@ class _SearchPageState extends State<_SearchPage> {
                                 autofocus: true,
                                 style: LhTypography.sans(
                                   size: 12,
-                                  color: LhColors.ink,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.ink,
+                                  ),
                                   weight: FontWeight.w600,
+                                  context: context,
                                 ),
                                 decoration: InputDecoration(
                                   isDense: true,
                                   hintText: '搜索乙方 / 编号 / 目的 / 类型 / 关键词',
                                   hintStyle: LhTypography.sans(
                                     size: 11,
-                                    color: LhColors.mute2,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      LhColors.mute2,
+                                    ),
                                     weight: FontWeight.w500,
+                                    context: context,
                                   ),
                                   border: InputBorder.none,
                                   contentPadding: const EdgeInsets.symmetric(
@@ -2745,7 +3254,10 @@ class _SearchPageState extends State<_SearchPage> {
                                 child: Icon(
                                   Icons.close,
                                   size: 14,
-                                  color: LhColors.mute2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.mute2,
+                                  ),
                                 ),
                               ),
                           ],
@@ -2765,8 +3277,8 @@ class _SearchPageState extends State<_SearchPage> {
                           Icons.tune,
                           size: 16,
                           color: (_typeFilter != null || _statusFilter != null)
-                              ? LhColors.copper
-                              : LhColors.ink,
+                              ? DunesColors.resolve(context, LhColors.copper)
+                              : DunesColors.resolve(context, LhColors.ink),
                         ),
                       ),
                     ),
@@ -2776,7 +3288,14 @@ class _SearchPageState extends State<_SearchPage> {
               // Advanced filter panel
               if (_advancedOpen) _buildAdvancedFilter(),
               // Hairline separator
-              Container(height: 1, color: const Color(0xFFDDD5C0)),
+              Container(
+                height: 1,
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFDDD5C0),
+                  role: DunesColorRole.surface,
+                ),
+              ),
               // Body
               Expanded(
                 child:
@@ -2795,7 +3314,11 @@ class _SearchPageState extends State<_SearchPage> {
 
   Widget _buildAdvancedFilter() {
     return Container(
-      color: const Color(0xFFFDF9EC),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFFDF9EC),
+        role: DunesColorRole.surface,
+      ),
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2804,9 +3327,10 @@ class _SearchPageState extends State<_SearchPage> {
             '合同类型 · TYPE',
             style: LhTypography.mono(
               size: 8.5,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w700,
               letterSpacing: 1.4,
+              context: context,
             ),
           ),
           const SizedBox(height: 6),
@@ -2825,12 +3349,24 @@ class _SearchPageState extends State<_SearchPage> {
                   ),
                   decoration: BoxDecoration(
                     color: on
-                        ? LhColors.copper.withAlpha(20)
+                        ? DunesColors.resolve(
+                            context,
+                            LhColors.copper,
+                            role: DunesColorRole.surface,
+                          ).withAlpha(20)
                         : Colors.transparent,
                     border: Border.all(
                       color: on
-                          ? LhColors.copper.withAlpha(140)
-                          : const Color(0xFFDDD5C0),
+                          ? DunesColors.resolve(
+                              context,
+                              LhColors.copper,
+                              role: DunesColorRole.border,
+                            ).withAlpha(140)
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFFDDD5C0),
+                              role: DunesColorRole.border,
+                            ),
                       width: 0.8,
                     ),
                     borderRadius: BorderRadius.circular(3),
@@ -2839,9 +3375,12 @@ class _SearchPageState extends State<_SearchPage> {
                     t ?? '全部',
                     style: LhTypography.sans(
                       size: 10.5,
-                      color: on ? LhColors.copper : LhColors.mute,
+                      color: on
+                          ? DunesColors.resolve(context, LhColors.copper)
+                          : DunesColors.resolve(context, LhColors.mute),
                       weight: on ? FontWeight.w700 : FontWeight.w500,
                       letterSpacing: 0.2,
+                      context: context,
                     ),
                   ),
                 ),
@@ -2853,9 +3392,10 @@ class _SearchPageState extends State<_SearchPage> {
             '状态 · STATUS',
             style: LhTypography.mono(
               size: 8.5,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w700,
               letterSpacing: 1.4,
+              context: context,
             ),
           ),
           const SizedBox(height: 6),
@@ -2882,12 +3422,24 @@ class _SearchPageState extends State<_SearchPage> {
                       ),
                       decoration: BoxDecoration(
                         color: on
-                            ? LhColors.copper.withAlpha(20)
+                            ? DunesColors.resolve(
+                                context,
+                                LhColors.copper,
+                                role: DunesColorRole.surface,
+                              ).withAlpha(20)
                             : Colors.transparent,
                         border: Border.all(
                           color: on
-                              ? LhColors.copper.withAlpha(140)
-                              : const Color(0xFFDDD5C0),
+                              ? DunesColors.resolve(
+                                  context,
+                                  LhColors.copper,
+                                  role: DunesColorRole.border,
+                                ).withAlpha(140)
+                              : DunesColors.resolve(
+                                  context,
+                                  const Color(0xFFDDD5C0),
+                                  role: DunesColorRole.border,
+                                ),
                           width: 0.8,
                         ),
                         borderRadius: BorderRadius.circular(3),
@@ -2896,9 +3448,12 @@ class _SearchPageState extends State<_SearchPage> {
                         s?.label ?? '全部',
                         style: LhTypography.sans(
                           size: 10.5,
-                          color: on ? LhColors.copper : LhColors.mute,
+                          color: on
+                              ? DunesColors.resolve(context, LhColors.copper)
+                              : DunesColors.resolve(context, LhColors.mute),
                           weight: on ? FontWeight.w700 : FontWeight.w500,
                           letterSpacing: 0.2,
+                          context: context,
                         ),
                       ),
                     ),
@@ -2921,9 +3476,10 @@ class _SearchPageState extends State<_SearchPage> {
               '最近查询 · RECENT',
               style: LhTypography.mono(
                 size: 8.5,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w700,
                 letterSpacing: 1.6,
+                context: context,
               ),
             ),
             const SizedBox(height: 8),
@@ -2943,9 +3499,17 @@ class _SearchPageState extends State<_SearchPage> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFEFCF5),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFFEFCF5),
+                        role: DunesColorRole.surface,
+                      ),
                       border: Border.all(
-                        color: const Color(0xFFDDD5C0),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFDDD5C0),
+                          role: DunesColorRole.border,
+                        ),
                         width: 0.8,
                       ),
                       borderRadius: BorderRadius.circular(3),
@@ -2953,14 +3517,19 @@ class _SearchPageState extends State<_SearchPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.history, size: 11, color: LhColors.mute2),
+                        Icon(
+                          Icons.history,
+                          size: 11,
+                          color: DunesColors.resolve(context, LhColors.mute2),
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           q,
                           style: LhTypography.sans(
                             size: 10.5,
-                            color: LhColors.ink2,
+                            color: DunesColors.resolve(context, LhColors.ink2),
                             weight: FontWeight.w600,
+                            context: context,
                           ),
                         ),
                       ],
@@ -2975,9 +3544,10 @@ class _SearchPageState extends State<_SearchPage> {
             '搜索提示 · TIPS',
             style: LhTypography.mono(
               size: 8.5,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w700,
               letterSpacing: 1.6,
+              context: context,
             ),
           ),
           const SizedBox(height: 8),
@@ -2991,15 +3561,20 @@ class _SearchPageState extends State<_SearchPage> {
             decoration: paperCardDecoration(),
             child: Row(
               children: [
-                Icon(Icons.info_outline, size: 14, color: LhColors.copper),
+                Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: DunesColors.resolve(context, LhColors.copper),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'v2 将支持合同正文全文搜索 (OCR 抽取)',
                     style: LhTypography.sans(
                       size: 10.5,
-                      color: LhColors.ink2,
+                      color: DunesColors.resolve(context, LhColors.ink2),
                       weight: FontWeight.w600,
+                      context: context,
                     ),
                   ),
                 ),
@@ -3020,8 +3595,9 @@ class _SearchPageState extends State<_SearchPage> {
           '· ',
           style: LhTypography.mono(
             size: 10,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w700,
+            context: context,
           ),
         ),
         Expanded(
@@ -3029,8 +3605,9 @@ class _SearchPageState extends State<_SearchPage> {
             text,
             style: LhTypography.sans(
               size: 10.5,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w500,
+              context: context,
             ),
           ),
         ),
@@ -3046,14 +3623,19 @@ class _SearchPageState extends State<_SearchPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.search_off_rounded, size: 28, color: LhColors.mute2),
+              Icon(
+                Icons.search_off_rounded,
+                size: 28,
+                color: DunesColors.resolve(context, LhColors.mute2),
+              ),
               const SizedBox(height: 6),
               Text(
                 '未找到匹配的合同',
                 style: LhTypography.sans(
                   size: 12,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w600,
+                  context: context,
                 ),
               ),
             ],
@@ -3071,9 +3653,10 @@ class _SearchPageState extends State<_SearchPage> {
                 '匹配 ${results.length} 项 · MATCHES',
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: LhColors.mute,
+                  color: DunesColors.resolve(context, LhColors.mute),
                   weight: FontWeight.w700,
                   letterSpacing: 1.4,
+                  context: context,
                 ),
               ),
             ],
@@ -3116,9 +3699,10 @@ class _SearchPageState extends State<_SearchPage> {
                       a.id,
                       style: LhTypography.mono(
                         size: 8.5,
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(context, LhColors.mute2),
                         weight: FontWeight.w700,
                         letterSpacing: 0.6,
+                        context: context,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -3128,8 +3712,9 @@ class _SearchPageState extends State<_SearchPage> {
                       a.amount == null ? '' : '${_fmtAmount(a.amount!)} 元',
                       style: LhTypography.mono(
                         size: 10.5,
-                        color: LhColors.ink,
+                        color: DunesColors.resolve(context, LhColors.ink),
                         weight: FontWeight.w700,
+                        context: context,
                       ),
                     ),
                   ],
@@ -3139,10 +3724,11 @@ class _SearchPageState extends State<_SearchPage> {
                   a.partyB,
                   style: LhTypography.sans(
                     size: 12.5,
-                    color: LhColors.ink,
+                    color: DunesColors.resolve(context, LhColors.ink),
                     weight: FontWeight.w700,
                     height: 1.15,
                     letterSpacing: -0.1,
+                    context: context,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -3152,8 +3738,9 @@ class _SearchPageState extends State<_SearchPage> {
                   '${a.contractType} · ${a.purpose}',
                   style: LhTypography.sans(
                     size: 9.5,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                     weight: FontWeight.w500,
+                    context: context,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -3218,13 +3805,28 @@ class _BorrowPageState extends State<_BorrowPage> {
         ? '{借阅单位}'
         : _unitCtrl.text.trim();
     return Scaffold(
-      backgroundColor: LhColors.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFFFFDF7), Color(0xFFEBE2CC)],
+            colors: [
+              DunesColors.resolve(
+                context,
+                Color(0xFFFFFDF7),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFEBE2CC),
+                role: DunesColorRole.surface,
+              ),
+            ],
           ),
         ),
         child: SafeArea(
@@ -3240,9 +3842,10 @@ class _BorrowPageState extends State<_BorrowPage> {
                       '发起借阅',
                       style: LhTypography.mono(
                         size: 8.5,
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(context, LhColors.mute2),
                         weight: FontWeight.w700,
                         letterSpacing: 1.4,
+                        context: context,
                       ),
                     ),
                   ],
@@ -3266,9 +3869,13 @@ class _BorrowPageState extends State<_BorrowPage> {
                               '借阅编号 · AUTO ID',
                               style: LhTypography.mono(
                                 size: 8.5,
-                                color: LhColors.mute,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.mute,
+                                ),
                                 weight: FontWeight.w700,
                                 letterSpacing: 1.4,
+                                context: context,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -3276,24 +3883,36 @@ class _BorrowPageState extends State<_BorrowPage> {
                               _autoId,
                               style: LhTypography.mono(
                                 size: 14,
-                                color: LhColors.ink,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.ink,
+                                ),
                                 weight: FontWeight.w700,
                                 letterSpacing: 0.4,
+                                context: context,
                               ),
                             ),
                             const SizedBox(height: 10),
                             Container(
                               height: 1,
-                              color: const Color(0xFFDDD5C0),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFDDD5C0),
+                                role: DunesColorRole.surface,
+                              ),
                             ),
                             const SizedBox(height: 10),
                             Text(
                               '合同 · CONTRACT',
                               style: LhTypography.mono(
                                 size: 8.5,
-                                color: LhColors.mute,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.mute,
+                                ),
                                 weight: FontWeight.w700,
                                 letterSpacing: 1.4,
+                                context: context,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -3301,9 +3920,13 @@ class _BorrowPageState extends State<_BorrowPage> {
                               widget.app.purpose,
                               style: LhTypography.sans(
                                 size: 12.5,
-                                color: LhColors.ink,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.ink,
+                                ),
                                 weight: FontWeight.w700,
                                 height: 1.2,
+                                context: context,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -3311,9 +3934,13 @@ class _BorrowPageState extends State<_BorrowPage> {
                               '${widget.app.id}  ·  ${widget.app.partyB}',
                               style: LhTypography.mono(
                                 size: 9,
-                                color: LhColors.mute,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.mute,
+                                ),
                                 weight: FontWeight.w500,
                                 letterSpacing: 0.4,
+                                context: context,
                               ),
                             ),
                           ],
@@ -3367,8 +3994,16 @@ class _BorrowPageState extends State<_BorrowPage> {
                                         decoration: BoxDecoration(
                                           border: Border.all(
                                             color: on
-                                                ? LhColors.copper
-                                                : LhColors.mute2,
+                                                ? DunesColors.resolve(
+                                                    context,
+                                                    LhColors.copper,
+                                                    role: DunesColorRole.border,
+                                                  )
+                                                : DunesColors.resolve(
+                                                    context,
+                                                    LhColors.mute2,
+                                                    role: DunesColorRole.border,
+                                                  ),
                                             width: on ? 3 : 1,
                                           ),
                                           borderRadius: BorderRadius.circular(
@@ -3382,11 +4017,18 @@ class _BorrowPageState extends State<_BorrowPage> {
                                         style: LhTypography.sans(
                                           size: 11.5,
                                           color: on
-                                              ? LhColors.ink
-                                              : LhColors.mute,
+                                              ? DunesColors.resolve(
+                                                  context,
+                                                  LhColors.ink,
+                                                )
+                                              : DunesColors.resolve(
+                                                  context,
+                                                  LhColors.mute,
+                                                ),
                                           weight: on
                                               ? FontWeight.w700
                                               : FontWeight.w500,
+                                          context: context,
                                         ),
                                       ),
                                     ],
@@ -3405,8 +4047,9 @@ class _BorrowPageState extends State<_BorrowPage> {
                           '过期后下载链接自动失效, 防止越权传播',
                           style: LhTypography.sans(
                             size: 9.5,
-                            color: LhColors.mute2,
+                            color: DunesColors.resolve(context, LhColors.mute2),
                             weight: FontWeight.w500,
+                            context: context,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -3428,12 +4071,24 @@ class _BorrowPageState extends State<_BorrowPage> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: on
-                                        ? LhColors.copper.withAlpha(18)
+                                        ? DunesColors.resolve(
+                                            context,
+                                            LhColors.copper,
+                                            role: DunesColorRole.surface,
+                                          ).withAlpha(18)
                                         : Colors.transparent,
                                     border: Border.all(
                                       color: on
-                                          ? LhColors.copper.withAlpha(140)
-                                          : const Color(0xFFDDD5C0),
+                                          ? DunesColors.resolve(
+                                              context,
+                                              LhColors.copper,
+                                              role: DunesColorRole.border,
+                                            ).withAlpha(140)
+                                          : DunesColors.resolve(
+                                              context,
+                                              const Color(0xFFDDD5C0),
+                                              role: DunesColorRole.border,
+                                            ),
                                       width: 0.8,
                                     ),
                                     borderRadius: BorderRadius.circular(3),
@@ -3443,12 +4098,19 @@ class _BorrowPageState extends State<_BorrowPage> {
                                     style: LhTypography.mono(
                                       size: 10.5,
                                       color: on
-                                          ? LhColors.copper
-                                          : LhColors.mute,
+                                          ? DunesColors.resolve(
+                                              context,
+                                              LhColors.copper,
+                                            )
+                                          : DunesColors.resolve(
+                                              context,
+                                              LhColors.mute,
+                                            ),
                                       weight: on
                                           ? FontWeight.w700
                                           : FontWeight.w500,
                                       letterSpacing: 0.3,
+                                      context: context,
                                     ),
                                   ),
                                 ),
@@ -3473,10 +4135,21 @@ class _BorrowPageState extends State<_BorrowPage> {
               // Submit bar
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFEFCF5),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFFEFCF5),
+                    role: DunesColorRole.surface,
+                  ),
                   border: Border(
-                    top: BorderSide(color: Color(0xFFDDD5C0), width: 1),
+                    top: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFDDD5C0),
+                        role: DunesColorRole.border,
+                      ),
+                      width: 1,
+                    ),
                   ),
                 ),
                 child: Row(
@@ -3489,9 +4162,10 @@ class _BorrowPageState extends State<_BorrowPage> {
                         style: LhTypography.sans(
                           size: 10,
                           color: _validated && !_canSubmit
-                              ? LhColors.neg
-                              : LhColors.mute,
+                              ? DunesColors.resolve(context, LhColors.neg)
+                              : DunesColors.resolve(context, LhColors.mute),
                           weight: FontWeight.w600,
+                          context: context,
                         ),
                       ),
                     ),
@@ -3524,21 +4198,39 @@ class _BorrowPageState extends State<_BorrowPage> {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: _canSubmit ? LhColors.copper : LhColors.mute2,
+                          color: _canSubmit
+                              ? DunesColors.resolve(
+                                  context,
+                                  LhColors.copper,
+                                  role: DunesColorRole.surface,
+                                )
+                              : DunesColors.resolve(
+                                  context,
+                                  LhColors.mute2,
+                                  role: DunesColorRole.surface,
+                                ),
                           borderRadius: BorderRadius.circular(5),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.check, size: 14, color: Colors.white),
+                            Icon(
+                              Icons.check,
+                              size: 14,
+                              color: DunesColors.resolve(context, Colors.white),
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               '生成借阅件',
                               style: LhTypography.sans(
                                 size: 12,
-                                color: Colors.white,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
                                 weight: FontWeight.w700,
                                 letterSpacing: 0.5,
+                                context: context,
                               ),
                             ),
                           ],
@@ -3559,9 +4251,10 @@ class _BorrowPageState extends State<_BorrowPage> {
     label,
     style: LhTypography.mono(
       size: 8.5,
-      color: LhColors.mute,
+      color: DunesColors.resolve(context, LhColors.mute),
       weight: FontWeight.w700,
       letterSpacing: 1.6,
+      context: context,
     ),
   );
 
@@ -3575,8 +4268,11 @@ class _BorrowPageState extends State<_BorrowPage> {
           label,
           style: LhTypography.sans(
             size: 10,
-            color: missing ? LhColors.neg : LhColors.mute,
+            color: missing
+                ? DunesColors.resolve(context, LhColors.neg)
+                : DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w600,
+            context: context,
           ),
         ),
         const SizedBox(height: 4),
@@ -3584,8 +4280,9 @@ class _BorrowPageState extends State<_BorrowPage> {
           controller: ctrl,
           style: LhTypography.sans(
             size: 12,
-            color: LhColors.ink,
+            color: DunesColors.resolve(context, LhColors.ink),
             weight: FontWeight.w600,
+            context: context,
           ),
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
@@ -3593,24 +4290,52 @@ class _BorrowPageState extends State<_BorrowPage> {
             hintText: hint,
             hintStyle: LhTypography.sans(
               size: 11,
-              color: LhColors.mute2,
+              color: DunesColors.resolve(context, LhColors.mute2),
               weight: FontWeight.w500,
+              context: context,
             ),
             contentPadding: const EdgeInsets.symmetric(vertical: 5),
             border: UnderlineInputBorder(
               borderSide: BorderSide(
-                color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
+                color: missing
+                    ? DunesColors.resolve(
+                        context,
+                        LhColors.neg,
+                        role: DunesColorRole.border,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFFDDD5C0),
+                        role: DunesColorRole.border,
+                      ),
                 width: 1,
               ),
             ),
             enabledBorder: UnderlineInputBorder(
               borderSide: BorderSide(
-                color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
+                color: missing
+                    ? DunesColors.resolve(
+                        context,
+                        LhColors.neg,
+                        role: DunesColorRole.border,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFFDDD5C0),
+                        role: DunesColorRole.border,
+                      ),
                 width: 1,
               ),
             ),
-            focusedBorder: const UnderlineInputBorder(
-              borderSide: BorderSide(color: LhColors.copper, width: 1.5),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.copper,
+                  role: DunesColorRole.border,
+                ),
+                width: 1.5,
+              ),
             ),
           ),
         ),
@@ -3639,8 +4364,19 @@ class _WatermarkPreview extends StatelessWidget {
       width: double.infinity,
       height: 220,
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFDDD5C0),
+            role: DunesColorRole.border,
+          ),
+          width: 1,
+        ),
         borderRadius: BorderRadius.circular(4),
         boxShadow: const [
           BoxShadow(
@@ -3664,8 +4400,9 @@ class _WatermarkPreview extends StatelessWidget {
                     contractSubject,
                     style: LhTypography.sans(
                       size: 11,
-                      color: Colors.black87,
+                      color: DunesColors.resolve(context, Colors.black87),
                       weight: FontWeight.w700,
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -3676,7 +4413,11 @@ class _WatermarkPreview extends StatelessWidget {
                       child: Container(
                         height: 5,
                         width: double.infinity * (i.isEven ? 0.9 : 0.8),
-                        color: const Color(0xFFE0E0E0),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFE0E0E0),
+                          role: DunesColorRole.surface,
+                        ),
                       ),
                     ),
                   ),

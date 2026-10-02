@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'lighthouse_hero_metric.dart';
 import 'lighthouse_people.dart';
 import 'lighthouse_theme.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 // ── 与账本共用的排版常量 ─────────────────────────────────────────────────────
 const double _kGridCellHBase = 43; // 收起态格高（_ledgerSummaryCellH）
@@ -85,7 +86,9 @@ _Kind _kindOf(String key) {
   switch (_kindOf(key)) {
     case _Kind.money:
       final a = v.abs();
-      if (a >= 10000) return (number: (v / 10000).toStringAsFixed(2), unit: '亿');
+      if (a >= 10000) {
+        return (number: (v / 10000).toStringAsFixed(2), unit: '亿');
+      }
       if (a >= 100) return (number: v.toStringAsFixed(1), unit: '万');
       return (number: v.toStringAsFixed(2), unit: '万');
     case _Kind.user:
@@ -134,9 +137,8 @@ double? _metricValue(LhPeopleRow r, String key) {
 
 /// 环比（百分点）。得分类没有同期基数，返回 null → 画「·」。
 double? _metricDelta(LhPeopleRow r, String key) {
-  double? pct(double? g) => g == null
-      ? null
-      : (g >= kLhZeroBaseGrowth ? null : g * 100);
+  double? pct(double? g) =>
+      g == null ? null : (g >= kLhZeroBaseGrowth ? null : g * 100);
   switch (key) {
     case 'revenue':
       return pct(r.revGrowth);
@@ -172,9 +174,8 @@ double? _taskValue(LhPeopleTask t, String key) {
 }
 
 double? _taskDelta(LhPeopleTask t, String key) {
-  double? pct(double? g) => g == null
-      ? null
-      : (g >= kLhZeroBaseGrowth ? null : g * 100);
+  double? pct(double? g) =>
+      g == null ? null : (g >= kLhZeroBaseGrowth ? null : g * 100);
   switch (key) {
     case 'revenue':
       return pct(t.revGrowth);
@@ -227,11 +228,12 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
     final w = MediaQuery.sizeOf(context).width;
     final scale = _scaleOf(w);
     final pinnedW = lighthouseLedgerPinnedWidthFor(w, tab: 'people');
-    final sorted = [...widget.rows]..sort((a, b) {
-      final sa = widget.standardCaliber ? a.standardScore : a.score;
-      final sb = widget.standardCaliber ? b.standardScore : b.score;
-      return sb.compareTo(sa);
-    });
+    final sorted = [...widget.rows]
+      ..sort((a, b) {
+        final sa = widget.standardCaliber ? a.standardScore : a.score;
+        final sb = widget.standardCaliber ? b.standardScore : b.score;
+        return sb.compareTo(sa);
+      });
     final flagged = sorted.where((r) => r.flags.isNotEmpty).length;
 
     return Column(
@@ -248,7 +250,11 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
             child: Center(
               child: Text(
                 '当前分类下没有人',
-                style: LhTypography.sans(size: 12, color: LhColors.mute),
+                style: LhTypography.sans(
+                  size: 12,
+                  color: DunesColors.resolve(context, LhColors.mute),
+                  context: context,
+                ),
               ),
             ),
           ),
@@ -267,8 +273,19 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
         vertical: 9 * scale,
       ),
       decoration: BoxDecoration(
-        color: LhColors.copperSoft,
-        border: Border.all(color: LhColors.copper.withAlpha(70), width: 0.7),
+        color: DunesColors.resolve(
+          context,
+          LhColors.copperSoft,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.copper,
+            role: DunesColorRole.border,
+          ).withAlpha(70),
+          width: 0.7,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -278,8 +295,9 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
             '!',
             style: LhTypography.mono(
               size: 11,
-              color: LhColors.copper,
+              color: DunesColors.resolve(context, LhColors.copper),
               weight: FontWeight.w700,
+              context: context,
             ),
           ),
           const SizedBox(width: 8),
@@ -288,8 +306,9 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
               text,
               style: LhTypography.sans(
                 size: 11,
-                color: LhColors.ink2,
+                color: DunesColors.resolve(context, LhColors.ink2),
                 height: 1.5,
+                context: context,
               ),
             ),
           ),
@@ -301,13 +320,18 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
   Widget _header(double pinnedW, double scale) {
     TextStyle kicker() => LhTypography.mono(
       size: 9,
-      color: LhColors.mute2,
+      color: DunesColors.resolve(context, LhColors.mute2),
       weight: FontWeight.w500,
       letterSpacing: 0.6,
       height: 1.3,
+      context: context,
     );
     return Container(
-      color: LhColors.mist,
+      color: DunesColors.resolve(
+        context,
+        LhColors.mist,
+        role: DunesColorRole.surface,
+      ),
       padding: EdgeInsets.fromLTRB(0, 7 * scale, 0, 6 * scale),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -370,17 +394,27 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
         Container(
           height: rowH + 1,
           decoration: BoxDecoration(
-            color: open ? LhColors.purple.withAlpha(10) : null,
-            border: const Border(
-              bottom: BorderSide(color: LhColors.line2, width: 0.5),
+            color: open
+                ? DunesColors.resolve(
+                    context,
+                    LhColors.purple,
+                    role: DunesColorRole.surface,
+                  ).withAlpha(10)
+                : null,
+            border: Border(
+              bottom: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.line2,
+                  role: DunesColorRole.border,
+                ),
+                width: 0.5,
+              ),
             ),
           ),
           child: Row(
             children: [
-              SizedBox(
-                width: pinnedW,
-                child: _pinned(r, index, scale, open),
-              ),
+              SizedBox(width: pinnedW, child: _pinned(r, index, scale, open)),
               Expanded(
                 child: Padding(
                   padding: EdgeInsets.symmetric(vertical: _kGridPadV * scale),
@@ -434,13 +468,29 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: isTop3
-                  ? LhColors.purple.withAlpha(18)
-                  : const Color(0xFFF5F3F8),
+                  ? DunesColors.resolve(
+                      context,
+                      LhColors.purple,
+                      role: DunesColorRole.surface,
+                    ).withAlpha(18)
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFF5F3F8),
+                      role: DunesColorRole.surface,
+                    ),
               shape: BoxShape.circle,
               border: Border.all(
                 color: isTop3
-                    ? LhColors.purple.withAlpha(42)
-                    : LhColors.line2,
+                    ? DunesColors.resolve(
+                        context,
+                        LhColors.purple,
+                        role: DunesColorRole.border,
+                      ).withAlpha(42)
+                    : DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.border,
+                      ),
                 width: 0.7,
               ),
             ),
@@ -450,10 +500,14 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                 LhTypography.mono(
                   size: 11.5 * scale,
                   color: isTop3
-                      ? LhColors.purple
-                      : LhColors.mute2.withAlpha(170),
+                      ? DunesColors.resolve(context, LhColors.purple)
+                      : DunesColors.resolve(
+                          context,
+                          LhColors.mute2,
+                        ).withAlpha(170),
                   weight: isTop3 ? FontWeight.w700 : FontWeight.w500,
                   height: 1.0,
+                  context: context,
                 ),
               ),
             ),
@@ -471,9 +525,10 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                   style: LhTypography.sans(
                     size: 12.5 * scale,
                     weight: FontWeight.w600,
-                    color: LhColors.ink,
+                    color: DunesColors.resolve(context, LhColors.ink),
                     height: 1.15,
                     letterSpacing: -0.1,
+                    context: context,
                   ),
                 ),
                 SizedBox(height: 5 * scale),
@@ -485,7 +540,11 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                       width: 4.5 * scale,
                       height: 4.5 * scale,
                       decoration: BoxDecoration(
-                        color: gColor,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          gColor,
+                          role: DunesColorRole.surface,
+                        ),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -496,11 +555,14 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                         style: _tabularOf(
                           LhTypography.sans(
                             size: 9 * scale,
-                            color: grade.isAlert ? gColor : LhColors.mute,
+                            color: grade.isAlert
+                                ? gColor
+                                : DunesColors.resolve(context, LhColors.mute),
                             weight: grade.isAlert
                                 ? FontWeight.w700
                                 : FontWeight.w500,
                             height: 1.0,
+                            context: context,
                           ),
                         ),
                       ),
@@ -518,9 +580,13 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                               text: '得分 ',
                               style: LhTypography.mono(
                                 size: 9.5 * scale,
-                                color: LhColors.mute,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.mute,
+                                ),
                                 weight: FontWeight.w500,
                                 height: 1.0,
+                                context: context,
                               ),
                             ),
                             TextSpan(
@@ -528,9 +594,13 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                               style: _tabularOf(
                                 LhTypography.mono(
                                   size: 10 * scale,
-                                  color: LhColors.ink,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.ink,
+                                  ),
                                   weight: FontWeight.w700,
                                   height: 1.0,
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -552,8 +622,16 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                         height: 27 * scale,
                         decoration: BoxDecoration(
                           color: open
-                              ? LhColors.purple.withAlpha(24)
-                              : const Color(0xFFF4F1FA),
+                              ? DunesColors.resolve(
+                                  context,
+                                  LhColors.purple,
+                                  role: DunesColorRole.surface,
+                                ).withAlpha(24)
+                              : DunesColors.resolve(
+                                  context,
+                                  const Color(0xFFF4F1FA),
+                                  role: DunesColorRole.surface,
+                                ),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -561,7 +639,10 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                               ? Icons.keyboard_arrow_up_rounded
                               : Icons.keyboard_arrow_down_rounded,
                           size: 18 * scale,
-                          color: LhColors.purple.withAlpha(open ? 255 : 185),
+                          color: DunesColors.resolve(
+                            context,
+                            LhColors.purple,
+                          ).withAlpha(open ? 255 : 185),
                         ),
                       ),
                     ),
@@ -607,10 +688,13 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                       size: lighthouseLedgerValueFontSize * scale,
                       // 负数染绿：中国金融色，和账本一致
                       color: missing
-                          ? LhColors.mute2
-                          : (negative ? LhColors.pos : LhColors.ink2),
+                          ? DunesColors.resolve(context, LhColors.mute2)
+                          : (negative
+                                ? DunesColors.resolve(context, LhColors.pos)
+                                : DunesColors.resolve(context, LhColors.ink2)),
                       weight: missing ? FontWeight.w500 : FontWeight.w700,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ),
@@ -619,10 +703,11 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                     text: parts.unit,
                     style: LhTypography.mono(
                       size: lighthouseLedgerUnitFontSize * scale,
-                      color: LhColors.mute,
+                      color: DunesColors.resolve(context, LhColors.mute),
                       weight: FontWeight.w500,
                       letterSpacing: 0.2,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
               ],
@@ -643,11 +728,17 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                 LhTypography.mono(
                   size: lighthouseLedgerDeltaFontSize * scale,
                   color: up == null
-                      ? LhColors.mute2.withAlpha(110)
-                      : (up ? LhColors.neg : LhColors.pos),
+                      ? DunesColors.resolve(
+                          context,
+                          LhColors.mute2,
+                        ).withAlpha(110)
+                      : (up
+                            ? DunesColors.resolve(context, LhColors.neg)
+                            : DunesColors.resolve(context, LhColors.pos)),
                   weight: FontWeight.w600,
                   letterSpacing: -0.2,
                   height: 1.0,
+                  context: context,
                 ),
               ),
             ),
@@ -665,18 +756,31 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
 
     final result = _isResult(metricKey);
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 3 * scale, vertical: 2.5 * scale),
+      margin: EdgeInsets.symmetric(
+        horizontal: 3 * scale,
+        vertical: 2.5 * scale,
+      ),
       decoration: BoxDecoration(
         color: result
-            ? const Color(
-                lighthouseLedgerResultBlockAccentValue,
+            ? DunesColors.resolve(
+                context,
+                const Color(lighthouseLedgerResultBlockAccentValue),
+                role: DunesColorRole.surface,
               ).withAlpha(lighthouseLedgerResultBlockTintAlpha)
-            : const Color(0xFFF9F8FC),
+            : DunesColors.resolve(
+                context,
+                const Color(0xFFF9F8FC),
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(10),
         border: result
-            ? const Border(
+            ? Border(
                 left: BorderSide(
-                  color: Color(lighthouseLedgerResultBlockAccentValue),
+                  color: DunesColors.resolve(
+                    context,
+                    Color(lighthouseLedgerResultBlockAccentValue),
+                    role: DunesColorRole.border,
+                  ),
                   width: lighthouseLedgerResultBlockRailWidth,
                 ),
               )
@@ -691,14 +795,17 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
             label,
             style: LhTypography.sans(
               size: lighthouseLedgerMetricLabelFontSize * scale,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w500,
               letterSpacing: 0.2,
               height: 1.0,
+              context: context,
             ),
           ),
           SizedBox(height: 4 * scale),
-          Expanded(child: Align(alignment: Alignment.centerRight, child: valueRow)),
+          Expanded(
+            child: Align(alignment: Alignment.centerRight, child: valueRow),
+          ),
         ],
       ),
     );
@@ -706,19 +813,30 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
 
   // ── 展开区：权重占比 · 全量指标 · 任务子行 · 对照人事表 ─────────────────
   Widget _drawer(LhPeopleRow r, double pinnedW, double scale) {
-    const palette = <Color>[
-      LhColors.purple,
-      LhColors.accent,
-      LhColors.copper,
-      LhColors.pos,
-      LhColors.mute2,
+    final palette = <Color>[
+      DunesColors.resolve(context, LhColors.purple),
+      DunesColors.resolve(context, LhColors.accent),
+      DunesColors.resolve(context, LhColors.copper),
+      DunesColors.resolve(context, LhColors.pos),
+      DunesColors.resolve(context, LhColors.mute2),
     ];
     return Container(
       padding: EdgeInsets.only(top: 11 * scale, bottom: 13 * scale),
-      decoration: const BoxDecoration(
-        color: LhColors.mist,
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          LhColors.mist,
+          role: DunesColorRole.surface,
+        ),
         border: Border(
-          bottom: BorderSide(color: LhColors.line2, width: 0.5),
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
         ),
       ),
       child: Column(
@@ -736,7 +854,13 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                     for (var i = 0; i < r.tasks.length; i++)
                       Expanded(
                         flex: (r.tasks[i].weight * 1000).round().clamp(1, 1000),
-                        child: Container(color: palette[i % palette.length]),
+                        child: Container(
+                          color: DunesColors.resolveNullable(
+                            context,
+                            palette[i % palette.length],
+                            role: DunesColorRole.surface,
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -757,7 +881,11 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                         width: 6,
                         height: 6,
                         decoration: BoxDecoration(
-                          color: palette[i % palette.length],
+                          color: DunesColors.resolveNullable(
+                            context,
+                            palette[i % palette.length],
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -767,7 +895,8 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                         '${(r.tasks[i].weight * 100).toStringAsFixed(0)}%',
                         style: LhTypography.mono(
                           size: 9,
-                          color: LhColors.mute,
+                          color: DunesColors.resolve(context, LhColors.mute),
+                          context: context,
                         ),
                       ),
                     ],
@@ -798,7 +927,11 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                 '　灯塔同期对齐 ${r.score.toStringAsFixed(2)}'
                 '　模板 ${r.template.code} · 满分 ${r.fullMark.toStringAsFixed(0)}',
                 style: _tabularOf(
-                  LhTypography.mono(size: 10, color: LhColors.ink2),
+                  LhTypography.mono(
+                    size: 10,
+                    color: DunesColors.resolve(context, LhColors.ink2),
+                    context: context,
+                  ),
                 ),
               ),
             ),
@@ -814,8 +947,9 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
       text,
       style: LhTypography.mono(
         size: 9,
-        color: LhColors.mute2,
+        color: DunesColors.resolve(context, LhColors.mute2),
         letterSpacing: 0.6,
+        context: context,
       ),
     ),
   );
@@ -843,9 +977,13 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                             textAlign: TextAlign.right,
                             style: LhTypography.mono(
                               size: 9,
-                              color: LhColors.mute2,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute2,
+                              ),
                               weight: FontWeight.w500,
                               letterSpacing: 0.5,
+                              context: context,
                             ),
                           ),
                         )
@@ -885,8 +1023,17 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
   Widget _childRow(LhPeopleTask t, double pinnedW, double scale) {
     return Container(
       constraints: BoxConstraints(minHeight: 44 * scale),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: LhColors.line2, width: 0.5)),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -904,8 +1051,12 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                         Container(
                           width: 4.5,
                           height: 4.5,
-                          decoration: const BoxDecoration(
-                            color: LhColors.copper,
+                          decoration: BoxDecoration(
+                            color: DunesColors.resolve(
+                              context,
+                              LhColors.copper,
+                              role: DunesColorRole.surface,
+                            ),
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -917,8 +1068,9 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                           style: LhTypography.sans(
                             size: 11.5 * scale,
                             weight: FontWeight.w500,
-                            color: LhColors.ink2,
+                            color: DunesColors.resolve(context, LhColors.ink2),
                             height: 1.15,
+                            context: context,
                           ),
                         ),
                       ),
@@ -929,7 +1081,11 @@ class _LhPeopleLedgerState extends State<LhPeopleLedger> {
                     '${(t.weight * 100).toStringAsFixed(0)}% · '
                     '${t.weightedScore.toStringAsFixed(1)}分',
                     style: _tabularOf(
-                      LhTypography.mono(size: 9.5, color: LhColors.mute),
+                      LhTypography.mono(
+                        size: 9.5,
+                        color: DunesColors.resolve(context, LhColors.mute),
+                        context: context,
+                      ),
                     ),
                   ),
                 ],

@@ -175,19 +175,29 @@ class ChatVideoBubble extends StatelessWidget {
                 )
               else
                 _videoPlaceholder(mine),
-              Container(color: Colors.black.withValues(alpha: 0.22)),
+              Container(
+                color: DunesColors.resolve(
+                  context,
+                  Colors.black,
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.22),
+              ),
               if (!busy)
                 Center(
                   child: Container(
                     width: playOuter,
                     height: playOuter,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.45),
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.black,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.45),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.play_arrow_rounded,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                       size: playIcon,
                     ),
                   ),
@@ -202,8 +212,12 @@ class ChatVideoBubble extends StatelessWidget {
                           ? busyProgress
                           : null,
                       strokeWidth: 3,
-                      color: Colors.white,
-                      backgroundColor: Colors.white24,
+                      color: DunesColors.resolve(context, Colors.white),
+                      backgroundColor: DunesColors.resolve(
+                        context,
+                        Colors.white24,
+                        role: DunesColorRole.surface,
+                      ),
                     ),
                   ),
                 ),
@@ -213,17 +227,21 @@ class ChatVideoBubble extends StatelessWidget {
                   top: 6,
                   right: 6,
                   child: Material(
-                    color: Colors.black.withValues(alpha: 0.45),
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.black,
+                      role: DunesColorRole.surface,
+                    ).withValues(alpha: 0.45),
                     shape: const CircleBorder(),
                     child: InkWell(
                       customBorder: const CircleBorder(),
                       onTap: upload != null ? onCancelUpload : onCancelDownload,
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(4),
                         child: Icon(
                           Icons.close_rounded,
                           size: 16,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
                         ),
                       ),
                     ),
@@ -237,8 +255,8 @@ class ChatVideoBubble extends StatelessWidget {
                   child: Text(
                     '${(busyProgress * 100).round()}%',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: DunesColors.resolve(context, Colors.white),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -254,15 +272,20 @@ class ChatVideoBubble extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.black,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       _formatDuration(durationSec),
                       style: DunesTypography.sans(
                         fontSize: 11,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                         fontWeight: FontWeight.w500,
+                        context: context,
                       ),
                     ),
                   ),
@@ -414,14 +437,16 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
                       child: Text(
                         '播放失败\n$_error',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: DunesColors.resolve(context, Colors.white70),
                           fontSize: 13,
                         ),
                       ),
                     )
                   : !_ready || _controller == null
-                  ? const CircularProgressIndicator(color: Colors.white)
+                  ? CircularProgressIndicator(
+                      color: DunesColors.resolve(context, Colors.white),
+                    )
                   : Padding(
                       padding: const EdgeInsets.fromLTRB(16, 48, 16, 88),
                       child: AspectRatio(
@@ -445,7 +470,10 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
                 children: [
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded, color: Colors.white),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      color: DunesColors.resolve(context, Colors.white),
+                    ),
                   ),
                   if (widget.onLocateInChat != null)
                     TextButton.icon(
@@ -453,14 +481,17 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
                         Navigator.of(context).pop();
                         widget.onLocateInChat!();
                       },
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.my_location_rounded,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                         size: 18,
                       ),
                       label: const Text('定位聊天'),
                       style: TextButton.styleFrom(
-                        foregroundColor: Colors.white,
+                        foregroundColor: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                        ),
                       ),
                     ),
                 ],
@@ -554,7 +585,11 @@ class _VideoSeekBarState extends State<_VideoSeekBar> {
     final durLabel = _formatVideoClock(value.duration);
 
     return Material(
-      color: Colors.black.withValues(alpha: 0.55),
+      color: DunesColors.resolve(
+        context,
+        Colors.black,
+        role: DunesColorRole.surface,
+      ).withValues(alpha: 0.55),
       borderRadius: BorderRadius.circular(12),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(6, 4, 12, 4),
@@ -571,13 +606,13 @@ class _VideoSeekBarState extends State<_VideoSeekBar> {
               },
               icon: Icon(
                 playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                color: Colors.white,
+                color: DunesColors.resolve(context, Colors.white),
               ),
             ),
             Text(
               posLabel,
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: DunesColors.resolve(context, Colors.white70),
                 fontSize: 12,
                 fontFeatures: [FontFeature.tabularFigures()],
               ),
@@ -592,10 +627,19 @@ class _VideoSeekBarState extends State<_VideoSeekBar> {
                   overlayShape: const RoundSliderOverlayShape(
                     overlayRadius: 14,
                   ),
-                  activeTrackColor: const Color(0xFF7E64BD),
-                  inactiveTrackColor: Colors.white24,
-                  thumbColor: Colors.white,
-                  overlayColor: const Color(0x337E64BD),
+                  activeTrackColor: DunesColors.resolve(
+                    context,
+                    const Color(0xFF7E64BD),
+                  ),
+                  inactiveTrackColor: DunesColors.resolve(
+                    context,
+                    Colors.white24,
+                  ),
+                  thumbColor: DunesColors.resolve(context, Colors.white),
+                  overlayColor: DunesColors.resolve(
+                    context,
+                    const Color(0x337E64BD),
+                  ),
                 ),
                 child: Slider(
                   min: 0,
@@ -623,8 +667,8 @@ class _VideoSeekBarState extends State<_VideoSeekBar> {
             ),
             Text(
               durLabel,
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: DunesColors.resolve(context, Colors.white70),
                 fontSize: 12,
                 fontFeatures: [FontFeature.tabularFigures()],
               ),
@@ -677,11 +721,15 @@ class _PlayPauseOverlayState extends State<_PlayPauseOverlay> {
         opacity: playing ? 0 : 1,
         duration: const Duration(milliseconds: 180),
         child: Container(
-          color: Colors.black26,
+          color: DunesColors.resolve(
+            context,
+            Colors.black26,
+            role: DunesColorRole.surface,
+          ),
           alignment: Alignment.center,
-          child: const Icon(
+          child: Icon(
             Icons.play_arrow_rounded,
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
             size: 64,
           ),
         ),

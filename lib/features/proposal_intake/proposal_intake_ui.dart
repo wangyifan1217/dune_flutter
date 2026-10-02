@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'proposal_intake_models.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 abstract final class ProposalPalette {
   static const page = Color(0xFFF3F0F7);
@@ -123,35 +124,39 @@ class ProposalStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (bg, border, color) = switch (kind) {
       ProposalChipKind.ok => (
-        ProposalPalette.greenSoft,
-        const Color(0xFFC8D5B0),
-        ProposalPalette.green,
+        DunesColors.resolve(context, ProposalPalette.greenSoft),
+        DunesColors.resolve(context, const Color(0xFFC8D5B0)),
+        DunesColors.resolve(context, ProposalPalette.green),
       ),
       ProposalChipKind.warn => (
-        ProposalPalette.coralSoft,
-        const Color(0xFFE7C2B0),
-        ProposalPalette.coral,
+        DunesColors.resolve(context, ProposalPalette.coralSoft),
+        DunesColors.resolve(context, const Color(0xFFE7C2B0)),
+        DunesColors.resolve(context, ProposalPalette.coral),
       ),
       ProposalChipKind.draft => (
-        ProposalPalette.amberSoft,
-        const Color(0xFFE0CBA0),
-        ProposalPalette.amber,
+        DunesColors.resolve(context, ProposalPalette.amberSoft),
+        DunesColors.resolve(context, const Color(0xFFE0CBA0)),
+        DunesColors.resolve(context, ProposalPalette.amber),
       ),
       ProposalChipKind.purple => (
-        ProposalPalette.purpleSoft,
-        ProposalPalette.purpleLine,
-        ProposalPalette.purpleDeep,
+        DunesColors.resolve(context, ProposalPalette.purpleSoft),
+        DunesColors.resolve(context, ProposalPalette.purpleLine),
+        DunesColors.resolve(context, ProposalPalette.purpleDeep),
       ),
       ProposalChipKind.normal => (
-        ProposalPalette.soft,
-        ProposalPalette.borderSoft,
-        ProposalPalette.text2,
+        DunesColors.resolve(context, ProposalPalette.soft),
+        DunesColors.resolve(context, ProposalPalette.borderSoft),
+        DunesColors.resolve(context, ProposalPalette.text2),
       ),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: bg,
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
         border: Border.all(color: border),
         borderRadius: BorderRadius.circular(4),
       ),
@@ -159,13 +164,17 @@ class ProposalStatusChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 13, color: color),
+            Icon(
+              icon,
+              size: 13,
+              color: DunesColors.resolveNullable(context, color),
+            ),
             const SizedBox(width: 5),
           ],
           Text(
             label,
             style: TextStyle(
-              color: color,
+              color: DunesColors.resolveNullable(context, color),
               fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
@@ -212,10 +221,22 @@ class ProposalCard extends StatelessWidget {
       margin: margin,
       padding: resolvedPadding,
       decoration: BoxDecoration(
-        color: gradient == null ? ProposalPalette.card : null,
+        color: gradient == null
+            ? DunesColors.resolve(
+                context,
+                ProposalPalette.card,
+                role: DunesColorRole.surface,
+              )
+            : null,
         gradient: gradient,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: ProposalPalette.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0C4E3A6C),
@@ -257,7 +278,7 @@ class ProposalSectionTitle extends StatelessWidget {
             Text(
               title,
               style: TextStyle(
-                color: ProposalPalette.text,
+                color: DunesColors.resolve(context, ProposalPalette.text),
                 fontSize: stacked ? 17 : 19,
                 fontWeight: lighthouse ? FontWeight.w600 : FontWeight.w700,
               ),
@@ -265,16 +286,26 @@ class ProposalSectionTitle extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: ProposalPalette.purpleSoft,
+                color: DunesColors.resolve(
+                  context,
+                  ProposalPalette.purpleSoft,
+                  role: DunesColorRole.surface,
+                ),
                 border: lighthouse
                     ? null
-                    : Border.all(color: ProposalPalette.borderStrong),
+                    : Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.borderStrong,
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 tag.toUpperCase(),
-                style: const TextStyle(
-                  color: ProposalPalette.purple,
+                style: TextStyle(
+                  color: DunesColors.resolve(context, ProposalPalette.purple),
                   fontSize: 9,
                   fontWeight: FontWeight.w600,
                   letterSpacing: .6,
@@ -343,8 +374,8 @@ class ProposalFormulaHint extends StatelessWidget {
         children: [
           Text(
             formula,
-            style: const TextStyle(
-              color: ProposalPalette.text3,
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text3),
               fontSize: 11,
               height: 1.25,
             ),
@@ -352,8 +383,8 @@ class ProposalFormulaHint extends StatelessWidget {
           if (extra.isNotEmpty)
             Text(
               extra,
-              style: const TextStyle(
-                color: ProposalPalette.text3,
+              style: TextStyle(
+                color: DunesColors.resolve(context, ProposalPalette.text3),
                 fontSize: 10,
                 height: 1.25,
               ),
@@ -396,12 +427,18 @@ class ProposalFormulaQuestionMark extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: ProposalPalette.purpleDeep),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                ProposalPalette.purpleDeep,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
-          child: const Text(
+          child: Text(
             '?',
             style: TextStyle(
-              color: ProposalPalette.purpleDeep,
+              color: DunesColors.resolve(context, ProposalPalette.purpleDeep),
               fontSize: 11,
               fontWeight: FontWeight.w700,
               height: 1,
@@ -451,8 +488,8 @@ class ProposalField extends StatelessWidget {
         ProposalChipKind.normal,
       ),
       ProposalFieldTone.locked => (
-        ProposalPalette.page,
-        ProposalPalette.borderStrong,
+        DunesColors.resolve(context, ProposalPalette.page),
+        DunesColors.resolve(context, ProposalPalette.borderStrong),
         ProposalChipKind.draft,
       ),
       ProposalFieldTone.fill => (
@@ -463,14 +500,19 @@ class ProposalField extends StatelessWidget {
     };
     // fill 与 auto 都靠输入框自身的 hairline 描边表达，外层不再套底色方块。
     final framed =
-        resolved != ProposalFieldTone.fill && resolved != ProposalFieldTone.auto;
+        resolved != ProposalFieldTone.fill &&
+        resolved != ProposalFieldTone.auto;
     return SizedBox(
       width: double.infinity,
       child: Padding(
         padding: const EdgeInsets.all(2),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: framed ? bg : null,
+            color: DunesColors.resolveNullable(
+              context,
+              framed ? bg : null,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(10),
             border: framed ? Border.all(color: border) : null,
           ),
@@ -487,17 +529,23 @@ class ProposalField extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: const TextStyle(
-                        color: ProposalPalette.text3,
+                      style: TextStyle(
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.text3,
+                        ),
                         fontSize: 11,
                         letterSpacing: .2,
                       ),
                     ),
                     if (required)
-                      const Text(
+                      Text(
                         '*',
                         style: TextStyle(
-                          color: ProposalPalette.coral,
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.coral,
+                          ),
                           fontSize: 12,
                         ),
                       ),
@@ -554,10 +602,10 @@ class ProposalReviewToggle extends StatelessWidget {
           : pendingLabel;
       if (subtle) {
         final color = reviewed
-            ? ProposalPalette.green
+            ? DunesColors.resolve(context, ProposalPalette.green)
             : rejected
-            ? const Color(0xFFB42318)
-            : ProposalPalette.text3;
+            ? DunesColors.resolve(context, const Color(0xFFB42318))
+            : DunesColors.resolve(context, ProposalPalette.text3);
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -565,14 +613,14 @@ class ProposalReviewToggle extends StatelessWidget {
               Icon(
                 reviewed ? Icons.check_rounded : Icons.error_outline_rounded,
                 size: 12,
-                color: color,
+                color: DunesColors.resolveNullable(context, color),
               ),
               const SizedBox(width: 3),
             ],
             Text(
               label,
               style: TextStyle(
-                color: color,
+                color: DunesColors.resolveNullable(context, color),
                 fontSize: 10,
                 fontWeight: FontWeight.w500,
               ),
@@ -584,17 +632,41 @@ class ProposalReviewToggle extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         decoration: BoxDecoration(
           color: reviewed
-              ? ProposalPalette.greenSoft
+              ? DunesColors.resolve(
+                  context,
+                  ProposalPalette.greenSoft,
+                  role: DunesColorRole.surface,
+                )
               : rejected
-              ? const Color(0xFFF8E8E8)
-              : ProposalPalette.page,
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFFF8E8E8),
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  ProposalPalette.page,
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: reviewed
-                ? ProposalPalette.green
+                ? DunesColors.resolve(
+                    context,
+                    ProposalPalette.green,
+                    role: DunesColorRole.border,
+                  )
                 : rejected
-                ? const Color(0xFFD9A3A3)
-                : ProposalPalette.borderStrong,
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFD9A3A3),
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    ProposalPalette.borderStrong,
+                    role: DunesColorRole.border,
+                  ),
           ),
         ),
         child: Text(
@@ -603,10 +675,10 @@ class ProposalReviewToggle extends StatelessWidget {
             fontSize: 11,
             fontWeight: FontWeight.w600,
             color: reviewed
-                ? ProposalPalette.green
+                ? DunesColors.resolve(context, ProposalPalette.green)
                 : rejected
-                ? const Color(0xFFB42318)
-                : ProposalPalette.text3,
+                ? DunesColors.resolve(context, const Color(0xFFB42318))
+                : DunesColors.resolve(context, ProposalPalette.text3),
           ),
         ),
       );
@@ -625,13 +697,31 @@ class ProposalReviewToggle extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 9),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             backgroundColor: reviewed
-                ? ProposalPalette.greenSoft
-                : ProposalPalette.purpleSoft,
+                ? DunesColors.resolve(
+                    context,
+                    ProposalPalette.greenSoft,
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    ProposalPalette.purpleSoft,
+                    role: DunesColorRole.surface,
+                  ),
             foregroundColor: reviewed
-                ? ProposalPalette.green
-                : ProposalPalette.purpleDeep,
+                ? DunesColors.resolve(context, ProposalPalette.green)
+                : DunesColors.resolve(context, ProposalPalette.purpleDeep),
             side: BorderSide(
-              color: reviewed ? ProposalPalette.green : ProposalPalette.purple,
+              color: reviewed
+                  ? DunesColors.resolve(
+                      context,
+                      ProposalPalette.green,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      ProposalPalette.purple,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Row(
@@ -656,8 +746,17 @@ class ProposalReviewToggle extends StatelessWidget {
               minimumSize: const Size(0, 30),
               padding: const EdgeInsets.symmetric(horizontal: 9),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              foregroundColor: const Color(0xFFB42318),
-              side: const BorderSide(color: Color(0xFFD9A3A3)),
+              foregroundColor: DunesColors.resolve(
+                context,
+                const Color(0xFFB42318),
+              ),
+              side: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  Color(0xFFD9A3A3),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: const Text('驳回', style: TextStyle(fontSize: 11)),
           ),
@@ -822,8 +921,16 @@ class _ProposalCenterToastState extends State<_ProposalCenterToast> {
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             decoration: BoxDecoration(
               color: widget.error
-                  ? ProposalPalette.coral
-                  : ProposalPalette.purpleDeep,
+                  ? DunesColors.resolve(
+                      context,
+                      ProposalPalette.coral,
+                      role: DunesColorRole.surface,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      ProposalPalette.purpleDeep,
+                      role: DunesColorRole.surface,
+                    ),
               borderRadius: BorderRadius.circular(12),
               boxShadow: const [
                 BoxShadow(
@@ -840,15 +947,15 @@ class _ProposalCenterToastState extends State<_ProposalCenterToast> {
                   widget.error
                       ? Icons.error_outline_rounded
                       : Icons.check_circle_outline_rounded,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
                   size: 18,
                 ),
                 const SizedBox(width: 9),
                 Flexible(
                   child: Text(
                     widget.message,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: DunesColors.resolve(context, Colors.white),
                       fontSize: 13,
                       height: 1.4,
                       fontWeight: FontWeight.w500,
@@ -928,17 +1035,35 @@ class ProposalChoiceChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final canTap = enabled && onSelected != null;
     final background = !enabled
-        ? (selected ? const Color(0xFFD0D5DE) : ProposalPalette.page)
-        : (selected ? selectedFill : Colors.white);
-    final foreground = enabled ? ProposalPalette.text : ProposalPalette.text3;
+        ? (selected
+              ? DunesColors.resolve(context, const Color(0xFFD0D5DE))
+              : DunesColors.resolve(context, ProposalPalette.page))
+        : (selected
+              ? selectedFill
+              : DunesColors.resolve(context, Colors.white));
+    final foreground = enabled
+        ? DunesColors.resolve(context, ProposalPalette.text)
+        : DunesColors.resolve(context, ProposalPalette.text3);
     final border = selected
-        ? (enabled ? selectedBorder : ProposalPalette.text4)
-        : ProposalPalette.text4;
+        ? (enabled
+              ? selectedBorder
+              : DunesColors.resolve(context, ProposalPalette.text4))
+        : DunesColors.resolve(context, ProposalPalette.text4);
     return Material(
-      color: background,
+      color: DunesColors.resolveNullable(
+        context,
+        background,
+        role: DunesColorRole.surface,
+      ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(6),
-        side: BorderSide(color: border),
+        side: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            border,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
@@ -948,7 +1073,7 @@ class ProposalChoiceChip extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: foreground,
+              color: DunesColors.resolveNullable(context, foreground),
               fontSize: 11,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
@@ -995,13 +1120,21 @@ class ProposalPills extends StatelessWidget {
           ActionChip(
             label: const Text('+ 新增'),
             onPressed: enabled ? onAdd : null,
-            backgroundColor: Colors.white,
-            side: const BorderSide(
-              color: ProposalPalette.border,
+            backgroundColor: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
+            side: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                ProposalPalette.border,
+                role: DunesColorRole.border,
+              ),
               style: BorderStyle.solid,
             ),
-            labelStyle: const TextStyle(
-              color: ProposalPalette.text3,
+            labelStyle: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text3),
               fontSize: 11,
             ),
             visualDensity: VisualDensity.compact,
@@ -1030,9 +1163,21 @@ class ProposalPresidentDecisionBar extends StatelessWidget {
     return SafeArea(
       top: false,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: ProposalPalette.app,
-          border: Border(top: BorderSide(color: ProposalPalette.borderSoft)),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.app,
+            role: DunesColorRole.surface,
+          ),
+          border: Border(
+            top: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                ProposalPalette.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
@@ -1040,12 +1185,12 @@ class ProposalPresidentDecisionBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 '最终确认',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: ProposalPalette.text2,
+                  color: DunesColors.resolve(context, ProposalPalette.text2),
                 ),
               ),
               const SizedBox(height: 8),
@@ -1056,8 +1201,17 @@ class ProposalPresidentDecisionBar extends StatelessWidget {
                       key: const ValueKey('proposal-president-reject'),
                       onPressed: onReject,
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: ProposalPalette.coral,
-                        side: const BorderSide(color: Color(0xFFE7C2B0)),
+                        foregroundColor: DunesColors.resolve(
+                          context,
+                          ProposalPalette.coral,
+                        ),
+                        side: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            Color(0xFFE7C2B0),
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                         minimumSize: const Size(0, height),
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),
@@ -1076,8 +1230,15 @@ class ProposalPresidentDecisionBar extends StatelessWidget {
                       key: const ValueKey('proposal-president-approve'),
                       onPressed: onApprove,
                       style: FilledButton.styleFrom(
-                        backgroundColor: ProposalPalette.purpleDeep,
-                        foregroundColor: Colors.white,
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          ProposalPalette.purpleDeep,
+                          role: DunesColorRole.surface,
+                        ),
+                        foregroundColor: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                        ),
                         minimumSize: const Size(0, height),
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),
@@ -1119,9 +1280,21 @@ class ProposalModuleConfirmBar extends StatelessWidget {
     return SafeArea(
       top: false,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: Color(0xFFECF8EE),
-          border: Border(top: BorderSide(color: Color(0xFFB9DDBE))),
+        decoration: BoxDecoration(
+          color: DunesColors.resolveNullable(
+            context,
+            Color(0xFFECF8EE),
+            role: DunesColorRole.surface,
+          ),
+          border: Border(
+            top: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFB9DDBE),
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
@@ -1131,19 +1304,22 @@ class ProposalModuleConfirmBar extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
-                  color: ProposalPalette.green,
+                  color: DunesColors.resolve(context, ProposalPalette.green),
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 message,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   height: 1.4,
-                  color: Color(0xFF3E6B46),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF3E6B46),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -1154,8 +1330,12 @@ class ProposalModuleConfirmBar extends StatelessWidget {
                   key: const ValueKey('proposal-module-confirm-bar'),
                   onPressed: onConfirm,
                   style: FilledButton.styleFrom(
-                    backgroundColor: ProposalPalette.green,
-                    foregroundColor: Colors.white,
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      ProposalPalette.green,
+                      role: DunesColorRole.surface,
+                    ),
+                    foregroundColor: DunesColors.resolve(context, Colors.white),
                   ),
                   child: Text(
                     confirmLabel,
@@ -1192,9 +1372,21 @@ class ProposalNextPendingFooter extends StatelessWidget {
     return SafeArea(
       top: false,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: ProposalPalette.app,
-          border: Border(top: BorderSide(color: ProposalPalette.borderSoft)),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.app,
+            role: DunesColorRole.surface,
+          ),
+          border: Border(
+            top: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                ProposalPalette.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
@@ -1204,8 +1396,16 @@ class ProposalNextPendingFooter extends StatelessWidget {
             child: FilledButton.icon(
               onPressed: loading ? null : onPressed,
               style: FilledButton.styleFrom(
-                backgroundColor: ProposalPalette.purpleDeep,
-                disabledBackgroundColor: ProposalPalette.purpleSoft,
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  ProposalPalette.purpleDeep,
+                  role: DunesColorRole.surface,
+                ),
+                disabledBackgroundColor: DunesColors.resolve(
+                  context,
+                  ProposalPalette.purpleSoft,
+                  role: DunesColorRole.surface,
+                ),
               ),
               icon: loading
                   ? const SizedBox(
@@ -1284,14 +1484,21 @@ Future<void> showProposalIntakeProcessHelp(
                           width: 22,
                           height: 22,
                           alignment: Alignment.center,
-                          decoration: const BoxDecoration(
-                            color: ProposalPalette.purpleSoft,
+                          decoration: BoxDecoration(
+                            color: DunesColors.resolve(
+                              ctx,
+                              ProposalPalette.purpleSoft,
+                              role: DunesColorRole.surface,
+                            ),
                             shape: BoxShape.circle,
                           ),
                           child: Text(
                             step.$1,
-                            style: const TextStyle(
-                              color: ProposalPalette.purpleDeep,
+                            style: TextStyle(
+                              color: DunesColors.resolve(
+                                ctx,
+                                ProposalPalette.purpleDeep,
+                              ),
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                             ),
@@ -1301,8 +1508,11 @@ Future<void> showProposalIntakeProcessHelp(
                         Expanded(
                           child: Text(
                             step.$2,
-                            style: const TextStyle(
-                              color: ProposalPalette.text,
+                            style: TextStyle(
+                              color: DunesColors.resolve(
+                                ctx,
+                                ProposalPalette.text,
+                              ),
                               fontSize: 13,
                               height: 1.45,
                             ),
@@ -1311,23 +1521,23 @@ Future<void> showProposalIntakeProcessHelp(
                       ],
                     ),
                   ),
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(top: 4, bottom: 8),
                   child: Text(
                     '催办与转发',
                     style: TextStyle(
-                      color: ProposalPalette.text,
+                      color: DunesColors.resolve(ctx, ProposalPalette.text),
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-                const Text(
+                Text(
                   '「催办」只把当前待办再发一次到审批助手，不改变提案阶段。\n'
                   '「转发」自己选会话，把提案名片发出去，不经过审批助手，也不推进流程。\n'
                   '点「通知财务填写 / 提交复核 / 通知最终人」仍走审批助手，那是第一次派发流程待办。',
                   style: TextStyle(
-                    color: ProposalPalette.text,
+                    color: DunesColors.resolve(ctx, ProposalPalette.text),
                     fontSize: 13,
                     height: 1.45,
                   ),
@@ -1360,17 +1570,17 @@ Future<void> showProposalCostFormulaHelp(
       children: [
         Text(
           title,
-          style: const TextStyle(
-            color: ProposalPalette.text,
+          style: TextStyle(
+            color: DunesColors.resolve(ctx, ProposalPalette.text),
             fontSize: 16,
             fontWeight: FontWeight.w700,
           ),
         ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           '测算公式',
           style: TextStyle(
-            color: ProposalPalette.text3,
+            color: DunesColors.resolve(ctx, ProposalPalette.text3),
             fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
@@ -1378,8 +1588,8 @@ Future<void> showProposalCostFormulaHelp(
         const SizedBox(height: 6),
         SelectableText(
           formula,
-          style: const TextStyle(
-            color: ProposalPalette.text,
+          style: TextStyle(
+            color: DunesColors.resolve(ctx, ProposalPalette.text),
             fontSize: 14,
             height: 1.45,
             fontWeight: FontWeight.w600,
@@ -1387,10 +1597,10 @@ Future<void> showProposalCostFormulaHelp(
         ),
         if (substitution.trim().isNotEmpty) ...[
           const SizedBox(height: 14),
-          const Text(
+          Text(
             '代入当前值',
             style: TextStyle(
-              color: ProposalPalette.text3,
+              color: DunesColors.resolve(ctx, ProposalPalette.text3),
               fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
@@ -1398,8 +1608,8 @@ Future<void> showProposalCostFormulaHelp(
           const SizedBox(height: 6),
           SelectableText(
             substitution,
-            style: const TextStyle(
-              color: ProposalPalette.purpleDeep,
+            style: TextStyle(
+              color: DunesColors.resolve(ctx, ProposalPalette.purpleDeep),
               fontSize: 13,
               height: 1.45,
               fontWeight: FontWeight.w600,
@@ -1480,10 +1690,10 @@ class ProposalCostFormulaHelpButton extends StatelessWidget {
           substitution: substitution,
         ),
       ),
-      icon: const Icon(
+      icon: Icon(
         Icons.functions_outlined,
         size: 18,
-        color: ProposalPalette.purpleDeep,
+        color: DunesColors.resolve(context, ProposalPalette.purpleDeep),
       ),
     );
   }
@@ -1514,7 +1724,7 @@ class ProposalIntakeProcessHelpButton extends StatelessWidget {
       icon: Icon(
         Icons.help_outline_rounded,
         size: compact ? 20 : 22,
-        color: ProposalPalette.purpleDeep,
+        color: DunesColors.resolve(context, ProposalPalette.purpleDeep),
       ),
     );
   }
@@ -1582,9 +1792,19 @@ class _ProposalIntakeProgressTimelineState
       width: double.infinity,
       margin: const EdgeInsets.only(top: 12, bottom: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: ProposalPalette.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1597,8 +1817,12 @@ class _ProposalIntakeProgressTimelineState
               compact ? 14 : 16,
               10,
             ),
-            decoration: const BoxDecoration(
-              color: ProposalPalette.page,
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                context,
+                ProposalPalette.page,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
             ),
             child: Row(
@@ -1607,10 +1831,13 @@ class _ProposalIntakeProgressTimelineState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         '审批进度',
                         style: TextStyle(
-                          color: ProposalPalette.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.text2,
+                          ),
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                         ),
@@ -1619,8 +1846,11 @@ class _ProposalIntakeProgressTimelineState
                         const SizedBox(height: 2),
                         Text(
                           headline,
-                          style: const TextStyle(
-                            color: ProposalPalette.text3,
+                          style: TextStyle(
+                            color: DunesColors.resolve(
+                              context,
+                              ProposalPalette.text3,
+                            ),
                             fontSize: 11,
                             height: 1.35,
                           ),
@@ -1699,9 +1929,18 @@ class _ProposalProgressRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final statusColor = switch (step.state) {
       ProposalIntakeProgressState.done => line,
-      ProposalIntakeProgressState.current => ProposalPalette.purpleDeep,
-      ProposalIntakeProgressState.rejected => ProposalPalette.coral,
-      ProposalIntakeProgressState.pending => ProposalPalette.text3,
+      ProposalIntakeProgressState.current => DunesColors.resolve(
+        context,
+        ProposalPalette.purpleDeep,
+      ),
+      ProposalIntakeProgressState.rejected => DunesColors.resolve(
+        context,
+        ProposalPalette.coral,
+      ),
+      ProposalIntakeProgressState.pending => DunesColors.resolve(
+        context,
+        ProposalPalette.text3,
+      ),
     };
     return IntrinsicHeight(
       child: Row(
@@ -1720,7 +1959,11 @@ class _ProposalProgressRow extends StatelessWidget {
                   Expanded(
                     child: Container(
                       width: 2,
-                      color: _active ? line : lineSoft,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        _active ? line : lineSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       margin: const EdgeInsets.symmetric(vertical: 2),
                     ),
                   ),
@@ -1748,8 +1991,14 @@ class _ProposalProgressRow extends StatelessWidget {
                                 color:
                                     step.state ==
                                         ProposalIntakeProgressState.pending
-                                    ? ProposalPalette.text3
-                                    : ProposalPalette.text,
+                                    ? DunesColors.resolve(
+                                        context,
+                                        ProposalPalette.text3,
+                                      )
+                                    : DunesColors.resolve(
+                                        context,
+                                        ProposalPalette.text,
+                                      ),
                                 fontSize: compact ? 13 : 14,
                                 fontWeight: FontWeight.w700,
                                 height: 1.3,
@@ -1761,7 +2010,10 @@ class _ProposalProgressRow extends StatelessWidget {
                               Text(
                                 step.statusText,
                                 style: TextStyle(
-                                  color: statusColor,
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    statusColor,
+                                  ),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -1778,8 +2030,14 @@ class _ProposalProgressRow extends StatelessWidget {
                               color:
                                   step.state ==
                                       ProposalIntakeProgressState.current
-                                  ? ProposalPalette.purpleDeep
-                                  : ProposalPalette.text3,
+                                  ? DunesColors.resolve(
+                                      context,
+                                      ProposalPalette.purpleDeep,
+                                    )
+                                  : DunesColors.resolve(
+                                      context,
+                                      ProposalPalette.text3,
+                                    ),
                               fontSize: 11,
                             ),
                           ),
@@ -1794,8 +2052,11 @@ class _ProposalProgressRow extends StatelessWidget {
                     if (step.action.isNotEmpty)
                       Text(
                         step.action,
-                        style: const TextStyle(
-                          color: ProposalPalette.text3,
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.text3,
+                          ),
                           fontSize: 12,
                           height: 1.4,
                         ),
@@ -1816,8 +2077,14 @@ class _ProposalProgressRow extends StatelessWidget {
                                   color:
                                       step.state ==
                                           ProposalIntakeProgressState.pending
-                                      ? ProposalPalette.text3
-                                      : ProposalPalette.text,
+                                      ? DunesColors.resolve(
+                                          context,
+                                          ProposalPalette.text3,
+                                        )
+                                      : DunesColors.resolve(
+                                          context,
+                                          ProposalPalette.text,
+                                        ),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                   height: 1.4,
@@ -1827,7 +2094,10 @@ class _ProposalProgressRow extends StatelessWidget {
                               Text(
                                 step.statusText,
                                 style: TextStyle(
-                                  color: statusColor,
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    statusColor,
+                                  ),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                   height: 1.4,
@@ -1866,7 +2136,13 @@ class _ProposalProgressDot extends StatelessWidget {
         width: 16,
         height: 16,
         decoration: BoxDecoration(
-          color: pending ? Colors.white : color,
+          color: pending
+              ? DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                )
+              : color,
           border: Border.all(color: color, width: 2),
           borderRadius: BorderRadius.circular(3),
         ),
@@ -1876,7 +2152,13 @@ class _ProposalProgressDot extends StatelessWidget {
       width: 22,
       height: 22,
       decoration: BoxDecoration(
-        color: pending ? Colors.white : color,
+        color: pending
+            ? DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              )
+            : color,
         shape: BoxShape.circle,
         border: Border.all(color: color, width: 1.6),
       ),
@@ -1885,7 +2167,7 @@ class _ProposalProgressDot extends StatelessWidget {
             ? Icons.close
             : Icons.person,
         size: 13,
-        color: pending ? color : Colors.white,
+        color: pending ? color : DunesColors.resolve(context, Colors.white),
       ),
     );
   }

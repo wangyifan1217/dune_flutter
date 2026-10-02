@@ -5,11 +5,7 @@ import 'robot_character.dart';
 import 'robot_models.dart';
 
 class RobotSearchField extends StatelessWidget {
-  const RobotSearchField({
-    super.key,
-    this.hint = '搜索',
-    this.onChanged,
-  });
+  const RobotSearchField({super.key, this.hint = '搜索', this.onChanged});
 
   final String hint;
   final ValueChanged<String>? onChanged;
@@ -20,11 +16,26 @@ class RobotSearchField extends StatelessWidget {
       onChanged: onChanged,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: DunesTypography.sans(fontSize: 13, color: RobotTheme.text3),
-        prefixIcon: const Icon(Icons.search_rounded, size: 20, color: RobotTheme.text3),
+        hintStyle: DunesTypography.sans(
+          fontSize: 13,
+          color: DunesColors.resolve(context, RobotTheme.text3),
+          context: context,
+        ),
+        prefixIcon: Icon(
+          Icons.search_rounded,
+          size: 20,
+          color: DunesColors.resolve(context, RobotTheme.text3),
+        ),
         filled: true,
-        fillColor: const Color(0xFFF0F1F3),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        fillColor: DunesColors.resolve(
+          context,
+          const Color(0xFFF0F1F3),
+          role: DunesColorRole.surface,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -49,7 +60,11 @@ class RobotScenarioCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -57,7 +72,13 @@ class RobotScenarioCard extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: RobotTheme.cardBorder),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                RobotTheme.cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.04),
@@ -77,13 +98,20 @@ class RobotScenarioCard extends StatelessWidget {
                       width: 22,
                       height: 22,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFF1C9),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFFFF1C9),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.auto_awesome_rounded,
                         size: 14,
-                        color: Color(0xFFD4A017),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFFD4A017),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -93,7 +121,8 @@ class RobotScenarioCard extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: RobotTheme.text,
+                          color: DunesColors.resolve(context, RobotTheme.text),
+                          context: context,
                         ),
                       ),
                     ),
@@ -107,7 +136,8 @@ class RobotScenarioCard extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 12,
                     height: 1.45,
-                    color: RobotTheme.text2,
+                    color: DunesColors.resolve(context, RobotTheme.text2),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -115,13 +145,18 @@ class RobotScenarioCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Icon(Icons.account_tree_outlined, size: 14, color: RobotTheme.text3),
+                    Icon(
+                      Icons.account_tree_outlined,
+                      size: 14,
+                      color: DunesColors.resolve(context, RobotTheme.text3),
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${scenario.stepCount} 步',
                       style: DunesTypography.sans(
                         fontSize: 12,
-                        color: RobotTheme.text3,
+                        color: DunesColors.resolve(context, RobotTheme.text3),
+                        context: context,
                       ),
                     ),
                     const Spacer(),
@@ -130,9 +165,19 @@ class RobotScenarioCard extends StatelessWidget {
                       icon: const Icon(Icons.play_arrow_rounded, size: 18),
                       label: const Text('运行'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: RobotTheme.purple,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          RobotTheme.purple,
+                          role: DunesColorRole.surface,
+                        ),
+                        foregroundColor: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
@@ -174,7 +219,11 @@ class RobotRoleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -183,7 +232,17 @@ class RobotRoleCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: selected ? RobotTheme.purple : RobotTheme.cardBorder,
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      RobotTheme.purple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      RobotTheme.cardBorder,
+                      role: DunesColorRole.border,
+                    ),
               width: selected ? 1.5 : 1,
             ),
             boxShadow: [
@@ -213,7 +272,11 @@ class RobotRoleCard extends StatelessWidget {
                             style: DunesTypography.sans(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: RobotTheme.purple,
+                              color: DunesColors.resolve(
+                                context,
+                                RobotTheme.purple,
+                              ),
+                              context: context,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -222,7 +285,11 @@ class RobotRoleCard extends StatelessWidget {
                             style: DunesTypography.sans(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
-                              color: RobotTheme.text,
+                              color: DunesColors.resolve(
+                                context,
+                                RobotTheme.text,
+                              ),
+                              context: context,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -233,7 +300,11 @@ class RobotRoleCard extends StatelessWidget {
                             style: DunesTypography.sans(
                               fontSize: 12,
                               height: 1.4,
-                              color: RobotTheme.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                RobotTheme.text2,
+                              ),
+                              context: context,
                             ),
                           ),
                         ],
@@ -249,14 +320,35 @@ class RobotRoleCard extends StatelessWidget {
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: selected
-                                ? RobotTheme.purple
-                                : const Color(0xFFC9CDD3),
+                                ? DunesColors.resolve(
+                                    context,
+                                    RobotTheme.purple,
+                                    role: DunesColorRole.border,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    const Color(0xFFC9CDD3),
+                                    role: DunesColorRole.border,
+                                  ),
                             width: 1.5,
                           ),
-                          color: selected ? RobotTheme.purple : Colors.transparent,
+                          color: selected
+                              ? DunesColors.resolve(
+                                  context,
+                                  RobotTheme.purple,
+                                  role: DunesColorRole.surface,
+                                )
+                              : Colors.transparent,
                         ),
                         child: selected
-                            ? const Icon(Icons.check, size: 12, color: Colors.white)
+                            ? Icon(
+                                Icons.check,
+                                size: 12,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
+                              )
                             : null,
                       ),
                     ],
@@ -266,13 +358,18 @@ class RobotRoleCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Icon(Icons.smart_toy_outlined, size: 14, color: RobotTheme.text3),
+                      Icon(
+                        Icons.smart_toy_outlined,
+                        size: 14,
+                        color: DunesColors.resolve(context, RobotTheme.text3),
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         '数字员工',
                         style: DunesTypography.sans(
                           fontSize: 12,
-                          color: RobotTheme.text3,
+                          color: DunesColors.resolve(context, RobotTheme.text3),
+                          context: context,
                         ),
                       ),
                       const Spacer(),
@@ -281,8 +378,15 @@ class RobotRoleCard extends StatelessWidget {
                         icon: const Icon(Icons.play_arrow_rounded, size: 18),
                         label: const Text('运行'),
                         style: FilledButton.styleFrom(
-                          backgroundColor: RobotTheme.purple,
-                          foregroundColor: Colors.white,
+                          backgroundColor: DunesColors.resolve(
+                            context,
+                            RobotTheme.purple,
+                            role: DunesColorRole.surface,
+                          ),
+                          foregroundColor: DunesColors.resolve(
+                            context,
+                            Colors.white,
+                          ),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
                             vertical: 8,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../platform/desktop_features.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 class DunesChoiceItem {
   const DunesChoiceItem({
@@ -33,7 +34,11 @@ Future<void> showDunesChoicePanel({
 
   Widget panel(BuildContext ctx, {required bool sheet}) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        ctx,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: sheet
           ? const BorderRadius.vertical(top: Radius.circular(20))
           : BorderRadius.circular(20),
@@ -50,7 +55,11 @@ Future<void> showDunesChoicePanel({
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE8E0F0),
+                    color: DunesColors.resolve(
+                      ctx,
+                      const Color(0xFFE8E0F0),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -62,20 +71,23 @@ Future<void> showDunesChoicePanel({
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF2C1E3F),
+                      color: DunesColors.resolveNullable(
+                        ctx,
+                        Color(0xFF2C1E3F),
+                      ),
                     ),
                   ),
                 ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   onPressed: () => Navigator.of(ctx).pop(),
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.close_rounded,
                     size: 20,
-                    color: Color(0xFF8A7A9E),
+                    color: DunesColors.resolveNullable(ctx, Color(0xFF8A7A9E)),
                   ),
                 ),
               ],
@@ -121,10 +133,7 @@ Future<void> showDunesChoicePanel({
   await showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => SafeArea(
-      top: false,
-      child: panel(ctx, sheet: true),
-    ),
+    builder: (ctx) => SafeArea(top: false, child: panel(ctx, sheet: true)),
   );
 }
 
@@ -137,7 +146,11 @@ class _ChoiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFF8F5FC),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF8F5FC),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -150,10 +163,18 @@ class _ChoiceCard extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: item.color.withValues(alpha: 0.12),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    item.color.withValues(alpha: 0.12),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(item.icon, color: item.color, size: 20),
+                child: Icon(
+                  item.icon,
+                  color: DunesColors.resolveNullable(context, item.color),
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -162,10 +183,13 @@ class _ChoiceCard extends StatelessWidget {
                   children: [
                     Text(
                       item.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF2C1E3F),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF2C1E3F),
+                        ),
                       ),
                     ),
                     if (item.subtitle.trim().isNotEmpty) ...[
@@ -174,18 +198,21 @@ class _ChoiceCard extends StatelessWidget {
                         item.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF817589),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF817589),
+                          ),
                         ),
                       ),
                     ],
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
-                color: Color(0xFFB5A9C4),
+                color: DunesColors.resolveNullable(context, Color(0xFFB5A9C4)),
               ),
             ],
           ),

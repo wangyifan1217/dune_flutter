@@ -156,7 +156,11 @@ void _openWorkSituationTask(
   Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (ctx) => Material(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          ctx,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         child: NativeTaskDetailView(
           session: session,
           taskId: taskId,
@@ -190,7 +194,11 @@ void _openWorkSituationTaskAction(
   Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (ctx) => Material(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          ctx,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         child: NativeTaskActionView(
           session: session,
           task: task,
@@ -605,8 +613,7 @@ String _deptSay(_Dept dept) {
 
 String _monthLabel(DateTime month) => '${month.year}年${month.month}月';
 
-String _dayLabel(DateTime day) =>
-    '${day.year}年${day.month}月${day.day}日';
+String _dayLabel(DateTime day) => '${day.year}年${day.month}月${day.day}日';
 
 String _monthKey(DateTime month) =>
     '${month.year.toString().padLeft(4, '0')}-${month.month.toString().padLeft(2, '0')}';
@@ -885,13 +892,15 @@ class _NativeQianjiEfficiencyBossPreviewState
               userId: person.userId,
             );
       if (!mounted || _person?.userId != person.userId) return;
-      setState(() => _person = detail.withAvatar(
-        WorkSituationAvatar(
-          preset: person.avatarPreset,
-          objectKey: person.avatarObjectKey,
-          url: person.avatarUrl,
+      setState(
+        () => _person = detail.withAvatar(
+          WorkSituationAvatar(
+            preset: person.avatarPreset,
+            objectKey: person.avatarObjectKey,
+            url: person.avatarUrl,
+          ),
         ),
-      ));
+      );
     } catch (_) {}
   }
 
@@ -1000,8 +1009,7 @@ class _NativeQianjiEfficiencyBossPreviewState
     SpotlightTourStep(
       targetKey: _filterBarKey,
       title: '三个问题标签',
-      body:
-          '任务没办完、开会没落地、沟通偏浅。每天由 AI 根据当天事实包判断；月视图汇总各日统计单。点标签只看对应的人。',
+      body: '任务没办完、开会没落地、沟通偏浅。每天由 AI 根据当天事实包判断；月视图汇总各日统计单。点标签只看对应的人。',
     ),
     SpotlightTourStep(
       targetKey: _helpKey,
@@ -1015,7 +1023,11 @@ class _NativeQianjiEfficiencyBossPreviewState
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1032,26 +1044,30 @@ class _NativeQianjiEfficiencyBossPreviewState
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE8E2EE),
+                        color: DunesColors.resolve(
+                          ctx,
+                          const Color(0xFFE8E2EE),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
+                  Text(
                     '这些内容根据什么分析',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(ctx, DunesColors.text),
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     '每天由 AI 算当天任务、会议和会话统计并落库。月视图只汇总这些每日统计单，超期取月末那天的快照。沟通由 AI 判断是否在推进事情，不打分。界面不展示聊天原文。知识库暂不纳入。',
                     style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(ctx, DunesColors.text3),
                       height: 1.45,
                     ),
                   ),
@@ -1082,7 +1098,13 @@ class _NativeQianjiEfficiencyBossPreviewState
                         },
                         style: OutlinedButton.styleFrom(
                           foregroundColor: _purple,
-                          side: const BorderSide(color: Color(0xFFD9CDEA)),
+                          side: BorderSide(
+                            color: DunesColors.resolve(
+                              ctx,
+                              Color(0xFFD9CDEA),
+                              role: DunesColorRole.border,
+                            ),
+                          ),
                         ),
                         child: const Text('再看一遍指引'),
                       ),
@@ -1112,7 +1134,11 @@ class _NativeQianjiEfficiencyBossPreviewState
     return GestureDetector(
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF7F5FA),
+        backgroundColor: DunesColors.resolve(
+          context,
+          const Color(0xFFF7F5FA),
+          role: DunesColorRole.surface,
+        ),
         resizeToAvoidBottomInset: true,
         body: SafeArea(
           bottom: false,
@@ -1279,9 +1305,21 @@ class _Header extends StatelessWidget {
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE8E2EE))),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE8E2EE),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -1300,15 +1338,16 @@ class _Header extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 if (subtitle != null)
                   Text(
                     subtitle!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
               ],
@@ -1318,7 +1357,10 @@ class _Header extends StatelessWidget {
             key: helpKey,
             tooltip: '这些内容怎么分析',
             onPressed: onHelp,
-            icon: const Icon(Icons.help_outline_rounded, color: _purple),
+            icon: Icon(
+              Icons.help_outline_rounded,
+              color: DunesColors.resolveNullable(context, _purple),
+            ),
           ),
         ],
       ),
@@ -1382,7 +1424,11 @@ class _PinnedFilters extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFF7F5FA),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF7F5FA),
+        role: DunesColorRole.surface,
+      ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
         child: Column(
@@ -1428,9 +1474,9 @@ class _PinnedFilters extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   '$monthLabel · ${departmentId == null ? scopeLabel : departments.where((d) => d.id == departmentId).map((d) => d.name).join()}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ),
@@ -1498,7 +1544,9 @@ class _Board extends StatelessWidget {
           Text(
             error!,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -1530,17 +1578,22 @@ class _Board extends StatelessWidget {
           ] else if (searching) ...[
             Text(
               '找到 $hitPeople 人',
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             const SizedBox(height: 12),
           ],
           if (depts.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 28),
               child: Text(
                 '这个范围暂时没有可看的人',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: DunesColors.text3),
+                style: TextStyle(
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             )
           else
@@ -1555,10 +1608,13 @@ class _Board extends StatelessWidget {
               ),
               const SizedBox(height: 10),
             ],
-          const Text(
+          Text(
             '按任务、会议和会话的每日统计看；月是这些天的汇总。沟通由 AI 判断，不打分。',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -1578,8 +1634,11 @@ class _HeroCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF5F3E82), Color(0xFF8965B5)],
+        gradient: LinearGradient(
+          colors: [
+            DunesColors.resolve(context, Color(0xFF5F3E82)),
+            DunesColors.resolve(context, Color(0xFF8965B5)),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -1589,22 +1648,28 @@ class _HeroCard extends StatelessWidget {
         children: [
           Text(
             '$monthLabel · $scopeLabel',
-            style: const TextStyle(color: Color(0xDFFFFFFF), fontSize: 13),
+            style: TextStyle(
+              color: DunesColors.resolveNullable(context, Color(0xDFFFFFFF)),
+              fontSize: 13,
+            ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '每个人工作实不实',
             style: TextStyle(
-              color: Colors.white,
+              color: DunesColors.resolve(context, Colors.white),
               fontSize: 22,
               fontWeight: FontWeight.w800,
               height: 1.2,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '每天由 AI 算当天统计，月是这些天的汇总',
-            style: TextStyle(color: Color(0xDFFFFFFF), fontSize: 12),
+            style: TextStyle(
+              color: DunesColors.resolveNullable(context, Color(0xDFFFFFFF)),
+              fontSize: 12,
+            ),
           ),
         ],
       ),
@@ -1622,9 +1687,17 @@ class _GrainBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _Chip(label: '按月', selected: grain != 'day', onTap: () => onChanged('month')),
+        _Chip(
+          label: '按月',
+          selected: grain != 'day',
+          onTap: () => onChanged('month'),
+        ),
         const SizedBox(width: 8),
-        _Chip(label: '按日', selected: grain == 'day', onTap: () => onChanged('day')),
+        _Chip(
+          label: '按日',
+          selected: grain == 'day',
+          onTap: () => onChanged('day'),
+        ),
       ],
     );
   }
@@ -1768,10 +1841,30 @@ class _Chip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? _purple : Colors.white,
+          color: selected
+              ? DunesColors.resolve(
+                  context,
+                  _purple,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(99),
           border: Border.all(
-            color: selected ? _purple : const Color(0xFFE9E3EE),
+            color: selected
+                ? DunesColors.resolve(
+                    context,
+                    _purple,
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    const Color(0xFFE9E3EE),
+                    role: DunesColorRole.border,
+                  ),
           ),
         ),
         child: Text(
@@ -1779,7 +1872,9 @@ class _Chip extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: selected ? Colors.white : DunesColors.text2,
+            color: selected
+                ? DunesColors.resolve(context, Colors.white)
+                : DunesColors.resolve(context, DunesColors.text2),
           ),
         ),
       ),
@@ -1809,8 +1904,14 @@ class _SearchField extends StatelessWidget {
       onSubmitted: (_) => focusNode.unfocus(),
       decoration: InputDecoration(
         hintText: '搜人、部门',
-        hintStyle: const TextStyle(fontSize: 13, color: DunesColors.text3),
-        prefixIcon: const Icon(Icons.search_rounded, color: DunesColors.text3),
+        hintStyle: TextStyle(
+          fontSize: 13,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
+        prefixIcon: Icon(
+          Icons.search_rounded,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
         suffixIcon: controller.text.isEmpty
             ? null
             : IconButton(
@@ -1823,22 +1924,44 @@ class _SearchField extends StatelessWidget {
                 icon: const Icon(Icons.close_rounded, size: 18),
               ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 12,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE9E3EE)),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE9E3EE),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE9E3EE)),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE9E3EE),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _purple),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _purple,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
       ),
     );
@@ -1896,23 +2019,35 @@ class _EffMeter extends StatelessWidget {
             if (goodPct > 0)
               Flexible(
                 flex: (goodPct * 1000).round().clamp(1, 1000),
-                child: const ColoredBox(
-                  color: DunesColors.green,
+                child: ColoredBox(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.green,
+                    role: DunesColorRole.surface,
+                  ),
                   child: SizedBox.expand(),
                 ),
               ),
             if (weakPct > 0)
               Flexible(
                 flex: (weakPct * 1000).round().clamp(1, 1000),
-                child: const ColoredBox(
-                  color: DunesColors.coral,
+                child: ColoredBox(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.coral,
+                    role: DunesColorRole.surface,
+                  ),
                   child: SizedBox.expand(),
                 ),
               ),
             Flexible(
               flex: ((1 - goodPct - weakPct) * 1000).round().clamp(1, 1000),
-              child: const ColoredBox(
-                color: Color(0xFFF3EEF6),
+              child: ColoredBox(
+                color: DunesColors.resolve(
+                  context,
+                  Color(0xFFF3EEF6),
+                  role: DunesColorRole.surface,
+                ),
                 child: SizedBox.expand(),
               ),
             ),
@@ -1966,9 +2101,19 @@ class _GlanceCardState extends State<_GlanceCard> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE9E3EE)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE9E3EE),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1995,9 +2140,12 @@ class _GlanceCardState extends State<_GlanceCard> {
                           const SizedBox(height: 4),
                           Text(
                             _glanceSummary(widget.people),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
                         ],
@@ -2008,7 +2156,7 @@ class _GlanceCardState extends State<_GlanceCard> {
                     _expanded
                         ? Icons.expand_less_rounded
                         : Icons.expand_more_rounded,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ],
               ),
@@ -2020,11 +2168,11 @@ class _GlanceCardState extends State<_GlanceCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  Text(
                     '看任务办没办完、开会有没有下文、会话里是不是在跟具体事。沟通抽会话给 AI 看，不打分。',
                     style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                       height: 1.4,
                     ),
                   ),
@@ -2051,9 +2199,19 @@ class _DeptGlanceList extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE9E3EE)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE9E3EE),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2085,9 +2243,12 @@ class _DeptGlanceList extends StatelessWidget {
                         const Spacer(),
                         Text(
                           '${dept.people.length}人 · ${_deptSay(dept)}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                       ],
@@ -2101,9 +2262,12 @@ class _DeptGlanceList extends StatelessWidget {
                           children: [
                             Text(
                               '任务 ${e.task}/${e.n} · 开会 ${e.meet}/${e.n} · 沟通 ${e.talk}/${e.n}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -2146,9 +2310,19 @@ class _DeptCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE9E3EE)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE9E3EE),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -2175,7 +2349,7 @@ class _DeptCard extends StatelessWidget {
                     expanded
                         ? Icons.expand_less_rounded
                         : Icons.expand_more_rounded,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ],
               ),
@@ -2231,16 +2405,19 @@ class _PersonRow extends StatelessWidget {
                         child: Text(
                           person.title,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                       ),
-                      const Icon(
+                      Icon(
                         Icons.chevron_right_rounded,
                         size: 18,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ],
                   ),
@@ -2327,10 +2504,10 @@ class _WhyLines extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             _whyText(person, row.$1, row.$2),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               height: 1.45,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ],
@@ -2413,8 +2590,20 @@ class _Avatar extends StatelessWidget {
           : person.avatarObjectKey,
       avatarUrl: person.avatarUrl.trim().isEmpty ? null : person.avatarUrl,
       avatarService: avatarService,
-      fallbackBackground: alert ? DunesColors.coralSoft : DunesColors.blueSoft,
-      fallbackForeground: alert ? DunesColors.coral : DunesColors.blue,
+      fallbackBackground: alert
+          ? DunesColors.resolve(
+              context,
+              DunesColors.coralSoft,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              DunesColors.blueSoft,
+              role: DunesColorRole.surface,
+            ),
+      fallbackForeground: alert
+          ? DunesColors.resolve(context, DunesColors.coral)
+          : DunesColors.resolve(context, DunesColors.blue),
     );
   }
 }
@@ -2458,9 +2647,19 @@ class _PersonDetail extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE9E3EE)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE9E3EE),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2486,7 +2685,12 @@ class _PersonDetail extends StatelessWidget {
                         ),
                         Text(
                           '${person.departmentName} · ${person.title} · $monthLabel',
-                          style: const TextStyle(color: DunesColors.text3),
+                          style: TextStyle(
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -2518,8 +2722,8 @@ class _PersonDetail extends StatelessWidget {
                 onTap: onOpenDept,
                 child: Text(
                   '看${person.departmentName}',
-                  style: const TextStyle(
-                    color: _purple,
+                  style: TextStyle(
+                    color: DunesColors.resolveNullable(context, _purple),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -2552,9 +2756,19 @@ class _PersonDetail extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE9E3EE)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE9E3EE),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2566,10 +2780,10 @@ class _PersonDetail extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 _talkDetailText(person),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   height: 1.45,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               if (talkItems.isNotEmpty) ...[
@@ -2604,9 +2818,19 @@ class _DetailSection extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE9E3EE)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE9E3EE),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2657,7 +2881,11 @@ class _ItemTile extends StatelessWidget {
             margin: const EdgeInsets.only(top: 2),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: meta.soft,
+              color: DunesColors.resolveNullable(
+                context,
+                meta.soft,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -2665,7 +2893,7 @@ class _ItemTile extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
-                color: meta.color,
+                color: DunesColors.resolveNullable(context, meta.color),
               ),
             ),
           ),
@@ -2684,21 +2912,21 @@ class _ItemTile extends StatelessWidget {
                 if (item.hint.isNotEmpty)
                   Text(
                     item.hint,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
               ],
             ),
           ),
           if (canOpen)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 2),
               child: Icon(
                 Icons.chevron_right_rounded,
                 size: 18,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
             ),
         ],
@@ -2736,19 +2964,19 @@ class _GuideItem extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 4),
           Text(
             body,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
               height: 1.5,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ],

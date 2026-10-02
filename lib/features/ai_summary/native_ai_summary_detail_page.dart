@@ -286,9 +286,17 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
   Widget build(BuildContext context) {
     final item = _item;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
@@ -300,15 +308,14 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
           style: DunesTypography.sans(
             fontSize: 16,
             fontWeight: FontWeight.w600,
+            context: context,
           ),
         ),
         actions: [
           if (item != null && !item.isGenerating)
             IconButton(
               onPressed: _canRegenerate ? _confirmRefresh : null,
-              tooltip: _participantConversations.isEmpty
-                  ? '请先选择会话'
-                  : '重新生成',
+              tooltip: _participantConversations.isEmpty ? '请先选择会话' : '重新生成',
               icon: _refreshing
                   ? const SizedBox(
                       width: 18,
@@ -319,8 +326,14 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
                       Icons.refresh_rounded,
                       size: 22,
                       color: _canRegenerate
-                          ? DunesColors.brandPurple
-                          : const Color(0xFFD1D5DB),
+                          ? DunesColors.resolve(
+                              context,
+                              DunesColors.brandPurple,
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFFD1D5DB),
+                            ),
                     ),
             ),
         ],
@@ -342,10 +355,13 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
           if (rangeLabel.isNotEmpty) ...[
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.date_range_outlined,
                   size: 16,
-                  color: Color(0xFF9CA3AF),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF9CA3AF),
+                  ),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -353,7 +369,11 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
                     '总结周期：$rangeLabel',
                     style: DunesTypography.sans(
                       fontSize: 13,
-                      color: const Color(0xFF6B7280),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF6B7280),
+                      ),
+                      context: context,
                     ),
                   ),
                 ),
@@ -373,7 +393,10 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
               icon: const Icon(Icons.person_add_alt_1_outlined, size: 18),
               label: const Text('添加会话'),
               style: TextButton.styleFrom(
-                foregroundColor: DunesColors.brandPurple,
+                foregroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurple,
+                ),
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
               ),
@@ -392,7 +415,13 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: DunesTypography.sans(color: DunesColors.text3)),
+            Text(
+              _error!,
+              style: DunesTypography.sans(
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
+              ),
+            ),
             TextButton(onPressed: () => _load(), child: const Text('重试')),
           ],
         ),
@@ -413,12 +442,15 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const SizedBox(
+                    SizedBox(
                       width: 32,
                       height: 32,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.4,
-                        color: DunesColors.brandPurple,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -427,7 +459,11 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
                       style: DunesTypography.sans(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.brandPurple,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                        ),
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -435,7 +471,11 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
                       item.statusLabel,
                       style: DunesTypography.sans(
                         fontSize: 13,
-                        color: const Color(0xFF6B7280),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF6B7280),
+                        ),
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -444,7 +484,8 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
                       textAlign: TextAlign.center,
                       style: DunesTypography.sans(
                         fontSize: 12.5,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
                       ),
                     ),
                   ],
@@ -474,20 +515,27 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
                       textAlign: TextAlign.center,
                       style: DunesTypography.sans(
                         fontSize: 14,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 16),
                     FilledButton(
                       onPressed: _canRegenerate ? _confirmRefresh : null,
                       style: FilledButton.styleFrom(
-                        backgroundColor: DunesColors.brandPurple,
-                        disabledBackgroundColor: const Color(0xFFE5E7EB),
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                          role: DunesColorRole.surface,
+                        ),
+                        disabledBackgroundColor: DunesColors.resolve(
+                          context,
+                          const Color(0xFFE5E7EB),
+                          role: DunesColorRole.surface,
+                        ),
                       ),
                       child: Text(
-                        _participantConversations.isEmpty
-                            ? '请先选择会话'
-                            : '重新生成',
+                        _participantConversations.isEmpty ? '请先选择会话' : '重新生成',
                       ),
                     ),
                   ],
@@ -517,21 +565,33 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF8E8),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFFFF8E8),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '依据部分聊天记录生成（内容较长已截断/分块）',
                       style: DunesTypography.sans(
                         fontSize: 12,
-                        color: const Color(0xFFB45309),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFB45309),
+                        ),
+                        context: context,
                       ),
                     ),
                   ),
                 if (md.isEmpty)
                   Text(
                     item.summaryPreview ?? '暂无内容',
-                    style: DunesTypography.sans(fontSize: 14, height: 1.7),
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      height: 1.7,
+                      context: context,
+                    ),
                   )
                 else
                   MeetingMinutesMarkdown(markdown: md),

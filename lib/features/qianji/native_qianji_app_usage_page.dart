@@ -150,41 +150,74 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
       confirmText: '确定',
       saveText: '确定',
       builder: (ctx, child) {
-        final light = ColorScheme.light(
+        final scheme = Theme.of(ctx).colorScheme.copyWith(
           primary: _themePurple,
-          onPrimary: Colors.white,
-          secondary: _themePurple.withValues(alpha: 0.18),
-          onSecondary: DunesColors.text,
-          surface: Colors.white,
-          onSurface: DunesColors.text,
+          onPrimary: DunesColors.resolve(ctx, Colors.white),
+          secondary: DunesColors.resolve(
+            ctx,
+            _themePurple,
+            role: DunesColorRole.surface,
+          ).withValues(alpha: 0.18),
+          onSecondary: DunesColors.resolve(ctx, DunesColors.text),
+          surface: DunesColors.resolve(
+            ctx,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          onSurface: DunesColors.resolve(ctx, DunesColors.text),
         );
         return Theme(
-          data: ThemeData(
-            useMaterial3: true,
-            colorScheme: light,
+          data: Theme.of(ctx).copyWith(
+            colorScheme: scheme,
             datePickerTheme: DatePickerThemeData(
-              backgroundColor: Colors.white,
-              headerBackgroundColor: Colors.white,
-              headerForegroundColor: DunesColors.text,
-              rangeSelectionBackgroundColor: _themePurple.withValues(
-                alpha: 0.14,
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
               ),
+              headerBackgroundColor: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
+              headerForegroundColor: DunesColors.resolve(ctx, DunesColors.text),
+              rangeSelectionBackgroundColor: DunesColors.resolve(
+                ctx,
+                _themePurple,
+                role: DunesColorRole.surface,
+              ).withValues(alpha: 0.14),
               rangeSelectionOverlayColor: WidgetStatePropertyAll(
-                _themePurple.withValues(alpha: 0.08),
+                DunesColors.resolve(ctx, _themePurple).withValues(alpha: 0.08),
               ),
               dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) return _themePurple;
+                if (states.contains(WidgetState.selected)) {
+                  return DunesColors.resolve(
+                    ctx,
+                    _themePurple,
+                    role: DunesColorRole.surface,
+                  );
+                }
                 return null;
               }),
               dayForegroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) return Colors.white;
-                if (states.contains(WidgetState.disabled)) {
-                  return DunesColors.text3;
+                if (states.contains(WidgetState.selected)) {
+                  return DunesColors.resolve(ctx, Colors.white);
                 }
-                return DunesColors.text;
+                if (states.contains(WidgetState.disabled)) {
+                  return DunesColors.resolve(ctx, DunesColors.text3);
+                }
+                return DunesColors.resolve(ctx, DunesColors.text);
               }),
-              todayForegroundColor: const WidgetStatePropertyAll(_themePurple),
-              todayBorder: const BorderSide(color: _themePurple),
+              todayForegroundColor: WidgetStatePropertyAll(
+                DunesColors.resolve(ctx, _themePurple),
+              ),
+              todayBorder: BorderSide(
+                color: DunesColors.resolve(
+                  ctx,
+                  _themePurple,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
           ),
           child: child!,
@@ -309,7 +342,11 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -341,7 +378,7 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: widget.onBack,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -349,35 +386,38 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
                   Icon(
                     Icons.arrow_back_ios_new,
                     size: 14,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                   SizedBox(width: 2),
                   Text(
                     '饕',
-                    style: TextStyle(fontSize: 13, color: DunesColors.text2),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               '沙丘使用热力',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ),
           if (heatmap != null && heatmap.activeUsers > 0)
             Text(
               '活跃 ${heatmap.activeUsers} 人',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             ),
         ],
@@ -405,22 +445,44 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
                 )
               : null,
           filled: true,
-          fillColor: Colors.white,
+          fillColor: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 12,
             vertical: 10,
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _themePurple),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                _themePurple,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ),
       ),
@@ -474,20 +536,20 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 '部门筛选',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 _superviseAll ? '全部门' : '管辖范围',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: _themePurple,
+                  color: DunesColors.resolveNullable(context, _themePurple),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -546,7 +608,9 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
           Text(
             friendlyErrorText(_error, fallback: '加载失败，请稍后重试'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -570,27 +634,33 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
           _buildModuleHeat(heatmap),
         ],
         const SizedBox(height: 18),
-        const Text(
+        Text(
           '团队停留',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF261D38),
+            color: DunesColors.resolveNullable(context, Color(0xFF261D38)),
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           '点人可看每页停留',
-          style: TextStyle(fontSize: 12, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
         const SizedBox(height: 10),
         if (_users.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 40),
             child: Center(
               child: Text(
                 '暂无使用数据',
-                style: TextStyle(color: DunesColors.text3, fontSize: 14),
+                style: TextStyle(
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  fontSize: 14,
+                ),
               ),
             ),
           )
@@ -666,29 +736,47 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '模块 × 日期',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF261D38),
+            color: DunesColors.resolveNullable(context, Color(0xFF261D38)),
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           '格子越深，当天停得越久。携程、薪人薪事和各免登应用分开统计。',
-          style: TextStyle(fontSize: 12, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
         const SizedBox(height: 10),
         if (matrix.isEmpty)
-          const Text('暂无模块数据', style: TextStyle(color: DunesColors.text3))
+          Text(
+            '暂无模块数据',
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
+          )
         else
           Container(
             padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFEDE8F5)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFEDE8F5),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: _HeatMatrix(
               dates: heatmap.dates,
@@ -709,7 +797,7 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
           onTap: () {
             setState(() => _moduleTotalsExpanded = !_moduleTotalsExpanded);
           },
-          child: const Padding(
+          child: Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
@@ -719,11 +807,17 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF261D38),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF261D38),
+                      ),
                     ),
                   ),
                 ),
-                Icon(Icons.expand_more_rounded, color: DunesColors.text3),
+                Icon(
+                  Icons.expand_more_rounded,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ],
             ),
           ),
@@ -734,9 +828,19 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
             Container(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFEDE8F5)),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFEDE8F5),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               child: Column(
                 children: [
@@ -769,24 +873,37 @@ class _MetricTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFEDE8F5)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFEDE8F5),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               label,
-              style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 11,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ],
@@ -850,9 +967,9 @@ class _HeatMatrix extends StatelessWidget {
                     child: Text(
                       _dayLabel(dates[i]),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ),
@@ -877,8 +994,11 @@ class _HeatMatrix extends StatelessWidget {
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                             color: selectedModule == row.moduleKey
-                                ? _themePurple
-                                : const Color(0xFF261D38),
+                                ? DunesColors.resolve(context, _themePurple)
+                                : DunesColors.resolve(
+                                    context,
+                                    const Color(0xFF261D38),
+                                  ),
                           ),
                         ),
                       ),
@@ -889,9 +1009,13 @@ class _HeatMatrix extends StatelessWidget {
                           height: cell,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              color: _heatColor(
-                                i < row.values.length ? row.values[i] : 0,
-                                maxValue,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _heatColor(
+                                  i < row.values.length ? row.values[i] : 0,
+                                  maxValue,
+                                ),
+                                role: DunesColorRole.surface,
                               ),
                               borderRadius: BorderRadius.circular(3),
                               border: selectedModule == row.moduleKey
@@ -906,20 +1030,34 @@ class _HeatMatrix extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 6),
-            const Row(
+            Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Text(
                   '低 ',
-                  style: TextStyle(fontSize: 10, color: DunesColors.text3),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
-                _LegendDot(color: Color(0xFFEEE8F8)),
-                _LegendDot(color: Color(0xFFD4C4F4)),
-                _LegendDot(color: Color(0xFF9B7EE8)),
-                _LegendDot(color: Color(0xFF4A2FA0)),
+                _LegendDot(
+                  color: DunesColors.resolve(context, Color(0xFFEEE8F8)),
+                ),
+                _LegendDot(
+                  color: DunesColors.resolve(context, Color(0xFFD4C4F4)),
+                ),
+                _LegendDot(
+                  color: DunesColors.resolve(context, Color(0xFF9B7EE8)),
+                ),
+                _LegendDot(
+                  color: DunesColors.resolve(context, Color(0xFF4A2FA0)),
+                ),
                 Text(
                   ' 高',
-                  style: TextStyle(fontSize: 10, color: DunesColors.text3),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
               ],
             ),
@@ -947,7 +1085,11 @@ class _LegendDot extends StatelessWidget {
       height: 12,
       margin: const EdgeInsets.symmetric(horizontal: 2),
       decoration: BoxDecoration(
-        color: color,
+        color: DunesColors.resolveNullable(
+          context,
+          color,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(3),
       ),
     );
@@ -970,10 +1112,10 @@ class _ModuleBar extends StatelessWidget {
             usageModuleLabel(module.moduleKey, module.moduleName),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF261D38),
+              color: DunesColors.resolveNullable(context, Color(0xFF261D38)),
             ),
           ),
         ),
@@ -983,7 +1125,11 @@ class _ModuleBar extends StatelessWidget {
             child: LinearProgressIndicator(
               value: ratio.clamp(0.04, 1),
               minHeight: 10,
-              backgroundColor: const Color(0xFFF1EBF9),
+              backgroundColor: DunesColors.resolve(
+                context,
+                const Color(0xFFF1EBF9),
+                role: DunesColorRole.surface,
+              ),
               color: _deepPurple,
             ),
           ),
@@ -994,10 +1140,10 @@ class _ModuleBar extends StatelessWidget {
           child: Text(
             formatUsageStay(module.durationMs),
             textAlign: TextAlign.right,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: _themePurple,
+              color: DunesColors.resolveNullable(context, _themePurple),
             ),
           ),
         ),
@@ -1035,7 +1181,11 @@ class _UserCard extends StatelessWidget {
       if (row.pv > 0) ('浏览', '${row.pv}次'),
     ];
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -1055,7 +1205,11 @@ class _UserCard extends StatelessWidget {
                   avatarObjectKey: avatar?.objectKey,
                   avatarUrl: avatar?.url,
                   avatarService: avatarService,
-                  fallbackBackground: const Color(0xFFF1EBF9),
+                  fallbackBackground: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF1EBF9),
+                    role: DunesColorRole.surface,
+                  ),
                   fallbackForeground: _themePurple,
                 ),
               ),
@@ -1071,20 +1225,26 @@ class _UserCard extends StatelessWidget {
                             row.displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF261D38),
+                              color: DunesColors.resolveNullable(
+                                context,
+                                Color(0xFF261D38),
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           formatUsageStay(row.durationMs),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: _themePurple,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _themePurple,
+                            ),
                           ),
                         ),
                       ],
@@ -1095,9 +1255,12 @@ class _UserCard extends StatelessWidget {
                         row.departmentName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
@@ -1134,9 +1297,12 @@ class _UserCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         '最近 $lastSeen',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
@@ -1146,7 +1312,11 @@ class _UserCard extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: ratio.clamp(0.04, 1),
                         minHeight: 4,
-                        backgroundColor: const Color(0xFFF1EBF9),
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          const Color(0xFFF1EBF9),
+                          role: DunesColorRole.surface,
+                        ),
                         color: _themePurple,
                       ),
                     ),
@@ -1172,7 +1342,11 @@ class _UserFactChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F3FB),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF6F3FB),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(7),
       ),
       child: Text.rich(
@@ -1180,18 +1354,18 @@ class _UserFactChip extends StatelessWidget {
           children: [
             TextSpan(
               text: '$label ',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
             ),
             TextSpan(
               text: value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF5B4A7A),
+                color: DunesColors.resolveNullable(context, Color(0xFF5B4A7A)),
               ),
             ),
           ],
@@ -1215,7 +1389,17 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFF0EEF7) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EEF7),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -1225,7 +1409,17 @@ class _Chip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? _themePurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -1233,7 +1427,9 @@ class _Chip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? _themePurple : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, _themePurple)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),

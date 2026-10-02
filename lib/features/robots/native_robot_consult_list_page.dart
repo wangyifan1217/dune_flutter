@@ -32,7 +32,8 @@ class NativeRobotConsultListPage extends StatefulWidget {
       _NativeRobotConsultListPageState();
 }
 
-class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage> {
+class _NativeRobotConsultListPageState
+    extends State<NativeRobotConsultListPage> {
   final _store = RobotConsultStore.instance;
   RobotRole _robot = RobotCatalog.lighthouse;
   String? _retryingId;
@@ -84,7 +85,11 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
   Widget build(BuildContext context) {
     final rows = _store.records;
     return ColoredBox(
-      color: RobotTheme.pageBg,
+      color: DunesColors.resolve(
+        context,
+        RobotTheme.pageBg,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -117,7 +122,8 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
                   style: DunesTypography.sans(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
-                    color: RobotTheme.text,
+                    color: DunesColors.resolve(context, RobotTheme.text),
+                    context: context,
                   ),
                 ),
                 Text(
@@ -126,7 +132,8 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
                       : (_robot.category.isEmpty ? '咨询记录' : _robot.category),
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: RobotTheme.text3,
+                    color: DunesColors.resolve(context, RobotTheme.text3),
+                    context: context,
                   ),
                 ),
               ],
@@ -136,13 +143,13 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
             onPressed: () => _store.refreshList(robotKey: widget.robotKey),
             tooltip: '刷新',
             icon: const Icon(Icons.refresh_rounded),
-            color: RobotTheme.text2,
+            color: DunesColors.resolve(context, RobotTheme.text2),
           ),
           IconButton(
             onPressed: widget.onCreate,
             tooltip: '新建咨询',
             icon: const Icon(Icons.add_rounded),
-            color: RobotTheme.purple,
+            color: DunesColors.resolve(context, RobotTheme.purple),
           ),
         ],
       ),
@@ -165,7 +172,8 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: const Color(0xFFC44949),
+                  color: DunesColors.resolve(context, const Color(0xFFC44949)),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 12),
@@ -200,7 +208,8 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
               style: DunesTypography.sans(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: RobotTheme.text,
+                color: DunesColors.resolve(context, RobotTheme.text),
+                context: context,
               ),
             ),
             if (desc.isNotEmpty) ...[
@@ -211,7 +220,8 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
                 style: DunesTypography.sans(
                   fontSize: 12,
                   height: 1.45,
-                  color: RobotTheme.text3,
+                  color: DunesColors.resolve(context, RobotTheme.text3),
+                  context: context,
                 ),
               ),
             ],
@@ -221,8 +231,12 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
               icon: const Icon(Icons.add_rounded),
               label: const Text('新建咨询'),
               style: FilledButton.styleFrom(
-                backgroundColor: RobotTheme.purple,
-                foregroundColor: Colors.white,
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  RobotTheme.purple,
+                  role: DunesColorRole.surface,
+                ),
+                foregroundColor: DunesColors.resolve(context, Colors.white),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -253,10 +267,17 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
             alignment: Alignment.centerRight,
             padding: const EdgeInsets.only(right: 20),
             decoration: BoxDecoration(
-              color: const Color(0xFFC44949),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFC44949),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+            child: Icon(
+              Icons.delete_outline_rounded,
+              color: DunesColors.resolve(context, Colors.white),
+            ),
           ),
           child: _ConsultCard(
             record: row,
@@ -288,9 +309,7 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
       widget.onOpenDetail(created.id);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => _retryingId = null);
     }
@@ -313,7 +332,12 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFC44949)),
+            style: TextButton.styleFrom(
+              foregroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFC44949),
+              ),
+            ),
             child: const Text('删除'),
           ),
         ],
@@ -329,9 +353,9 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
       return true;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
       return false;
     }
@@ -356,18 +380,35 @@ class _ConsultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (record.status) {
-      RobotConsultStatus.queued => RobotTheme.text3,
-      RobotConsultStatus.running => RobotTheme.purple,
-      RobotConsultStatus.success => const Color(0xFF2E7544),
-      RobotConsultStatus.failed => const Color(0xFFC44949),
+      RobotConsultStatus.queued => DunesColors.resolve(
+        context,
+        RobotTheme.text3,
+      ),
+      RobotConsultStatus.running => DunesColors.resolve(
+        context,
+        RobotTheme.purple,
+      ),
+      RobotConsultStatus.success => DunesColors.resolve(
+        context,
+        const Color(0xFF2E7544),
+      ),
+      RobotConsultStatus.failed => DunesColors.resolve(
+        context,
+        const Color(0xFFC44949),
+      ),
     };
     final time =
         '${record.createdAt.hour.toString().padLeft(2, '0')}:${record.createdAt.minute.toString().padLeft(2, '0')}';
-    final done =
-        record.nodes.where((n) => n.status == RobotNodeStatus.success).length;
+    final done = record.nodes
+        .where((n) => n.status == RobotNodeStatus.success)
+        .length;
 
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -378,8 +419,16 @@ class _ConsultCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: record.unread && record.isTerminal
-                  ? RobotTheme.purple.withValues(alpha: 0.45)
-                  : RobotTheme.cardBorder,
+                  ? DunesColors.resolve(
+                      context,
+                      RobotTheme.purple,
+                      role: DunesColorRole.border,
+                    ).withValues(alpha: 0.45)
+                  : DunesColors.resolve(
+                      context,
+                      RobotTheme.cardBorder,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Padding(
@@ -389,8 +438,11 @@ class _ConsultCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.chat_bubble_outline_rounded,
-                        size: 16, color: RobotTheme.purple),
+                    Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      size: 16,
+                      color: DunesColors.resolve(context, RobotTheme.purple),
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -400,7 +452,8 @@ class _ConsultCard extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: RobotTheme.text,
+                          color: DunesColors.resolve(context, RobotTheme.text),
+                          context: context,
                         ),
                       ),
                     ),
@@ -409,8 +462,12 @@ class _ConsultCard extends StatelessWidget {
                       Container(
                         width: 8,
                         height: 8,
-                        decoration: const BoxDecoration(
-                          color: RobotTheme.purple,
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolve(
+                            context,
+                            RobotTheme.purple,
+                            role: DunesColorRole.surface,
+                          ),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -422,7 +479,11 @@ class _ConsultCard extends StatelessWidget {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          color.withValues(alpha: 0.12),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -444,7 +505,10 @@ class _ConsultCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: color,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                color,
+                              ),
                             ),
                           ),
                         ],
@@ -462,18 +526,24 @@ class _ConsultCard extends StatelessWidget {
                           minHeight: 32,
                         ),
                         icon: retrying
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: RobotTheme.purple,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    RobotTheme.purple,
+                                  ),
                                 ),
                               )
-                            : const Icon(
+                            : Icon(
                                 Icons.replay_rounded,
                                 size: 18,
-                                color: RobotTheme.purple,
+                                color: DunesColors.resolve(
+                                  context,
+                                  RobotTheme.purple,
+                                ),
                               ),
                       ),
                     ],
@@ -487,10 +557,10 @@ class _ConsultCard extends StatelessWidget {
                           minWidth: 32,
                           minHeight: 32,
                         ),
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.delete_outline_rounded,
                           size: 18,
-                          color: RobotTheme.text3,
+                          color: DunesColors.resolve(context, RobotTheme.text3),
                         ),
                       ),
                     ],
@@ -507,7 +577,8 @@ class _ConsultCard extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 12,
                     height: 1.4,
-                    color: RobotTheme.text2,
+                    color: DunesColors.resolve(context, RobotTheme.text2),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -515,7 +586,8 @@ class _ConsultCard extends StatelessWidget {
                   time,
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: RobotTheme.text3,
+                    color: DunesColors.resolve(context, RobotTheme.text3),
+                    context: context,
                   ),
                 ),
               ],

@@ -31,8 +31,9 @@ class NativeQianjiCursorAccountPage extends StatefulWidget {
 
 class _NativeQianjiCursorAccountPageState
     extends State<NativeQianjiCursorAccountPage> {
-  late final CursorSuperviseService _service =
-      CursorSuperviseService(session: widget.session);
+  late final CursorSuperviseService _service = CursorSuperviseService(
+    session: widget.session,
+  );
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _keywordCtrl = TextEditingController();
 
@@ -66,7 +67,10 @@ class _NativeQianjiCursorAccountPageState
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients || _loading || _loadingMore || !_hasMore) {
+    if (!_scrollController.hasClients ||
+        _loading ||
+        _loadingMore ||
+        !_hasMore) {
       return;
     }
     final pos = _scrollController.position;
@@ -109,7 +113,8 @@ class _NativeQianjiCursorAccountPageState
       setState(() {
         _rows = result.items;
         _page = 0;
-        _hasMore = result.items.length >= _pageSize &&
+        _hasMore =
+            result.items.length >= _pageSize &&
             result.items.length < result.totalCount;
         if (stats != null) {
           _deptStats = stats.departments;
@@ -171,7 +176,11 @@ class _NativeQianjiCursorAccountPageState
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -200,7 +209,7 @@ class _NativeQianjiCursorAccountPageState
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: widget.onBack,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -208,35 +217,38 @@ class _NativeQianjiCursorAccountPageState
                   Icon(
                     Icons.arrow_back_ios_new,
                     size: 14,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                   SizedBox(width: 2),
                   Text(
                     '饕',
-                    style: TextStyle(fontSize: 13, color: DunesColors.text2),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               '研发账号',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ),
           if (_totalAccounts > 0)
             Text(
               '合计 $_totalAccounts',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             ),
         ],
@@ -262,22 +274,44 @@ class _NativeQianjiCursorAccountPageState
                 )
               : null,
           filled: true,
-          fillColor: Colors.white,
+          fillColor: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 12,
             vertical: 10,
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _themePurple),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                _themePurple,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ),
       ),
@@ -293,20 +327,20 @@ class _NativeQianjiCursorAccountPageState
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 '部门筛选',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 _superviseAll ? '全部门' : '管辖范围',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: _themePurple,
+                  color: DunesColors.resolveNullable(context, _themePurple),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -359,7 +393,9 @@ class _NativeQianjiCursorAccountPageState
           Text(
             friendlyErrorText(_error, fallback: '加载失败，请稍后重试'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -374,12 +410,15 @@ class _NativeQianjiCursorAccountPageState
     if (_rows.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
+        children: [
           SizedBox(height: 120),
           Center(
             child: Text(
               '暂无研发账号',
-              style: TextStyle(color: DunesColors.text3, fontSize: 14),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -407,8 +446,9 @@ class _NativeQianjiCursorAccountPageState
         final row = _rows[index];
         return _AccountCard(
           row: row,
-          remainingLabel:
-              row.remainingDays == null ? '—' : '${row.remainingDays}天',
+          remainingLabel: row.remainingDays == null
+              ? '—'
+              : '${row.remainingDays}天',
           autoLabel: _pct(row.autoUsagePercent),
           apiLabel: _pct(row.apiUsagePercent),
           totalLabel: _pct(row.totalUsagePercent),
@@ -435,7 +475,17 @@ class _DeptChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFF0EEF7) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EEF7),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -445,7 +495,17 @@ class _DeptChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? _themePurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Row(
@@ -456,7 +516,9 @@ class _DeptChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? _themePurple : DunesColors.text2,
+                  color: selected
+                      ? DunesColors.resolve(context, _themePurple)
+                      : DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 6),
@@ -465,7 +527,9 @@ class _DeptChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: selected ? _themePurple : DunesColors.text3,
+                  color: selected
+                      ? DunesColors.resolve(context, _themePurple)
+                      : DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
             ],
@@ -496,7 +560,11 @@ class _AccountCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -505,7 +573,13 @@ class _AccountCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -517,20 +591,20 @@ class _AccountCard extends StatelessWidget {
                       row.personLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     row.membershipLabel,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: _themePurple,
+                      color: DunesColors.resolveNullable(context, _themePurple),
                     ),
                   ),
                 ],
@@ -540,7 +614,10 @@ class _AccountCard extends StatelessWidget {
                 row.accountText,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               const SizedBox(height: 10),
               Wrap(
@@ -574,14 +651,17 @@ class _Meta extends StatelessWidget {
         children: [
           TextSpan(
             text: '$label ',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           TextSpan(
             text: value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ],

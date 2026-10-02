@@ -30,8 +30,9 @@ class NativeQianjiCursorAccountDetailPage extends StatefulWidget {
 
 class _NativeQianjiCursorAccountDetailPageState
     extends State<NativeQianjiCursorAccountDetailPage> {
-  late final CursorSuperviseService _service =
-      CursorSuperviseService(session: widget.session);
+  late final CursorSuperviseService _service = CursorSuperviseService(
+    session: widget.session,
+  );
 
   bool _loading = true;
   String? _error;
@@ -65,11 +66,15 @@ class _NativeQianjiCursorAccountDetailPageState
     final title = (_data?.displayName.trim().isNotEmpty ?? false)
         ? _data!.displayName.trim()
         : ((_data?.email.trim().isNotEmpty ?? false)
-            ? _data!.email.trim()
-            : '用量明细');
+              ? _data!.email.trim()
+              : '用量明细');
 
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -82,7 +87,7 @@ class _NativeQianjiCursorAccountDetailPageState
                   InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: widget.onBack,
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -90,14 +95,20 @@ class _NativeQianjiCursorAccountDetailPageState
                           Icon(
                             Icons.arrow_back_ios_new,
                             size: 14,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
                           ),
                           SizedBox(width: 2),
                           Text(
                             '监管',
                             style: TextStyle(
                               fontSize: 13,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
                             ),
                           ),
                         ],
@@ -110,10 +121,13 @@ class _NativeQianjiCursorAccountDetailPageState
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     ),
                   ),
@@ -125,7 +139,10 @@ class _NativeQianjiCursorAccountDetailPageState
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Text(
                   _data!.email.trim(),
-                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
               ),
             Expanded(child: _buildBody()),
@@ -147,7 +164,9 @@ class _NativeQianjiCursorAccountDetailPageState
           Text(
             friendlyErrorText(_error, fallback: '加载失败，请稍后重试'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -161,10 +180,13 @@ class _NativeQianjiCursorAccountDetailPageState
     }
     final items = _data?.items ?? const <CursorSuperviseDailySpendItem>[];
     if (items.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           '暂无用量明细',
-          style: TextStyle(color: DunesColors.text3, fontSize: 14),
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+            fontSize: 14,
+          ),
         ),
       );
     }
@@ -177,7 +199,11 @@ class _NativeQianjiCursorAccountDetailPageState
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0EEF7),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF0EEF7),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Row(
@@ -186,11 +212,19 @@ class _NativeQianjiCursorAccountDetailPageState
                 Expanded(flex: 4, child: Text('模型', style: _headStyle)),
                 Expanded(
                   flex: 3,
-                  child: Text('消费(\$)', style: _headStyle, textAlign: TextAlign.right),
+                  child: Text(
+                    '消费(\$)',
+                    style: _headStyle,
+                    textAlign: TextAlign.right,
+                  ),
                 ),
                 Expanded(
                   flex: 2,
-                  child: Text('Tokens', style: _headStyle, textAlign: TextAlign.right),
+                  child: Text(
+                    'Tokens',
+                    style: _headStyle,
+                    textAlign: TextAlign.right,
+                  ),
                 ),
               ],
             ),
@@ -222,9 +256,19 @@ class _SpendRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -232,7 +276,10 @@ class _SpendRow extends StatelessWidget {
             flex: 3,
             child: Text(
               item.day.isEmpty ? '—' : item.day,
-              style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
           ),
           Expanded(
@@ -241,10 +288,10 @@ class _SpendRow extends StatelessWidget {
               item.model.isEmpty ? '—' : item.model,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
               ),
             ),
           ),
@@ -253,10 +300,10 @@ class _SpendRow extends StatelessWidget {
             child: Text(
               item.spendDollarLabel,
               textAlign: TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
               ),
             ),
           ),
@@ -265,7 +312,10 @@ class _SpendRow extends StatelessWidget {
             child: Text(
               item.tokensMLabel,
               textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
           ),
         ],

@@ -75,7 +75,11 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
         child: Center(
           child: Text(
             '暂无列定义',
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ),
       );
@@ -86,7 +90,11 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
         child: Center(
           child: Text(
             '当日无明细',
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ),
       );
@@ -121,9 +129,7 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
     final notes = [
       for (var i = 0; i < report.rows.length; i++) _notesFor(report, i),
     ];
-    final noteHeights = [
-      for (final item in notes) _noteHeight(item),
-    ];
+    final noteHeights = [for (final item in notes) _noteHeight(item)];
     final actionW = widget.showRowActions
         ? (widget.showConfirmAction
               ? (widget.showBatchSelect
@@ -242,9 +248,19 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
       builder: (context, constraints) {
         final child = DecoratedBox(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: DunesColors.borderSoft),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
@@ -285,12 +301,16 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
   Color _rowColor(ShucaiReport report, int index) {
     final key = _rowKey(report, index);
     if (key.isNotEmpty && widget.selectedRowKeys.contains(key)) {
-      return const Color(0xFFF7F3FC);
+      return DunesColors.resolve(context, const Color(0xFFF7F3FC));
     }
-    if (_isTotalLike(report.rows[index])) return const Color(0xFFF3F6F5);
+    if (_isTotalLike(report.rows[index])) {
+      return DunesColors.resolve(context, const Color(0xFFF3F6F5));
+    }
     final reviewers = _reviewersFor(report, key);
-    if (reviewers.any((item) => item.rejected)) return const Color(0xFFFBEDEC);
-    return Colors.white;
+    if (reviewers.any((item) => item.rejected)) {
+      return DunesColors.resolve(context, const Color(0xFFFBEDEC));
+    }
+    return DunesColors.resolve(context, Colors.white);
   }
 
   List<_RowNote> _notesFor(ShucaiReport report, int index) {
@@ -304,8 +324,8 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
           _RowNote(
             label: '$layer反驳',
             text: previous.reason.trim(),
-            color: DunesColors.coral,
-            background: DunesColors.coralSoft,
+            color: DunesColors.resolve(context, DunesColors.coral),
+            background: DunesColors.resolve(context, DunesColors.coralSoft),
           ),
         );
       } else if (previous.rejectReason.trim().isNotEmpty) {
@@ -313,8 +333,8 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
           _RowNote(
             label: '$layer驳回历史',
             text: previous.rejectReason.trim(),
-            color: DunesColors.coral,
-            background: DunesColors.coralSoft,
+            color: DunesColors.resolve(context, DunesColors.coral),
+            background: DunesColors.resolve(context, DunesColors.coralSoft),
           ),
         );
       }
@@ -326,8 +346,8 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
           _RowNote(
             label: '你的反驳',
             text: mine.reason.trim(),
-            color: DunesColors.coral,
-            background: DunesColors.coralSoft,
+            color: DunesColors.resolve(context, DunesColors.coral),
+            background: DunesColors.resolve(context, DunesColors.coralSoft),
           ),
         );
       } else if (mine.rejectReason.trim().isNotEmpty) {
@@ -335,8 +355,8 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
           _RowNote(
             label: '驳回历史',
             text: mine.rejectReason.trim(),
-            color: DunesColors.coral,
-            background: DunesColors.coralSoft,
+            color: DunesColors.resolve(context, DunesColors.coral),
+            background: DunesColors.resolve(context, DunesColors.coralSoft),
           ),
         );
       }
@@ -345,8 +365,8 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
           _RowNote(
             label: '复核说明',
             text: mine.reason.trim(),
-            color: DunesColors.green,
-            background: DunesColors.greenSoft,
+            color: DunesColors.resolve(context, DunesColors.green),
+            background: DunesColors.resolve(context, DunesColors.greenSoft),
           ),
         );
       }
@@ -372,18 +392,29 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
   }) {
     final keys = [
       for (var i = 0; i < report.rows.length; i++)
-        if (!shucaiIsSummaryRow(report.rows[i])) shucaiRowKey(report.rows[i], i),
+        if (!shucaiIsSummaryRow(report.rows[i]))
+          shucaiRowKey(report.rows[i], i),
     ];
     final selected = widget.selectedRowKeys;
-    final allSelected =
-        keys.isNotEmpty && keys.every(selected.contains);
+    final allSelected = keys.isNotEmpty && keys.every(selected.contains);
     final someSelected = keys.any(selected.contains);
     final locked = widget.rowActionsLocked;
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         border: Border(
-          right: BorderSide(color: DunesColors.borderSoft, width: 0.5),
+          right: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
         ),
       ),
       child: SizedBox(
@@ -394,7 +425,11 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
               SizedBox(
                 height: headerH,
                 child: ColoredBox(
-                  color: const Color(0xFFF6F7F9),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF6F7F9),
+                    role: DunesColorRole.surface,
+                  ),
                   child: Row(
                     children: [
                       if (!locked && widget.showBatchSelect)
@@ -408,7 +443,10 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
                           visualDensity: VisualDensity.compact,
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,
-                          activeColor: DunesColors.brandPurple,
+                          activeColor: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                          ),
                           onChanged: widget.onToggleSelectAll == null
                               ? null
                               : (_) => widget.onToggleSelectAll!(),
@@ -421,7 +459,11 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
                           style: DunesTypography.sans(
                             fontSize: fontSize,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
+                            context: context,
                           ),
                         ),
                       ),
@@ -468,8 +510,10 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
     return _row(
       height: height,
       color: selected
-          ? const Color(0xFFF7F3FC)
-          : (_isTotalLike(row) ? const Color(0xFFF3F6F5) : Colors.white),
+          ? DunesColors.resolve(context, const Color(0xFFF7F3FC))
+          : (_isTotalLike(row)
+                ? DunesColors.resolve(context, const Color(0xFFF3F6F5))
+                : DunesColors.resolve(context, Colors.white)),
       children: [
         SizedBox(
           width: width,
@@ -482,7 +526,10 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
                         value: selected,
                         visualDensity: VisualDensity.compact,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        activeColor: DunesColors.brandPurple,
+                        activeColor: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                        ),
                         onChanged: widget.onToggleRow == null
                             ? null
                             : (_) => widget.onToggleRow!(key),
@@ -501,7 +548,10 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
                                         ? '复核'
                                         : '确认',
                                     active: decision?.confirmed == true,
-                                    color: DunesColors.green,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.green,
+                                    ),
                                     onTap: widget.onConfirmRow == null
                                         ? null
                                         : () => widget.onConfirmRow!(key),
@@ -511,7 +561,10 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
                                 _miniAction(
                                   label: '反驳',
                                   active: decision?.rejected == true,
-                                  color: DunesColors.coral,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.coral,
+                                  ),
                                   onTap: widget.onRejectRow == null
                                       ? null
                                       : () => widget.onRejectRow!(key),
@@ -530,17 +583,22 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
     if (decision == null) {
       return Text(
         '未处理',
-        style: DunesTypography.sans(fontSize: fontSize, color: DunesColors.text3),
+        style: DunesTypography.sans(
+          fontSize: fontSize,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
+        ),
       );
     }
     return Text(
-      decision.rejected
-          ? '已驳回'
-          : (decision.reconfirmed ? '已复核' : '已确认'),
+      decision.rejected ? '已驳回' : (decision.reconfirmed ? '已复核' : '已确认'),
       style: DunesTypography.sans(
         fontSize: fontSize,
         fontWeight: FontWeight.w600,
-        color: decision.rejected ? DunesColors.coral : DunesColors.green,
+        color: decision.rejected
+            ? DunesColors.resolve(context, DunesColors.coral)
+            : DunesColors.resolve(context, DunesColors.green),
+        context: context,
       ),
     );
   }
@@ -559,12 +617,20 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
           decoration: BoxDecoration(
-            color: active ? color.withValues(alpha: 0.14) : Colors.transparent,
+            color: DunesColors.resolveNullable(
+              context,
+              active ? color.withValues(alpha: 0.14) : Colors.transparent,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: active
                   ? color.withValues(alpha: 0.55)
-                  : DunesColors.borderSoft,
+                  : DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -572,7 +638,10 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
             style: DunesTypography.sans(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: active ? color : DunesColors.text2,
+              color: active
+                  ? color
+                  : DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
         ),
@@ -587,9 +656,20 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
   }) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: notes.first.background,
-        border: const Border(
-          bottom: BorderSide(color: DunesColors.borderSoft, width: 0.5),
+        color: DunesColors.resolveNullable(
+          context,
+          notes.first.background,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
         ),
       ),
       child: SizedBox(
@@ -611,13 +691,15 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           color: note.color,
+                          context: context,
                         ),
                       ),
                       TextSpan(
                         text: note.text,
                         style: DunesTypography.sans(
                           fontSize: 11,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                     ],
@@ -639,9 +721,20 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
   }) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color,
-        border: const Border(
-          bottom: BorderSide(color: DunesColors.borderSoft, width: 0.5),
+        color: DunesColors.resolveNullable(
+          context,
+          color,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
         ),
       ),
       child: SizedBox(height: height, width: width),
@@ -655,9 +748,20 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
   }) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color,
-        border: const Border(
-          bottom: BorderSide(color: DunesColors.borderSoft, width: 0.5),
+        color: DunesColors.resolveNullable(
+          context,
+          color,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
         ),
       ),
       child: SizedBox(
@@ -667,11 +771,7 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
     );
   }
 
-  String _display(
-    ShucaiReport report,
-    int rowIndex,
-    int colIndex,
-  ) {
+  String _display(ShucaiReport report, int rowIndex, int colIndex) {
     if (shucaiMergedBlank(report, rowIndex, colIndex)) return '';
     final col = report.columns[colIndex];
     final row = report.rows[rowIndex];
@@ -695,7 +795,11 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
     final colIndex = report.columns.indexOf(col);
     for (var i = 0; i < report.rows.length; i++) {
       final text = _display(report, i, colIndex < 0 ? 0 : colIndex);
-      final w = _measure(text, fontSize, bold: shucaiIsSummaryRow(report.rows[i]));
+      final w = _measure(
+        text,
+        fontSize,
+        bold: shucaiIsSummaryRow(report.rows[i]),
+      );
       if (w > widest) widest = w;
     }
     return (widest + 24).clamp(minWidth, maxWidth);
@@ -708,6 +812,7 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
         style: DunesTypography.sans(
           fontSize: fontSize,
           fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
+          context: context,
         ),
       ),
       maxLines: 1,
@@ -731,7 +836,7 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
       final painter = TextPainter(
         text: TextSpan(
           text: text,
-          style: DunesTypography.sans(fontSize: fontSize),
+          style: DunesTypography.sans(fontSize: fontSize, context: context),
         ),
         maxLines: 3,
         textDirection: TextDirection.ltr,
@@ -767,14 +872,16 @@ class _ShucaiReportTableState extends State<ShucaiReportTable> {
             textAlign: alignEnd ? TextAlign.right : TextAlign.left,
             style:
                 (header || !alignEnd
-                        ? DunesTypography.sans
-                        : DunesTypography.mono)(
-                      fontSize: fontSize,
-                      fontWeight: header || bold
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                      color: header ? DunesColors.text2 : DunesColors.text,
-                    ),
+                ? DunesTypography.sans
+                : DunesTypography.mono)(
+                  fontSize: fontSize,
+                  fontWeight: header || bold
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                  color: header
+                      ? DunesColors.resolve(context, DunesColors.text2)
+                      : DunesColors.resolve(context, DunesColors.text),
+                ),
           ),
         ),
       ),

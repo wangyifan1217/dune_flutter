@@ -21,7 +21,8 @@ class NativeNotificationsPage extends StatefulWidget {
   final VoidCallback? onNotificationsRead;
 
   @override
-  State<NativeNotificationsPage> createState() => _NativeNotificationsPageState();
+  State<NativeNotificationsPage> createState() =>
+      _NativeNotificationsPageState();
 }
 
 class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
@@ -76,7 +77,11 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
       if (reload) await _load();
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '标记失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '标记失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
     } finally {
       _markingRead = false;
     }
@@ -101,7 +106,12 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: const TextStyle(color: DunesColors.text3)),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
+            ),
             const SizedBox(height: 10),
             OutlinedButton(
               onPressed: () => _load(markReadOnEnter: true),
@@ -112,7 +122,14 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
       );
     }
     if (_items.isEmpty) {
-      return const Center(child: Text('暂无通知', style: TextStyle(color: DunesColors.text3)));
+      return Center(
+        child: Text(
+          '暂无通知',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
+      );
     }
     return RefreshIndicator(
       onRefresh: () => _load(markReadOnEnter: true),

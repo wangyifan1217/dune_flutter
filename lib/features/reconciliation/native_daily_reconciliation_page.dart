@@ -490,7 +490,11 @@ class _NativeDailyReconciliationPageState
   @override
   Widget build(BuildContext context) {
     final body = ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: _buildBody(),
     );
     if (_level != _ReconLevel.dates) return body;
@@ -514,7 +518,11 @@ class _NativeDailyReconciliationPageState
           Text(
             _error!,
             textAlign: TextAlign.center,
-            style: DunesTypography.sans(fontSize: 14, color: DunesColors.text2),
+            style: DunesTypography.sans(
+              fontSize: 14,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
+            ),
           ),
         ],
       );
@@ -556,7 +564,8 @@ class _NativeDailyReconciliationPageState
               textAlign: TextAlign.center,
               style: DunesTypography.sans(
                 fontSize: 14,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           )
@@ -569,7 +578,8 @@ class _NativeDailyReconciliationPageState
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
             ),
@@ -612,7 +622,11 @@ class _NativeDailyReconciliationPageState
   Widget _buildDatePicker() {
     final picked = _selectedDate.trim();
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
@@ -626,7 +640,8 @@ class _NativeDailyReconciliationPageState
                     '对账日',
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -635,7 +650,8 @@ class _NativeDailyReconciliationPageState
                     style: DunesTypography.sans(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                   ),
                 ],
@@ -665,7 +681,11 @@ class _NativeDailyReconciliationPageState
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
           child: Material(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(12),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
@@ -680,7 +700,11 @@ class _NativeDailyReconciliationPageState
                           style: DunesTypography.sans(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                            context: context,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -694,7 +718,11 @@ class _NativeDailyReconciliationPageState
                           style: DunesTypography.sans(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.accent,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.accent,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],
@@ -728,7 +756,8 @@ class _NativeDailyReconciliationPageState
               _error!,
               style: DunesTypography.sans(
                 fontSize: 13,
-                color: DunesColors.coral,
+                color: DunesColors.resolve(context, DunesColors.coral),
+                context: context,
               ),
             ),
           ),
@@ -787,7 +816,11 @@ class _NativeDailyReconciliationPageState
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
           child: Material(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(12),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
@@ -802,7 +835,11 @@ class _NativeDailyReconciliationPageState
                           style: DunesTypography.sans(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                            context: context,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -811,7 +848,11 @@ class _NativeDailyReconciliationPageState
                           style: DunesTypography.sans(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.accent,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.accent,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],
@@ -845,7 +886,8 @@ class _NativeDailyReconciliationPageState
               _error!,
               style: DunesTypography.sans(
                 fontSize: 13,
-                color: DunesColors.coral,
+                color: DunesColors.resolve(context, DunesColors.coral),
+                context: context,
               ),
             ),
           ),
@@ -906,7 +948,11 @@ class _DailyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -927,7 +973,11 @@ class _DailyCard extends StatelessWidget {
                             style: DunesTypography.sans(
                               fontSize: 14.5,
                               fontWeight: FontWeight.w700,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -939,8 +989,9 @@ class _DailyCard extends StatelessWidget {
                       subtitle,
                       style: DunesTypography.sans(
                         fontSize: 13,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
                         height: 1.35,
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -949,14 +1000,18 @@ class _DailyCard extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 12,
                         color: highlighted
-                            ? DunesColors.accent
-                            : DunesColors.text3,
+                            ? DunesColors.resolve(context, DunesColors.accent)
+                            : DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: DunesColors.text3),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ],
           ),
         ),
@@ -976,7 +1031,17 @@ class _Tag3DailyDateStatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: done ? DunesColors.greenSoft : DunesColors.amberSoft,
+        color: done
+            ? DunesColors.resolve(
+                context,
+                DunesColors.greenSoft,
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                DunesColors.amberSoft,
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -984,7 +1049,10 @@ class _Tag3DailyDateStatusPill extends StatelessWidget {
         style: DunesTypography.sans(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: done ? DunesColors.green : DunesColors.amber,
+          color: done
+              ? DunesColors.resolve(context, DunesColors.green)
+              : DunesColors.resolve(context, DunesColors.amber),
+          context: context,
         ),
       ),
     );

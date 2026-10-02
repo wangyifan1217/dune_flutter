@@ -97,7 +97,11 @@ class _ProposalIntakeMyEntryPageState extends State<ProposalIntakeMyEntryPage> {
   Widget build(BuildContext context) {
     final inForm = _chrome.onBack != null;
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -118,17 +122,23 @@ class _ProposalIntakeMyEntryPageState extends State<ProposalIntakeMyEntryPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.arrow_back_ios_new,
                             size: 14,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
                           ),
                           const SizedBox(width: 2),
                           Text(
                             inForm ? '列表' : '我的',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
                             ),
                           ),
                         ],
@@ -139,10 +149,13 @@ class _ProposalIntakeMyEntryPageState extends State<ProposalIntakeMyEntryPage> {
                   Expanded(
                     child: Text(
                       widget.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF7B5CD8),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF7B5CD8),
+                        ),
                       ),
                     ),
                   ),
@@ -476,8 +489,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                         width: 118,
                         child: Text(
                           line.role,
-                          style: const TextStyle(
-                            color: ProposalPalette.text3,
+                          style: TextStyle(
+                            color: DunesColors.resolve(
+                              ctx,
+                              ProposalPalette.text3,
+                            ),
                             fontSize: 12,
                           ),
                         ),
@@ -485,8 +501,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                       Expanded(
                         child: Text(
                           line.name,
-                          style: const TextStyle(
-                            color: ProposalPalette.text,
+                          style: TextStyle(
+                            color: DunesColors.resolve(
+                              ctx,
+                              ProposalPalette.text,
+                            ),
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
@@ -525,7 +544,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: ProposalPalette.purple,
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                ProposalPalette.purple,
+                role: DunesColorRole.surface,
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('确认新建'),
@@ -562,7 +585,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: ProposalPalette.coral,
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                ProposalPalette.coral,
+                role: DunesColorRole.surface,
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除'),
@@ -875,18 +902,29 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           ChoiceChip(
             label: Text(item.$2),
             selected: value == item.$1,
-            selectedColor: ProposalPalette.purpleSoft,
+            selectedColor: DunesColors.resolve(
+              context,
+              ProposalPalette.purpleSoft,
+            ),
             labelStyle: TextStyle(
               color: value == item.$1
-                  ? ProposalPalette.purpleDeep
-                  : ProposalPalette.text2,
+                  ? DunesColors.resolve(context, ProposalPalette.purpleDeep)
+                  : DunesColors.resolve(context, ProposalPalette.text2),
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
             side: BorderSide(
               color: value == item.$1
-                  ? ProposalPalette.purpleLine
-                  : ProposalPalette.border,
+                  ? DunesColors.resolve(
+                      context,
+                      ProposalPalette.purpleLine,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      ProposalPalette.border,
+                      role: DunesColorRole.border,
+                    ),
             ),
             onSelected: _loading ? null : (_) => onChanged(item.$1),
           ),
@@ -914,11 +952,19 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
               ),
               decoration: BoxDecoration(
                 color: selected
-                    ? ProposalPalette.purpleSoft
+                    ? DunesColors.resolve(
+                        context,
+                        ProposalPalette.purpleSoft,
+                        role: DunesColorRole.surface,
+                      )
                     : Colors.transparent,
                 border: Border.all(
                   color: selected
-                      ? ProposalPalette.purpleLine
+                      ? DunesColors.resolve(
+                          context,
+                          ProposalPalette.purpleLine,
+                          role: DunesColorRole.border,
+                        )
                       : Colors.transparent,
                 ),
                 borderRadius: BorderRadius.circular(10),
@@ -932,8 +978,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: selected
-                          ? ProposalPalette.purpleDeep
-                          : ProposalPalette.text3,
+                          ? DunesColors.resolve(
+                              context,
+                              ProposalPalette.purpleDeep,
+                            )
+                          : DunesColors.resolve(context, ProposalPalette.text3),
                       fontSize: compact ? 10 : 11,
                       fontWeight: FontWeight.w600,
                     ),
@@ -943,8 +992,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                     '$value',
                     style: TextStyle(
                       color: selected
-                          ? ProposalPalette.purpleDeep
-                          : ProposalPalette.text,
+                          ? DunesColors.resolve(
+                              context,
+                              ProposalPalette.purpleDeep,
+                            )
+                          : DunesColors.resolve(context, ProposalPalette.text),
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       height: 1.1,
@@ -1020,11 +1072,29 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
             vertical: compact ? 3 : 4,
           ),
           decoration: BoxDecoration(
-            color: selected ? ProposalPalette.purpleSoft : ProposalPalette.soft,
+            color: selected
+                ? DunesColors.resolve(
+                    context,
+                    ProposalPalette.purpleSoft,
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    ProposalPalette.soft,
+                    role: DunesColorRole.surface,
+                  ),
             border: Border.all(
               color: selected
-                  ? ProposalPalette.purpleLine
-                  : ProposalPalette.borderSoft,
+                  ? DunesColors.resolve(
+                      context,
+                      ProposalPalette.purpleLine,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      ProposalPalette.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
             ),
             borderRadius: BorderRadius.circular(8),
           ),
@@ -1035,8 +1105,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                   text: name,
                   style: TextStyle(
                     color: selected
-                        ? ProposalPalette.purpleDeep
-                        : ProposalPalette.text2,
+                        ? DunesColors.resolve(
+                            context,
+                            ProposalPalette.purpleDeep,
+                          )
+                        : DunesColors.resolve(context, ProposalPalette.text2),
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1045,8 +1118,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                   text: ' $count',
                   style: TextStyle(
                     color: selected
-                        ? ProposalPalette.purpleDeep
-                        : ProposalPalette.text,
+                        ? DunesColors.resolve(
+                            context,
+                            ProposalPalette.purpleDeep,
+                          )
+                        : DunesColors.resolve(context, ProposalPalette.text),
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1092,10 +1168,16 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         ? FilledButton.icon(
             onPressed: _saving || _options == null ? null : _create,
             style: _compactListButtonStyle.copyWith(
-              backgroundColor: const WidgetStatePropertyAll(
-                ProposalPalette.purple,
+              backgroundColor: WidgetStatePropertyAll(
+                DunesColors.resolve(
+                  context,
+                  ProposalPalette.purple,
+                  role: DunesColorRole.surface,
+                ),
               ),
-              foregroundColor: const WidgetStatePropertyAll(Colors.white),
+              foregroundColor: WidgetStatePropertyAll(
+                DunesColors.resolve(context, Colors.white),
+              ),
             ),
             icon: const Icon(Icons.add, size: 15),
             label: Text(
@@ -1112,7 +1194,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       behavior: HitTestBehavior.translucent,
       child: ColoredBox(
-        color: ProposalPalette.page,
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.page,
+          role: DunesColorRole.surface,
+        ),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             compact ? 12 : 20,
@@ -1238,7 +1324,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
             child: Text(
               entry.label,
               style: TextStyle(
-                color: ProposalPalette.text2,
+                color: DunesColors.resolve(context, ProposalPalette.text2),
                 fontSize: compact ? 13 : 14,
                 fontWeight: FontWeight.w700,
               ),
@@ -1343,19 +1429,25 @@ class _ProposalListTile extends StatelessWidget {
     final actionText = proposalIntakeListActionText(row, people: people);
     final metaStyle = kProposalCaptionStyle;
     final agingStyle = TextStyle(
-      color: days >= 7 ? ProposalPalette.coral : ProposalPalette.text3,
+      color: days >= 7
+          ? DunesColors.resolve(context, ProposalPalette.coral)
+          : DunesColors.resolve(context, ProposalPalette.text3),
       fontSize: 11,
       fontWeight: days >= 7 ? FontWeight.w700 : FontWeight.w400,
     );
     final fillStyle = TextStyle(
       color: fill.filledPercent < 50
-          ? ProposalPalette.coral
-          : ProposalPalette.text3,
+          ? DunesColors.resolve(context, ProposalPalette.coral)
+          : DunesColors.resolve(context, ProposalPalette.text3),
       fontSize: 11,
       fontWeight: fill.filledPercent < 50 ? FontWeight.w700 : FontWeight.w400,
     );
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -1363,7 +1455,13 @@ class _ProposalListTile extends StatelessWidget {
         child: Container(
           padding: EdgeInsets.all(compact ? 12 : 16),
           decoration: BoxDecoration(
-            border: Border.all(color: ProposalPalette.borderSoft),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                ProposalPalette.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -1373,12 +1471,16 @@ class _ProposalListTile extends StatelessWidget {
                 width: compact ? 38 : 42,
                 height: compact ? 38 : 42,
                 decoration: BoxDecoration(
-                  color: ProposalPalette.purpleSoft,
+                  color: DunesColors.resolve(
+                    context,
+                    ProposalPalette.purpleSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(11),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.assignment_outlined,
-                  color: ProposalPalette.purple,
+                  color: DunesColors.resolve(context, ProposalPalette.purple),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1392,8 +1494,11 @@ class _ProposalListTile extends StatelessWidget {
                           : row.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: ProposalPalette.text,
+                      style: TextStyle(
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.text,
+                        ),
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1464,8 +1569,11 @@ class _ProposalListTile extends StatelessWidget {
                         actionText,
                         maxLines: compact ? 2 : 3,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: ProposalPalette.purpleDeep,
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.purpleDeep,
+                          ),
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1487,9 +1595,12 @@ class _ProposalListTile extends StatelessWidget {
                           tooltip: '复制新建',
                           visualDensity: VisualDensity.compact,
                           onPressed: onDuplicate,
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.file_copy_outlined,
-                            color: ProposalPalette.purpleDeep,
+                            color: DunesColors.resolve(
+                              context,
+                              ProposalPalette.purpleDeep,
+                            ),
                             size: 20,
                           ),
                         ),
@@ -1497,9 +1608,12 @@ class _ProposalListTile extends StatelessWidget {
                         tooltip: '相关人员',
                         visualDensity: VisualDensity.compact,
                         onPressed: onPeople,
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.people_alt_outlined,
-                          color: ProposalPalette.purpleDeep,
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.purpleDeep,
+                          ),
                           size: 20,
                         ),
                       ),
@@ -1511,9 +1625,12 @@ class _ProposalListTile extends StatelessWidget {
                           minHeight: 44,
                         ),
                         onPressed: onForward,
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.forward_outlined,
-                          color: ProposalPalette.purpleDeep,
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.purpleDeep,
+                          ),
                           size: 24,
                         ),
                       ),
@@ -1522,15 +1639,21 @@ class _ProposalListTile extends StatelessWidget {
                           tooltip: '删除',
                           visualDensity: VisualDensity.compact,
                           onPressed: onDelete,
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.delete_outline,
-                            color: ProposalPalette.coral,
+                            color: DunesColors.resolve(
+                              context,
+                              ProposalPalette.coral,
+                            ),
                             size: 20,
                           ),
                         ),
-                      const Icon(
+                      Icon(
                         Icons.chevron_right,
-                        color: ProposalPalette.text3,
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.text3,
+                        ),
                       ),
                     ],
                   ),
@@ -1560,19 +1683,26 @@ class _ListMessage extends StatelessWidget {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 44, color: ProposalPalette.purpleLine),
+        Icon(
+          icon,
+          size: 44,
+          color: DunesColors.resolve(context, ProposalPalette.purpleLine),
+        ),
         const SizedBox(height: 12),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w700,
-            color: ProposalPalette.text,
+            color: DunesColors.resolve(context, ProposalPalette.text),
           ),
         ),
         const SizedBox(height: 5),
         Text(
           message,
-          style: const TextStyle(color: ProposalPalette.text3, fontSize: 12),
+          style: TextStyle(
+            color: DunesColors.resolve(context, ProposalPalette.text3),
+            fontSize: 12,
+          ),
         ),
       ],
     ),
@@ -2192,7 +2322,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       fontSize: 13,
       height: 1.35,
       fontWeight: text.isEmpty ? FontWeight.w500 : FontWeight.w600,
-      color: text.isEmpty ? ProposalPalette.text3 : ProposalPalette.text,
+      color: text.isEmpty
+          ? DunesColors.resolve(context, ProposalPalette.text3)
+          : DunesColors.resolve(context, ProposalPalette.text),
     );
     // 空值只占一行。大 maxLines 在 Flutter web 上会按 HTML rows 留白。
     final hug = text.isEmpty || maxLines == 1;
@@ -2635,8 +2767,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 const SizedBox(height: 12),
                 Text(
                   recipientsHeading,
-                  style: const TextStyle(
-                    color: ProposalPalette.text,
+                  style: TextStyle(
+                    color: DunesColors.resolve(ctx, ProposalPalette.text),
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -2647,8 +2779,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
                       '· ${item.line}',
-                      style: const TextStyle(
-                        color: ProposalPalette.text2,
+                      style: TextStyle(
+                        color: DunesColors.resolve(ctx, ProposalPalette.text2),
                         fontSize: 13,
                       ),
                     ),
@@ -2664,7 +2796,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: ProposalPalette.purpleDeep,
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                ProposalPalette.purpleDeep,
+                role: DunesColorRole.surface,
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(confirmLabel),
@@ -2841,7 +2977,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   int _technologyReviewedCount() => _technologyReviewFields
       .where(
-        (key) => proposalIntakeTechnologyItemReviewed(_review, key, form: _form),
+        (key) =>
+            proposalIntakeTechnologyItemReviewed(_review, key, form: _form),
       )
       .length;
 
@@ -2894,10 +3031,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final comment = _itemRejectComment(section);
     final rejected = comment.isNotEmpty && !reviewed;
     final color = reviewed
-        ? ProposalPalette.green
+        ? DunesColors.resolve(context, ProposalPalette.green)
         : rejected
-        ? const Color(0xFFB42318)
-        : ProposalPalette.border;
+        ? DunesColors.resolve(context, const Color(0xFFB42318))
+        : DunesColors.resolve(context, ProposalPalette.border);
     final dot = Tooltip(
       message: reviewed
           ? '已复核'
@@ -2909,7 +3046,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         height: 9,
         margin: const EdgeInsets.only(top: 4),
         decoration: BoxDecoration(
-          color: reviewed || rejected ? color : Colors.transparent,
+          color: DunesColors.resolveNullable(
+            context,
+            reviewed || rejected ? color : Colors.transparent,
+            role: DunesColorRole.surface,
+          ),
           border: Border.all(color: color, width: 1.4),
           shape: BoxShape.circle,
         ),
@@ -2923,8 +3064,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         const SizedBox(height: 4),
         Text(
           comment,
-          style: const TextStyle(
-            color: Color(0xFFB42318),
+          style: TextStyle(
+            color: DunesColors.resolveNullable(context, Color(0xFFB42318)),
             fontSize: 11,
             height: 1.35,
           ),
@@ -2963,8 +3104,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         const SizedBox(height: 4),
         Text(
           comment,
-          style: const TextStyle(
-            color: Color(0xFFB42318),
+          style: TextStyle(
+            color: DunesColors.resolveNullable(context, Color(0xFFB42318)),
             fontSize: 11,
             height: 1.35,
           ),
@@ -3863,10 +4004,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Widget _ratingChip(String rating) {
     final (Color bg, Color fg) = switch (rating) {
-      'S' => (ProposalPalette.purpleSoft, ProposalPalette.purpleDeep),
-      'A' => (ProposalPalette.greenSoft, ProposalPalette.green),
-      'B' => (ProposalPalette.amberSoft, ProposalPalette.amber),
-      _ => (const Color(0xFFF0ECF4), ProposalPalette.text2),
+      'S' => (
+        DunesColors.resolve(context, ProposalPalette.purpleSoft),
+        DunesColors.resolve(context, ProposalPalette.purpleDeep),
+      ),
+      'A' => (
+        DunesColors.resolve(context, ProposalPalette.greenSoft),
+        DunesColors.resolve(context, ProposalPalette.green),
+      ),
+      'B' => (
+        DunesColors.resolve(context, ProposalPalette.amberSoft),
+        DunesColors.resolve(context, ProposalPalette.amber),
+      ),
+      _ => (
+        DunesColors.resolve(context, const Color(0xFFF0ECF4)),
+        DunesColors.resolve(context, ProposalPalette.text2),
+      ),
     };
     return Tooltip(
       message: '任务评级 $rating，按年化规模自动',
@@ -3876,13 +4029,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         padding: const EdgeInsets.symmetric(horizontal: 6),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: bg,
+          color: DunesColors.resolveNullable(
+            context,
+            bg,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
           '$rating级',
           style: TextStyle(
-            color: fg,
+            color: DunesColors.resolveNullable(context, fg),
             fontSize: 11,
             fontWeight: FontWeight.w800,
             height: 1.0,
@@ -4629,7 +4786,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: ProposalPalette.coral,
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                ProposalPalette.coral,
+                role: DunesColorRole.surface,
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除'),
@@ -4662,7 +4823,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           final wide = !ProposalLayout.isMedium(constraints.maxWidth);
           final compact = ProposalLayout.isCompact(constraints.maxWidth);
           return ColoredBox(
-            color: ProposalPalette.page,
+            color: DunesColors.resolve(
+              context,
+              ProposalPalette.page,
+              role: DunesColorRole.surface,
+            ),
             child: Column(
               children: [
                 _topbar(compact: compact),
@@ -4671,11 +4836,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 _taskBanner(compact: compact),
                 Expanded(
                   child: Container(
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [ProposalPalette.app, ProposalPalette.page],
+                        colors: [
+                          DunesColors.resolve(
+                            context,
+                            ProposalPalette.app,
+                            role: DunesColorRole.surface,
+                          ),
+                          DunesColors.resolve(
+                            context,
+                            ProposalPalette.page,
+                            role: DunesColorRole.surface,
+                          ),
+                        ],
                       ),
                     ),
                     child: NotificationListener<ScrollNotification>(
@@ -4804,10 +4980,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         compact ? 8 : 12,
         8,
       ),
-      decoration: const BoxDecoration(
-        color: ProposalPalette.app,
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.app,
+          role: DunesColorRole.surface,
+        ),
         border: Border(
-          bottom: BorderSide(color: ProposalPalette.borderSoft, width: 1),
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              ProposalPalette.borderSoft,
+              role: DunesColorRole.border,
+            ),
+            width: 1,
+          ),
         ),
       ),
       child: Row(
@@ -4821,8 +5008,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     _headerTitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: ProposalPalette.text,
+                    style: TextStyle(
+                      color: DunesColors.resolve(context, ProposalPalette.text),
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                       height: 1.2,
@@ -4840,8 +5027,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       _topStatusLine,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: ProposalPalette.text3,
+                      style: TextStyle(
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.text3,
+                        ),
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                         height: 1.2,
@@ -4869,9 +5059,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   static const _topToolH = 28.0;
 
   BoxDecoration get _topToolDecoration => BoxDecoration(
-    color: const Color(0xFFF3EFFA),
+    color: DunesColors.resolve(
+      context,
+      const Color(0xFFF3EFFA),
+      role: DunesColorRole.surface,
+    ),
     borderRadius: BorderRadius.circular(8),
-    border: Border.all(color: ProposalPalette.borderStrong, width: 0.8),
+    border: Border.all(
+      color: DunesColors.resolve(
+        context,
+        ProposalPalette.borderStrong,
+        role: DunesColorRole.border,
+      ),
+      width: 0.8,
+    ),
   );
 
   Widget _progressToggle({required bool compact}) {
@@ -4897,8 +5098,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       fontWeight: FontWeight.w600,
                       height: 1.1,
                       color: _progressOpen
-                          ? ProposalPalette.purpleDeep
-                          : ProposalPalette.text2,
+                          ? DunesColors.resolve(
+                              context,
+                              ProposalPalette.purpleDeep,
+                            )
+                          : DunesColors.resolve(context, ProposalPalette.text2),
                     ),
                   ),
                   Icon(
@@ -4907,8 +5111,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         : Icons.expand_more_rounded,
                     size: 16,
                     color: _progressOpen
-                        ? ProposalPalette.purpleDeep
-                        : ProposalPalette.text3,
+                        ? DunesColors.resolve(
+                            context,
+                            ProposalPalette.purpleDeep,
+                          )
+                        : DunesColors.resolve(context, ProposalPalette.text3),
                   ),
                 ],
               ),
@@ -4985,8 +5192,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         onPressed: () => _jumpToSection(section),
         style: TextButton.styleFrom(
           foregroundColor: active
-              ? ProposalPalette.purpleDeep
-              : ProposalPalette.text2,
+              ? DunesColors.resolve(context, ProposalPalette.purpleDeep)
+              : DunesColors.resolve(context, ProposalPalette.text2),
           backgroundColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
@@ -5009,7 +5216,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             fontSize: 12,
             height: 1.1,
             fontWeight: active || mine ? FontWeight.w700 : FontWeight.w600,
-            color: active ? ProposalPalette.purpleDeep : ProposalPalette.text2,
+            color: active
+                ? DunesColors.resolve(context, ProposalPalette.purpleDeep)
+                : DunesColors.resolve(context, ProposalPalette.text2),
           ),
           child: Text(
             proposalIntakeNavSectionLabel(section),
@@ -5031,7 +5240,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 Icons.check_circle,
                 key: ValueKey('proposal-nav-done-${section.name}'),
                 size: 14,
-                color: ProposalPalette.green,
+                color: DunesColors.resolve(context, ProposalPalette.green),
               ),
             )
           else if (todo)
@@ -5043,14 +5252,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 width: 16,
                 height: 16,
                 alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  color: ProposalPalette.amber,
+                decoration: BoxDecoration(
+                  color: DunesColors.resolve(
+                    context,
+                    ProposalPalette.amber,
+                    role: DunesColorRole.surface,
+                  ),
                   shape: BoxShape.circle,
                 ),
                 child: Text(
                   todoBadge,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, Colors.white),
                     fontSize: 9,
                     height: 1,
                     fontWeight: FontWeight.w800,
@@ -5070,7 +5283,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
 
     return ColoredBox(
-      color: ProposalPalette.app,
+      color: DunesColors.resolve(
+        context,
+        ProposalPalette.app,
+        role: DunesColorRole.surface,
+      ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           compact ? 12 : 18,
@@ -5082,13 +5299,25 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           height: 48,
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: const Color(0xFFF1ECF7),
-            border: Border.all(color: ProposalPalette.borderSoft),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF1ECF7),
+              role: DunesColorRole.surface,
+            ),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                ProposalPalette.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
             borderRadius: BorderRadius.circular(14),
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final index = sections.indexOf(_visibleSection).clamp(0, sections.length - 1);
+              final index = sections
+                  .indexOf(_visibleSection)
+                  .clamp(0, sections.length - 1);
               final tabWidth = constraints.maxWidth / sections.length;
               return Stack(
                 children: [
@@ -5101,7 +5330,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     height: navH,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(10),
                         boxShadow: const [
                           BoxShadow(
@@ -5150,16 +5383,38 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         key: ValueKey('proposal-nav-${section.name}'),
         onPressed: () => _jumpToSection(section),
         style: OutlinedButton.styleFrom(
-          foregroundColor: active ? Colors.white : ProposalPalette.purpleDeep,
+          foregroundColor: active
+              ? DunesColors.resolve(context, Colors.white)
+              : DunesColors.resolve(context, ProposalPalette.purpleDeep),
           backgroundColor: active
-              ? ProposalPalette.purple
+              ? DunesColors.resolve(
+                  context,
+                  ProposalPalette.purple,
+                  role: DunesColorRole.surface,
+                )
               : mine
-              ? ProposalPalette.purpleSoft
-              : Colors.white,
+              ? DunesColors.resolve(
+                  context,
+                  ProposalPalette.purpleSoft,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
           side: BorderSide(
             color: active || mine
-                ? ProposalPalette.purple
-                : ProposalPalette.borderStrong,
+                ? DunesColors.resolve(
+                    context,
+                    ProposalPalette.purple,
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    ProposalPalette.borderStrong,
+                    role: DunesColorRole.border,
+                  ),
             width: active || mine ? 1.4 : 1,
           ),
           padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
@@ -5187,13 +5442,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           children: [
             button,
             if (done)
-              const Positioned(
+              Positioned(
                 right: -2,
                 top: -5,
                 child: Icon(
                   Icons.check_circle,
                   size: 14,
-                  color: ProposalPalette.green,
+                  color: DunesColors.resolve(context, ProposalPalette.green),
                 ),
               )
             else if (todo)
@@ -5204,14 +5459,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   width: 16,
                   height: 16,
                   alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: ProposalPalette.amber,
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolve(
+                      context,
+                      ProposalPalette.amber,
+                      role: DunesColorRole.surface,
+                    ),
                     shape: BoxShape.circle,
                   ),
                   child: Text(
                     todoBadge,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: DunesColors.resolve(context, Colors.white),
                       fontSize: 9,
                       height: 1,
                       fontWeight: FontWeight.w800,
@@ -5227,14 +5486,26 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return Container(
       height: 48,
       padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 18),
-      decoration: const BoxDecoration(
-        color: ProposalPalette.app,
-        border: Border(bottom: BorderSide(color: ProposalPalette.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.app,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              ProposalPalette.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox(
+          SizedBox(
             height: navH,
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -5242,7 +5513,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 Icon(
                   Icons.my_location_outlined,
                   size: 15,
-                  color: ProposalPalette.purple,
+                  color: DunesColors.resolve(context, ProposalPalette.purple),
                 ),
                 SizedBox(width: 6),
                 Text(
@@ -5250,7 +5521,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.1,
-                    color: ProposalPalette.text3,
+                    color: DunesColors.resolve(context, ProposalPalette.text3),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -5302,8 +5573,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               key: const ValueKey('proposal-task-jump'),
               onPressed: _jumpToTask,
               style: FilledButton.styleFrom(
-                backgroundColor: ProposalPalette.purple,
-                foregroundColor: Colors.white,
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  ProposalPalette.purple,
+                  role: DunesColorRole.surface,
+                ),
+                foregroundColor: DunesColors.resolve(context, Colors.white),
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 minimumSize: const Size(0, 32),
                 maximumSize: const Size(double.infinity, 32),
@@ -5323,8 +5598,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       title,
       style: TextStyle(
         color: awaitingModule
-            ? ProposalPalette.green
-            : ProposalPalette.purpleDeep,
+            ? DunesColors.resolve(context, ProposalPalette.green)
+            : DunesColors.resolve(context, ProposalPalette.purpleDeep),
         fontSize: 13,
         fontWeight: FontWeight.w800,
         height: 1.25,
@@ -5334,8 +5609,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ? null
         : Text(
             bodyWithLeft,
-            style: const TextStyle(
-              color: ProposalPalette.text2,
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text2),
               fontSize: 11,
               height: 1.4,
             ),
@@ -5350,12 +5625,30 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         compact ? 10 : 10,
       ),
       decoration: BoxDecoration(
-        color: awaitingModule ? const Color(0xFFECF8EE) : ProposalPalette.soft,
+        color: awaitingModule
+            ? DunesColors.resolve(
+                context,
+                const Color(0xFFECF8EE),
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                ProposalPalette.soft,
+                role: DunesColorRole.surface,
+              ),
         border: Border(
           bottom: BorderSide(
             color: awaitingModule
-                ? const Color(0xFFB9DDBE)
-                : ProposalPalette.borderStrong,
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFB9DDBE),
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    ProposalPalette.borderStrong,
+                    role: DunesColorRole.border,
+                  ),
           ),
         ),
       ),
@@ -5370,8 +5663,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   Icons.assignment_turned_in_outlined,
                   size: 18,
                   color: awaitingModule
-                      ? ProposalPalette.green
-                      : ProposalPalette.purple,
+                      ? DunesColors.resolve(context, ProposalPalette.green)
+                      : DunesColors.resolve(context, ProposalPalette.purple),
                 ),
                 const SizedBox(width: 10),
               ],
@@ -5407,10 +5700,30 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: write ? ProposalPalette.amberSoft : ProposalPalette.purpleSoft,
+          color: write
+              ? DunesColors.resolve(
+                  context,
+                  ProposalPalette.amberSoft,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  ProposalPalette.purpleSoft,
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: write ? ProposalPalette.amber : ProposalPalette.purple,
+            color: write
+                ? DunesColors.resolve(
+                    context,
+                    ProposalPalette.amber,
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    ProposalPalette.purple,
+                    role: DunesColorRole.border,
+                  ),
           ),
         ),
         child: Row(
@@ -5418,7 +5731,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             Icon(
               write ? Icons.edit_outlined : Icons.task_alt_rounded,
               size: 16,
-              color: write ? ProposalPalette.amber : ProposalPalette.purpleDeep,
+              color: write
+                  ? DunesColors.resolve(context, ProposalPalette.amber)
+                  : DunesColors.resolve(context, ProposalPalette.purpleDeep),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -5426,8 +5741,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 remaining > 0 ? '$cue · 还剩 $remaining 条' : cue,
                 style: TextStyle(
                   color: write
-                      ? ProposalPalette.amber
-                      : ProposalPalette.purpleDeep,
+                      ? DunesColors.resolve(context, ProposalPalette.amber)
+                      : DunesColors.resolve(
+                          context,
+                          ProposalPalette.purpleDeep,
+                        ),
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                 ),
@@ -5469,8 +5787,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         fontWeight: FontWeight.w600,
                         height: 1.0,
                         color: enabled
-                            ? ProposalPalette.purpleDeep
-                            : ProposalPalette.text4,
+                            ? DunesColors.resolve(
+                                context,
+                                ProposalPalette.purpleDeep,
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                ProposalPalette.text4,
+                              ),
                       ),
                     ),
             ),
@@ -5496,7 +5820,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           Container(
             width: 0.8,
             height: 14,
-            color: ProposalPalette.borderStrong,
+            color: DunesColors.resolve(
+              context,
+              ProposalPalette.borderStrong,
+              role: DunesColorRole.surface,
+            ),
           ),
           _topToolSlot(
             key: const ValueKey('proposal-top-forward'),
@@ -5588,7 +5916,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       padding: EdgeInsets.zero,
       position: PopupMenuPosition.under,
       offset: const Offset(0, 6),
-      color: ProposalPalette.card,
+      color: DunesColors.resolve(context, ProposalPalette.card),
       surfaceTintColor: Colors.transparent,
       elevation: compact ? 0 : 8,
       shadowColor: const Color(0x1A292530),
@@ -5598,7 +5926,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: ProposalPalette.border),
+        side: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.border,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       menuPadding: const EdgeInsets.symmetric(vertical: 6),
       onSelected: (index) => items[index].onPressed?.call(),
@@ -5626,7 +5960,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   vertical: compact ? 8 : 6,
                 ),
                 decoration: BoxDecoration(
-                  color: item.danger ? ProposalPalette.coralSoft : null,
+                  color: item.danger
+                      ? DunesColors.resolve(
+                          context,
+                          ProposalPalette.coralSoft,
+                          role: DunesColorRole.surface,
+                        )
+                      : null,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -5635,10 +5975,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: !enabled
-                        ? ProposalPalette.text4
+                        ? DunesColors.resolve(context, ProposalPalette.text4)
                         : item.danger
-                        ? ProposalPalette.coral
-                        : ProposalPalette.text,
+                        ? DunesColors.resolve(context, ProposalPalette.coral)
+                        : DunesColors.resolve(context, ProposalPalette.text),
                     fontSize: compact ? 14 : 13,
                     fontWeight: FontWeight.w600,
                     height: 1.2,
@@ -5652,7 +5992,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       },
       child: DecoratedBox(
         decoration: _topToolDecoration,
-        child: const SizedBox(
+        child: SizedBox(
           height: _topToolH,
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 10),
@@ -5663,7 +6003,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   height: 1.0,
-                  color: ProposalPalette.purpleDeep,
+                  color: DunesColors.resolve(
+                    context,
+                    ProposalPalette.purpleDeep,
+                  ),
                 ),
               ),
             ),
@@ -5710,14 +6053,24 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: ProposalPalette.coralSoft,
-        border: Border.all(color: const Color(0xFFE7C2B0)),
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.coralSoft,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE7C2B0),
+            role: DunesColorRole.border,
+          ),
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         text,
-        style: const TextStyle(
-          color: ProposalPalette.coral,
+        style: TextStyle(
+          color: DunesColors.resolve(context, ProposalPalette.coral),
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -5730,16 +6083,26 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: ProposalPalette.greenSoft,
-        border: Border.all(color: const Color(0xFFB9DDBE)),
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.greenSoft,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFB9DDBE),
+            role: DunesColorRole.border,
+          ),
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         _canSubmit
             ? '单条复核和板块复核都已完成。请点击右上角「通知最终人」。已复核内容不可再改；如需改已复核部分请驳回。'
             : '各环节已复核完成。右上角「通知最终人」由${_submitterBannerName()}操作。已复核内容不可再改；如需改已复核部分请驳回。',
-        style: const TextStyle(
-          color: ProposalPalette.green,
+        style: TextStyle(
+          color: DunesColors.resolve(context, ProposalPalette.green),
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -5769,17 +6132,27 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     margin: const EdgeInsets.only(bottom: 14),
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
-      color: ProposalPalette.coralSoft,
-      border: Border.all(color: const Color(0xFFE7C2B0)),
+      color: DunesColors.resolve(
+        context,
+        ProposalPalette.coralSoft,
+        role: DunesColorRole.surface,
+      ),
+      border: Border.all(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFE7C2B0),
+          role: DunesColorRole.border,
+        ),
+      ),
       borderRadius: BorderRadius.circular(10),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '规则校验未通过，禁止提交',
           style: TextStyle(
-            color: ProposalPalette.coral,
+            color: DunesColors.resolve(context, ProposalPalette.coral),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -5787,7 +6160,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         for (final issue in _issues)
           Text(
             '• $issue',
-            style: const TextStyle(color: ProposalPalette.coral, fontSize: 11),
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.coral),
+              fontSize: 11,
+            ),
           ),
       ],
     ),
@@ -5843,13 +6219,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
           decoration: BoxDecoration(
-            color: ProposalPalette.amberSoft,
+            color: DunesColors.resolve(
+              context,
+              ProposalPalette.amberSoft,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(
             proposalIntakeSectionTaskCue(_taskAction),
-            style: const TextStyle(
-              color: ProposalPalette.amber,
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.amber),
               fontSize: 11,
               height: 1.3,
               fontWeight: FontWeight.w700,
@@ -5858,22 +6238,37 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         );
       }
       if (flag == null) {
-        return const Text(
+        return Text(
           '自动生成',
-          style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+          style: TextStyle(
+            color: DunesColors.resolve(context, ProposalPalette.text3),
+            fontSize: 11,
+          ),
         );
       }
       final done = _moduleReviewed(flag);
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
-          color: done ? ProposalPalette.greenSoft : ProposalPalette.soft,
+          color: done
+              ? DunesColors.resolve(
+                  context,
+                  ProposalPalette.greenSoft,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  ProposalPalette.soft,
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
           done ? '已复核' : '未完成',
           style: TextStyle(
-            color: done ? ProposalPalette.green : ProposalPalette.text3,
+            color: done
+                ? DunesColors.resolve(context, ProposalPalette.green)
+                : DunesColors.resolve(context, ProposalPalette.text3),
             fontSize: 11,
             height: 1.3,
             fontWeight: FontWeight.w600,
@@ -5893,7 +6288,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             child: Text(
               e.no,
               style: TextStyle(
-                color: active ? ProposalPalette.purple : ProposalPalette.text3,
+                color: active
+                    ? DunesColors.resolve(context, ProposalPalette.purple)
+                    : DunesColors.resolve(context, ProposalPalette.text3),
                 fontSize: 12,
                 height: 1.3,
                 fontWeight: FontWeight.w700,
@@ -5903,7 +6300,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           Text(
             proposalIntakeNavSectionLabel(e.section),
             style: TextStyle(
-              color: active ? ProposalPalette.purpleDeep : ProposalPalette.text,
+              color: active
+                  ? DunesColors.resolve(context, ProposalPalette.purpleDeep)
+                  : DunesColors.resolve(context, ProposalPalette.text),
               fontSize: 13,
               height: 1.3,
               fontWeight: FontWeight.w700,
@@ -5915,8 +6314,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         e.desc,
         maxLines: wide ? 1 : 2,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: ProposalPalette.text3,
+        style: TextStyle(
+          color: DunesColors.resolve(context, ProposalPalette.text3),
           fontSize: 11.5,
           height: 1.4,
         ),
@@ -5928,12 +6327,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: active ? ProposalPalette.soft : Colors.transparent,
+              color: active
+                  ? DunesColors.resolve(
+                      context,
+                      ProposalPalette.soft,
+                      role: DunesColorRole.surface,
+                    )
+                  : Colors.transparent,
               border: Border(
                 bottom: BorderSide(
                   color: i == entries.length - 1
                       ? Colors.transparent
-                      : ProposalPalette.borderSoft,
+                      : DunesColors.resolve(
+                          context,
+                          ProposalPalette.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
                 ),
               ),
             ),
@@ -5969,9 +6378,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
         decoration: BoxDecoration(
-          color: ProposalPalette.card,
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.card,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: ProposalPalette.border),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              ProposalPalette.border,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -5979,28 +6398,41 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           children: [
             Container(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-              decoration: const BoxDecoration(
-                color: ProposalPalette.app,
+              decoration: BoxDecoration(
+                color: DunesColors.resolve(
+                  context,
+                  ProposalPalette.app,
+                  role: DunesColorRole.surface,
+                ),
                 border: Border(
-                  bottom: BorderSide(color: ProposalPalette.borderSoft),
+                  bottom: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      ProposalPalette.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
               ),
               child: Row(
                 children: [
-                  const Text(
+                  Text(
                     '目录',
                     style: TextStyle(
-                      color: ProposalPalette.text,
+                      color: DunesColors.resolve(context, ProposalPalette.text),
                       fontSize: 12.5,
                       height: 1.3,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const Spacer(),
-                  const Text(
+                  Text(
                     '点一行跳到对应板块',
                     style: TextStyle(
-                      color: ProposalPalette.text3,
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.text3,
+                      ),
                       fontSize: 11,
                       height: 1.3,
                     ),
@@ -6027,9 +6459,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!first)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(bottom: 10),
-              child: Divider(height: 1, color: ProposalPalette.borderSoft),
+              child: Divider(
+                height: 1,
+                color: DunesColors.resolve(
+                  context,
+                  ProposalPalette.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
@@ -6088,8 +6527,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: selected.isEmpty
-                    ? ProposalPalette.text3
-                    : ProposalPalette.text,
+                    ? DunesColors.resolve(context, ProposalPalette.text3)
+                    : DunesColors.resolve(context, ProposalPalette.text),
                 fontSize: 13,
                 fontWeight: selected.isEmpty
                     ? FontWeight.w400
@@ -6100,8 +6539,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               '展开',
               style: TextStyle(
                 color: enabled
-                    ? ProposalPalette.purpleDeep
-                    : ProposalPalette.text3,
+                    ? DunesColors.resolve(context, ProposalPalette.purpleDeep)
+                    : DunesColors.resolve(context, ProposalPalette.text3),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -6481,10 +6920,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         childrenPadding: EdgeInsets.zero,
         title: Text(
           '历史轮次（${history.length}）',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: ProposalPalette.text,
+            color: DunesColors.resolve(context, ProposalPalette.text),
           ),
         ),
         children: [
@@ -6518,8 +6957,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: ProposalPalette.soft,
-        border: Border.all(color: ProposalPalette.border),
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.soft,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.border,
+            role: DunesColorRole.border,
+          ),
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -6540,18 +6989,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           else
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
-                color: ProposalPalette.text,
+                color: DunesColors.resolve(context, ProposalPalette.text),
               ),
             ),
           if (summary.isNotEmpty)
             Text(
               summary,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: ProposalPalette.text2,
+                color: DunesColors.resolve(context, ProposalPalette.text2),
               ),
             ),
         ],
@@ -6620,8 +7069,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   margin: const EdgeInsets.only(top: 10),
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: ProposalPalette.app,
-                    border: Border.all(color: ProposalPalette.border),
+                    color: DunesColors.resolve(
+                      context,
+                      ProposalPalette.app,
+                      role: DunesColorRole.surface,
+                    ),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.border,
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
@@ -6630,14 +7089,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   '财务技术接口 · 根据项目成本动态生成',
                                   style: TextStyle(
-                                    color: ProposalPalette.text,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      ProposalPalette.text,
+                                    ),
                                     fontWeight: FontWeight.w700,
                                     fontSize: 13,
                                   ),
@@ -6646,7 +7108,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                 Text(
                                   '由财务部负责人二填写，科技部负责人随科技板块复核',
                                   style: TextStyle(
-                                    color: ProposalPalette.text3,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      ProposalPalette.text3,
+                                    ),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -6842,7 +7307,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     _multiField(
                       '能力输出形式',
                       'outputForms',
-                      proposalIntakeOutputFormOptions(widget.options.outputForms),
+                      proposalIntakeOutputFormOptions(
+                        widget.options.outputForms,
+                      ),
                       null,
                       required: true,
                       writable: _canEditTech,
@@ -6976,11 +7443,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(bottom: 8),
                 child: Text(
                   '科技部负责人随科技板块复核',
-                  style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, ProposalPalette.text3),
+                    fontSize: 11,
+                  ),
                 ),
               ),
               if (_showSelectedAsText)
@@ -7061,10 +7531,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         children: [
           Align(
             alignment: Alignment.centerLeft,
-            child: const Text(
+            child: Text(
               '$kProposalChildProductLabel科技',
-              style: const TextStyle(
-                color: ProposalPalette.green,
+              style: TextStyle(
+                color: DunesColors.resolve(context, ProposalPalette.green),
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
               ),
@@ -7075,18 +7545,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             alignment: Alignment.centerLeft,
             child: Text(
               '对应$kProposalChildProductLabel：${_productScopeNames(proposalIntakeChildProducts(_form), fallback: '未命名$kProposalChildProductLabel')}',
-              style: const TextStyle(
-                color: ProposalPalette.green,
+              style: TextStyle(
+                color: DunesColors.resolve(context, ProposalPalette.green),
                 fontSize: 11,
               ),
             ),
           ),
           const SizedBox(height: 4),
-          const Align(
+          Align(
             alignment: Alignment.centerLeft,
             child: Text(
               '$kProposalChildProductLabel合并共用这一套科技字段，不按$kProposalChildProductLabel切换。',
-              style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+              style: TextStyle(
+                color: DunesColors.resolve(context, ProposalPalette.text3),
+                fontSize: 11,
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -7138,8 +7611,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               margin: const EdgeInsets.only(top: 10),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: ProposalPalette.app,
-                border: Border.all(color: ProposalPalette.border),
+                color: DunesColors.resolve(
+                  context,
+                  ProposalPalette.app,
+                  role: DunesColorRole.surface,
+                ),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    ProposalPalette.border,
+                    role: DunesColorRole.border,
+                  ),
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -7148,14 +7631,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               '$kProposalChildProductLabel财务技术接口',
                               style: TextStyle(
-                                color: ProposalPalette.text,
+                                color: DunesColors.resolve(
+                                  context,
+                                  ProposalPalette.text,
+                                ),
                                 fontWeight: FontWeight.w700,
                                 fontSize: 13,
                               ),
@@ -7164,7 +7650,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                             Text(
                               '由财务部负责人二填写，科技部负责人随科技板块复核',
                               style: TextStyle(
-                                color: ProposalPalette.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  ProposalPalette.text3,
+                                ),
                                 fontSize: 12,
                               ),
                             ),
@@ -7326,8 +7815,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         _rating,
-                        style: const TextStyle(
-                          color: ProposalPalette.purpleDeep,
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.purpleDeep,
+                          ),
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
                           height: 1.8,
@@ -7611,8 +8103,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         : 'financeItem:$key';
     final computed = _financeComputedMetric(key, formOverride: scope);
     final revenueEditable = key == 'revenue';
-    final revenueManual =
-        revenueEditable && proposalRevenueIsManual(scope);
+    final revenueManual = revenueEditable && proposalRevenueIsManual(scope);
     final current = revenueEditable
         ? (revenueManual
               ? _looseAmountText(scope['revenue'])
@@ -7693,7 +8184,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (computed == null || (revenueEditable && enabled)) return fieldWidget;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F6FA),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF3F6FA),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: fieldWidget,
@@ -7758,13 +8253,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool? writable,
   }) {
     if (label == '业务成本' && _businessCostSealed) {
-      return const ProposalField(
+      return ProposalField(
         label: '业务成本',
         tone: ProposalFieldTone.locked,
         child: Text(
           '已加密上锁，负责人二不可查看。由市场部负责人一在财务复核时填写。',
           style: TextStyle(
-            color: ProposalPalette.text2,
+            color: DunesColors.resolve(context, ProposalPalette.text2),
             fontSize: 13,
             height: 1.45,
             fontWeight: FontWeight.w600,
@@ -7782,13 +8277,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final amounts = proposalCostAmountMap(finance[amountsKey]);
     final enabled = _fillEnabled(writable, resetReview: 'financeCompleted');
     if (label == '业务成本' && !_canEditBusinessCost && names.isEmpty) {
-      return const ProposalField(
+      return ProposalField(
         label: '业务成本',
         tone: ProposalFieldTone.locked,
         child: Text(
           '由市场部负责人一在财务复核时填写',
           style: TextStyle(
-            color: ProposalPalette.text3,
+            color: DunesColors.resolve(context, ProposalPalette.text3),
             fontSize: 13,
             height: 1.45,
             fontWeight: FontWeight.w600,
@@ -7879,8 +8374,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 child: Text(
                   '合计 ${_money(proposalCostAmountTotal(amounts))}',
                   textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    color: ProposalPalette.text2,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, ProposalPalette.text2),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -7936,13 +8431,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               LayoutBuilder(
                 builder: (context, box) {
                   final stacked = ProposalLayout.isCompact(box.maxWidth);
-                  final title = const Column(
+                  final title = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         '提案全链路',
                         style: TextStyle(
-                          color: ProposalPalette.text,
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.text,
+                          ),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -8038,8 +8536,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     width: expanded ? double.infinity : 250,
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: ProposalPalette.app,
-      border: Border.all(color: ProposalPalette.border),
+      color: DunesColors.resolve(
+        context,
+        ProposalPalette.app,
+        role: DunesColorRole.surface,
+      ),
+      border: Border.all(
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.border,
+          role: DunesColorRole.border,
+        ),
+      ),
       borderRadius: BorderRadius.circular(10),
     ),
     child: Column(
@@ -8047,15 +8555,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       children: [
         Text(
           label,
-          style: const TextStyle(color: ProposalPalette.text3, fontSize: 9),
+          style: TextStyle(
+            color: DunesColors.resolve(context, ProposalPalette.text3),
+            fontSize: 9,
+          ),
         ),
         const SizedBox(height: 4),
         Text(
           value.isEmpty ? '待填写' : value,
           maxLines: expanded ? 4 : 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: ProposalPalette.text,
+          style: TextStyle(
+            color: DunesColors.resolve(context, ProposalPalette.text),
             fontSize: 12,
             fontWeight: FontWeight.w700,
             height: 1.35,
@@ -8065,8 +8576,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           meta.isEmpty ? '—' : meta,
           maxLines: expanded ? 4 : 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: ProposalPalette.text3,
+          style: TextStyle(
+            color: DunesColors.resolve(context, ProposalPalette.text3),
             fontSize: 9,
             height: 1.35,
           ),
@@ -8084,9 +8595,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               border: Border(
-                bottom: BorderSide(color: ProposalPalette.borderSoft),
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    ProposalPalette.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
             ),
             child: Column(
@@ -8094,8 +8611,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: ProposalPalette.navTop,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, ProposalPalette.navTop),
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -8130,17 +8647,35 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  ProposalPalette.soft,
-                  ProposalPalette.app,
-                  ProposalPalette.soft,
+                  DunesColors.resolve(
+                    context,
+                    ProposalPalette.soft,
+                    role: DunesColorRole.surface,
+                  ),
+                  DunesColors.resolve(
+                    context,
+                    ProposalPalette.app,
+                    role: DunesColorRole.surface,
+                  ),
+                  DunesColors.resolve(
+                    context,
+                    ProposalPalette.soft,
+                    role: DunesColorRole.surface,
+                  ),
                 ],
               ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
               border: Border(
-                bottom: BorderSide(color: ProposalPalette.borderSoft),
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    ProposalPalette.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
             ),
             child: LayoutBuilder(
@@ -8150,15 +8685,28 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   width: 30,
                   height: 30,
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: ProposalPalette.borderStrong),
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.borderStrong,
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: Center(
                     child: Text(
                       step,
-                      style: const TextStyle(
-                        color: ProposalPalette.purpleMid,
+                      style: TextStyle(
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.purpleMid,
+                        ),
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                       ),
@@ -8171,8 +8719,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
-                          color: ProposalPalette.navTop,
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.navTop,
+                          ),
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                         ),
@@ -8431,10 +8982,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
               ),
               const SizedBox(width: 6),
-              const Text(
+              Text(
                 '是否已有采购提案',
                 style: TextStyle(
-                  color: ProposalPalette.text,
+                  color: DunesColors.resolve(context, ProposalPalette.text),
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
@@ -8442,11 +8993,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ],
           ),
         ),
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 4),
           child: Text(
             '勾选后搜索并选择已审核通过的采购提案，合同状态、编号、名称、主体、源文件等内容会自动带出，可再修改。不勾选则按下方合同归集 / 上传填写。',
-            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text3),
+              fontSize: 11,
+            ),
           ),
         ),
       ],
@@ -8544,7 +9098,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               label: Text(opening ? '打开中…' : '查看合同'),
               style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
-                foregroundColor: ProposalPalette.purpleDeep,
+                foregroundColor: DunesColors.resolve(
+                  context,
+                  ProposalPalette.purpleDeep,
+                ),
                 padding: const EdgeInsets.symmetric(horizontal: 8),
               ),
             ),
@@ -8561,8 +9118,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     visualDensity: VisualDensity.compact,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6),
-                      side: const BorderSide(
-                        color: ProposalPalette.borderSoft,
+                      side: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
                       ),
                     ),
                     avatar: i == 0
@@ -9338,12 +9899,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   void _toggleSelectAllProducts() {
-    final mains = [
-      for (final row in proposalIntakeSkuDetails(_form)) row.id,
-    ];
+    final mains = [for (final row in proposalIntakeSkuDetails(_form)) row.id];
     final selected = _liveSelectedProductIds;
-    final allMainsSelected =
-        mains.isNotEmpty && mains.every(selected.contains);
+    final allMainsSelected = mains.isNotEmpty && mains.every(selected.contains);
     setState(() {
       if (allMainsSelected) {
         _selectedProductIds.removeAll(mains);
@@ -9368,16 +9926,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除所选产品'),
-        content: Text(
-          '确定删除已选的 ${parts.join('、')}吗？业务产品下的关联产品会一并删除，删除后不可恢复。',
-        ),
+        content: Text('确定删除已选的 ${parts.join('、')}吗？业务产品下的关联产品会一并删除，删除后不可恢复。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('取消'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: ProposalPalette.coral),
+            style: FilledButton.styleFrom(
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                ProposalPalette.coral,
+                role: DunesColorRole.surface,
+              ),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除'),
           ),
@@ -9427,7 +9989,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       height: 28,
       child: Checkbox(
         value: _selectedProductIds.contains(id),
-        activeColor: ProposalPalette.purple,
+        activeColor: DunesColors.resolve(context, ProposalPalette.purple),
         visualDensity: VisualDensity.compact,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         onChanged: (value) => _toggleProductSelected(id, value == true),
@@ -9740,7 +10302,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _markFormDirty();
       _businessProductVisible = copied.mains.length;
       _financeSettleVisible = copied.mains.length;
-      _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
+      _row = _row.copyWith(
+        status: _statusAfterEdit,
+        form: form,
+        review: review,
+      );
     });
     widget.onChanged(_row);
     if (!mounted) return;
@@ -9767,7 +10333,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               autofocus: true,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+              onTapOutside: (_) =>
+                  FocusManager.instance.primaryFocus?.unfocus(),
               decoration: proposalInputDecoration(hint: '新增数量'),
             ),
           ],
@@ -10069,8 +10636,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: ProposalPalette.app,
-        border: Border.all(color: ProposalPalette.border),
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.app,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.border,
+            role: DunesColorRole.border,
+          ),
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -10078,12 +10655,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   '销售收入 · 共用结算',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: ProposalPalette.text,
+                    color: DunesColors.resolve(context, ProposalPalette.text),
                   ),
                 ),
               ),
@@ -10095,9 +10672,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ],
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '勾选适用的$kProposalMainProductLabel。这是销售收入比例，不是项目成本。',
-            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text3),
+              fontSize: 11,
+            ),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -10207,10 +10787,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     '业务平台产品',
                     style: TextStyle(
-                      color: ProposalPalette.text,
+                      color: DunesColors.resolve(context, ProposalPalette.text),
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
@@ -10274,7 +10854,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         ? null
                         : () => unawaited(_confirmRemoveSelectedProducts()),
                     style: TextButton.styleFrom(
-                      foregroundColor: ProposalPalette.coral,
+                      foregroundColor: DunesColors.resolve(
+                        context,
+                        ProposalPalette.coral,
+                      ),
                     ),
                     child: Text(
                       _liveSelectedProductIds.isEmpty
@@ -10324,17 +10907,27 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.72),
+        color: DunesColors.resolveNullable(
+          context,
+          Colors.white.withValues(alpha: 0.72),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: ProposalPalette.purpleLine),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.purpleLine,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '关联产品',
             style: TextStyle(
-              color: ProposalPalette.text,
+              color: DunesColors.resolve(context, ProposalPalette.text),
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -10376,8 +10969,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    color: ProposalPalette.text,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, ProposalPalette.text),
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
@@ -10388,8 +10981,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           const SizedBox(height: 2),
           Text(
             bits.join(' · '),
-            style: const TextStyle(
-              color: ProposalPalette.text,
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text),
               fontSize: 12,
               fontWeight: FontWeight.w600,
               height: 1.4,
@@ -10442,10 +11035,28 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: child
-            ? ProposalPalette.greenSoft.withValues(alpha: 0.32)
-            : ProposalPalette.purpleSoft.withValues(alpha: 0.24),
+            ? DunesColors.resolve(
+                context,
+                ProposalPalette.greenSoft,
+                role: DunesColorRole.surface,
+              ).withValues(alpha: 0.32)
+            : DunesColors.resolve(
+                context,
+                ProposalPalette.purpleSoft,
+                role: DunesColorRole.surface,
+              ).withValues(alpha: 0.24),
         border: Border.all(
-          color: child ? ProposalPalette.green : ProposalPalette.purpleLine,
+          color: child
+              ? DunesColors.resolve(
+                  context,
+                  ProposalPalette.green,
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  ProposalPalette.purpleLine,
+                  role: DunesColorRole.border,
+                ),
         ),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -10465,8 +11076,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
-                        color: ProposalPalette.text,
+                      style: TextStyle(
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.text,
+                        ),
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
@@ -10475,8 +11089,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       const SizedBox(height: 4),
                       Text(
                         bits.join(' · '),
-                        style: const TextStyle(
-                          color: ProposalPalette.text,
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.text,
+                          ),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           height: 1.4,
@@ -10495,10 +11112,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
           const SizedBox(height: 4),
           if (!child) ...[
-            const Text(
+            Text(
               '业务产品',
               style: TextStyle(
-                color: ProposalPalette.text3,
+                color: DunesColors.resolve(context, ProposalPalette.text3),
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
               ),
@@ -10526,9 +11143,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       children: [
         TextButton(
           style: style,
-          onPressed: () => unawaited(
-            _openSkuProductDialog(child: child, existing: row),
-          ),
+          onPressed: () =>
+              unawaited(_openSkuProductDialog(child: child, existing: row)),
           child: Text(_canEditProducts ? '编辑' : '查看'),
         ),
         if (_canEditProducts && !child)
@@ -10616,7 +11232,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               Text(
                 child ? '$kProposalChildProductLabel是否已经建产品' : '是否已经建产品',
                 style: TextStyle(
-                  color: ProposalPalette.text,
+                  color: DunesColors.resolve(context, ProposalPalette.text),
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
@@ -10633,7 +11249,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 : '不勾：手工填写产品信息。\n'
                       '勾选：先选业务平台，再搜索选中资管已建的产品。选中后会按资管结算规则同步账单类型、结算方式、税率；券包会带出子产品基础信息和对应结算，仍可继续增改。',
             style: TextStyle(
-              color: ProposalPalette.text3,
+              color: DunesColors.resolve(context, ProposalPalette.text3),
               fontSize: 11,
               height: 1.5,
             ),
@@ -10654,8 +11270,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: ProposalPalette.text2,
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text2),
               fontSize: 11.5,
               height: 1.3,
               fontWeight: FontWeight.w700,
@@ -10663,8 +11279,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
           const SizedBox(width: 8),
           if (hint == null)
-            const Expanded(
-              child: Divider(height: 1, color: ProposalPalette.borderSoft),
+            Expanded(
+              child: Divider(
+                height: 1,
+                color: DunesColors.resolve(
+                  context,
+                  ProposalPalette.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
             )
           else
             Expanded(
@@ -10672,8 +11295,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 hint,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: ProposalPalette.text3,
+                style: TextStyle(
+                  color: DunesColors.resolve(context, ProposalPalette.text3),
                   fontSize: 11,
                   height: 1.3,
                 ),
@@ -10711,8 +11334,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             Expanded(
               child: Text(
                 child ? '$kProposalChildProductLabel渠道设置' : '渠道设置',
-                style: const TextStyle(
-                  color: ProposalPalette.text2,
+                style: TextStyle(
+                  color: DunesColors.resolve(context, ProposalPalette.text2),
                   fontSize: 11.5,
                   fontWeight: FontWeight.w700,
                 ),
@@ -10949,10 +11572,28 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: child
-            ? ProposalPalette.greenSoft.withValues(alpha: 0.32)
-            : ProposalPalette.purpleSoft.withValues(alpha: 0.24),
+            ? DunesColors.resolve(
+                context,
+                ProposalPalette.greenSoft,
+                role: DunesColorRole.surface,
+              ).withValues(alpha: 0.32)
+            : DunesColors.resolve(
+                context,
+                ProposalPalette.purpleSoft,
+                role: DunesColorRole.surface,
+              ).withValues(alpha: 0.24),
         border: Border.all(
-          color: child ? ProposalPalette.green : ProposalPalette.purpleLine,
+          color: child
+              ? DunesColors.resolve(
+                  context,
+                  ProposalPalette.green,
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  ProposalPalette.purpleLine,
+                  role: DunesColorRole.border,
+                ),
         ),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -10966,8 +11607,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   titleName.isEmpty
                       ? '${proposalIntakeProductKindLabel(child: child)} $index'
                       : '${proposalIntakeProductKindLabel(child: child)} $index · $titleName',
-                  style: const TextStyle(
-                    color: ProposalPalette.text,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, ProposalPalette.text),
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
@@ -11226,7 +11867,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               hintText,
               style: TextStyle(
                 fontSize: 11,
-                color: syncing ? ProposalPalette.amber : ProposalPalette.text3,
+                color: syncing
+                    ? DunesColors.resolve(context, ProposalPalette.amber)
+                    : DunesColors.resolve(context, ProposalPalette.text3),
               ),
             ),
       child: locked
@@ -11640,11 +12283,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             hint: '每个$kProposalChildProductLabel独立结算，用切换条查看；复核整块完成。',
           ),
           if (rows.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
                 '请先在市场部新增$kProposalChildProductLabel。',
-                style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+                style: TextStyle(
+                  color: DunesColors.resolve(context, ProposalPalette.text3),
+                  fontSize: 12,
+                ),
               ),
             )
           else ...[
@@ -11706,11 +12352,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 : '每个产品一套结算，可再加明细；复核整块完成。',
           ),
           if (channelRows.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
                 '请先在科技部添加$kProposalMainProductLabel。',
-                style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+                style: TextStyle(
+                  color: DunesColors.resolve(context, ProposalPalette.text3),
+                  fontSize: 12,
+                ),
               ),
             ),
           if (kProposalSharedSettleEnabled) ...[
@@ -11729,7 +12378,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   ),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  foregroundColor: ProposalPalette.purpleDeep,
+                  foregroundColor: DunesColors.resolve(
+                    context,
+                    ProposalPalette.purpleDeep,
+                  ),
                   textStyle: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
@@ -11866,12 +12518,28 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: childProduct
-            ? ProposalPalette.greenSoft.withValues(alpha: 0.26)
-            : ProposalPalette.purpleSoft.withValues(alpha: 0.18),
+            ? DunesColors.resolve(
+                context,
+                ProposalPalette.greenSoft,
+                role: DunesColorRole.surface,
+              ).withValues(alpha: 0.26)
+            : DunesColors.resolve(
+                context,
+                ProposalPalette.purpleSoft,
+                role: DunesColorRole.surface,
+              ).withValues(alpha: 0.18),
         border: Border.all(
           color: childProduct
-              ? ProposalPalette.green
-              : ProposalPalette.purpleLine,
+              ? DunesColors.resolve(
+                  context,
+                  ProposalPalette.green,
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  ProposalPalette.purpleLine,
+                  role: DunesColorRole.border,
+                ),
         ),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -11886,19 +12554,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             children: [
               Text(
                 title.isEmpty ? emptyTitle : title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
-                  color: ProposalPalette.text,
+                  color: DunesColors.resolve(context, ProposalPalette.text),
                 ),
               ),
               if (product != null)
                 _skuPlatformStatusChip(product, slot: 'settle'),
               if (compact && summaryBits.isNotEmpty)
-                Text(
-                  summaryBits.join(' · '),
-                  style: kProposalCaptionStyle,
-                ),
+                Text(summaryBits.join(' · '), style: kProposalCaptionStyle),
               if (enabled && !compact && productSource != 'CHANNEL')
                 TextButton.icon(
                   onPressed: onAdd,
@@ -11912,7 +12577,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: ProposalPalette.purpleDeep,
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      ProposalPalette.purpleDeep,
+                    ),
                     textStyle: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
@@ -11942,7 +12610,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: ProposalPalette.text2,
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      ProposalPalette.text2,
+                    ),
                     textStyle: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
@@ -11962,7 +12633,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: ProposalPalette.text2,
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      ProposalPalette.text2,
+                    ),
                     textStyle: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
@@ -11984,7 +12658,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: ProposalPalette.text2,
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      ProposalPalette.text2,
+                    ),
                     textStyle: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
@@ -12002,7 +12679,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: ProposalPalette.purpleDeep,
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      ProposalPalette.purpleDeep,
+                    ),
                     textStyle: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -12013,11 +12693,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ],
           ),
           if (!compact && scaleOnly)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 4),
               child: Text(
                 '销售收入已走共用结算，这里只填规模。应付成本请新增明细。',
-                style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+                style: TextStyle(
+                  color: DunesColors.resolve(context, ProposalPalette.text3),
+                  fontSize: 11,
+                ),
               ),
             ),
           if (!compact) ...[
@@ -12118,13 +12801,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Widget _settleSplitPair(Widget left, Widget right, {required bool stack}) {
-    const line = ProposalPalette.borderSoft;
+    final line = DunesColors.resolve(context, ProposalPalette.borderSoft);
     if (stack) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           left,
-          Container(height: 1, color: line),
+          Container(
+            height: 1,
+            color: DunesColors.resolveNullable(
+              context,
+              line,
+              role: DunesColorRole.surface,
+            ),
+          ),
           right,
         ],
       );
@@ -12134,7 +12824,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(child: left),
-          Container(width: 1, color: line),
+          Container(
+            width: 1,
+            color: DunesColors.resolveNullable(
+              context,
+              line,
+              role: DunesColorRole.surface,
+            ),
+          ),
           Expanded(child: right),
         ],
       ),
@@ -12153,10 +12850,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final label = Text(
       proposalIntakeSettleLabel(index, kind: labelKind),
       textAlign: TextAlign.start,
-      style: const TextStyle(
+      style: TextStyle(
         fontWeight: FontWeight.w700,
         fontSize: 12,
-        color: ProposalPalette.text,
+        color: DunesColors.resolve(context, ProposalPalette.text),
         height: 1.25,
       ),
     );
@@ -12172,12 +12869,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             child: const Text('删除', style: TextStyle(fontSize: 11)),
           )
         : null;
-    const border = ProposalPalette.border;
+    final border = DunesColors.resolve(context, ProposalPalette.border);
     if (!wide) {
       return Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           border: Border.all(color: border),
           borderRadius: BorderRadius.circular(10),
         ),
@@ -12210,7 +12911,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         border: Border.all(color: border),
         borderRadius: BorderRadius.circular(10),
       ),
@@ -12219,7 +12924,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            color: ProposalPalette.soft,
+            color: DunesColors.resolve(
+              context,
+              ProposalPalette.soft,
+              role: DunesColorRole.surface,
+            ),
             padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
             child: Row(
               children: [
@@ -12246,9 +12955,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '适用的$kProposalMainProductLabel：不勾则该条比例按全部产品规模计算采购成本。',
-            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text3),
+              fontSize: 11,
+            ),
           ),
           const SizedBox(height: 6),
           Wrap(
@@ -12312,10 +13024,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 12,
-                  color: ProposalPalette.text2,
+                  color: DunesColors.resolve(context, ProposalPalette.text2),
                 ),
               ),
             ),
@@ -12332,8 +13044,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               '尚未填写$label',
-              style: const TextStyle(
-                color: ProposalPalette.text3,
+              style: TextStyle(
+                color: DunesColors.resolve(context, ProposalPalette.text3),
                 fontSize: 12,
               ),
             ),
@@ -12846,10 +13558,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '关联$kProposalMainProductLabel',
                       style: TextStyle(
-                        color: ProposalPalette.text2,
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.text2,
+                        ),
                         fontWeight: FontWeight.w600,
                         fontSize: 11,
                       ),
@@ -12934,10 +13649,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         if (_showProductTemplates) ...[
           Row(
             children: [
-              const Text(
+              Text(
                 '产品模板',
                 style: TextStyle(
-                  color: ProposalPalette.text,
+                  color: DunesColors.resolve(context, ProposalPalette.text),
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
@@ -12954,7 +13669,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   onPressed: _loadImportTemplates,
                   style: TextButton.styleFrom(
                     visualDensity: VisualDensity.compact,
-                    foregroundColor: ProposalPalette.purpleDeep,
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      ProposalPalette.purpleDeep,
+                    ),
                   ),
                   child: const Text('刷新'),
                 ),
@@ -12964,8 +13682,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           if (_importTemplatesError != null && _importTemplates.isEmpty)
             Text(
               _importTemplatesError!,
-              style: const TextStyle(
-                color: ProposalPalette.coral,
+              style: TextStyle(
+                color: DunesColors.resolve(context, ProposalPalette.coral),
                 fontSize: 12,
               ),
             )
@@ -12982,9 +13700,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ],
             ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '与提案审批相同：数商 / 运营商 / 出行-订阅 / 出行-权益金 / 民营。',
-            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text3),
+              fontSize: 11,
+            ),
           ),
           const SizedBox(height: 16),
         ],
@@ -13001,10 +13722,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
                 border: _draggingProduct
-                    ? Border.all(color: ProposalPalette.purple, width: 1.4)
+                    ? Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.purple,
+                          role: DunesColorRole.border,
+                        ),
+                        width: 1.4,
+                      )
                     : null,
                 color: _draggingProduct
-                    ? ProposalPalette.purpleSoft.withValues(alpha: 0.35)
+                    ? DunesColors.resolve(
+                        context,
+                        ProposalPalette.purpleSoft,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.35)
                     : null,
               ),
               child: Padding(
@@ -13036,8 +13768,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                       : Icons.upload_file_outlined,
                                   size: 18,
                                   color: enabled
-                                      ? ProposalPalette.purple
-                                      : ProposalPalette.text3,
+                                      ? DunesColors.resolve(
+                                          context,
+                                          ProposalPalette.purple,
+                                        )
+                                      : DunesColors.resolve(
+                                          context,
+                                          ProposalPalette.text3,
+                                        ),
                                 ),
                               ),
                           child: Text(
@@ -13048,9 +13786,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                             ? '点击选择或拖拽上线产品文件'
                                             : '点击选择上线产品文件')
                                       : '由提交人上传'),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
-                              color: ProposalPalette.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                ProposalPalette.text3,
+                              ),
                             ),
                           ),
                         ),
@@ -13115,17 +13856,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
           children: [
-            const Icon(
+            Icon(
               Icons.difference_outlined,
               size: 16,
-              color: ProposalPalette.amber,
+              color: DunesColors.resolve(context, ProposalPalette.amber),
             ),
             const SizedBox(width: 6),
             Text(
               '已改过抓取内容，点击对照合同原文',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: ProposalPalette.amber,
+                color: DunesColors.resolve(context, ProposalPalette.amber),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -13149,11 +13890,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               '合同匹配原文',
               style: TextStyle(
                 fontSize: 12,
-                color: ProposalPalette.text3,
+                color: DunesColors.resolve(ctx, ProposalPalette.text3),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -13163,11 +13904,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               style: const TextStyle(fontSize: 13, height: 1.45),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               '确认后的内容',
               style: TextStyle(
                 fontSize: 12,
-                color: ProposalPalette.text3,
+                color: DunesColors.resolve(ctx, ProposalPalette.text3),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -13630,7 +14371,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ? Icons.picture_as_pdf_outlined
                     : Icons.description_outlined,
                 size: 16,
-                color: ProposalPalette.purple,
+                color: DunesColors.resolve(context, ProposalPalette.purple),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -13644,8 +14385,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       style: TextStyle(
                         fontSize: 13,
                         color: canPreviewThis
-                            ? ProposalPalette.purpleDeep
-                            : ProposalPalette.text,
+                            ? DunesColors.resolve(
+                                context,
+                                ProposalPalette.purpleDeep,
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                ProposalPalette.text,
+                              ),
                         fontWeight: FontWeight.w600,
                         decoration: canPreviewThis
                             ? TextDecoration.underline
@@ -13672,7 +14419,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   ),
                   onPressed: () => _clearUnsignedFile(prefix, index),
                   icon: const Icon(Icons.close_rounded, size: 16),
-                  color: ProposalPalette.text3,
+                  color: DunesColors.resolve(context, ProposalPalette.text3),
                 ),
             ],
           ),
@@ -13698,8 +14445,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                           : Icons.upload_file_outlined,
                       size: 18,
                       color: enabled
-                          ? ProposalPalette.purple
-                          : ProposalPalette.text3,
+                          ? DunesColors.resolve(context, ProposalPalette.purple)
+                          : DunesColors.resolve(context, ProposalPalette.text3),
                     ),
                   ),
               child: Text(
@@ -13708,9 +14455,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     : (_supportsDesktopDrop
                           ? '点击选择或拖拽未签合同 PDF / Word'
                           : '点击选择未签合同 PDF / Word'),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: ProposalPalette.text3,
+                  color: DunesColors.resolve(context, ProposalPalette.text3),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -13721,9 +14468,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             decoration: proposalInputDecoration(readOnly: true),
             child: Text(
               canFetchSigned ? '点击「查看合同」预览合同归集中的源文件' : '还没有合同源文件',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: ProposalPalette.text3,
+                color: DunesColors.resolve(context, ProposalPalette.text3),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -13750,7 +14497,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   label: Text(uploading ? '上传中…' : '继续上传合同'),
                   style: OutlinedButton.styleFrom(
                     visualDensity: VisualDensity.compact,
-                    foregroundColor: ProposalPalette.purpleDeep,
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      ProposalPalette.purpleDeep,
+                    ),
                   ),
                 ),
               ],
@@ -13783,7 +14533,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 label: Text(opening ? '打开中…' : '查看合同'),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
-                  foregroundColor: ProposalPalette.purpleDeep,
+                  foregroundColor: DunesColors.resolve(
+                    context,
+                    ProposalPalette.purpleDeep,
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
               )
@@ -13798,10 +14551,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               border: dragging
-                  ? Border.all(color: ProposalPalette.purple, width: 1.4)
+                  ? Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.purple,
+                        role: DunesColorRole.border,
+                      ),
+                      width: 1.4,
+                    )
                   : null,
               color: dragging
-                  ? ProposalPalette.purpleSoft.withValues(alpha: 0.35)
+                  ? DunesColors.resolve(
+                      context,
+                      ProposalPalette.purpleSoft,
+                      role: DunesColorRole.surface,
+                    ).withValues(alpha: 0.35)
                   : null,
             ),
             child: picker,
@@ -13827,27 +14591,55 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final done = _review[keyName] == true;
     // 复制或新建的提案在填写阶段复核项全是空的，列出来会被误读成字段没填。
     final showOmissions =
-        !done && _isReviewing && omissions.isNotEmpty && onCheckOmissions != null;
+        !done &&
+        _isReviewing &&
+        omissions.isNotEmpty &&
+        onCheckOmissions != null;
     return Container(
       key: key,
       width: double.infinity,
       margin: EdgeInsets.only(bottom: compact ? 0 : 14, top: compact ? 4 : 0),
       padding: EdgeInsets.all(compact ? 12 : 16),
       decoration: BoxDecoration(
-        color: plain ? Colors.white : null,
+        color: plain
+            ? DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              )
+            : null,
         gradient: plain
             ? null
-            : const LinearGradient(
-                colors: [ProposalPalette.app, ProposalPalette.purpleSoft],
+            : LinearGradient(
+                colors: [
+                  DunesColors.resolve(context, ProposalPalette.app),
+                  DunesColors.resolve(context, ProposalPalette.purpleSoft),
+                ],
               ),
         border: Border.all(
           color: plain
-              ? ProposalPalette.borderSoft
+              ? DunesColors.resolve(
+                  context,
+                  ProposalPalette.borderSoft,
+                  role: DunesColorRole.border,
+                )
               : done
-              ? const Color(0xFFB9DDBE)
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFFB9DDBE),
+                  role: DunesColorRole.border,
+                )
               : locked
-              ? ProposalPalette.borderSoft
-              : ProposalPalette.borderStrong,
+              ? DunesColors.resolve(
+                  context,
+                  ProposalPalette.borderSoft,
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  ProposalPalette.borderStrong,
+                  role: DunesColorRole.border,
+                ),
         ),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -13869,8 +14661,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   key: ValueKey('proposal-module-approve-$keyName'),
                   onPressed: () => unawaited(_setReview(keyName, true)),
                   style: FilledButton.styleFrom(
-                    backgroundColor: ProposalPalette.purple,
-                    foregroundColor: Colors.white,
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      ProposalPalette.purple,
+                      role: DunesColorRole.surface,
+                    ),
+                    foregroundColor: DunesColors.resolve(context, Colors.white),
                   ),
                   child: approveChild,
                 )
@@ -13895,8 +14691,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   key: ValueKey('proposal-module-reject-$keyName'),
                   onPressed: () => unawaited(_rejectReview(keyName)),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: ProposalPalette.coral,
-                    side: const BorderSide(color: Color(0xFFE7C2B0)),
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      ProposalPalette.coral,
+                    ),
+                    side: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFE7C2B0),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                   ),
                   child: const Text('驳回', style: TextStyle(fontSize: 10)),
                 ),
@@ -13915,19 +14720,28 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     child: Text(
                       '检查遗漏：还有 ${omissions.length} 项未复核（${omissions.join('、')}）',
                       style: kProposalCaptionStyle.copyWith(
-                        color: ProposalPalette.coral,
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.coral,
+                        ),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                 )
-              else if (!done && !locked && progress != null && omissions.isEmpty)
+              else if (!done &&
+                  !locked &&
+                  progress != null &&
+                  omissions.isEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     '逐条复核已完成，点右侧确认本板块。点保存不会结束复核。',
                     style: kProposalCaptionStyle.copyWith(
-                      color: ProposalPalette.purpleDeep,
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.purpleDeep,
+                      ),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -13938,7 +14752,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   child: Text(
                     '发现问题可直接点「驳回」；通过需先完成逐条复核。',
                     style: kProposalCaptionStyle.copyWith(
-                      color: ProposalPalette.coral,
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.coral,
+                      ),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -13950,13 +14767,29 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             height: 34,
             decoration: BoxDecoration(
               color: done
-                  ? ProposalPalette.greenSoft
-                  : (plain ? ProposalPalette.soft : ProposalPalette.purpleSoft),
+                  ? DunesColors.resolve(
+                      context,
+                      ProposalPalette.greenSoft,
+                      role: DunesColorRole.surface,
+                    )
+                  : (plain
+                        ? DunesColors.resolve(
+                            context,
+                            ProposalPalette.soft,
+                            role: DunesColorRole.surface,
+                          )
+                        : DunesColors.resolve(
+                            context,
+                            ProposalPalette.purpleSoft,
+                            role: DunesColorRole.surface,
+                          )),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               done ? Icons.check : Icons.fact_check_outlined,
-              color: done ? ProposalPalette.green : ProposalPalette.purpleDeep,
+              color: done
+                  ? DunesColors.resolve(context, ProposalPalette.green)
+                  : DunesColors.resolve(context, ProposalPalette.purpleDeep),
               size: 18,
             ),
           );
@@ -14053,10 +14886,30 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: on ? ProposalPalette.purpleSoft : ProposalPalette.card,
+          color: on
+              ? DunesColors.resolve(
+                  context,
+                  ProposalPalette.purpleSoft,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  ProposalPalette.card,
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: on ? ProposalPalette.purpleLine : ProposalPalette.border,
+            color: on
+                ? DunesColors.resolve(
+                    context,
+                    ProposalPalette.purpleLine,
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    ProposalPalette.border,
+                    role: DunesColorRole.border,
+                  ),
           ),
         ),
         child: Text(
@@ -14065,7 +14918,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             fontSize: 11,
             height: 1.2,
             fontWeight: FontWeight.w500,
-            color: on ? ProposalPalette.purpleDeep : ProposalPalette.text2,
+            color: on
+                ? DunesColors.resolve(context, ProposalPalette.purpleDeep)
+                : DunesColors.resolve(context, ProposalPalette.text2),
           ),
         ),
       ),
@@ -14119,12 +14974,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Divider(height: 1, color: ProposalPalette.borderSoft),
+          Divider(
+            height: 1,
+            color: DunesColors.resolve(
+              context,
+              ProposalPalette.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
           const SizedBox(height: 10),
           Text(
             title,
-            style: const TextStyle(
-              color: ProposalPalette.text2,
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text2),
               fontWeight: FontWeight.w700,
               fontSize: 11,
               letterSpacing: .6,
@@ -14240,9 +15102,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         key,
         Container(
           padding: const EdgeInsets.symmetric(vertical: 2),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border(
-              bottom: BorderSide(color: ProposalPalette.borderSoft),
+              bottom: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  ProposalPalette.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
           ),
           child: ProposalField(
@@ -14258,8 +15126,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (key == 'supplySettleMode' || key == 'channelSettleMode') {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 2),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: ProposalPalette.borderSoft)),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                ProposalPalette.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
         ),
         child: _dropdownField(
           field.$2,
@@ -14277,8 +15153,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (key == 'supplySettleCycle' || key == 'channelSettleCycle') {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 2),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: ProposalPalette.borderSoft)),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                ProposalPalette.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
         ),
         child: _dropdownField(
           field.$2,
@@ -14305,8 +15189,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     };
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 2),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: ProposalPalette.borderSoft)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              ProposalPalette.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: textual
           ? _textField(
@@ -14361,9 +15253,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       return Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          border: flat ? null : Border.all(color: ProposalPalette.borderSoft),
+          border: flat
+              ? null
+              : Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    ProposalPalette.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
           borderRadius: flat ? null : BorderRadius.circular(10),
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
         ),
         clipBehavior: flat ? Clip.none : Clip.hardEdge,
         child: Column(
@@ -14467,10 +15371,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         border: Border(
           right: lastInRow
               ? BorderSide.none
-              : const BorderSide(color: ProposalPalette.borderSoft),
+              : BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    ProposalPalette.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
           bottom: lastRow
               ? BorderSide.none
-              : const BorderSide(color: ProposalPalette.borderSoft),
+              : BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    ProposalPalette.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
         ),
       ),
       child: child ?? const SizedBox.shrink(),
@@ -14497,32 +15413,39 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
   Widget _datePickerTheme(Widget? child) {
-    const accent = ProposalPalette.purple;
-    const accentSoft = ProposalPalette.purpleSoft;
-    const dayColor = ProposalPalette.text2;
+    final accent = DunesColors.resolve(context, ProposalPalette.purple);
+    final accentSoft = DunesColors.resolve(context, ProposalPalette.purpleSoft);
+    final dayColor = DunesColors.resolve(context, ProposalPalette.text2);
     return Theme(
-      data: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.light(
+      data: Theme.of(context).copyWith(
+        colorScheme: Theme.of(context).colorScheme.copyWith(
           primary: accent,
-          onPrimary: Colors.white,
+          onPrimary: DunesColors.resolve(context, Colors.white),
           secondary: accent,
-          onSecondary: Colors.white,
+          onSecondary: DunesColors.resolve(context, Colors.white),
           secondaryContainer: accentSoft,
           onSecondaryContainer: accent,
-          surface: Colors.white,
+          surface: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           onSurface: dayColor,
         ),
         datePickerTheme: DatePickerThemeData(
-          backgroundColor: Colors.white,
+          backgroundColor: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           headerBackgroundColor: accentSoft,
           headerForegroundColor: accent,
           rangeSelectionBackgroundColor: accentSoft,
           rangeSelectionOverlayColor: WidgetStatePropertyAll(
             accent.withValues(alpha: 0.08),
           ),
-          weekdayStyle: const TextStyle(
-            color: dayColor,
+          weekdayStyle: TextStyle(
+            color: DunesColors.resolveNullable(context, dayColor),
             fontWeight: FontWeight.w600,
             fontSize: 12,
           ),
@@ -14531,15 +15454,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             return null;
           }),
           dayForegroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) return Colors.white;
+            if (states.contains(WidgetState.selected)) {
+              return DunesColors.resolve(context, Colors.white);
+            }
             if (states.contains(WidgetState.disabled)) {
-              return ProposalPalette.text3;
+              return DunesColors.resolve(context, ProposalPalette.text3);
             }
             return dayColor;
           }),
-          todayForegroundColor: const WidgetStatePropertyAll(accent),
-          todayBackgroundColor: const WidgetStatePropertyAll(accentSoft),
-          todayBorder: const BorderSide(color: accent),
+          todayForegroundColor: WidgetStatePropertyAll(accent),
+          todayBackgroundColor: WidgetStatePropertyAll(accentSoft),
+          todayBorder: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              accent,
+              role: DunesColorRole.border,
+            ),
+          ),
           confirmButtonStyle: TextButton.styleFrom(foregroundColor: accent),
           cancelButtonStyle: TextButton.styleFrom(foregroundColor: accent),
         ),
@@ -14630,7 +15561,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       ? Icons.calendar_today_outlined
                       : Icons.lock_outline_rounded,
                   size: 16,
-                  color: ProposalPalette.text3,
+                  color: DunesColors.resolve(context, ProposalPalette.text3),
                 ),
               ),
           child: Text(
@@ -14638,8 +15569,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             style: TextStyle(
               fontSize: 13,
               color: empty || !enabled
-                  ? ProposalPalette.text3
-                  : ProposalPalette.text,
+                  ? DunesColors.resolve(context, ProposalPalette.text3)
+                  : DunesColors.resolve(context, ProposalPalette.text),
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -14734,7 +15665,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             style: TextStyle(
               fontSize: 13,
               height: 1.35,
-              color: enabled ? ProposalPalette.text : ProposalPalette.text3,
+              color: enabled
+                  ? DunesColors.resolve(context, ProposalPalette.text)
+                  : DunesColors.resolve(context, ProposalPalette.text3),
             ),
             onChanged: enabled
                 ? (value) => _set(
@@ -14821,7 +15754,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           style: TextStyle(
             fontSize: 13,
             height: 1.35,
-            color: enabled ? ProposalPalette.text : ProposalPalette.text3,
+            color: enabled
+                ? DunesColors.resolve(context, ProposalPalette.text)
+                : DunesColors.resolve(context, ProposalPalette.text3),
           ),
           onChanged: enabled
               ? (value) {
@@ -15008,7 +15943,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       child: Text(
         names.isEmpty ? '请在管理后台「提案录入选项」中配置最终确认人' : names,
         style: TextStyle(
-          color: names.isEmpty ? ProposalPalette.coral : ProposalPalette.text,
+          color: names.isEmpty
+              ? DunesColors.resolve(context, ProposalPalette.coral)
+              : DunesColors.resolve(context, ProposalPalette.text),
           fontSize: 13,
           fontWeight: FontWeight.w600,
         ),
@@ -15103,13 +16040,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Widget _businessCostField({bool wide = true}) {
     if (_businessCostSealed) {
-      return const ProposalField(
+      return ProposalField(
         label: '业务成本',
         tone: ProposalFieldTone.locked,
         child: Text(
           '已加密上锁，负责人二不可查看。由市场部负责人一在财务复核时填写。',
           style: TextStyle(
-            color: ProposalPalette.text2,
+            color: DunesColors.resolve(context, ProposalPalette.text2),
             fontSize: 13,
             height: 1.45,
             fontWeight: FontWeight.w600,
@@ -15124,13 +16061,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ]
         : const <String>[];
     if (!_canEditBusinessCost && names.isEmpty) {
-      return const ProposalField(
+      return ProposalField(
         label: '业务成本',
         tone: ProposalFieldTone.locked,
         child: Text(
           '由市场部负责人一在财务复核时填写',
           style: TextStyle(
-            color: ProposalPalette.text3,
+            color: DunesColors.resolve(context, ProposalPalette.text3),
             fontSize: 13,
             height: 1.45,
             fontWeight: FontWeight.w600,
@@ -15235,8 +16172,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     children: [
                       Text(
                         '第 ${i + 1} 条',
-                        style: const TextStyle(
-                          color: ProposalPalette.text2,
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.text2,
+                          ),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -15343,8 +16283,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   estimated == null ? '填比例或单价后自动加总' : '合计 ${_money(estimated)}',
-                  style: const TextStyle(
-                    color: ProposalPalette.text2,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, ProposalPalette.text2),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -15373,8 +16313,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       children: [
                         Text(
                           name,
-                          style: const TextStyle(
-                            color: ProposalPalette.text,
+                          style: TextStyle(
+                            color: DunesColors.resolve(
+                              context,
+                              ProposalPalette.text,
+                            ),
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
                           ),
@@ -15405,8 +16348,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
                     '合计 ${_money(total)}',
-                    style: const TextStyle(
-                      color: ProposalPalette.text2,
+                    style: TextStyle(
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.text2,
+                      ),
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
@@ -15440,8 +16386,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                               settleTermsKey.isEmpty
                                   ? '$name  ${_money(amounts[proposalCostAmountId(name, catalog)] ?? amounts[name] ?? 0)}'
                                   : name,
-                              style: const TextStyle(
-                                color: ProposalPalette.text,
+                              style: TextStyle(
+                                color: DunesColors.resolve(
+                                  context,
+                                  ProposalPalette.text,
+                                ),
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -15456,8 +16405,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     if (settleTermsKey.isEmpty)
                       Text(
                         '合计 ${_money(total)}',
-                        style: const TextStyle(
-                          color: ProposalPalette.text2,
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.text2,
+                          ),
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -15498,24 +16450,24 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
             ),
             if (namesKey == 'costItems')
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Text(
                   '从产品成本结算的「成本类型」匹配；金额可改。',
                   style: TextStyle(
-                    color: ProposalPalette.text3,
+                    color: DunesColors.resolve(context, ProposalPalette.text3),
                     fontSize: 11,
                     height: 1.35,
                   ),
                 ),
               ),
             if (namesKey == 'taxCostItems')
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Text(
                   '增值税及附加两种口径只选一种，后点的生效；印花税、所得税可另选。',
                   style: TextStyle(
-                    color: ProposalPalette.text3,
+                    color: DunesColors.resolve(context, ProposalPalette.text3),
                     fontSize: 11,
                     height: 1.35,
                   ),
@@ -15552,8 +16504,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: ProposalPalette.text,
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text),
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -15576,7 +16528,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.35,
-                  color: enabled ? ProposalPalette.text : ProposalPalette.text3,
+                  color: enabled
+                      ? DunesColors.resolve(context, ProposalPalette.text)
+                      : DunesColors.resolve(context, ProposalPalette.text3),
                 ),
                 onChanged: enabled
                     ? (value) => _setCostAmount(
@@ -15712,8 +16666,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               tone: ProposalFieldTone.auto,
               child: Text(
                 _submitterName.isEmpty ? '—' : _submitterName,
-                style: const TextStyle(
-                  color: ProposalPalette.text,
+                style: TextStyle(
+                  color: DunesColors.resolve(context, ProposalPalette.text),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -15814,13 +16768,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 resetReview: 'marketCompleted',
               )
             else
-              const ProposalField(
+              ProposalField(
                 label: 'HUN ID',
                 source: '加密处理，仅市场部负责人一填写、可见',
                 child: Text(
                   '已加密',
                   style: TextStyle(
-                    color: ProposalPalette.text3,
+                    color: DunesColors.resolve(context, ProposalPalette.text3),
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -15960,11 +16914,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   '供给产品',
                   style: TextStyle(
-                    color: ProposalPalette.text,
+                    color: DunesColors.resolve(context, ProposalPalette.text),
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
@@ -15978,18 +16932,24 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
             ],
           ),
-          const Text(
+          Text(
             '只填供给侧。未开始填写的卡片可不填。勾选「是否已有供给产品」后必须搜索选择已建供应商产品，选中后同步资管结算规则。新建时请先选供应商。',
-            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text3),
+              fontSize: 11,
+            ),
           ),
           const SizedBox(height: 8),
           _existingSupplyToggle(locked: locked),
           if (rows.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
                 '尚未添加供给产品',
-                style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+                style: TextStyle(
+                  color: DunesColors.resolve(context, ProposalPalette.text3),
+                  fontSize: 12,
+                ),
               ),
             ),
           for (var i = 0; i < rows.length; i++) ...[
@@ -16023,10 +16983,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
               ),
               const SizedBox(width: 6),
-              const Text(
+              Text(
                 '是否已有供给产品',
                 style: TextStyle(
-                  color: ProposalPalette.text,
+                  color: DunesColors.resolve(context, ProposalPalette.text),
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
@@ -16034,11 +16994,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ],
           ),
         ),
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 4),
           child: Text(
             '勾选后先选业务平台，再搜索并选择已建供给产品（必填）。选中后会按资管供应商产品结算规则同步账单类型、结算方式、税率等。',
-            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text3),
+              fontSize: 11,
+            ),
           ),
         ),
       ],
@@ -16091,8 +17054,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: ProposalPalette.app,
-        border: Border.all(color: ProposalPalette.border),
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.app,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.border,
+            role: DunesColorRole.border,
+          ),
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -16103,8 +17076,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    color: ProposalPalette.text,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, ProposalPalette.text),
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
@@ -16488,12 +17461,30 @@ class _ProposalTemplateChip extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
           decoration: BoxDecoration(
-            color: enabled ? Colors.white : ProposalPalette.soft,
+            color: enabled
+                ? DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    ProposalPalette.soft,
+                    role: DunesColorRole.surface,
+                  ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: enabled
-                  ? ProposalPalette.borderStrong
-                  : ProposalPalette.borderSoft,
+                  ? DunesColors.resolve(
+                      context,
+                      ProposalPalette.borderStrong,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      ProposalPalette.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Row(
@@ -16504,7 +17495,9 @@ class _ProposalTemplateChip extends StatelessWidget {
                     ? Icons.download_outlined
                     : Icons.hourglass_empty_outlined,
                 size: 15,
-                color: enabled ? ProposalPalette.purple : ProposalPalette.text3,
+                color: enabled
+                    ? DunesColors.resolve(context, ProposalPalette.purple)
+                    : DunesColors.resolve(context, ProposalPalette.text3),
               ),
               const SizedBox(width: 6),
               Column(
@@ -16516,15 +17509,18 @@ class _ProposalTemplateChip extends StatelessWidget {
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
                       color: enabled
-                          ? ProposalPalette.text
-                          : ProposalPalette.text3,
+                          ? DunesColors.resolve(context, ProposalPalette.text)
+                          : DunesColors.resolve(context, ProposalPalette.text3),
                     ),
                   ),
                   Text(
                     subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 9.5,
-                      color: ProposalPalette.text3,
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.text3,
+                      ),
                     ),
                   ),
                 ],
@@ -16563,7 +17559,11 @@ class _OnlineProductFileTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: ProposalPalette.app,
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.app,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
         child: ListTile(
           dense: true,
@@ -16572,7 +17572,7 @@ class _OnlineProductFileTile extends StatelessWidget {
             busy
                 ? Icons.hourglass_top_rounded
                 : Icons.insert_drive_file_outlined,
-            color: ProposalPalette.purple,
+            color: DunesColors.resolve(context, ProposalPalette.purple),
           ),
           title: Text(
             name.isEmpty ? '未命名文件' : name,
@@ -16586,7 +17586,10 @@ class _OnlineProductFileTile extends StatelessWidget {
                 : downloading
                 ? '下载中…'
                 : '查看或下载',
-            style: const TextStyle(fontSize: 11, color: ProposalPalette.text3),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, ProposalPalette.text3),
+            ),
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
@@ -16633,13 +17636,25 @@ class _FlowFieldFlash extends StatelessWidget {
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: active ? const Color(0xFFFFF4D6) : Colors.transparent,
+        color: active
+            ? DunesColors.resolve(
+                context,
+                const Color(0xFFFFF4D6),
+                role: DunesColorRole.surface,
+              )
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(10),
       ),
       foregroundDecoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: active ? const Color(0xFFE0B44A) : Colors.transparent,
+          color: active
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFFE0B44A),
+                  role: DunesColorRole.border,
+                )
+              : Colors.transparent,
           width: 1.5,
         ),
       ),
@@ -16870,27 +17885,37 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.fromLTRB(12, 8, 8, 4),
       decoration: BoxDecoration(
-        color: ProposalPalette.soft,
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.soft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: ProposalPalette.border),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.border,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             name.isEmpty ? '关联产品 ${index + 1}' : '关联产品 ${index + 1} · $name',
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 13,
-              color: ProposalPalette.text,
+              color: DunesColors.resolve(context, ProposalPalette.text),
             ),
           ),
           if (bits.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
               bits.join(' · '),
-              style: const TextStyle(
-                color: ProposalPalette.text,
+              style: TextStyle(
+                color: DunesColors.resolve(context, ProposalPalette.text),
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 height: 1.4,
@@ -16930,19 +17955,19 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
               style: TextStyle(
                 fontSize: 13,
                 color: display.isEmpty
-                    ? ProposalPalette.text3
-                    : ProposalPalette.text,
+                    ? DunesColors.resolve(context, ProposalPalette.text3)
+                    : DunesColors.resolve(context, ProposalPalette.text),
                 fontWeight: FontWeight.w600,
               ),
             )
           : Row(
               children: [
-                const Text(
+                Text(
                   '满',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: ProposalPalette.text2,
+                    color: DunesColors.resolve(context, ProposalPalette.text2),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -16957,14 +17982,17 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                     decoration: proposalInputDecoration(hint: '门槛'),
                   ),
                 ),
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
                     '减',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: ProposalPalette.text2,
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.text2,
+                      ),
                     ),
                   ),
                 ),
@@ -17000,8 +18028,8 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
               style: TextStyle(
                 fontSize: 13,
                 color: controller.text.trim().isEmpty
-                    ? ProposalPalette.text3
-                    : ProposalPalette.text,
+                    ? DunesColors.resolve(context, ProposalPalette.text3)
+                    : DunesColors.resolve(context, ProposalPalette.text),
                 fontWeight: FontWeight.w600,
               ),
             )
@@ -17143,8 +18171,14 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                           style: TextStyle(
                             fontSize: 13,
                             color: _syncZhongyouHaoke.trim().isEmpty
-                                ? ProposalPalette.text3
-                                : ProposalPalette.text,
+                                ? DunesColors.resolve(
+                                    context,
+                                    ProposalPalette.text3,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    ProposalPalette.text,
+                                  ),
                             fontWeight: FontWeight.w600,
                           ),
                         )

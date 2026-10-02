@@ -36,7 +36,11 @@ class MeetingAbandonedRecovery {
           title: const Text('发现未完成的会议录音'),
           content: Text(
             abandonedMeetingPrompt(rec),
-            style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
+            style: DunesTypography.sans(
+              fontSize: 13.5,
+              height: 1.55,
+              context: ctx,
+            ),
           ),
           actions: [
             TextButton(

@@ -20,9 +20,19 @@ class KpiMetricList extends StatelessWidget {
     }
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFEDEFF2)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFEDEFF2),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Column(
@@ -33,8 +43,14 @@ class KpiMetricList extends StatelessWidget {
               decoration: BoxDecoration(
                 border: i == rows.length - 1
                     ? null
-                    : const Border(
-                        bottom: BorderSide(color: Color(0xFFF1F3F5)),
+                    : Border(
+                        bottom: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            Color(0xFFF1F3F5),
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                       ),
               ),
               child: _MetricRow(metric: rows[i]),
@@ -76,7 +92,9 @@ class _MetricRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                  color: selected ? _accent : DunesColors.text2,
+                  color: selected
+                      ? DunesColors.resolve(context, _accent)
+                      : DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
             ),
@@ -86,13 +104,18 @@ class _MetricRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: pts == null ? DunesColors.text3 : DunesColors.text,
+                  color: pts == null
+                      ? DunesColors.resolve(context, DunesColors.text3)
+                      : DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
             if (!rubric && cap > 0)
               Text(
                 ' / ${cap.toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
           ],
         ),
@@ -103,9 +126,15 @@ class _MetricRow extends StatelessWidget {
             child: LinearProgressIndicator(
               value: fill,
               minHeight: 4,
-              backgroundColor: const Color(0xFFF1F3F5),
+              backgroundColor: DunesColors.resolve(
+                context,
+                const Color(0xFFF1F3F5),
+                role: DunesColorRole.surface,
+              ),
               valueColor: AlwaysStoppedAnimation<Color>(
-                pts == null ? const Color(0xFFD7DBDE) : _accent,
+                pts == null
+                    ? DunesColors.resolve(context, const Color(0xFFD7DBDE))
+                    : DunesColors.resolve(context, _accent),
               ),
             ),
           ),
@@ -114,7 +143,10 @@ class _MetricRow extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             _detail(metric),
-            style: TextStyle(fontSize: 11, color: _detailColor(metric)),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolveNullable(context, _detailColor(metric)),
+            ),
           ),
         ],
       ],

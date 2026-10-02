@@ -567,21 +567,29 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
   Widget build(BuildContext context) {
     return TaskTheme(
       child: ColoredBox(
-      color: const Color(0xFFF5F6F8),
-      child: Column(
-        children: [
-          _buildHeader(),
-          Expanded(child: _buildBody()),
-        ],
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF5F6F8),
+          role: DunesColorRole.surface,
+        ),
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(child: _buildBody()),
+          ],
+        ),
       ),
-    ),
     );
   }
 
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: Row(
         children: [
           IconButton(
@@ -726,9 +734,13 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
       children: [
-        const Text(
+        Text(
           '仅展示任务相关的管理和待办功能，不改变原有任务列表、详情和日报流程。',
-          style: TextStyle(fontSize: 13, color: DunesColors.text3, height: 1.4),
+          style: TextStyle(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            height: 1.4,
+          ),
         ),
         const SizedBox(height: 14),
         ...cards,
@@ -757,10 +769,17 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: kTaskPurple.withValues(alpha: 0.10),
+                  color: DunesColors.resolve(
+                    context,
+                    kTaskPurple,
+                    role: DunesColorRole.surface,
+                  ).withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: kTaskPurple),
+                child: Icon(
+                  icon,
+                  color: DunesColors.resolveNullable(context, kTaskPurple),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -774,15 +793,18 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: DunesColors.text3),
+              Icon(
+                Icons.chevron_right,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ],
           ),
         ),
@@ -839,12 +861,12 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
           child: Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   '到达周期后自动生成主目标，可随时停用。',
                   style: TextStyle(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                     height: 1.35,
                   ),
                 ),
@@ -896,17 +918,17 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
     required String label,
     Color? color,
   }) {
-    final tone = color ?? DunesColors.text;
+    final tone = color ?? DunesColors.resolve(context, DunesColors.text);
     return Row(
       children: [
-        Icon(icon, size: 18, color: tone),
+        Icon(icon, size: 18, color: DunesColors.resolveNullable(context, tone)),
         const SizedBox(width: 10),
         Text(
           label,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: tone,
+            color: DunesColors.resolveNullable(context, tone),
           ),
         ),
       ],
@@ -915,15 +937,27 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
 
   Widget _ruleCard(TaskRecurringRule rule) {
     final enabled = rule.enabled;
-    final accent = enabled ? kTaskPurple : const Color(0xFF9AA0A6);
+    final accent = enabled
+        ? DunesColors.resolve(context, kTaskPurple)
+        : DunesColors.resolve(context, const Color(0xFF9AA0A6));
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE3E5EA)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE3E5EA),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -933,7 +967,11 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
               height: 42,
               margin: const EdgeInsets.only(top: 2),
               decoration: BoxDecoration(
-                color: accent,
+                color: DunesColors.resolveNullable(
+                  context,
+                  accent,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -946,11 +984,11 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                     rule.title.isEmpty ? '未命名周期任务' : rule.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       height: 1.3,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -964,12 +1002,15 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                       ),
                       TaskMetaChip(
                         text: _ruleRangeLabel(rule),
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
                       ),
                       if (rule.ownerName.isNotEmpty)
                         TaskMetaChip(
                           text: rule.ownerName,
-                          color: const Color(0xFF3D7A8C),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF3D7A8C),
+                          ),
                         ),
                     ],
                   ),
@@ -986,14 +1027,24 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                   tooltip: '更多操作',
                   offset: const Offset(0, 8),
                   position: PopupMenuPosition.under,
-                  color: Colors.white,
-                  surfaceTintColor: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
+                  surfaceTintColor: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
                   elevation: 6,
                   shadowColor: Colors.black.withValues(alpha: 0.08),
                   constraints: const BoxConstraints(minWidth: 176),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
-                    side: const BorderSide(color: Color(0xFFE8EAED)),
+                    side: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFE8EAED),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                   ),
                   onSelected: (value) {
                     if (value == 'toggle') unawaited(_toggleRule(rule));
@@ -1029,14 +1080,20 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                             : Icons.play_circle_outline,
                         label: enabled ? '停用规则' : '启用规则',
                         color: enabled
-                            ? const Color(0xFFBE123C)
-                            : const Color(0xFF15803D),
+                            ? DunesColors.resolve(
+                                context,
+                                const Color(0xFFBE123C),
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFF15803D),
+                              ),
                       ),
                     ),
                   ],
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.more_horiz_rounded,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ],
@@ -1108,12 +1165,12 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
         FilledButton.icon(
           onPressed: _saving ? null : _saveConfig,
           icon: _saving
-                ? const SizedBox(
+              ? SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
                   ),
                 )
               : const Icon(Icons.save_outlined),
@@ -1179,9 +1236,13 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
       children: [
-        const Text(
+        Text(
           '任务日报仅使用这里的任务日历判断法定节假日和调休上班日，不修改考勤、请假或人事数据。',
-          style: TextStyle(fontSize: 13, color: DunesColors.text3, height: 1.4),
+          style: TextStyle(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            height: 1.4,
+          ),
         ),
         const SizedBox(height: 14),
         Card(
@@ -1214,14 +1275,14 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                 FilledButton.icon(
                   onPressed: _syncingCalendar ? null : _syncCalendar,
                   icon: _syncingCalendar
-                ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: DunesColors.resolve(context, Colors.white),
+                          ),
+                        )
                       : const Icon(Icons.sync_rounded),
                   label: Text(_syncingCalendar ? '同步中…' : '同步节假日'),
                 ),
@@ -1235,10 +1296,26 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
             spacing: 10,
             runSpacing: 10,
             children: [
-              _calendarStat('全年日期', '${_calendarDays.length}', kTaskPurple),
-              _calendarStat('法定节假日', '$holidays', const Color(0xFFE35D4C)),
-              _calendarStat('调休上班', '$adjusted', const Color(0xFF2F8F7E)),
-              _calendarStat('普通周末', '$weekends', const Color(0xFF6B7280)),
+              _calendarStat(
+                '全年日期',
+                '${_calendarDays.length}',
+                DunesColors.resolve(context, kTaskPurple),
+              ),
+              _calendarStat(
+                '法定节假日',
+                '$holidays',
+                DunesColors.resolve(context, const Color(0xFFE35D4C)),
+              ),
+              _calendarStat(
+                '调休上班',
+                '$adjusted',
+                DunesColors.resolve(context, const Color(0xFF2F8F7E)),
+              ),
+              _calendarStat(
+                '普通周末',
+                '$weekends',
+                DunesColors.resolve(context, const Color(0xFF6B7280)),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -1273,7 +1350,11 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
       constraints: const BoxConstraints(minWidth: 112),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: DunesColors.resolveNullable(
+          context,
+          color.withValues(alpha: 0.08),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -1284,13 +1365,16 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: color,
+              color: DunesColors.resolveNullable(context, color),
             ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -1302,16 +1386,29 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
     return ChoiceChip(
       label: Text(label),
       selected: selected,
-      selectedColor: kTaskPurple.withValues(alpha: 0.14),
+      selectedColor: DunesColors.resolve(
+        context,
+        kTaskPurple,
+      ).withValues(alpha: 0.14),
       checkmarkColor: kTaskPurple,
       labelStyle: TextStyle(
-        color: selected ? kTaskPurple : DunesColors.text2,
+        color: selected
+            ? DunesColors.resolve(context, kTaskPurple)
+            : DunesColors.resolve(context, DunesColors.text2),
         fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
       ),
       side: BorderSide(
         color: selected
-            ? kTaskPurple.withValues(alpha: 0.45)
-            : const Color(0xFFE8EAED),
+            ? DunesColors.resolve(
+                context,
+                kTaskPurple,
+                role: DunesColorRole.border,
+              ).withValues(alpha: 0.45)
+            : DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
       ),
       onSelected: (_) => setState(() => _calendarFilter = value),
     );
@@ -1323,10 +1420,10 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
         ? ''
         : '星期${const ['一', '二', '三', '四', '五', '六', '日'][date.weekday - 1]}';
     final color = day.isHoliday
-        ? const Color(0xFFE35D4C)
+        ? DunesColors.resolve(context, const Color(0xFFE35D4C))
         : day.isAdjustedWorkday
-        ? const Color(0xFF2F8F7E)
-        : const Color(0xFF6B7280);
+        ? DunesColors.resolve(context, const Color(0xFF2F8F7E))
+        : DunesColors.resolve(context, const Color(0xFF6B7280));
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
@@ -1335,7 +1432,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
           day.isAdjustedWorkday
               ? Icons.work_history_outlined
               : Icons.event_outlined,
-          color: color,
+          color: DunesColors.resolveNullable(context, color),
         ),
         title: Text('${day.date}  $weekday'),
         subtitle: Text(day.typeLabel),
@@ -1361,9 +1458,9 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
             _importKind == 'probation'
                 ? '先选择试用期员工并下载目标模板，校验通过后再创建主任务和验收子任务。'
                 : '选择任务模板后先预览校验，再确认写入任务数据。',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
               height: 1.4,
             ),
           ),
@@ -1416,12 +1513,12 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
             style: taskImportFilledStyle(),
             onPressed: busy ? null : () => unawaited(_previewImport()),
             icon: _previewing
-                ? const SizedBox(
+                ? SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                     ),
                   )
                 : const Icon(Icons.fact_check_outlined),
@@ -1436,7 +1533,10 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                 '将创建 ${preview.parentCount} 项主任务、${preview.childCount} 项验收目标'
                 '${preview.targetUserName.isEmpty ? '' : '，负责人 ${preview.targetUserName}'}'
                 '${preview.periodLabel.isEmpty ? '' : ' · ${preview.periodLabel}'}',
-                style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
               ),
             ],
             if (preview.warnings.isNotEmpty) ...[
@@ -1446,9 +1546,12 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Text(
                     warning,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: Color(0xFFB45309),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFB45309),
+                      ),
                     ),
                   ),
                 ),
@@ -1460,7 +1563,12 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Text(
                     '• $error',
-                    style: const TextStyle(color: Color(0xFFBE123C)),
+                    style: TextStyle(
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFBE123C),
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -1488,7 +1596,12 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Text(
                           '• $error',
-                          style: const TextStyle(color: Color(0xFFBE123C)),
+                          style: TextStyle(
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFFBE123C),
+                            ),
+                          ),
                         ),
                       ),
                   ],
@@ -1514,7 +1627,10 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
           elevation: 0,
           margin: const EdgeInsets.only(bottom: 10),
           child: ListTile(
-            leading: const Icon(Icons.description_outlined, color: kTaskPurple),
+            leading: Icon(
+              Icons.description_outlined,
+              color: DunesColors.resolveNullable(context, kTaskPurple),
+            ),
             title: Text(item.fileName.isEmpty ? '未命名文件' : item.fileName),
             subtitle: Text(
               [
@@ -1541,14 +1657,26 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: positive ? const Color(0xFFE8F7F0) : const Color(0xFFFFF1F2),
+        color: positive
+            ? DunesColors.resolve(
+                context,
+                const Color(0xFFE8F7F0),
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                const Color(0xFFFFF1F2),
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         text,
         style: TextStyle(
           fontSize: 11,
-          color: positive ? const Color(0xFF15803D) : const Color(0xFFBE123C),
+          color: positive
+              ? DunesColors.resolve(context, const Color(0xFF15803D))
+              : DunesColors.resolve(context, const Color(0xFFBE123C)),
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -1562,10 +1690,10 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.cloud_off_outlined,
               size: 38,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
             const SizedBox(height: 10),
             const Text(
@@ -1576,7 +1704,10 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             const SizedBox(height: 12),
             TextButton(onPressed: onRetry, child: const Text('重试')),
@@ -1593,14 +1724,21 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 42, color: kTaskPurple),
+            Icon(
+              icon,
+              size: 42,
+              color: DunesColors.resolveNullable(context, kTaskPurple),
+            ),
             const SizedBox(height: 12),
             Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ],
         ),

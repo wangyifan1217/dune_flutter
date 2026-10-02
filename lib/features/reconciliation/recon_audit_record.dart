@@ -31,10 +31,7 @@ import 'reconciliation_shucai_models.dart';
       profile?.avatarObjectKey ?? '',
       objectKey,
     ]),
-    url: first([
-      snap?.avatarUrl ?? '',
-      profile?.avatarUrl ?? '',
-    ]),
+    url: first([snap?.avatarUrl ?? '', profile?.avatarUrl ?? '']),
   );
 }
 
@@ -100,10 +97,21 @@ class ReconFrozenAuditLane extends StatelessWidget {
     final recordW = reconAuditRecordWidth(compact: compact);
     final width = reconAuditLaneWidth(compact: compact, steps: steps);
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         border: Border(
-          left: BorderSide(color: DunesColors.borderSoft, width: 0.5),
+          left: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
         ),
       ),
       child: SizedBox(
@@ -113,14 +121,11 @@ class ReconFrozenAuditLane extends StatelessWidget {
             if (includeHeader)
               _band(
                 height: headerH,
-                color: const Color(0xFFF6F7F9),
+                color: DunesColors.resolve(context, const Color(0xFFF6F7F9)),
                 child: Row(
                   children: [
                     for (final step in steps)
-                      _headerCell(
-                        reconChainStepLabel(step),
-                        width: layerW,
-                      ),
+                      _headerCell(reconChainStepLabel(step), width: layerW),
                     _headerCell('审核记录', width: recordW),
                   ],
                 ),
@@ -129,10 +134,18 @@ class ReconFrozenAuditLane extends StatelessWidget {
               for (var i = 0; i < rowCount; i++) ...[
                 DecoratedBox(
                   decoration: BoxDecoration(
-                    color: rowColorAt(i),
-                    border: const Border(
+                    color: DunesColors.resolveNullable(
+                      context,
+                      rowColorAt(i),
+                      role: DunesColorRole.surface,
+                    ),
+                    border: Border(
                       bottom: BorderSide(
-                        color: DunesColors.borderSoft,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
                         width: 0.5,
                       ),
                     ),
@@ -160,7 +173,13 @@ class ReconFrozenAuditLane extends StatelessWidget {
                 ),
                 if (noteHeights[i] > 0)
                   ColoredBox(
-                    color: noteColorAt(i) ?? Colors.white,
+                    color:
+                        noteColorAt(i) ??
+                        DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
                     child: SizedBox(height: noteHeights[i], width: width),
                   ),
               ],
@@ -265,7 +284,11 @@ class ReconFrozenAuditLane extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: fontSize,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.brandPurple,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                        ),
+                        context: context,
                       ),
                     ),
                   ),
@@ -274,7 +297,8 @@ class ReconFrozenAuditLane extends StatelessWidget {
                   '—',
                   style: DunesTypography.sans(
                     fontSize: fontSize,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
         ),
@@ -301,7 +325,11 @@ Future<void> showReconAuditRecordSheet({
     return showDialog<void>(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          ctx,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440, maxHeight: 560),
@@ -313,7 +341,11 @@ Future<void> showReconAuditRecordSheet({
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    ),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -356,7 +388,8 @@ class ReconAuditRecordPane extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 4),
@@ -366,7 +399,8 @@ class ReconAuditRecordPane extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 14),
@@ -477,8 +511,7 @@ class ReconAuditRecordPane extends StatelessWidget {
               const SizedBox(height: 8),
               _kv('复核说明', reason, DunesColors.green),
             ],
-            if (rejectHistory.isNotEmpty &&
-                rejectHistory != reason) ...[
+            if (rejectHistory.isNotEmpty && rejectHistory != reason) ...[
               const SizedBox(height: 8),
               _kv('驳回历史', rejectHistory, DunesColors.coral),
             ],
@@ -502,10 +535,7 @@ class ReconAuditRecordPane extends StatelessWidget {
           ),
           TextSpan(
             text: text,
-            style: DunesTypography.sans(
-              fontSize: 12,
-              color: DunesColors.text,
-            ),
+            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text),
           ),
         ],
       ),

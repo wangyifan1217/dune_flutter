@@ -139,20 +139,43 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
         width: width,
         height: height,
         child: Material(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           clipBehavior: Clip.antiAlias,
           borderRadius: BorderRadius.circular(24),
           child: Column(
             children: [
               Container(
                 padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFFF6F1FF), Color(0xFFFFFFFF)],
+                    colors: [
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFF6F1FF),
+                        role: DunesColorRole.surface,
+                      ),
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFFFFFFF),
+                        role: DunesColorRole.surface,
+                      ),
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  border: Border(bottom: BorderSide(color: Color(0xFFEDE8F7))),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFEDE8F7),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -160,12 +183,19 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7B5CD8).withValues(alpha: 0.12),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF7B5CD8),
+                          role: DunesColorRole.surface,
+                        ).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.edit_note_rounded,
-                        color: Color(0xFF7B5CD8),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF7B5CD8),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -173,12 +203,15 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             '修改任务信息',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -186,9 +219,12 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
                             widget.task.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
                             ),
                           ),
                         ],
@@ -197,9 +233,9 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
                     IconButton(
                       tooltip: '关闭',
                       onPressed: () => Navigator.pop(context),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.close_rounded,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],
@@ -209,18 +245,24 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.info_outline_rounded,
                       size: 17,
-                      color: Color(0xFF7B5CD8),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF7B5CD8),
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         '提交后由任务流上级审批，通过前仍显示原信息。',
                         style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
                           height: 1.35,
                         ),
                       ),
@@ -231,14 +273,21 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFF4DE),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFFFF4DE),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Text(
+                      child: Text(
                         '需审批',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Color(0xFF986514),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF986514),
+                          ),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -277,15 +326,28 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
                             vertical: 14,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF7F7FA),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFF7F7FA),
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFFE8E7EE)),
+                            border: Border.all(
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFE8E7EE),
+                                role: DunesColorRole.border,
+                              ),
+                            ),
                           ),
                           child: Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.calendar_month_outlined,
-                                color: Color(0xFF7B5CD8),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFF7B5CD8),
+                                ),
                                 size: 20,
                               ),
                               const SizedBox(width: 10),
@@ -296,14 +358,23 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
                                     color: _dueAt == null
-                                        ? DunesColors.text3
-                                        : DunesColors.text,
+                                        ? DunesColors.resolve(
+                                            context,
+                                            DunesColors.text3,
+                                          )
+                                        : DunesColors.resolve(
+                                            context,
+                                            DunesColors.text,
+                                          ),
                                   ),
                                 ),
                               ),
-                              const Icon(
+                              Icon(
                                 Icons.chevron_right_rounded,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
                               ),
                             ],
                           ),
@@ -313,9 +384,12 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
                         const SizedBox(height: 12),
                         Text(
                           _error!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFFE35D6A),
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFFE35D6A),
+                            ),
                           ),
                         ),
                       ],
@@ -325,8 +399,16 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
               ),
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: Color(0xFFF0EEF4))),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFF0EEF4),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -335,8 +417,17 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
                         onPressed: () => Navigator.pop(context),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(46),
-                          foregroundColor: DunesColors.text2,
-                          side: const BorderSide(color: Color(0xFFE3E1E8)),
+                          foregroundColor: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                          side: BorderSide(
+                            color: DunesColors.resolve(
+                              context,
+                              Color(0xFFE3E1E8),
+                              role: DunesColorRole.border,
+                            ),
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
@@ -353,7 +444,11 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
                         icon: const Icon(Icons.send_rounded, size: 17),
                         label: const Text('提交修改'),
                         style: FilledButton.styleFrom(
-                          backgroundColor: DunesColors.brandPurple,
+                          backgroundColor: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                            role: DunesColorRole.surface,
+                          ),
                           minimumSize: const Size.fromHeight(46),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
@@ -375,31 +470,57 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
     padding: const EdgeInsets.only(bottom: 7),
     child: Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w700,
-        color: DunesColors.text,
+        color: DunesColors.resolve(context, DunesColors.text),
       ),
     ),
   );
 
   InputDecoration _inputDecoration(String hint) => InputDecoration(
     hintText: hint,
-    hintStyle: const TextStyle(fontSize: 13, color: DunesColors.text3),
+    hintStyle: TextStyle(
+      fontSize: 13,
+      color: DunesColors.resolve(context, DunesColors.text3),
+    ),
     filled: true,
-    fillColor: const Color(0xFFF7F7FA),
+    fillColor: DunesColors.resolve(
+      context,
+      const Color(0xFFF7F7FA),
+      role: DunesColorRole.surface,
+    ),
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: Color(0xFFE8E7EE)),
+      borderSide: BorderSide(
+        color: DunesColors.resolve(
+          context,
+          Color(0xFFE8E7EE),
+          role: DunesColorRole.border,
+        ),
+      ),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: Color(0xFFE8E7EE)),
+      borderSide: BorderSide(
+        color: DunesColors.resolve(
+          context,
+          Color(0xFFE8E7EE),
+          role: DunesColorRole.border,
+        ),
+      ),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: Color(0xFF7B5CD8), width: 1.4),
+      borderSide: BorderSide(
+        color: DunesColors.resolve(
+          context,
+          Color(0xFF7B5CD8),
+          role: DunesColorRole.border,
+        ),
+        width: 1.4,
+      ),
     ),
   );
 }

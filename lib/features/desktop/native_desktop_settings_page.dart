@@ -61,10 +61,7 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
     await DesktopImagePreviewPref.setEnabled(value);
     if (!mounted) return;
     setState(() => _imageExtraWindow = DesktopImagePreviewPref.enabled);
-    showDunesToast(
-      context,
-      value ? '已改为独立窗口查看图片' : '已改为会话内预览图片',
-    );
+    showDunesToast(context, value ? '已改为独立窗口查看图片' : '已改为会话内预览图片');
   }
 
   Future<void> _reloadPath() async {
@@ -125,26 +122,42 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
     return Theme(
       data: DunesTheme.light(),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF7F5FA),
+        backgroundColor: DunesColors.resolve(
+          context,
+          const Color(0xFFF7F5FA),
+          role: DunesColorRole.surface,
+        ),
         appBar: AppBar(
-          backgroundColor: Colors.white,
+          backgroundColor: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           elevation: 0,
           scrolledUnderElevation: 0,
-          bottom: const PreferredSize(
+          bottom: PreferredSize(
             preferredSize: Size.fromHeight(1),
-            child: Divider(height: 1, color: Color(0xFFEBE5F2)),
+            child: Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFEBE5F2),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           leading: IconButton(
             onPressed: widget.onBack,
             icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-            color: const Color(0xFF2C1E3F),
+            color: DunesColors.resolve(context, const Color(0xFF2C1E3F)),
           ),
           title: Text(
             '系统设置',
             style: DunesTypography.sans(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: const Color(0xFF2C1E3F),
+              color: DunesColors.resolve(context, const Color(0xFF2C1E3F)),
+              context: context,
             ),
           ),
           centerTitle: true,
@@ -159,7 +172,8 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
               style: DunesTypography.sans(
                 fontSize: 12,
                 height: 1.5,
-                color: const Color(0xFF9E8EAF),
+                color: DunesColors.resolve(context, const Color(0xFF9E8EAF)),
+                context: context,
               ),
             ),
           ],
@@ -176,46 +190,46 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
           if (widget.onOpenTextScale != null)
             _buildActionRow(
               icon: Icons.format_size_rounded,
-              iconColor: const Color(0xFF7045B2),
+              iconColor: DunesColors.resolve(context, const Color(0xFF7045B2)),
               title: '字号调节',
               subtitle: '调整后作用于整个客户端应用',
               onTap: widget.onOpenTextScale!,
             ),
           _buildSettingsRow(
             icon: Icons.folder_outlined,
-            iconColor: const Color(0xFF3B82F6),
+            iconColor: DunesColors.resolve(context, const Color(0xFF3B82F6)),
             title: '文件保存位置',
-            subtitle:
-                '${_isCustom ? '自定义目录' : '默认：下载 / 沙丘文件'} · $_pathDisplay',
-            trailing: const Icon(
+            subtitle: '${_isCustom ? '自定义目录' : '默认：下载 / 沙丘文件'} · $_pathDisplay',
+            trailing: Icon(
               Icons.chevron_right_rounded,
               size: 18,
-              color: Color(0xFFB5A9C4),
+              color: DunesColors.resolveNullable(context, Color(0xFFB5A9C4)),
             ),
             onTap: _busy ? null : _chooseSaveDir,
           ),
           if (_isCustom)
             _buildSettingsRow(
               icon: Icons.restart_alt_rounded,
-              iconColor: const Color(0xFFF59E0B),
+              iconColor: DunesColors.resolve(context, const Color(0xFFF59E0B)),
               title: '恢复默认保存位置',
-              trailing: const Icon(
+              trailing: Icon(
                 Icons.chevron_right_rounded,
                 size: 18,
-                color: Color(0xFFB5A9C4),
+                color: DunesColors.resolveNullable(context, Color(0xFFB5A9C4)),
               ),
               onTap: _busy ? null : _resetSaveDir,
             ),
           _buildSettingsRow(
             icon: Icons.photo_outlined,
-            iconColor: const Color(0xFF10B981),
+            iconColor: DunesColors.resolve(context, const Color(0xFF10B981)),
             title: '独立窗口查看图片',
-            subtitle: _imageExtraWindow
-                ? '点击图片时弹出额外窗口独立展示'
-                : '默认在当前会话内直接预览',
+            subtitle: _imageExtraWindow ? '点击图片时弹出额外窗口独立展示' : '默认在当前会话内直接预览',
             trailing: Switch(
               value: _imageExtraWindow,
-              activeThumbColor: const Color(0xFF7045B2),
+              activeThumbColor: DunesColors.resolve(
+                context,
+                const Color(0xFF7045B2),
+              ),
               onChanged: (val) => _setImageExtraWindow(val),
             ),
             onTap: () => _setImageExtraWindow(!_imageExtraWindow),
@@ -233,7 +247,10 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
             if (widget.onOpenReleaseHistory != null)
               _buildActionRow(
                 icon: Icons.history_rounded,
-                iconColor: const Color(0xFF7045B2),
+                iconColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFF7045B2),
+                ),
                 title: '发版历史与更新日志',
                 subtitle:
                     '${AppUpdateService.platformDisplayName()} 版本记录与详细功能变更',
@@ -242,7 +259,10 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
             if (widget.onCheckForUpdates != null)
               _buildActionRow(
                 icon: Icons.system_update_alt_rounded,
-                iconColor: const Color(0xFF3880FF),
+                iconColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFF3880FF),
+                ),
                 title: '检查客户端更新',
                 subtitle: '检测是否有新版本发布',
                 onTap: widget.onCheckForUpdates!,
@@ -250,7 +270,10 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
             if (widget.onScanWorkstation != null)
               _buildActionRow(
                 icon: Icons.qr_code_scanner_rounded,
-                iconColor: const Color(0xFF0EA5E9),
+                iconColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFF0EA5E9),
+                ),
                 title: '扫码登录工作台',
                 subtitle: '扫描沙丘工作台二维码快速授权登录',
                 onTap: widget.onScanWorkstation!,
@@ -258,7 +281,10 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
             if (widget.onOpenWechatBot != null)
               _buildActionRow(
                 icon: Icons.chat_rounded,
-                iconColor: const Color(0xFF10B981),
+                iconColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFF10B981),
+                ),
                 title: '微信机器人设置',
                 subtitle: '配置企业微信与群机器人联动',
                 onTap: widget.onOpenWechatBot!,
@@ -266,7 +292,10 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
             if (widget.onClearCache != null)
               _buildActionRow(
                 icon: Icons.cleaning_services_outlined,
-                iconColor: const Color(0xFF64748B),
+                iconColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFF64748B),
+                ),
                 title: '清除本地缓存',
                 subtitle: '清理工作画像、草稿与本地临时存储',
                 onTap: widget.onClearCache!,
@@ -279,7 +308,7 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
           children: [
             _buildActionRow(
               icon: Icons.logout_rounded,
-              iconColor: DunesColors.coral,
+              iconColor: DunesColors.resolve(context, DunesColors.coral),
               title: '退出当前登录',
               subtitle: '退出当前账号并返回登录界面',
               accentIcon: true,
@@ -311,18 +340,29 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
           padding: const EdgeInsets.only(left: 6, bottom: 8),
           child: Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF5D4B72),
+              color: DunesColors.resolveNullable(context, Color(0xFF5D4B72)),
             ),
           ),
         ),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFECE4F3), width: 0.8),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFECE4F3),
+                role: DunesColorRole.border,
+              ),
+              width: 0.8,
+            ),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF552D8E).withValues(alpha: .04),
@@ -337,11 +377,15 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: children.length,
-              separatorBuilder: (ctx, i) => const Divider(
+              separatorBuilder: (ctx, i) => Divider(
                 height: 1,
                 indent: 52,
                 endIndent: 16,
-                color: Color(0xFFF3EDF8),
+                color: DunesColors.resolve(
+                  ctx,
+                  Color(0xFFF3EDF8),
+                  role: DunesColorRole.border,
+                ),
               ),
               itemBuilder: (ctx, i) => children[i],
             ),
@@ -372,10 +416,18 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: .10),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    iconColor.withValues(alpha: .10),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, size: 18, color: iconColor),
+                child: Icon(
+                  icon,
+                  size: 18,
+                  color: DunesColors.resolveNullable(context, iconColor),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -387,7 +439,12 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
                       style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w600,
-                        color: accentIcon ? DunesColors.coral : const Color(0xFF2C1E3F),
+                        color: accentIcon
+                            ? DunesColors.resolve(context, DunesColors.coral)
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFF2C1E3F),
+                              ),
                       ),
                     ),
                     if (subtitle != null && subtitle.isNotEmpty) ...[
@@ -397,8 +454,14 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
                         style: TextStyle(
                           fontSize: 11.5,
                           color: accentIcon
-                              ? DunesColors.coral.withValues(alpha: .8)
-                              : const Color(0xFF8A7A9E),
+                              ? DunesColors.resolve(
+                                  context,
+                                  DunesColors.coral,
+                                ).withValues(alpha: .8)
+                              : DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF8A7A9E),
+                                ),
                         ),
                       ),
                     ],
@@ -427,10 +490,10 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
       title: title,
       subtitle: subtitle,
       accentIcon: accentIcon,
-      trailing: const Icon(
+      trailing: Icon(
         Icons.chevron_right_rounded,
         size: 18,
-        color: Color(0xFFB5A9C4),
+        color: DunesColors.resolveNullable(context, Color(0xFFB5A9C4)),
       ),
       onTap: onTap,
     );

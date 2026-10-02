@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 灯塔 · 周期分段条（日 / 周 / 月 / 季 / 年）
@@ -265,7 +266,11 @@ class _LhPeriodBarState extends State<LhPeriodBar>
         padding: EdgeInsets.all(widget.trackPadding),
         decoration: widget.floating
             ? BoxDecoration(
-                color: widget.trackColor,
+                color: DunesColors.resolveNullable(
+                  context,
+                  widget.trackColor,
+                  role: DunesColorRole.surface,
+                ),
                 border: Border.all(color: widget.trackBorder, width: 0.7),
                 borderRadius: BorderRadius.circular(widget.trackRadius),
                 boxShadow: [
@@ -392,7 +397,8 @@ class _LhPeriodBarState extends State<LhPeriodBar>
     // 选中项不只写「月」，直接写正在看的是哪一期（本月 / 上月 / 7月）——
     // 不用再去 Hero 右上角对日期。
     final selLabel = widget.selectedLabel;
-    final label = (i == widget.selectedIndex && selLabel != null && selLabel.isNotEmpty)
+    final label =
+        (i == widget.selectedIndex && selLabel != null && selLabel.isNotEmpty)
         ? selLabel
         : widget.labels[i];
 
@@ -434,26 +440,30 @@ class _LhPeriodBarState extends State<LhPeriodBar>
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (widget.dotSize > 0)
-                slot(
-                  width: dotSlot,
-                  alignment: Alignment.centerLeft,
-                  child: Container(
-                    width: dotD,
-                    height: dotD,
-                    decoration: BoxDecoration(
-                      color: widget.primary,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: widget.primary.withValues(
-                            alpha: 0.35 + 0.35 * glow,
-                          ),
-                          blurRadius: 4 + 3 * glow,
+                  slot(
+                    width: dotSlot,
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      width: dotD,
+                      height: dotD,
+                      decoration: BoxDecoration(
+                        color: DunesColors.resolveNullable(
+                          context,
+                          widget.primary,
+                          role: DunesColorRole.surface,
                         ),
-                      ],
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: widget.primary.withValues(
+                              alpha: 0.35 + 0.35 * glow,
+                            ),
+                            blurRadius: 4 + 3 * glow,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 Text(label, textAlign: TextAlign.center, style: style),
                 slot(
                   width: arrowSlot,
@@ -465,7 +475,10 @@ class _LhPeriodBarState extends State<LhPeriodBar>
                     child: Icon(
                       Icons.keyboard_arrow_down_rounded,
                       size: 15,
-                      color: widget.primary.withValues(alpha: 0.8),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        widget.primary.withValues(alpha: 0.8),
+                      ),
                     ),
                   ),
                 ),
@@ -644,8 +657,11 @@ class _LhPeriodFxPainter extends CustomPainter {
               tan.position,
               0.5 + 1.4 * f,
               Paint()
-                ..color = Color.lerp(primary, Colors.white, 0.42 * f)!
-                    .withValues(alpha: 0.70 * a * o),
+                ..color = Color.lerp(
+                  primary,
+                  Colors.white,
+                  0.42 * f,
+                )!.withValues(alpha: 0.70 * a * o),
             );
           }
           final head = m.getTangentForOffset((cm % 1.0) * len);

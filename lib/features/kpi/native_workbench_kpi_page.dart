@@ -76,9 +76,9 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   bool get _canFollowup => widget.session.effectiveKpiFollowupAccess;
 
   List<MapEntry<String, String>> get _lensOptions => [
-        if (_canRoster) const MapEntry('roster', '名单'),
-        if (_canFollowup) const MapEntry('followup', '催办'),
-      ];
+    if (_canRoster) const MapEntry('roster', '名单'),
+    if (_canFollowup) const MapEntry('followup', '催办'),
+  ];
 
   DateTime get _clock => widget.now ?? DateTime.now();
   DateTime get _currentMonth => kpiMonthStart(_clock);
@@ -185,7 +185,17 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
             key: const Key('kpi-confirm-ok'),
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-              backgroundColor: danger ? const Color(0xFFBC5C40) : _accent,
+              backgroundColor: danger
+                  ? DunesColors.resolve(
+                      ctx,
+                      const Color(0xFFBC5C40),
+                      role: DunesColorRole.surface,
+                    )
+                  : DunesColors.resolve(
+                      ctx,
+                      _accent,
+                      role: DunesColorRole.surface,
+                    ),
             ),
             child: Text(confirmLabel),
           ),
@@ -469,7 +479,8 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     if (picked == null || !mounted) return;
     final ok = await _confirm(
       title: '确认导入量表？',
-      content: '将读取个人量表或行政/财务汇总表。有整体绩效评价表，或汇总表第一行「项目绩效得分」时，按分档算成项目绩效系数（不改个人分）。仍跳过统计表。写入 $label，不会自动通知员工。',
+      content:
+          '将读取个人量表或行政/财务汇总表。有整体绩效评价表，或汇总表第一行「项目绩效得分」时，按分档算成项目绩效系数（不改个人分）。仍跳过统计表。写入 $label，不会自动通知员工。',
       confirmLabel: '确认导入',
     );
     if (!ok || !mounted) return;
@@ -802,8 +813,13 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       );
     }
     if (_detailScore == null) {
-      return const Center(
-        child: Text('该月暂无绩效明细', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '该月暂无绩效明细',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     final person = _detailScore!.people.isEmpty
@@ -911,7 +927,11 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     final gutter = narrow ? 12.0 : 20.0;
     if (_detailUserId > 0) {
       return Material(
-        color: _pageBg,
+        color: DunesColors.resolveNullable(
+          context,
+          _pageBg,
+          role: DunesColorRole.surface,
+        ),
         child: Column(
           children: [
             Padding(
@@ -942,7 +962,11 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
         ? const <WorkProfileKpiPerson>[]
         : _filteredPeople;
     return Material(
-      color: _pageBg,
+      color: DunesColors.resolveNullable(
+        context,
+        _pageBg,
+        role: DunesColorRole.surface,
+      ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(gutter, 6, gutter, 12),
         child: Column(
@@ -1086,20 +1110,28 @@ class _KpiSearchField extends StatelessWidget {
   Widget build(BuildContext context) {
     final border = OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: _line),
+      borderSide: BorderSide(
+        color: DunesColors.resolve(context, _line, role: DunesColorRole.border),
+      ),
     );
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: controller,
       builder: (context, value, _) => TextField(
         controller: controller,
-        style: const TextStyle(fontSize: 13.5, color: DunesColors.text),
+        style: TextStyle(
+          fontSize: 13.5,
+          color: DunesColors.resolve(context, DunesColors.text),
+        ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(fontSize: 13.5, color: DunesColors.text3),
-          prefixIcon: const Icon(
+          hintStyle: TextStyle(
+            fontSize: 13.5,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+          prefixIcon: Icon(
             Icons.search_rounded,
             size: 18,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
           ),
           prefixIconConstraints: const BoxConstraints(
             minWidth: 38,
@@ -1110,12 +1142,12 @@ class _KpiSearchField extends StatelessWidget {
               : InkWell(
                   onTap: controller.clear,
                   customBorder: const CircleBorder(),
-                  child: const Padding(
+                  child: Padding(
                     padding: EdgeInsets.all(8),
                     child: Icon(
                       Icons.close_rounded,
                       size: 16,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 ),
@@ -1125,12 +1157,22 @@ class _KpiSearchField extends StatelessWidget {
           ),
           isDense: true,
           filled: true,
-          fillColor: Colors.white,
+          fillColor: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
           border: border,
           enabledBorder: border,
           focusedBorder: border.copyWith(
-            borderSide: const BorderSide(color: DunesColors.brandPurpleLine),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.brandPurpleLine,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ),
       ),
@@ -1156,7 +1198,11 @@ class _KpiMonthStepper extends StatelessWidget {
     return Container(
       height: 34,
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F6FB),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF8F6FB),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: _line),
       ),
@@ -1173,18 +1219,21 @@ class _KpiMonthStepper extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.calendar_today_outlined,
                     size: 14,
-                    color: DunesColors.brandPurpleDeep,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleDeep,
+                    ),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                       fontFeatures: _tabular,
                     ),
                   ),
@@ -1246,15 +1295,19 @@ class _KpiControlPanel extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.right,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 12,
-        color: DunesColors.text3,
+        color: DunesColors.resolve(context, DunesColors.text3),
         fontFeatures: _tabular,
       ),
     );
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _line),
         boxShadow: const [
@@ -1293,7 +1346,11 @@ class _KpiControlPanel extends StatelessWidget {
           Container(
             height: 1,
             margin: const EdgeInsets.symmetric(horizontal: 12),
-            color: _line,
+            color: DunesColors.resolveNullable(
+              context,
+              _line,
+              role: DunesColorRole.surface,
+            ),
           ),
           if (compact)
             Padding(
@@ -1336,19 +1393,34 @@ class _KpiActionTile extends StatelessWidget {
     final Color iconColor;
     final BoxDecoration circle;
     if (!enabled) {
-      iconColor = DunesColors.text3;
-      circle = const BoxDecoration(
-        color: Color(0xFFF3F1F6),
+      iconColor = DunesColors.resolve(context, DunesColors.text3);
+      circle = BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFF3F1F6),
+          role: DunesColorRole.surface,
+        ),
         shape: BoxShape.circle,
       );
     } else if (primary) {
-      iconColor = Colors.white;
-      circle = const BoxDecoration(
+      iconColor = DunesColors.resolve(context, Colors.white);
+      circle = BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [DunesColors.brandPurple, DunesColors.brandPurpleDeep],
+          colors: [
+            DunesColors.resolve(
+              context,
+              DunesColors.brandPurple,
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              DunesColors.brandPurpleDeep,
+              role: DunesColorRole.surface,
+            ),
+          ],
         ),
         boxShadow: [
           BoxShadow(
@@ -1360,15 +1432,21 @@ class _KpiActionTile extends StatelessWidget {
         ],
       );
     } else {
-      iconColor = DunesColors.brandPurpleDeep;
-      circle = const BoxDecoration(
-        color: DunesColors.brandPurpleSoft,
+      iconColor = DunesColors.resolve(context, DunesColors.brandPurpleDeep);
+      circle = BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.brandPurpleSoft,
+          role: DunesColorRole.surface,
+        ),
         shape: BoxShape.circle,
       );
     }
     final labelColor = !enabled
-        ? DunesColors.text3
-        : (primary ? DunesColors.brandPurpleDeep : DunesColors.text2);
+        ? DunesColors.resolve(context, DunesColors.text3)
+        : (primary
+              ? DunesColors.resolve(context, DunesColors.brandPurpleDeep)
+              : DunesColors.resolve(context, DunesColors.text2));
     return Material(
       type: MaterialType.transparency,
       child: InkWell(
@@ -1385,7 +1463,11 @@ class _KpiActionTile extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: circle,
-                child: Icon(action.icon, size: 18, color: iconColor),
+                child: Icon(
+                  action.icon,
+                  size: 18,
+                  color: DunesColors.resolveNullable(context, iconColor),
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -1397,7 +1479,7 @@ class _KpiActionTile extends StatelessWidget {
                   fontSize: 11,
                   height: 1.1,
                   fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
-                  color: labelColor,
+                  color: DunesColors.resolveNullable(context, labelColor),
                 ),
               ),
             ],
@@ -1420,14 +1502,41 @@ class _KpiActionButton extends StatelessWidget {
       key: action.key,
       onPressed: action.onTap,
       style: TextButton.styleFrom(
-        foregroundColor: primary ? Colors.white : DunesColors.brandPurpleDeep,
-        backgroundColor: primary ? DunesColors.brandPurple : Colors.white,
-        disabledForegroundColor: DunesColors.text3,
-        disabledBackgroundColor: const Color(0xFFF3F1F6),
+        foregroundColor: primary
+            ? DunesColors.resolve(context, Colors.white)
+            : DunesColors.resolve(context, DunesColors.brandPurpleDeep),
+        backgroundColor: primary
+            ? DunesColors.resolve(
+                context,
+                DunesColors.brandPurple,
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
+        disabledForegroundColor: DunesColors.resolve(
+          context,
+          DunesColors.text3,
+        ),
+        disabledBackgroundColor: DunesColors.resolve(
+          context,
+          const Color(0xFFF3F1F6),
+          role: DunesColorRole.surface,
+        ),
         minimumSize: const Size(0, 34),
         padding: const EdgeInsets.symmetric(horizontal: 12),
         visualDensity: VisualDensity.compact,
-        side: primary ? null : const BorderSide(color: _line),
+        side: primary
+            ? null
+            : BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  _line,
+                  role: DunesColorRole.border,
+                ),
+              ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
         textStyle: TextStyle(
           fontSize: 13,
@@ -1461,7 +1570,11 @@ class _KpiSectorTabs extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFFECE7F4),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFECE7F4),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -1644,7 +1757,11 @@ class _KpiRosterPane extends StatelessWidget {
           key: const Key('kpi-summary'),
           width: double.infinity,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _line),
           ),
@@ -1653,9 +1770,9 @@ class _KpiRosterPane extends StatelessWidget {
               ? Center(
                   child: Text(
                     emptyLabel,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 )
@@ -1692,9 +1809,21 @@ class _KpiSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 9, 14, 7),
-      decoration: const BoxDecoration(
-        color: Color(0xFFFAF8FD),
-        border: Border(bottom: BorderSide(color: _line)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFFAF8FD),
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _line,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -1702,23 +1831,30 @@ class _KpiSectionHeader extends StatelessWidget {
             width: 3,
             height: 12,
             decoration: BoxDecoration(
-              color: _accent,
+              color: DunesColors.resolveNullable(
+                context,
+                _accent,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           const SizedBox(width: 8),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(width: 6),
           Text(
             '$count 人',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -1737,11 +1873,7 @@ Color _kpiProjectTierColor(double coef) {
 }
 
 class _KpiProjectBanner extends StatelessWidget {
-  const _KpiProjectBanner({
-    super.key,
-    required this.title,
-    required this.team,
-  });
+  const _KpiProjectBanner({super.key, required this.title, required this.team});
 
   final String title;
   final WorkProfileKpiTeam team;
@@ -1758,9 +1890,21 @@ class _KpiProjectBanner extends StatelessWidget {
         : (direct ? '汇总表直接填写' : '板块得分 ${formatKpiProjectScore(score)}');
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: const BoxDecoration(
-        color: Color(0xFFFCFBFE),
-        border: Border(bottom: BorderSide(color: _line)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFFCFBFE),
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _line,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1772,12 +1916,12 @@ class _KpiProjectBanner extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
+                    Text(
                       '项目绩效系数',
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1785,9 +1929,9 @@ class _KpiProjectBanner extends StatelessWidget {
                       '$title · $note',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11.5,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                         fontFeatures: _tabular,
                       ),
                     ),
@@ -1797,9 +1941,16 @@ class _KpiProjectBanner extends StatelessWidget {
               const SizedBox(width: 12),
               Container(
                 key: const Key('kpi-project-coef'),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 3,
+                ),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    color.withValues(alpha: 0.1),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -1807,7 +1958,7 @@ class _KpiProjectBanner extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
-                    color: color,
+                    color: DunesColors.resolveNullable(context, color),
                     height: 1.15,
                     fontFeatures: _tabular,
                   ),
@@ -1889,7 +2040,11 @@ class _KpiBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: fill ?? color.withValues(alpha: 0.1),
+        color: DunesColors.resolveNullable(
+          context,
+          fill ?? color.withValues(alpha: 0.1),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
@@ -1900,7 +2055,7 @@ class _KpiBadge extends StatelessWidget {
           fontSize: 11,
           height: 1.3,
           fontWeight: FontWeight.w600,
-          color: color,
+          color: DunesColors.resolveNullable(context, color),
           fontFeatures: _tabular,
         ),
       ),
@@ -1936,7 +2091,9 @@ class _KpiRank extends StatelessWidget {
       style: TextStyle(
         fontSize: 12,
         fontWeight: highlight ? FontWeight.w700 : FontWeight.w500,
-        color: highlight ? _accent : DunesColors.text3,
+        color: highlight
+            ? DunesColors.resolve(context, _accent)
+            : DunesColors.resolve(context, DunesColors.text3),
         fontFeatures: _tabular,
       ),
     );
@@ -1969,7 +2126,11 @@ class _KpiPersonTile extends StatelessWidget {
       if (post.isNotEmpty) post,
     ].join(' · ');
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: InkWell(
         key: Key('kpi-person-${person.userId}'),
         onTap: busy ? null : onOpen,
@@ -1978,7 +2139,15 @@ class _KpiPersonTile extends StatelessWidget {
           decoration: BoxDecoration(
             border: last
                 ? null
-                : const Border(bottom: BorderSide(color: _line)),
+                : Border(
+                    bottom: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        _line,
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                  ),
           ),
           child: Row(
             children: [
@@ -1986,7 +2155,8 @@ class _KpiPersonTile extends StatelessWidget {
                 width: 26,
                 child: _KpiRank(
                   rank: rank,
-                  highlight: rank <= 3 && !person.isPending && !person.isSkipped,
+                  highlight:
+                      rank <= 3 && !person.isPending && !person.isSkipped,
                 ),
               ),
               Expanded(
@@ -1998,10 +2168,10 @@ class _KpiPersonTile extends StatelessWidget {
                       person.userName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                     if (subtitle.isNotEmpty) ...[
@@ -2010,9 +2180,12 @@ class _KpiPersonTile extends StatelessWidget {
                         subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
@@ -2023,14 +2196,14 @@ class _KpiPersonTile extends StatelessWidget {
               if (person.isSkipped)
                 _KpiBadge(
                   label: person.skipLabel,
-                  color: DunesColors.text2,
-                  fill: DunesColors.bgSoft,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  fill: DunesColors.resolve(context, DunesColors.bgSoft),
                 )
               else if (person.isPending)
-                const _KpiBadge(
+                _KpiBadge(
                   label: '待录入',
-                  color: DunesColors.amber,
-                  fill: DunesColors.amberSoft,
+                  color: DunesColors.resolve(context, DunesColors.amber),
+                  fill: DunesColors.resolve(context, DunesColors.amberSoft),
                 )
               else
                 Column(
@@ -2039,10 +2212,10 @@ class _KpiPersonTile extends StatelessWidget {
                   children: [
                     Text(
                       person.mainScore.toStringAsFixed(2),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                         fontFeatures: _tabular,
                       ),
                     ),
@@ -2080,9 +2253,21 @@ class _KpiTableHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 9, 18, 9),
-      decoration: const BoxDecoration(
-        color: Color(0xFFFAF8FD),
-        border: Border(bottom: BorderSide(color: _line)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFFAF8FD),
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _line,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: const Row(
         children: [
@@ -2113,10 +2298,10 @@ class _KpiColLabel extends StatelessWidget {
     return Text(
       text,
       textAlign: align,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w500,
-        color: DunesColors.text3,
+        color: DunesColors.resolve(context, DunesColors.text3),
       ),
     );
   }
@@ -2146,17 +2331,32 @@ class _KpiTableRow extends StatelessWidget {
     final grade = person.resolvedGrade;
     final post = person.position.trim();
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: InkWell(
         key: Key('kpi-person-${person.userId}'),
         onTap: busy ? null : onOpen,
-        hoverColor: DunesColors.brandPurpleSoft.withValues(alpha: 0.6),
+        hoverColor: DunesColors.resolve(
+          context,
+          DunesColors.brandPurpleSoft,
+        ).withValues(alpha: 0.6),
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 11, 18, 11),
           decoration: BoxDecoration(
             border: last
                 ? null
-                : const Border(bottom: BorderSide(color: _line)),
+                : Border(
+                    bottom: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        _line,
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                  ),
           ),
           child: Row(
             children: [
@@ -2164,7 +2364,8 @@ class _KpiTableRow extends StatelessWidget {
                 width: _kColRank,
                 child: _KpiRank(
                   rank: rank,
-                  highlight: rank <= 3 && !person.isPending && !person.isSkipped,
+                  highlight:
+                      rank <= 3 && !person.isPending && !person.isSkipped,
                 ),
               ),
               Expanded(
@@ -2182,10 +2383,10 @@ class _KpiTableRow extends StatelessWidget {
                   person.userName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
               ),
@@ -2205,10 +2406,10 @@ class _KpiTableRow extends StatelessWidget {
                       ? '—'
                       : person.mainScore.toStringAsFixed(2),
                   textAlign: TextAlign.right,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                     fontFeatures: _tabular,
                   ),
                 ),
@@ -2221,14 +2422,26 @@ class _KpiTableRow extends StatelessWidget {
                   child: person.isSkipped
                       ? _KpiBadge(
                           label: person.skipLabel,
-                          color: DunesColors.text2,
-                          fill: DunesColors.bgSoft,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                          fill: DunesColors.resolve(
+                            context,
+                            DunesColors.bgSoft,
+                          ),
                         )
                       : person.isPending
-                      ? const _KpiBadge(
+                      ? _KpiBadge(
                           label: '待录入',
-                          color: DunesColors.amber,
-                          fill: DunesColors.amberSoft,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.amber,
+                          ),
+                          fill: DunesColors.resolve(
+                            context,
+                            DunesColors.amberSoft,
+                          ),
                         )
                       : _KpiBadge(
                           label: grade.label,
@@ -2272,7 +2485,12 @@ class _ErrorPane extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(message, style: const TextStyle(color: DunesColors.text2)),
+          Text(
+            message,
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
+          ),
           const SizedBox(height: 12),
           TextButton(onPressed: onRetry, child: const Text('重试')),
         ],

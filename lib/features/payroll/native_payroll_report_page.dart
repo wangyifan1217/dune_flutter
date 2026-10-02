@@ -493,7 +493,11 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFF8F5FC),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF8F5FC),
+        role: DunesColorRole.surface,
+      ),
       child: Column(
         children: [
           Padding(
@@ -593,22 +597,44 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                     prefixIcon: const Icon(Icons.search, size: 20),
                     isDense: true,
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 12,
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: Color(0xFFE6DCF0)),
+                      borderSide: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFE6DCF0),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: Color(0xFFE6DCF0)),
+                      borderSide: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFE6DCF0),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: Color(0xFFC2AEE7)),
+                      borderSide: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFC2AEE7),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -654,7 +680,12 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: const TextStyle(color: DunesColors.text2)),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
+            ),
             TextButton(
               onPressed: () => unawaited(_loadSheets()),
               child: const Text('重试'),
@@ -664,14 +695,24 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
       );
     }
     if (_sheets.isEmpty) {
-      return const Center(
-        child: Text('该月暂无工资报表', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '该月暂无工资报表',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     final table = _table;
     if (table == null || table.rows.isEmpty) {
-      return const Center(
-        child: Text('暂无匹配的工资明细', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '暂无匹配的工资明细',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     final people = _visiblePeople(table)
@@ -779,7 +820,11 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
             labelText: '部门筛选',
             isDense: true,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 10,
@@ -787,7 +832,13 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE6DCF0)),
+              borderSide: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  Color(0xFFE6DCF0),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
           ),
           items: [
@@ -847,7 +898,10 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
           ),
           Text(
             '${people.length} 人 · ${_formatAmount(total)}',
-            style: const TextStyle(color: DunesColors.text2, fontSize: 12),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+              fontSize: 12,
+            ),
           ),
           const SizedBox(width: 4),
           IconButton(
@@ -861,10 +915,10 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                       department: people.first.departmentLabel,
                     ),
                   ),
-            icon: const Icon(
+            icon: Icon(
               Icons.forward_to_inbox_outlined,
               size: 19,
-              color: _payrollAccent,
+              color: DunesColors.resolveNullable(context, _payrollAccent),
             ),
           ),
         ],
@@ -876,9 +930,19 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE6DCF0)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE6DCF0),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -900,8 +964,8 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                     person.departmentLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: DunesColors.text3,
+                    style: TextStyle(
+                      color: DunesColors.resolve(context, DunesColors.text3),
                       fontSize: 12,
                     ),
                   ),
@@ -914,15 +978,18 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
             children: [
               Text(
                 _formatAmount(person.primaryAmount),
-                style: const TextStyle(
-                  color: _payrollAccent,
+                style: TextStyle(
+                  color: DunesColors.resolveNullable(context, _payrollAccent),
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               Text(
                 person.primaryLabel,
-                style: const TextStyle(color: DunesColors.text3, fontSize: 11),
+                style: TextStyle(
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  fontSize: 11,
+                ),
               ),
             ],
           ),
@@ -938,10 +1005,10 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                       personName: person.name,
                     ),
                   ),
-            icon: const Icon(
+            icon: Icon(
               Icons.forward_to_inbox_outlined,
               size: 19,
-              color: _payrollAccent,
+              color: DunesColors.resolveNullable(context, _payrollAccent),
             ),
           ),
         ],
@@ -957,12 +1024,20 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: _payrollAccent,
+        color: DunesColors.resolveNullable(
+          context,
+          _payrollAccent,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
-          const Icon(Icons.groups_2_outlined, color: Colors.white, size: 24),
+          Icon(
+            Icons.groups_2_outlined,
+            color: DunesColors.resolve(context, Colors.white),
+            size: 24,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -971,15 +1046,18 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                 Text(
                   '本月人力成本',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.76),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Colors.white.withValues(alpha: 0.76),
+                    ),
                     fontSize: 12,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   _formatAmount(total),
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, Colors.white),
                     fontSize: 23,
                     fontWeight: FontWeight.w700,
                   ),
@@ -990,12 +1068,19 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
+              color: DunesColors.resolveNullable(
+                context,
+                Colors.white.withValues(alpha: 0.16),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               '$count 人 · $label',
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              style: TextStyle(
+                color: DunesColors.resolve(context, Colors.white),
+                fontSize: 12,
+              ),
             ),
           ),
         ],
@@ -1007,9 +1092,19 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE6DCF0)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE6DCF0),
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0D6B5882),
@@ -1026,7 +1121,11 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundColor: _payrollAccent.withValues(alpha: 0.12),
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  _payrollAccent,
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.12),
                 foregroundColor: _payrollAccent,
                 child: Text(
                   person.name.substring(0, 1),
@@ -1052,8 +1151,11 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                         person.context.join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: DunesColors.text3,
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                           fontSize: 12,
                         ),
                       ),
@@ -1072,10 +1174,10 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                           personName: person.name,
                         ),
                       ),
-                icon: const Icon(
+                icon: Icon(
                   Icons.forward_to_inbox_outlined,
                   size: 19,
-                  color: _payrollAccent,
+                  color: DunesColors.resolveNullable(context, _payrollAccent),
                 ),
               ),
             ],
@@ -1083,20 +1185,30 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
           const SizedBox(height: 16),
           Text(
             person.primaryLabel,
-            style: const TextStyle(color: DunesColors.text3, fontSize: 12),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text3),
+              fontSize: 12,
+            ),
           ),
           const SizedBox(height: 3),
           Text(
             _formatAmount(person.primaryAmount),
-            style: const TextStyle(
-              color: _payrollAccent,
+            style: TextStyle(
+              color: DunesColors.resolveNullable(context, _payrollAccent),
               fontSize: 24,
               fontWeight: FontWeight.w700,
             ),
           ),
           if (person.costItems.isNotEmpty) ...[
             const SizedBox(height: 12),
-            const Divider(height: 1, color: Color(0xFFEAF0F1)),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFEAF0F1),
+                role: DunesColorRole.border,
+              ),
+            ),
             const SizedBox(height: 10),
             for (final item in person.costItems)
               Padding(
@@ -1105,8 +1217,8 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                   '${item.label} ${item.value}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: DunesColors.text2,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, DunesColors.text2),
                     fontSize: 12,
                   ),
                 ),
@@ -1209,21 +1321,25 @@ class _PayrollToolbarChip extends StatelessWidget {
     final Color border;
     if (filled) {
       background = enabled
-          ? _payrollAccent
-          : _payrollAccent.withValues(alpha: 0.4);
-      foreground = Colors.white;
+          ? DunesColors.resolve(context, _payrollAccent)
+          : DunesColors.resolve(context, _payrollAccent).withValues(alpha: 0.4);
+      foreground = DunesColors.resolve(context, Colors.white);
       border = background;
     } else if (selected) {
-      background = const Color(0xFFF6F0FC);
-      foreground = const Color(0xFF6B46A8);
-      border = const Color(0xFFD2BBE8);
+      background = DunesColors.resolve(context, const Color(0xFFF6F0FC));
+      foreground = DunesColors.resolve(context, const Color(0xFF6B46A8));
+      border = DunesColors.resolve(context, const Color(0xFFD2BBE8));
     } else {
-      background = Colors.white;
-      foreground = const Color(0xFF5D536B);
-      border = const Color(0xFFE6DCF0);
+      background = DunesColors.resolve(context, Colors.white);
+      foreground = DunesColors.resolve(context, const Color(0xFF5D536B));
+      border = DunesColors.resolve(context, const Color(0xFFE6DCF0));
     }
     return Material(
-      color: background,
+      color: DunesColors.resolveNullable(
+        context,
+        background,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
@@ -1239,7 +1355,11 @@ class _PayrollToolbarChip extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 16, color: foreground),
+                Icon(
+                  icon,
+                  size: 16,
+                  color: DunesColors.resolveNullable(context, foreground),
+                ),
                 const SizedBox(width: 4),
               ],
               Text(
@@ -1249,7 +1369,7 @@ class _PayrollToolbarChip extends StatelessWidget {
                   fontWeight: selected || filled
                       ? FontWeight.w700
                       : FontWeight.w600,
-                  color: foreground,
+                  color: DunesColors.resolveNullable(context, foreground),
                 ),
               ),
             ],

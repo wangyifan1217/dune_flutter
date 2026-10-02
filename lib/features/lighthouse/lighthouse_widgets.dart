@@ -19,9 +19,19 @@ class LighthouseSectionCard extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.75),
+        color: DunesColors.resolveNullable(
+          context,
+          Colors.white.withValues(alpha: 0.75),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x12000000),
@@ -49,16 +59,26 @@ class LighthousePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = active ? DunesColors.text : DunesColors.text2;
-    final bg = active ? DunesColors.bgCard : DunesColors.bgApp;
-    final border = active ? DunesColors.text2 : DunesColors.borderSoft;
+    final fg = active
+        ? DunesColors.resolve(context, DunesColors.text)
+        : DunesColors.resolve(context, DunesColors.text2);
+    final bg = active
+        ? DunesColors.resolve(context, DunesColors.bgCard)
+        : DunesColors.resolve(context, DunesColors.bgApp);
+    final border = active
+        ? DunesColors.resolve(context, DunesColors.text2)
+        : DunesColors.resolve(context, DunesColors.borderSoft);
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: bg,
+          color: DunesColors.resolveNullable(
+            context,
+            bg,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: border),
         ),
@@ -68,6 +88,7 @@ class LighthousePill extends StatelessWidget {
             fontSize: 11,
             fontWeight: active ? FontWeight.w600 : FontWeight.w500,
             color: fg,
+            context: context,
           ),
         ),
       ),

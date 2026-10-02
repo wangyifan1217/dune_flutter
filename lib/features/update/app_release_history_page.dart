@@ -56,7 +56,8 @@ class _AppReleaseHistoryPageState extends State<AppReleaseHistoryPage> {
   }
 
   void _openItem(AppReleaseHistoryItem item) {
-    final newer = item.versionCode > _currentCode ||
+    final newer =
+        item.versionCode > _currentCode ||
         (item.versionCode == _currentCode &&
             item.versionName.trim().isNotEmpty &&
             item.versionName.trim() != _currentVersion);
@@ -83,10 +84,21 @@ class _AppReleaseHistoryPageState extends State<AppReleaseHistoryPage> {
     return Theme(
       data: DunesTheme.light(),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF3F4F6),
+        backgroundColor: DunesColors.resolve(
+          context,
+          const Color(0xFFF3F4F6),
+          role: DunesColorRole.surface,
+        ),
         appBar: AppBar(
-          backgroundColor: const Color(0xFFF3F4F6),
-          foregroundColor: const Color(0xFF1A1A1A),
+          backgroundColor: DunesColors.resolve(
+            context,
+            const Color(0xFFF3F4F6),
+            role: DunesColorRole.surface,
+          ),
+          foregroundColor: DunesColors.resolve(
+            context,
+            const Color(0xFF1A1A1A),
+          ),
           elevation: 0,
           scrolledUnderElevation: 0,
           leading: IconButton(
@@ -98,15 +110,13 @@ class _AppReleaseHistoryPageState extends State<AppReleaseHistoryPage> {
             style: DunesTypography.sans(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF1A1A1A),
+              color: DunesColors.resolve(context, const Color(0xFF1A1A1A)),
+              context: context,
             ),
           ),
           centerTitle: true,
         ),
-        body: RefreshIndicator(
-          onRefresh: _load,
-          child: _buildBody(),
-        ),
+        body: RefreshIndicator(onRefresh: _load, child: _buildBody()),
       ),
     );
   }
@@ -140,7 +150,8 @@ class _AppReleaseHistoryPageState extends State<AppReleaseHistoryPage> {
           style: DunesTypography.sans(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: DunesColors.text2,
+            color: DunesColors.resolve(context, DunesColors.text2),
+            context: context,
           ),
         ),
         const SizedBox(height: 8),
@@ -149,21 +160,30 @@ class _AppReleaseHistoryPageState extends State<AppReleaseHistoryPage> {
             padding: const EdgeInsets.symmetric(vertical: 36),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Text(
               '暂无 $_platformLabel 发版记录',
               style: DunesTypography.sans(
                 fontSize: 14,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           )
         else
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
@@ -207,10 +227,14 @@ class _CurrentVersionCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [Color(0xFFF0ECF6), Color(0xFFE7E2F2), Color(0xFFD9E4F6)],
+          colors: [
+            DunesColors.resolve(context, Color(0xFFF0ECF6)),
+            DunesColors.resolve(context, Color(0xFFE7E2F2)),
+            DunesColors.resolve(context, Color(0xFFD9E4F6)),
+          ],
         ),
       ),
       child: Row(
@@ -219,12 +243,16 @@ class _CurrentVersionCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.72),
+              color: DunesColors.resolveNullable(
+                context,
+                Colors.white.withValues(alpha: 0.72),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.system_update_alt_rounded,
-              color: Color(0xFF5B4A9A),
+              color: DunesColors.resolveNullable(context, Color(0xFF5B4A9A)),
             ),
           ),
           const SizedBox(width: 12),
@@ -236,7 +264,8 @@ class _CurrentVersionCard extends StatelessWidget {
                   '当前 $platformLabel 版本',
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -245,7 +274,8 @@ class _CurrentVersionCard extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
               ],
@@ -295,7 +325,11 @@ class _HistoryTile extends StatelessWidget {
                             style: DunesTypography.sans(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              color: const Color(0xFF1A1A1A),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFF1A1A1A),
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -307,7 +341,11 @@ class _HistoryTile extends StatelessWidget {
                               vertical: 1,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFE8F1FF),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFE8F1FF),
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(99),
                             ),
                             child: Text(
@@ -315,7 +353,11 @@ class _HistoryTile extends StatelessWidget {
                               style: DunesTypography.sans(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: const Color(0xFF007DFF),
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF007DFF),
+                                ),
+                                context: context,
                               ),
                             ),
                           ),
@@ -329,7 +371,8 @@ class _HistoryTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: DunesTypography.sans(
                         fontSize: 13,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
                       ),
                     ),
                     if (timeText.isNotEmpty) ...[
@@ -338,16 +381,20 @@ class _HistoryTile extends StatelessWidget {
                         timeText,
                         style: DunesTypography.sans(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
-                color: Color(0xFFB0B0B0),
+                color: DunesColors.resolveNullable(context, Color(0xFFB0B0B0)),
               ),
             ],
           ),

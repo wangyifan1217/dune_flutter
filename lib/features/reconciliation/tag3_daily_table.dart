@@ -94,7 +94,11 @@ class Tag3DailyTable extends StatelessWidget {
         child: Center(
           child: Text(
             '暂无明细',
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ),
       );
@@ -720,7 +724,8 @@ class Tag3DailyDrilldownSheet extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
             const SizedBox(height: 6),
@@ -728,7 +733,8 @@ class Tag3DailyDrilldownSheet extends StatelessWidget {
               '销售额 ${tag3DailyMoney(data.totalSales)}  ·  核销 ${tag3DailyMoney(data.totalWriteOff)}  ·  利润 ${tag3DailyMoney(data.totalProfit)}',
               style: DunesTypography.sans(
                 fontSize: 12,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
             if (data.snapshotHint.trim().isNotEmpty) ...[
@@ -737,7 +743,8 @@ class Tag3DailyDrilldownSheet extends StatelessWidget {
                 data.snapshotHint.trim(),
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.accent,
+                  color: DunesColors.resolve(context, DunesColors.accent),
+                  context: context,
                 ),
               ),
             ],
@@ -747,7 +754,8 @@ class Tag3DailyDrilldownSheet extends StatelessWidget {
                 '暂无下钻明细',
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               )
             else
@@ -911,7 +919,8 @@ class _Tag3DailyCommentDialogState extends State<Tag3DailyCommentDialog> {
               '意见：$body',
               style: DunesTypography.sans(
                 fontSize: 13,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
           ],
@@ -974,10 +983,18 @@ class Tag3DailyOpinionEntry extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: DunesColors.accent.withValues(alpha: 0.08),
+            color: DunesColors.resolve(
+              context,
+              DunesColors.accent,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: DunesColors.accent.withValues(alpha: 0.35),
+              color: DunesColors.resolve(
+                context,
+                DunesColors.accent,
+                role: DunesColorRole.border,
+              ).withValues(alpha: 0.35),
             ),
           ),
           child: Row(
@@ -988,10 +1005,15 @@ class Tag3DailyOpinionEntry extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.accent,
+                  color: DunesColors.resolve(context, DunesColors.accent),
+                  context: context,
                 ),
               ),
-              Icon(Icons.chevron_right, size: 16, color: DunesColors.accent),
+              Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: DunesColors.resolve(context, DunesColors.accent),
+              ),
             ],
           ),
         ),
@@ -1023,7 +1045,8 @@ Future<void> showTag3DailyOpinionList({
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(ctx, DunesColors.text),
+                  context: ctx,
                 ),
               ),
               const SizedBox(height: 4),
@@ -1031,7 +1054,8 @@ Future<void> showTag3DailyOpinionList({
                 '只显示填写了意见的内容，确认记录不在这里。',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(ctx, DunesColors.text3),
+                  context: ctx,
                 ),
               ),
               const SizedBox(height: 12),
@@ -1040,7 +1064,8 @@ Future<void> showTag3DailyOpinionList({
                   '暂无意见',
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(ctx, DunesColors.text3),
+                    context: ctx,
                   ),
                 )
               else
@@ -1073,7 +1098,8 @@ Future<void> showTag3DailyOpinionList({
                             style: DunesTypography.sans(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(ctx, DunesColors.text),
+                              context: ctx,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -1081,7 +1107,11 @@ Future<void> showTag3DailyOpinionList({
                             '$name · ${tag3DailyCommentTime(item.createdAt)}',
                             style: DunesTypography.sans(
                               fontSize: 12,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                ctx,
+                                DunesColors.text3,
+                              ),
+                              context: ctx,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -1089,7 +1119,11 @@ Future<void> showTag3DailyOpinionList({
                             item.body.trim(),
                             style: DunesTypography.sans(
                               fontSize: 13,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                ctx,
+                                DunesColors.text2,
+                              ),
+                              context: ctx,
                             ),
                           ),
                         ],
@@ -1126,7 +1160,8 @@ Future<void> showTag3DailyCommentHistory({
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(ctx, DunesColors.text),
+                  context: ctx,
                 ),
               ),
               const SizedBox(height: 4),
@@ -1134,7 +1169,8 @@ Future<void> showTag3DailyCommentHistory({
                 '按提交时间查看，可看到是哪个人提的意见。',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(ctx, DunesColors.text3),
+                  context: ctx,
                 ),
               ),
               const SizedBox(height: 12),
@@ -1143,7 +1179,8 @@ Future<void> showTag3DailyCommentHistory({
                   '暂无意见',
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(ctx, DunesColors.text3),
+                    context: ctx,
                   ),
                 )
               else
@@ -1169,7 +1206,8 @@ Future<void> showTag3DailyCommentHistory({
                             style: DunesTypography.sans(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(ctx, DunesColors.text),
+                              context: ctx,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -1177,7 +1215,11 @@ Future<void> showTag3DailyCommentHistory({
                             item.displayBody,
                             style: DunesTypography.sans(
                               fontSize: 13,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                ctx,
+                                DunesColors.text2,
+                              ),
+                              context: ctx,
                             ),
                           ),
                         ],

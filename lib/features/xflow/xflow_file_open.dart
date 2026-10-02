@@ -268,7 +268,11 @@ Future<bool> _previewImageDialogOnDesktop({
             minHeight: 200,
           ),
           child: Material(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              ctx,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(12),
             clipBehavior: Clip.antiAlias,
             child: Column(
@@ -283,10 +287,10 @@ Future<bool> _previewImageDialogOnDesktop({
                           fileName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(ctx, DunesColors.text),
                           ),
                         ),
                       ),
@@ -317,7 +321,11 @@ Future<bool> _previewImageDialogOnDesktop({
                 ),
                 Flexible(
                   child: ColoredBox(
-                    color: const Color(0xFFF3F4F6),
+                    color: DunesColors.resolve(
+                      ctx,
+                      const Color(0xFFF3F4F6),
+                      role: DunesColorRole.surface,
+                    ),
                     child: InteractiveViewer(
                       maxScale: 5,
                       child: Center(
@@ -365,11 +373,7 @@ Future<void> _openWithSystem({
     );
     if (path == null || path.isEmpty) {
       if (context.mounted) {
-        showDunesToast(
-          context,
-          '文件已保存，但无法自动打开',
-          kind: DunesToastKind.error,
-        );
+        showDunesToast(context, '文件已保存，但无法自动打开', kind: DunesToastKind.error);
       }
       return;
     }
@@ -403,13 +407,13 @@ Future<bool> _previewInApp({
   showDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => const Center(
+    builder: (_) => Center(
       child: SizedBox(
         width: 36,
         height: 36,
         child: CircularProgressIndicator(
           strokeWidth: 2.6,
-          color: DunesColors.accent,
+          color: DunesColors.resolve(context, DunesColors.accent),
         ),
       ),
     ),
@@ -428,19 +432,15 @@ Future<bool> _previewInApp({
       if (isPdf) {
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(
-            builder: (_) => _XflowPdfPreviewPage(
-              fileName: fileName,
-              bytes: bytes,
-            ),
+            builder: (_) =>
+                _XflowPdfPreviewPage(fileName: fileName, bytes: bytes),
           ),
         );
       } else {
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(
-            builder: (_) => _XflowImagePreviewPage(
-              fileName: fileName,
-              bytes: bytes,
-            ),
+            builder: (_) =>
+                _XflowImagePreviewPage(fileName: fileName, bytes: bytes),
           ),
         );
       }
@@ -465,7 +465,11 @@ class _XflowPdfPreviewPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
         title: Text(fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
@@ -483,10 +487,18 @@ class _XflowImagePreviewPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.black,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          context,
+          Colors.black,
+          role: DunesColorRole.surface,
+        ),
+        foregroundColor: DunesColors.resolve(context, Colors.white),
         title: Text(fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       body: Center(

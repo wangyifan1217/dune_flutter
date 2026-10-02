@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'task_chat_share.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 class TaskChatShareBundleCard extends StatelessWidget {
   const TaskChatShareBundleCard({
@@ -28,7 +29,11 @@ class TaskChatShareBundleCard extends StatelessWidget {
           button: true,
           label: '任务合集名片，$owner 的 ${bundle.shares.length} 个主目标，点击查看',
           child: Material(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(18),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
@@ -37,7 +42,13 @@ class TaskChatShareBundleCard extends StatelessWidget {
                 width: cardWidth,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFE8E3F4)),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8E3F4),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                   boxShadow: const [
                     BoxShadow(
                       color: Color(0x1339296F),
@@ -51,9 +62,20 @@ class TaskChatShareBundleCard extends StatelessWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Color(0xFF39296A), Color(0xFF6852B0)],
+                          colors: [
+                            DunesColors.resolve(
+                              context,
+                              Color(0xFF39296A),
+                              role: DunesColorRole.surface,
+                            ),
+                            DunesColors.resolve(
+                              context,
+                              Color(0xFF6852B0),
+                              role: DunesColorRole.surface,
+                            ),
+                          ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -64,12 +86,16 @@ class TaskChatShareBundleCard extends StatelessWidget {
                             width: 36,
                             height: 36,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: .15),
+                              color: DunesColors.resolveNullable(
+                                context,
+                                Colors.white.withValues(alpha: .15),
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(11),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.view_agenda_rounded,
-                              color: Colors.white,
+                              color: DunesColors.resolve(context, Colors.white),
                               size: 20,
                             ),
                           ),
@@ -78,12 +104,15 @@ class TaskChatShareBundleCard extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   '沙丘任务合集',
                                   style: TextStyle(
                                     fontSize: 10,
                                     letterSpacing: .35,
-                                    color: Color(0xFFE9E3FA),
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      Color(0xFFE9E3FA),
+                                    ),
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
@@ -92,8 +121,11 @@ class TaskChatShareBundleCard extends StatelessWidget {
                                   '$owner 的主目标',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ),
                                     fontSize: 15,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -108,13 +140,20 @@ class TaskChatShareBundleCard extends StatelessWidget {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: .15),
+                              color: DunesColors.resolveNullable(
+                                context,
+                                Colors.white.withValues(alpha: .15),
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
                               '${bundle.shares.length} 项',
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -139,13 +178,20 @@ class TaskChatShareBundleCard extends StatelessWidget {
                                     height: 22,
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF1EDFC),
+                                      color: DunesColors.resolve(
+                                        context,
+                                        const Color(0xFFF1EDFC),
+                                        role: DunesColorRole.surface,
+                                      ),
                                       borderRadius: BorderRadius.circular(7),
                                     ),
                                     child: Text(
                                       '${i + 1}',
-                                      style: const TextStyle(
-                                        color: _purple,
+                                      style: TextStyle(
+                                        color: DunesColors.resolveNullable(
+                                          context,
+                                          _purple,
+                                        ),
                                         fontSize: 10,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -157,8 +203,11 @@ class TaskChatShareBundleCard extends StatelessWidget {
                                       preview[i].title,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Color(0xFF332F3D),
+                                      style: TextStyle(
+                                        color: DunesColors.resolveNullable(
+                                          context,
+                                          Color(0xFF332F3D),
+                                        ),
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -170,8 +219,11 @@ class TaskChatShareBundleCard extends StatelessWidget {
                                       preview[i].status,
                                       overdue: preview[i].overdue,
                                     ),
-                                    style: const TextStyle(
-                                      color: _purple,
+                                    style: TextStyle(
+                                      color: DunesColors.resolveNullable(
+                                        context,
+                                        _purple,
+                                      ),
                                       fontSize: 10,
                                     ),
                                   ),
@@ -185,8 +237,11 @@ class TaskChatShareBundleCard extends StatelessWidget {
                                 alignment: Alignment.centerLeft,
                                 child: Text(
                                   '另有 ${bundle.shares.length - preview.length} 项主目标',
-                                  style: const TextStyle(
-                                    color: Color(0xFF9692A1),
+                                  style: TextStyle(
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      Color(0xFF9692A1),
+                                    ),
                                     fontSize: 10,
                                   ),
                                 ),
@@ -200,19 +255,32 @@ class TaskChatShareBundleCard extends StatelessWidget {
                         horizontal: 14,
                         vertical: 9,
                       ),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFDFCFF),
+                      decoration: BoxDecoration(
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFFFDFCFF),
+                          role: DunesColorRole.surface,
+                        ),
                         border: Border(
-                          top: BorderSide(color: Color(0xFFF0EEF4)),
+                          top: BorderSide(
+                            color: DunesColors.resolve(
+                              context,
+                              Color(0xFFF0EEF4),
+                              role: DunesColorRole.border,
+                            ),
+                          ),
                         ),
                       ),
-                      child: const Row(
+                      child: Row(
                         children: [
                           Text(
                             '点击查看全部任务',
                             style: TextStyle(
                               fontSize: 10,
-                              color: Color(0xFF8A8498),
+                              color: DunesColors.resolveNullable(
+                                context,
+                                Color(0xFF8A8498),
+                              ),
                             ),
                           ),
                           Spacer(),
@@ -220,7 +288,10 @@ class TaskChatShareBundleCard extends StatelessWidget {
                             '只读查看',
                             style: TextStyle(
                               fontSize: 10,
-                              color: _purple,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _purple,
+                              ),
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -228,7 +299,10 @@ class TaskChatShareBundleCard extends StatelessWidget {
                           Icon(
                             Icons.chevron_right_rounded,
                             size: 15,
-                            color: _purple,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _purple,
+                            ),
                           ),
                         ],
                       ),
@@ -259,8 +333,12 @@ Future<void> showTaskChatShareBundleDetailSheet({
         top: false,
         child: Container(
           constraints: BoxConstraints(maxHeight: height * .82),
-          decoration: const BoxDecoration(
-            color: Color(0xFFF7F6FA),
+          decoration: BoxDecoration(
+            color: DunesColors.resolveNullable(
+              context,
+              Color(0xFFF7F6FA),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
@@ -270,7 +348,11 @@ Future<void> showTaskChatShareBundleDetailSheet({
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD8D4DF),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFD8D4DF),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(99),
                 ),
               ),
@@ -278,9 +360,12 @@ Future<void> showTaskChatShareBundleDetailSheet({
                 padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.task_alt_rounded,
-                      color: Color(0xFF7054D8),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF7054D8),
+                      ),
                     ),
                     const SizedBox(width: 9),
                     Expanded(
@@ -288,24 +373,37 @@ Future<void> showTaskChatShareBundleDetailSheet({
                         '${bundle.ownerName.isEmpty ? '同一负责人' : bundle.ownerName} 的主目标',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF332F3D),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF332F3D),
+                          ),
                         ),
                       ),
                     ),
                     Text(
                       '${bundle.shares.length} 项',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF827D8D),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF827D8D),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const Divider(height: 1, color: Color(0xFFE9E6EF)),
+              Divider(
+                height: 1,
+                color: DunesColors.resolve(
+                  context,
+                  Color(0xFFE9E6EF),
+                  role: DunesColorRole.border,
+                ),
+              ),
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 20),
@@ -321,7 +419,11 @@ Future<void> showTaskChatShareBundleDetailSheet({
                         ? bundle.ownerName
                         : share.ownerName;
                     return Material(
-                      color: Colors.white,
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(14),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
@@ -342,27 +444,36 @@ Future<void> showTaskChatShareBundleDetailSheet({
                                       share.title,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w700,
-                                        color: Color(0xFF332F3D),
+                                        color: DunesColors.resolveNullable(
+                                          context,
+                                          Color(0xFF332F3D),
+                                        ),
                                       ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
                                     status,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 11,
-                                      color: Color(0xFF7054D8),
+                                      color: DunesColors.resolveNullable(
+                                        context,
+                                        Color(0xFF7054D8),
+                                      ),
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   const SizedBox(width: 3),
-                                  const Icon(
+                                  Icon(
                                     Icons.chevron_right_rounded,
                                     size: 18,
-                                    color: Color(0xFF938D9D),
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      Color(0xFF938D9D),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -371,33 +482,45 @@ Future<void> showTaskChatShareBundleDetailSheet({
                                 '周期 ${_taskShareDate(share.startAt)} 至 ${_taskShareDate(share.dueAt)}  ·  负责人 ${owner.isEmpty ? '未指定' : owner}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: Color(0xFF817B8B),
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    Color(0xFF817B8B),
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 6),
                               Row(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.flag_rounded,
                                     size: 13,
-                                    color: Color(0xFF9A94A4),
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      Color(0xFF9A94A4),
+                                    ),
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
                                     '优先级 ${taskSharePriorityLabel(share.priority)}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 10,
-                                      color: Color(0xFF817B8B),
+                                      color: DunesColors.resolveNullable(
+                                        context,
+                                        Color(0xFF817B8B),
+                                      ),
                                     ),
                                   ),
                                   const Spacer(),
                                   Text(
                                     '进度 ${share.progressPct}%',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 10,
-                                      color: Color(0xFF7054D8),
+                                      color: DunesColors.resolveNullable(
+                                        context,
+                                        Color(0xFF7054D8),
+                                      ),
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -412,22 +535,29 @@ Future<void> showTaskChatShareBundleDetailSheet({
                                       child: LinearProgressIndicator(
                                         value: share.progressPct / 100,
                                         minHeight: 5,
-                                        backgroundColor: const Color(
-                                          0xFFEFEDF5,
+                                        backgroundColor: DunesColors.resolve(
+                                          context,
+                                          const Color(0xFFEFEDF5),
+                                          role: DunesColorRole.surface,
                                         ),
-                                        valueColor:
-                                            const AlwaysStoppedAnimation(
-                                              Color(0xFF7054D8),
-                                            ),
+                                        valueColor: AlwaysStoppedAnimation(
+                                          DunesColors.resolve(
+                                            context,
+                                            Color(0xFF7054D8),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
                                   const SizedBox(width: 9),
                                   Text(
                                     '${share.progressPct}%',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 11,
-                                      color: Color(0xFF7054D8),
+                                      color: DunesColors.resolveNullable(
+                                        context,
+                                        Color(0xFF7054D8),
+                                      ),
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -441,11 +571,17 @@ Future<void> showTaskChatShareBundleDetailSheet({
                   },
                 ),
               ),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 14),
                 child: Text(
                   '任务详情仅供查看',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF9692A1)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF9692A1),
+                    ),
+                  ),
                 ),
               ),
             ],

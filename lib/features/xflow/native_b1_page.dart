@@ -532,7 +532,11 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     final isB1 = widget.type == _ListType.b1;
     final isB13 = widget.type == _ListType.b13;
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         child: Column(
           children: [
@@ -648,7 +652,11 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                 style: DunesTypography.sans(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: DunesColors.text2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text2,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                               const SizedBox(width: 10),
@@ -706,7 +714,11 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                 _search.text.trim().isEmpty ? '暂无数据' : '无匹配结果',
                                 style: DunesTypography.sans(
                                   fontSize: 12,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             )
@@ -856,9 +868,21 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     return Container(
       height: 50,
       padding: const EdgeInsets.fromLTRB(4, 6, 6, 6),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -874,6 +898,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
               style: DunesTypography.sans(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
+                context: context,
               ),
             ),
           ),

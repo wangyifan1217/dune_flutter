@@ -43,9 +43,7 @@ Uint8List? _encodeAvatarJpeg(_AvatarEncodeRequest req) {
           height: h > w ? req.maxDim : (h * req.maxDim / w).round(),
         )
       : decoded;
-  return Uint8List.fromList(
-    img.encodeJpg(resized, quality: req.quality),
-  );
+  return Uint8List.fromList(img.encodeJpg(resized, quality: req.quality));
 }
 
 /// 与 WebView `openAvatarSheet` 一致：6 个默认头像 + 上传 + 保存。
@@ -73,7 +71,11 @@ class NativeAvatarSheet extends StatefulWidget {
     return showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -280,7 +282,10 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
       return Image.memory(previewBytes, fit: BoxFit.cover);
     }
     if (_uploadPreviewPath.isEmpty) {
-      return const Icon(Icons.check_circle, color: DunesColors.accentDeep);
+      return Icon(
+        Icons.check_circle,
+        color: DunesColors.resolve(context, DunesColors.accentDeep),
+      );
     }
     if (kIsWeb) {
       return Image.network(_uploadPreviewPath, fit: BoxFit.cover);
@@ -302,7 +307,11 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFFE0E0E0),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE0E0E0),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(99),
               ),
             ),
@@ -314,10 +323,13 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '选择卡通头像或上传自定义图片',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 16),
           GridView.count(
@@ -357,7 +369,14 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
                   height: 56,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: DunesColors.accentDeep, width: 2),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.accentDeep,
+                        role: DunesColorRole.border,
+                      ),
+                      width: 2,
+                    ),
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: _uploadPreview(),
@@ -393,7 +412,11 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
                 child: FilledButton(
                   onPressed: _saving || !_hasSelection ? null : _save,
                   style: FilledButton.styleFrom(
-                    backgroundColor: DunesColors.accentDeep,
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      DunesColors.accentDeep,
+                      role: DunesColorRole.surface,
+                    ),
                   ),
                   child: Text(_saving ? '保存中…' : '保存'),
                 ),
@@ -433,7 +456,17 @@ class _PresetTile extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: Border.all(
-            color: selected ? DunesColors.accentDeep : const Color(0xFFE8E8E8),
+            color: selected
+                ? DunesColors.resolve(
+                    context,
+                    DunesColors.accentDeep,
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    const Color(0xFFE8E8E8),
+                    role: DunesColorRole.border,
+                  ),
             width: selected ? 2.5 : 1,
           ),
         ),
@@ -503,7 +536,11 @@ class NativeAvatarCircle extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: _radius,
         border: Border.all(color: borderColor, width: borderWidth),
-        color: const Color(0xFFF9DE7A),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF9DE7A),
+          role: DunesColorRole.surface,
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       alignment: Alignment.center,

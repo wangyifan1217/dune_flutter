@@ -126,7 +126,11 @@ Future<void> showTaskAiAnalysis({
               minHeight: 380,
             ),
             child: Material(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
               clipBehavior: Clip.antiAlias,
               child: SelectionArea(
@@ -153,8 +157,12 @@ Future<void> showTaskAiAnalysis({
         padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
         child: Container(
           height: size.height * 0.82,
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              ctx,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
           ),
           clipBehavior: Clip.antiAlias,
@@ -265,7 +273,11 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
             padding: const EdgeInsets.fromLTRB(20, 14, 8, 4),
             child: Row(
               children: [
-                const Icon(Icons.auto_awesome, size: 18, color: _themePurple),
+                Icon(
+                  Icons.auto_awesome,
+                  size: 18,
+                  color: DunesColors.resolveNullable(context, _themePurple),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -282,9 +294,12 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
                         widget.task.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
@@ -293,18 +308,32 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
                 IconButton(
                   tooltip: '关闭',
                   onPressed: widget.onClose,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.close,
                     size: 20,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                 ),
               ],
             ),
           ),
-          const Divider(height: 1, color: Color(0xFFEDEFF2)),
+          Divider(
+            height: 1,
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFEDEFF2),
+              role: DunesColorRole.border,
+            ),
+          ),
           Expanded(child: _buildBody()),
-          const Divider(height: 1, color: Color(0xFFEDEFF2)),
+          Divider(
+            height: 1,
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFEDEFF2),
+              role: DunesColorRole.border,
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 12, 12),
             child: Row(
@@ -319,12 +348,16 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
                     onSubmitted: (_) => _send(),
                     decoration: InputDecoration(
                       hintText: '输入问题，留空则做综合分析',
-                      hintStyle: const TextStyle(
+                      hintStyle: TextStyle(
                         fontSize: 13,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                       filled: true,
-                      fillColor: const Color(0xFFF5F6F8),
+                      fillColor: DunesColors.resolve(
+                        context,
+                        const Color(0xFFF5F6F8),
+                        role: DunesColorRole.surface,
+                      ),
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 14,
@@ -351,12 +384,12 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
                   ),
                   onPressed: _sending || _hasFreshRunning ? null : _send,
                   child: _sending
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: DunesColors.resolve(context, Colors.white),
                           ),
                         )
                       : Text(_hasFreshRunning ? '分析中…' : '分析'),
@@ -392,7 +425,10 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               const SizedBox(height: 10),
               OutlinedButton(onPressed: _reload, child: const Text('重试')),
@@ -402,7 +438,7 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
       );
     }
     if (_items.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
           padding: EdgeInsets.all(28),
           child: Text(
@@ -410,7 +446,7 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
               height: 1.6,
             ),
           ),
@@ -433,9 +469,19 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFAFC),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFFAFAFC),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -446,26 +492,26 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
               Expanded(
                 child: Text(
                   '问：$question',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                 ),
               ),
               if (item.createdAt != null)
                 Text(
                   _fmtTime(item.createdAt!),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
             ],
           ),
           const SizedBox(height: 10),
           if (item.isRunning && !item.isStale)
-            const Row(
+            Row(
               children: [
                 SizedBox(
                   width: 14,
@@ -478,7 +524,10 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
                 SizedBox(width: 8),
                 Text(
                   'AI 分析中，请稍候…',
-                  style: TextStyle(fontSize: 13, color: DunesColors.text3),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
               ],
             )
@@ -491,7 +540,10 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
                   : (item.detail.trim().isEmpty
                         ? '分析失败，请稍后重试'
                         : item.detail.trim()),
-              style: const TextStyle(fontSize: 13, color: Color(0xFFB4552D)),
+              style: TextStyle(
+                fontSize: 13,
+                color: DunesColors.resolveNullable(context, Color(0xFFB4552D)),
+              ),
             ),
         ],
       ),

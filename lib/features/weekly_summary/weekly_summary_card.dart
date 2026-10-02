@@ -37,10 +37,18 @@ class WeeklySummaryPoster extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.88),
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ).withValues(alpha: 0.88),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.95),
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.border,
+                ).withValues(alpha: 0.95),
                 width: 1.0,
               ),
               boxShadow: const [
@@ -116,7 +124,11 @@ class WeeklySummaryPoster extends StatelessWidget {
           const SizedBox(width: 4),
           GestureDetector(
             onTap: onShare,
-            child: const Icon(Icons.ios_share_rounded, size: 15, color: _secondary),
+            child: const Icon(
+              Icons.ios_share_rounded,
+              size: 15,
+              color: _secondary,
+            ),
           ),
         ],
       ],
@@ -162,15 +174,16 @@ class WeeklySummaryPoster extends StatelessWidget {
                   children: [
                     Text(
                       item.value,
-                      style: DunesTypography.sans(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.4,
-                        color: _ink,
-                        height: 1.05,
-                      ).copyWith(
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
+                      style:
+                          DunesTypography.sans(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.4,
+                            color: _ink,
+                            height: 1.05,
+                          ).copyWith(
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -214,15 +227,16 @@ class WeeklySummaryPoster extends StatelessWidget {
                   children: [
                     Text(
                       item.value,
-                      style: DunesTypography.sans(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.3,
-                        color: _ink,
-                        height: 1.05,
-                      ).copyWith(
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
+                      style:
+                          DunesTypography.sans(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
+                            color: _ink,
+                            height: 1.05,
+                          ).copyWith(
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -270,13 +284,16 @@ class WeeklySummaryPoster extends StatelessWidget {
                       ),
                       Text(
                         view.portrait[i].value,
-                        style: DunesTypography.sans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: _ink,
-                        ).copyWith(
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                        style:
+                            DunesTypography.sans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _ink,
+                            ).copyWith(
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
                       ),
                     ],
                   ),
@@ -304,15 +321,18 @@ class WeeklySummaryPoster extends StatelessWidget {
                     children: [
                       Text(
                         item.value,
-                        style: DunesTypography.sans(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
-                          color: _ink,
-                          height: 1.05,
-                        ).copyWith(
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                        style:
+                            DunesTypography.sans(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
+                              color: _ink,
+                              height: 1.05,
+                            ).copyWith(
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
                       ),
                       const SizedBox(height: 2),
                       Text(

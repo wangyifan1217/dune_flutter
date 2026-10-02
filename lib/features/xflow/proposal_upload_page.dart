@@ -41,6 +41,7 @@ import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
 import 'xflow_template_runtime.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 class ProposalUploadPage extends StatefulWidget {
   const ProposalUploadPage({
@@ -212,10 +213,7 @@ class _ParsedProposal {
           '',
       'owner2': owner2,
       'owner2Level':
-          _sectionValue(
-            sections,
-            labels('owner2Level', const ['第二责任人等级']),
-          ) ??
+          _sectionValue(sections, labels('owner2Level', const ['第二责任人等级'])) ??
           '',
       'techPlatform': techPlatform ?? '',
       'respNational': _string(owners['national']),
@@ -319,10 +317,12 @@ class _ProposalSection {
             images: images,
           );
         })
-        .where((row) =>
-            row.label.isNotEmpty ||
-            row.value.isNotEmpty ||
-            row.images.isNotEmpty)
+        .where(
+          (row) =>
+              row.label.isNotEmpty ||
+              row.value.isNotEmpty ||
+              row.images.isNotEmpty,
+        )
         .toList(growable: false);
     final sectionTierRows =
         tierRows ??
@@ -548,6 +548,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
   Timer? _autosaveTimer;
   int _autosaveSeq = 0;
   bool _autosaving = false;
+
   /// 保存进行中又有新编辑时置位，finally 里补一次 schedule，避免 silent drop。
   bool _needsAutosave = false;
   String _autosaveHint = '';
@@ -698,7 +699,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     if (parsed == null) return <String, dynamic>{};
     final values = parsed.toXflowSubmitValues(extractRules: _extractRules);
     for (final field in _supplementalFields) {
-      final isUser = field.type == 'user' ||
+      final isUser =
+          field.type == 'user' ||
           field.type == 'userSelect' ||
           field.raw['dataSource']?.toString() == 'org_user';
       if (isUser) values.remove(field.key);
@@ -798,8 +800,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       final supplemental = supplementalFormFields(template.fields);
       final uploadKey =
           findPrimaryUploadField(template.fields)?.key.trim().isNotEmpty == true
-              ? findPrimaryUploadField(template.fields)!.key.trim()
-              : 'proposalExcel';
+          ? findPrimaryUploadField(template.fields)!.key.trim()
+          : 'proposalExcel';
 
       var draftValues = <String, dynamic>{};
       final editId = widget.editProposalId;
@@ -862,16 +864,17 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
           _parsed = restored;
           _state = _UploadState.parsed;
           _autosaveHint = 'Excel 已识别，填写补充信息时将自动保存草稿';
-          _recognitionHydrating = restored.sections.isEmpty &&
+          _recognitionHydrating =
+              restored.sections.isEmpty &&
               (restored.archiveId.trim().isNotEmpty ||
                   restored.proposalId.trim().isNotEmpty);
         }
         _expandedIds
           ..clear()
           ..addAll(
-            previewSectionsFromDetailConfig(detailConfig)
-                .where((section) => section.expanded)
-                .map((section) => section.id),
+            previewSectionsFromDetailConfig(
+              detailConfig,
+            ).where((section) => section.expanded).map((section) => section.id),
           );
       });
       if (restored != null &&
@@ -1049,7 +1052,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       final key = field.key;
       if (!extracted.containsKey(key)) continue;
       // 人员字段（如技术负责人）不回填，由用户自行搜索选择。
-      final isUser = field.type == 'user' ||
+      final isUser =
+          field.type == 'user' ||
           field.type == 'userSelect' ||
           field.raw['dataSource']?.toString() == 'org_user';
       if (isUser) continue;
@@ -1061,7 +1065,11 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     }
     final template = _template;
     if (template != null) {
-      XflowLinkage.recompute(template.fields, template.layout, _supplementalValues);
+      XflowLinkage.recompute(
+        template.fields,
+        template.layout,
+        _supplementalValues,
+      );
     }
   }
 
@@ -1070,7 +1078,11 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       _supplementalValues[key] = value;
       final template = _template;
       if (template != null) {
-        XflowLinkage.recompute(template.fields, template.layout, _supplementalValues);
+        XflowLinkage.recompute(
+          template.fields,
+          template.layout,
+          _supplementalValues,
+        );
       }
     });
     _scheduleAutosave();
@@ -1151,10 +1163,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       return await openFile(acceptedTypeGroups: const [primary]);
     } catch (_) {
       try {
-        const fallback = XTypeGroup(
-          label: 'Excel 提案',
-          extensions: ['xlsx'],
-        );
+        const fallback = XTypeGroup(label: 'Excel 提案', extensions: ['xlsx']);
         return await openFile(acceptedTypeGroups: const [fallback]);
       } catch (_) {
         return openFile();
@@ -1254,9 +1263,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       }
       await _service.clearLocalDraft(businessId: null);
       if (!mounted) return;
-      _showUploadSuccess(
-        businessId > 0 ? '已提交审批 · 提案 #$businessId' : '已提交审批',
-      );
+      _showUploadSuccess(businessId > 0 ? '已提交审批 · 提案 #$businessId' : '已提交审批');
       if (businessId > 0) {
         widget.onSubmitted?.call(businessId);
       }
@@ -1322,22 +1329,30 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
   Widget build(BuildContext context) {
     if (_configLoading) {
       return Scaffold(
-        backgroundColor: _PDColors.bg,
+        backgroundColor: DunesColors.resolve(
+          context,
+          _PDColors.bg,
+          role: DunesColorRole.surface,
+        ),
         appBar: AppBar(
-          backgroundColor: _PDColors.bg,
+          backgroundColor: DunesColors.resolve(
+            context,
+            _PDColors.bg,
+            role: DunesColorRole.surface,
+          ),
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_ios_rounded,
               size: 18,
-              color: _PDColors.ink,
+              color: DunesColors.resolve(context, _PDColors.ink),
             ),
             onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
           ),
-          title: const Text(
+          title: Text(
             '加载模板',
             style: TextStyle(
-              color: _PDColors.ink,
+              color: DunesColors.resolve(context, _PDColors.ink),
               fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
@@ -1350,15 +1365,23 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
 
     if (_configError != null) {
       return Scaffold(
-        backgroundColor: _PDColors.bg,
+        backgroundColor: DunesColors.resolve(
+          context,
+          _PDColors.bg,
+          role: DunesColorRole.surface,
+        ),
         appBar: AppBar(
-          backgroundColor: _PDColors.bg,
+          backgroundColor: DunesColors.resolve(
+            context,
+            _PDColors.bg,
+            role: DunesColorRole.surface,
+          ),
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_ios_rounded,
               size: 18,
-              color: _PDColors.ink,
+              color: DunesColors.resolve(context, _PDColors.ink),
             ),
             onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
           ),
@@ -1374,26 +1397,41 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     }
 
     return Scaffold(
-      backgroundColor: _PDColors.bg,
+      backgroundColor: DunesColors.resolve(
+        context,
+        _PDColors.bg,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: _PDColors.bg,
+        backgroundColor: DunesColors.resolve(
+          context,
+          _PDColors.bg,
+          role: DunesColorRole.surface,
+        ),
         elevation: 0,
         scrolledUnderElevation: 0,
-        shape: const Border(
-          bottom: BorderSide(color: _PDColors.line, width: 0.5),
+        shape: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _PDColors.line,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
         ),
         leading: IconButton(
-          icon: const Icon(
+          icon: Icon(
             Icons.arrow_back_ios_rounded,
             size: 18,
-            color: _PDColors.ink,
+            color: DunesColors.resolve(context, _PDColors.ink),
           ),
           onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
         ),
         title: Text(
           _pageTitle,
-          style: const TextStyle(
-            color: _PDColors.ink,
+          style: TextStyle(
+            color: DunesColors.resolve(context, _PDColors.ink),
             fontSize: 15,
             fontWeight: FontWeight.w600,
           ),
@@ -1407,8 +1445,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
             label: '提交审批',
             loading: _submitting,
             onPressed: _canSubmit ? _handleSubmit : null,
-            onDisabledTap: () =>
-                _showUploadError('请先上传并识别 Excel 提案'),
+            onDisabledTap: () => _showUploadError('请先上传并识别 Excel 提案'),
           ),
         ],
       ),
@@ -1430,9 +1467,9 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
         if (_pageSubtitle.isNotEmpty) ...[
           Text(
             _pageSubtitle,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: _PDColors.mute,
+              color: DunesColors.resolve(context, _PDColors.mute),
               height: 1.6,
             ),
           ),
@@ -1441,9 +1478,9 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
         if (_autosaveHint.isNotEmpty) ...[
           Text(
             _autosaveHint,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: _PDColors.coral,
+              color: DunesColors.resolve(context, _PDColors.coral),
               height: 1.4,
             ),
           ),
@@ -1456,11 +1493,22 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: _PDColors.card,
+              color: DunesColors.resolve(
+                context,
+                _PDColors.card,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _PDColors.line2, width: 0.6),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  _PDColors.line2,
+                  role: DunesColorRole.border,
+                ),
+                width: 0.6,
+              ),
             ),
-            child: const Row(
+            child: Row(
               children: [
                 SizedBox(
                   width: 16,
@@ -1470,7 +1518,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                 SizedBox(width: 10),
                 Text(
                   '正在加载 Excel 识别内容…',
-                  style: TextStyle(fontSize: 12, color: _PDColors.mute),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.resolve(context, _PDColors.mute),
+                  ),
                 ),
               ],
             ),
@@ -1605,30 +1656,33 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       children: [
         Row(
           children: [
-            const Text(
+            Text(
               '产品模板',
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
-                color: _PDColors.ink,
+                color: DunesColors.resolve(context, _PDColors.ink),
               ),
             ),
             const Spacer(),
             if (_importTemplatesLoading)
-              const SizedBox(
+              SizedBox(
                 width: 14,
                 height: 14,
                 child: CircularProgressIndicator(
                   strokeWidth: 1.6,
-                  color: _PDColors.mute,
+                  color: DunesColors.resolve(context, _PDColors.mute),
                 ),
               )
             else
               GestureDetector(
                 onTap: _loadImportTemplates,
-                child: const Text(
+                child: Text(
                   '刷新',
-                  style: TextStyle(fontSize: 11, color: _PDColors.coral),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: DunesColors.resolve(context, _PDColors.coral),
+                  ),
                 ),
               ),
           ],
@@ -1637,7 +1691,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
         if (_importTemplatesError != null && _importTemplates.isEmpty)
           Text(
             _importTemplatesError!,
-            style: const TextStyle(fontSize: 11, color: _PDColors.danger),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, _PDColors.danger),
+            ),
           )
         else
           Wrap(
@@ -1652,9 +1709,13 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
             ],
           ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           '先按产品分类下载空白 Excel，填好后再上传识别。',
-          style: TextStyle(fontSize: 10, color: _PDColors.mute2, height: 1.5),
+          style: TextStyle(
+            fontSize: 10,
+            color: DunesColors.resolve(context, _PDColors.mute2),
+            height: 1.5,
+          ),
         ),
       ],
     );
@@ -1668,10 +1729,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
           if (field.label.trim().isNotEmpty) ...[
             Text(
               field.label.trim(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
-                color: _PDColors.ink,
+                color: DunesColors.resolve(context, _PDColors.ink),
               ),
             ),
             const SizedBox(height: 10),
@@ -1680,15 +1741,26 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
             padding: const EdgeInsets.symmetric(vertical: 28),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: _PDColors.card,
+              color: DunesColors.resolve(
+                context,
+                _PDColors.card,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _PDColors.line2, width: 0.6),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  _PDColors.line2,
+                  role: DunesColorRole.border,
+                ),
+                width: 0.6,
+              ),
             ),
-            child: const SizedBox(
+            child: SizedBox(
               width: 24,
               height: 24,
               child: CircularProgressIndicator(
-                color: _PDColors.coral,
+                color: DunesColors.resolve(context, _PDColors.coral),
                 strokeWidth: 2,
               ),
             ),
@@ -1705,10 +1777,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
           if (field.label.trim().isNotEmpty) ...[
             Text(
               field.label.trim(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
-                color: _PDColors.ink,
+                color: DunesColors.resolve(context, _PDColors.ink),
               ),
             ),
             const SizedBox(height: 8),
@@ -1729,16 +1801,19 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
             children: [
               Text(
                 field.label.trim(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
-                  color: _PDColors.ink,
+                  color: DunesColors.resolve(context, _PDColors.ink),
                 ),
               ),
               if (field.required)
-                const Text(
+                Text(
                   ' *',
-                  style: TextStyle(fontSize: 11.5, color: _PDColors.coral),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: DunesColors.resolve(context, _PDColors.coral),
+                  ),
                 ),
             ],
           ),
@@ -1747,9 +1822,9 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
         if (placeholder.isNotEmpty) ...[
           Text(
             placeholder,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: _PDColors.mute,
+              color: DunesColors.resolve(context, _PDColors.mute),
               height: 1.6,
             ),
           ),
@@ -1764,7 +1839,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
             borderRadius: BorderRadius.circular(12),
             child: CustomPaint(
               painter: _DashedBorderPainter(
-                color: _PDColors.ink.withAlpha(78),
+                color: DunesColors.resolve(
+                  context,
+                  _PDColors.ink,
+                ).withAlpha(78),
                 strokeWidth: 1.4,
                 radius: 12,
                 dashLen: 6,
@@ -1772,14 +1850,21 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
               ),
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 28,
+                  horizontal: 20,
+                ),
                 child: Column(
                   children: [
                     Container(
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: _PDColors.ink.withAlpha(14),
+                        color: DunesColors.resolve(
+                          context,
+                          _PDColors.ink,
+                          role: DunesColorRole.surface,
+                        ).withAlpha(14),
                         borderRadius: BorderRadius.circular(24),
                       ),
                       child: Icon(
@@ -1787,16 +1872,16 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                             ? Icons.hourglass_top_outlined
                             : Icons.cloud_upload_outlined,
                         size: 26,
-                        color: _PDColors.ink,
+                        color: DunesColors.resolve(context, _PDColors.ink),
                       ),
                     ),
                     if (acceptHint.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       Text(
                         acceptHint,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
-                          color: _PDColors.mute,
+                          color: DunesColors.resolve(context, _PDColors.mute),
                           letterSpacing: 0.3,
                           fontFamily: 'monospace',
                         ),
@@ -1813,16 +1898,27 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
           Container(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
             decoration: BoxDecoration(
-              color: _PDColors.coral.withAlpha(13),
-              border: const Border(
-                left: BorderSide(color: _PDColors.coral, width: 1.5),
+              color: DunesColors.resolve(
+                context,
+                _PDColors.coral,
+                role: DunesColorRole.surface,
+              ).withAlpha(13),
+              border: Border(
+                left: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    _PDColors.coral,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 1.5,
+                ),
               ),
             ),
             child: Text(
               helpText,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10,
-                color: _PDColors.mute,
+                color: DunesColors.resolve(context, _PDColors.mute),
                 height: 1.6,
                 letterSpacing: 0.2,
               ),
@@ -1868,9 +1964,20 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
-        color: _PDColors.card,
+        color: DunesColors.resolve(
+          context,
+          _PDColors.card,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _PDColors.line2, width: 0.6),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _PDColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.6,
+        ),
       ),
       child: Row(
         children: [
@@ -1882,19 +1989,19 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
               children: [
                 Text(
                   p.fileName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w500,
-                    color: _PDColors.ink,
+                    color: DunesColors.resolve(context, _PDColors.ink),
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '${p.fileSize} · ${p.sheetCount} sheet · 刚刚',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 9,
-                    color: _PDColors.mute,
+                    color: DunesColors.resolve(context, _PDColors.mute),
                     fontFamily: 'monospace',
                   ),
                 ),
@@ -1909,14 +2016,21 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  border: Border.all(color: _PDColors.line, width: 0.6),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      _PDColors.line,
+                      role: DunesColorRole.border,
+                    ),
+                    width: 0.6,
+                  ),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text(
+                child: Text(
                   '重新',
                   style: TextStyle(
                     fontSize: 9,
-                    color: _PDColors.mute,
+                    color: DunesColors.resolve(context, _PDColors.mute),
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.4,
                     fontFamily: 'monospace',
@@ -1932,7 +2046,11 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
 
   Widget _buildExcelPreviewButton(_ParsedProposal p) {
     return Material(
-      color: _PDColors.card,
+      color: DunesColors.resolve(
+        context,
+        _PDColors.card,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -1941,7 +2059,14 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _PDColors.line2, width: 0.6),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                _PDColors.line2,
+                role: DunesColorRole.border,
+              ),
+              width: 0.6,
+            ),
           ),
           child: Row(
             children: [
@@ -1949,17 +2074,21 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: _PDColors.coral.withAlpha(18),
+                  color: DunesColors.resolve(
+                    context,
+                    _PDColors.coral,
+                    role: DunesColorRole.surface,
+                  ).withAlpha(18),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.table_chart_outlined,
                   size: 17,
-                  color: _PDColors.coral,
+                  color: DunesColors.resolve(context, _PDColors.coral),
                 ),
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1967,7 +2096,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                       'Excel 原文预览',
                       style: TextStyle(
                         fontSize: 12,
-                        color: _PDColors.ink,
+                        color: DunesColors.resolve(context, _PDColors.ink),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1976,17 +2105,17 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                       '打开完整工作簿 · 保留表格、图片与布局',
                       style: TextStyle(
                         fontSize: 9,
-                        color: _PDColors.mute,
+                        color: DunesColors.resolve(context, _PDColors.mute),
                         fontFamily: 'monospace',
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 size: 18,
-                color: _PDColors.mute2,
+                color: DunesColors.resolve(context, _PDColors.mute2),
               ),
             ],
           ),
@@ -2024,18 +2153,33 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     }
     if (rows.isEmpty) {
       rows.add(
-        const Text(
+        Text(
           '未配置识别摘要字段（recognitionConfig.summaryFields）',
-          style: TextStyle(fontSize: 11, color: _PDColors.mute, height: 1.5),
+          style: TextStyle(
+            fontSize: 11,
+            color: DunesColors.resolve(context, _PDColors.mute),
+            height: 1.5,
+          ),
         ),
       );
     }
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: _PDColors.card,
+        color: DunesColors.resolve(
+          context,
+          _PDColors.card,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _PDColors.line2, width: 0.6),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _PDColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.6,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2076,10 +2220,24 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: _PDColors.card,
+        color: DunesColors.resolve(
+          context,
+          _PDColors.card,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: isFinance ? _PDColors.coral.withAlpha(90) : _PDColors.line2,
+          color: isFinance
+              ? DunesColors.resolve(
+                  context,
+                  _PDColors.coral,
+                  role: DunesColorRole.border,
+                ).withAlpha(90)
+              : DunesColors.resolve(
+                  context,
+                  _PDColors.line2,
+                  role: DunesColorRole.border,
+                ),
           width: 0.6,
         ),
       ),
@@ -2089,7 +2247,11 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
         children: [
           Material(
             color: isFinance
-                ? _PDColors.coral.withAlpha(13)
+                ? DunesColors.resolve(
+                    context,
+                    _PDColors.coral,
+                    role: DunesColorRole.surface,
+                  ).withAlpha(13)
                 : Colors.transparent,
             child: InkWell(
               onTap: () => _toggleSection(s.id),
@@ -2097,8 +2259,15 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                 decoration: BoxDecoration(
                   border: isFinance
-                      ? const Border(
-                          left: BorderSide(color: _PDColors.coral, width: 2),
+                      ? Border(
+                          left: BorderSide(
+                            color: DunesColors.resolve(
+                              context,
+                              _PDColors.coral,
+                              role: DunesColorRole.border,
+                            ),
+                            width: 2,
+                          ),
                         )
                       : null,
                 ),
@@ -2113,8 +2282,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                             fontFamily: 'monospace',
                             fontSize: 9,
                             color: isFinance
-                                ? _PDColors.coral
-                                : _PDColors.mute2,
+                                ? DunesColors.resolve(context, _PDColors.coral)
+                                : DunesColors.resolve(context, _PDColors.mute2),
                             letterSpacing: 0.6,
                             fontWeight: FontWeight.w700,
                           ),
@@ -2124,7 +2293,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                           s.title,
                           style: TextStyle(
                             fontSize: 12,
-                            color: _PDColors.ink,
+                            color: DunesColors.resolve(context, _PDColors.ink),
                             fontWeight: isFinance
                                 ? FontWeight.w700
                                 : FontWeight.w600,
@@ -2138,15 +2307,22 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                               vertical: 1,
                             ),
                             decoration: BoxDecoration(
-                              color: _PDColors.coral.withAlpha(38),
+                              color: DunesColors.resolve(
+                                context,
+                                _PDColors.coral,
+                                role: DunesColorRole.surface,
+                              ).withAlpha(38),
                               borderRadius: BorderRadius.circular(2),
                             ),
-                            child: const Text(
+                            child: Text(
                               '灯塔基线',
                               style: TextStyle(
                                 fontFamily: 'monospace',
                                 fontSize: 8,
-                                color: _PDColors.coral,
+                                color: DunesColors.resolve(
+                                  context,
+                                  _PDColors.coral,
+                                ),
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.4,
                               ),
@@ -2161,8 +2337,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                             Icons.keyboard_arrow_down_rounded,
                             size: 18,
                             color: isFinance
-                                ? _PDColors.coral
-                                : _PDColors.mute2,
+                                ? DunesColors.resolve(context, _PDColors.coral)
+                                : DunesColors.resolve(context, _PDColors.mute2),
                           ),
                         ),
                       ],
@@ -2171,10 +2347,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                       const SizedBox(height: 4),
                       Text(
                         s.preview,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 10,
-                          color: _PDColors.mute,
+                          color: DunesColors.resolve(context, _PDColors.mute),
                           height: 1.5,
                           letterSpacing: 0.2,
                         ),
@@ -2219,7 +2395,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: _PDColors.mute),
+          style: TextStyle(
+            fontSize: 11,
+            color: DunesColors.resolve(context, _PDColors.mute),
+          ),
         ),
         const Spacer(),
         if (child != null)
@@ -2229,19 +2408,19 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
         else if (valueMono != null)
           Text(
             valueMono,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'monospace',
               fontSize: 11,
-              color: _PDColors.ink,
+              color: DunesColors.resolve(context, _PDColors.ink),
               fontWeight: FontWeight.w600,
             ),
           )
         else
           Text(
             valueText ?? '—',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
-              color: _PDColors.ink,
+              color: DunesColors.resolve(context, _PDColors.ink),
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -2257,9 +2436,9 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
           width: 78,
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10.5,
-              color: _PDColors.mute,
+              color: DunesColors.resolve(context, _PDColors.mute),
               letterSpacing: 0.1,
             ),
           ),
@@ -2267,9 +2446,9 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10.5,
-              color: _PDColors.ink,
+              color: DunesColors.resolve(context, _PDColors.ink),
               height: 1.5,
             ),
           ),
@@ -2282,15 +2461,19 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
       decoration: BoxDecoration(
-        color: _PDColors.coral.withAlpha(31),
+        color: DunesColors.resolve(
+          context,
+          _PDColors.coral,
+          role: DunesColorRole.surface,
+        ).withAlpha(31),
         borderRadius: BorderRadius.circular(3),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'monospace',
           fontSize: 9.5,
-          color: _PDColors.coral,
+          color: DunesColors.resolve(context, _PDColors.coral),
           fontWeight: FontWeight.w600,
           letterSpacing: 0.4,
         ),
@@ -2302,14 +2485,18 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
-        color: _PDColors.ink.withAlpha(14),
+        color: DunesColors.resolve(
+          context,
+          _PDColors.ink,
+          role: DunesColorRole.surface,
+        ).withAlpha(14),
         borderRadius: BorderRadius.circular(3),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 10.5,
-          color: _PDColors.ink,
+          color: DunesColors.resolve(context, _PDColors.ink),
           fontWeight: FontWeight.w500,
         ),
       ),
@@ -2337,12 +2524,30 @@ class _ImportTemplateChip extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
           decoration: BoxDecoration(
-            color: enabled ? _PDColors.card : _PDColors.cardAlt,
+            color: enabled
+                ? DunesColors.resolve(
+                    context,
+                    _PDColors.card,
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    _PDColors.cardAlt,
+                    role: DunesColorRole.surface,
+                  ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: enabled
-                  ? _PDColors.ink.withAlpha(40)
-                  : _PDColors.line2,
+                  ? DunesColors.resolve(
+                      context,
+                      _PDColors.ink,
+                      role: DunesColorRole.border,
+                    ).withAlpha(40)
+                  : DunesColors.resolve(
+                      context,
+                      _PDColors.line2,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Row(
@@ -2353,7 +2558,9 @@ class _ImportTemplateChip extends StatelessWidget {
                     ? Icons.download_outlined
                     : Icons.hourglass_empty_outlined,
                 size: 15,
-                color: enabled ? _PDColors.coral : _PDColors.mute2,
+                color: enabled
+                    ? DunesColors.resolve(context, _PDColors.coral)
+                    : DunesColors.resolve(context, _PDColors.mute2),
               ),
               const SizedBox(width: 6),
               Column(
@@ -2364,14 +2571,18 @@ class _ImportTemplateChip extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
-                      color: enabled ? _PDColors.ink : _PDColors.mute,
+                      color: enabled
+                          ? DunesColors.resolve(context, _PDColors.ink)
+                          : DunesColors.resolve(context, _PDColors.mute),
                     ),
                   ),
                   Text(
                     subtitle,
                     style: TextStyle(
                       fontSize: 9.5,
-                      color: enabled ? _PDColors.mute : _PDColors.mute2,
+                      color: enabled
+                          ? DunesColors.resolve(context, _PDColors.mute)
+                          : DunesColors.resolve(context, _PDColors.mute2),
                     ),
                   ),
                 ],

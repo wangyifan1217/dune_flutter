@@ -259,7 +259,11 @@ class _NativeWeeklySummaryPageState extends State<NativeWeeklySummaryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF2F2F7),
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -277,14 +281,24 @@ class _NativeWeeklySummaryPageState extends State<NativeWeeklySummaryPage> {
                   ? Center(
                       child: Text(
                         _error!,
-                        style: const TextStyle(color: DunesColors.text2),
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                        ),
                       ),
                     )
                   : _messages.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         '周五下午 6 点会送达本周小结',
-                        style: TextStyle(color: DunesColors.text3),
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
                       ),
                     )
                   : Stack(
@@ -293,8 +307,7 @@ class _NativeWeeklySummaryPageState extends State<NativeWeeklySummaryPage> {
                           controller: _scroll,
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-                          itemCount:
-                              _messages.length + (_loadingOlder ? 1 : 0),
+                          itemCount: _messages.length + (_loadingOlder ? 1 : 0),
                           itemBuilder: (context, index) {
                             if (_loadingOlder && index == 0) {
                               return const Padding(
@@ -327,9 +340,12 @@ class _NativeWeeklySummaryPageState extends State<NativeWeeklySummaryPage> {
                                       padding: const EdgeInsets.only(bottom: 8),
                                       child: Text(
                                         time,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 11,
-                                          color: DunesColors.text3,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.text3,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -343,8 +359,11 @@ class _NativeWeeklySummaryPageState extends State<NativeWeeklySummaryPage> {
                                   else
                                     Text(
                                       m.bodyText,
-                                      style: const TextStyle(
-                                        color: DunesColors.text2,
+                                      style: TextStyle(
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text2,
+                                        ),
                                       ),
                                     ),
                                 ],
@@ -386,10 +405,7 @@ Future<void> showWeeklySummaryDetailSheet({
 }
 
 class _WeeklySummaryDetailSheet extends StatefulWidget {
-  const _WeeklySummaryDetailSheet({
-    required this.session,
-    required this.data,
-  });
+  const _WeeklySummaryDetailSheet({required this.session, required this.data});
 
   final AuthSession session;
   final WeeklySummaryShare data;
@@ -417,11 +433,7 @@ class _WeeklySummaryDetailSheetState extends State<_WeeklySummaryDetailSheet> {
           ],
         );
         if (location == null) return;
-        final file = XFile.fromData(
-          bytes,
-          mimeType: 'image/png',
-          name: name,
-        );
+        final file = XFile.fromData(bytes, mimeType: 'image/png', name: name);
         await file.saveTo(location.path);
       } else {
         await saveImageToGallery(bytes, name);
@@ -501,7 +513,11 @@ class _WeeklySummaryDetailSheetState extends State<_WeeklySummaryDetailSheet> {
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         decoration: BoxDecoration(
-          color: const Color(0xFFF2F2F7),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFF2F2F7),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(22),
         ),
         child: Column(
@@ -512,10 +528,7 @@ class _WeeklySummaryDetailSheetState extends State<_WeeklySummaryDetailSheet> {
                 const Expanded(
                   child: Text(
                     '一周小结',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                 ),
                 IconButton(

@@ -247,11 +247,7 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
             ),
           ),
           if (notes[i].isNotEmpty)
-            _noteRow(
-              notes: notes[i],
-              height: noteH[i],
-              width: dataW,
-            ),
+            _noteRow(notes: notes[i], height: noteH[i], width: dataW),
         ],
       ],
     );
@@ -305,10 +301,12 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
               includeBody: true,
             )
           : null,
-      trailingHeader:
-          widget.showPrevious ? auditLane(header: true, body: false) : null,
-      trailingBody:
-          widget.showPrevious ? auditLane(header: false, body: true) : null,
+      trailingHeader: widget.showPrevious
+          ? auditLane(header: true, body: false)
+          : null,
+      trailingBody: widget.showPrevious
+          ? auditLane(header: false, body: true)
+          : null,
       dataHeader: dataHeader,
       dataBody: dataBody,
     );
@@ -321,7 +319,8 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
               style: DunesTypography.sans(
                 fontSize: compact ? 12 : 13,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
           )
@@ -331,26 +330,36 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
       builder: (context, constraints) {
         final child = DecoratedBox(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: DunesColors.borderSoft),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: title == null
                 ? pinned
                 : constraints.hasBoundedHeight
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          title,
-                          Expanded(child: pinned),
-                        ],
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [title, pinned],
-                      ),
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      title,
+                      Expanded(child: pinned),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [title, pinned],
+                  ),
           ),
         );
         if (constraints.hasBoundedHeight) {
@@ -381,10 +390,21 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
     final someSelected = keys.any(selected.contains);
     final locked = widget.rowActionsLocked;
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         border: Border(
-          right: BorderSide(color: DunesColors.borderSoft, width: 0.5),
+          right: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
         ),
       ),
       child: SizedBox(
@@ -395,7 +415,11 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
               SizedBox(
                 height: headerH,
                 child: ColoredBox(
-                  color: const Color(0xFFF6F7F9),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF6F7F9),
+                    role: DunesColorRole.surface,
+                  ),
                   child: Row(
                     children: [
                       if (!locked && widget.showBatchSelect)
@@ -409,7 +433,10 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
                           visualDensity: VisualDensity.compact,
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,
-                          activeColor: DunesColors.brandPurple,
+                          activeColor: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                          ),
                           onChanged: widget.onToggleSelectAll == null
                               ? null
                               : (_) => widget.onToggleSelectAll!(),
@@ -422,7 +449,11 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
                           style: DunesTypography.sans(
                             fontSize: fontSize,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
+                            context: context,
                           ),
                         ),
                       ),
@@ -435,13 +466,21 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
                 SizedBox(
                   height: heights[i],
                   child: ColoredBox(
-                    color: _rowColor(i),
+                    color: DunesColors.resolve(
+                      context,
+                      _rowColor(i),
+                      role: DunesColorRole.surface,
+                    ),
                     child: _actionCell(i),
                   ),
                 ),
                 if (notes[i].isNotEmpty)
                   ColoredBox(
-                    color: notes[i].first.background,
+                    color: DunesColors.resolve(
+                      context,
+                      notes[i].first.background,
+                      role: DunesColorRole.surface,
+                    ),
                     child: SizedBox(height: noteHeights[i], width: width),
                   ),
               ],
@@ -454,16 +493,17 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
   Color _rowColor(int i) {
     final key = _keyAt(i);
     if (key.isNotEmpty && widget.selectedRowKeys.contains(key)) {
-      return const Color(0xFFF7F3FC);
+      return DunesColors.resolve(context, const Color(0xFFF7F3FC));
     }
-    if (_isSummary(i)) return const Color(0xFFF3F6F5);
+    if (_isSummary(i)) {
+      return DunesColors.resolve(context, const Color(0xFFF3F6F5));
+    }
     final decision = _decisionAt(i);
     final reviewers = _reviewersAt(i);
-    if (decision?.rejected == true ||
-        reviewers.any((item) => item.rejected)) {
-      return const Color(0xFFFBEDEC);
+    if (decision?.rejected == true || reviewers.any((item) => item.rejected)) {
+      return DunesColors.resolve(context, const Color(0xFFFBEDEC));
     }
-    return Colors.white;
+    return DunesColors.resolve(context, Colors.white);
   }
 
   int _jsonIndex(int i) => widget.rowOffset + i;
@@ -535,7 +575,7 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
       final painter = TextPainter(
         text: TextSpan(
           text: cells[c],
-          style: DunesTypography.sans(fontSize: fontSize),
+          style: DunesTypography.sans(fontSize: fontSize, context: context),
         ),
         maxLines: 4,
         textDirection: TextDirection.ltr,
@@ -554,9 +594,20 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
   }) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color,
-        border: const Border(
-          bottom: BorderSide(color: DunesColors.borderSoft, width: 0.5),
+        color: DunesColors.resolveNullable(
+          context,
+          color,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
         ),
       ),
       child: SizedBox(height: height, child: child),
@@ -577,7 +628,9 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
         (header || !alignEnd ? DunesTypography.sans : DunesTypography.mono)(
           fontSize: fontSize,
           fontWeight: header || bold ? FontWeight.w600 : FontWeight.w400,
-          color: header ? DunesColors.text2 : DunesColors.text,
+          color: header
+              ? DunesColors.resolve(context, DunesColors.text2)
+              : DunesColors.resolve(context, DunesColors.text),
         );
     return SizedBox(
       width: width,
@@ -615,7 +668,10 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
                 value: selected,
                 visualDensity: VisualDensity.compact,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                activeColor: DunesColors.brandPurple,
+                activeColor: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurple,
+                ),
                 onChanged: widget.onToggleRow == null
                     ? null
                     : (_) => widget.onToggleRow!(key),
@@ -633,10 +689,17 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: decision == null
-                          ? DunesColors.text3
+                          ? DunesColors.resolve(context, DunesColors.text3)
                           : (decision.rejected
-                                ? DunesColors.coral
-                                : DunesColors.green),
+                                ? DunesColors.resolve(
+                                    context,
+                                    DunesColors.coral,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    DunesColors.green,
+                                  )),
+                      context: context,
                     ),
                   )
                 : Wrap(
@@ -648,7 +711,10 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
                         _chip(
                           decision?.rejected == true ? '复核' : '确认',
                           active: decision?.confirmed == true,
-                          color: DunesColors.green,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.green,
+                          ),
                           onTap: widget.onConfirmRow == null
                               ? null
                               : () => widget.onConfirmRow!(key),
@@ -656,7 +722,7 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
                       _chip(
                         '反驳',
                         active: decision?.rejected == true,
-                        color: DunesColors.coral,
+                        color: DunesColors.resolve(context, DunesColors.coral),
                         onTap: widget.onRejectRow == null
                             ? null
                             : () => widget.onRejectRow!(key),
@@ -683,12 +749,20 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
           decoration: BoxDecoration(
-            color: active ? color.withValues(alpha: 0.14) : Colors.transparent,
+            color: DunesColors.resolveNullable(
+              context,
+              active ? color.withValues(alpha: 0.14) : Colors.transparent,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: active
                   ? color.withValues(alpha: 0.55)
-                  : DunesColors.borderSoft,
+                  : DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -696,7 +770,10 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
             style: DunesTypography.sans(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: active ? color : DunesColors.text2,
+              color: active
+                  ? color
+                  : DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
         ),
@@ -711,9 +788,20 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
   }) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: notes.first.background,
-        border: const Border(
-          bottom: BorderSide(color: DunesColors.borderSoft, width: 0.5),
+        color: DunesColors.resolveNullable(
+          context,
+          notes.first.background,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
         ),
       ),
       child: SizedBox(
@@ -735,13 +823,15 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           color: note.color,
+                          context: context,
                         ),
                       ),
                       TextSpan(
                         text: note.text,
                         style: DunesTypography.sans(
                           fontSize: 11,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                     ],
@@ -772,8 +862,8 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
           _RowNote(
             label: '$layer反驳',
             text: item.reason.trim(),
-            color: DunesColors.coral,
-            background: DunesColors.coralSoft,
+            color: DunesColors.resolve(context, DunesColors.coral),
+            background: DunesColors.resolve(context, DunesColors.coralSoft),
           ),
         );
       } else if (item.rejectReason.trim().isNotEmpty) {
@@ -781,8 +871,8 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
           _RowNote(
             label: '$layer驳回历史',
             text: item.rejectReason.trim(),
-            color: DunesColors.coral,
-            background: DunesColors.coralSoft,
+            color: DunesColors.resolve(context, DunesColors.coral),
+            background: DunesColors.resolve(context, DunesColors.coralSoft),
           ),
         );
       }
@@ -793,8 +883,8 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
           _RowNote(
             label: '你的反驳',
             text: mine.reason.trim(),
-            color: DunesColors.coral,
-            background: DunesColors.coralSoft,
+            color: DunesColors.resolve(context, DunesColors.coral),
+            background: DunesColors.resolve(context, DunesColors.coralSoft),
           ),
         );
       } else if (mine.rejectReason.trim().isNotEmpty) {
@@ -802,8 +892,8 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
           _RowNote(
             label: '驳回历史',
             text: mine.rejectReason.trim(),
-            color: DunesColors.coral,
-            background: DunesColors.coralSoft,
+            color: DunesColors.resolve(context, DunesColors.coral),
+            background: DunesColors.resolve(context, DunesColors.coralSoft),
           ),
         );
       }
@@ -812,8 +902,8 @@ class _ReconGfmTableBlockState extends State<_ReconGfmTableBlock> {
           _RowNote(
             label: '复核说明',
             text: mine.reason.trim(),
-            color: DunesColors.green,
-            background: DunesColors.greenSoft,
+            color: DunesColors.resolve(context, DunesColors.green),
+            background: DunesColors.resolve(context, DunesColors.greenSoft),
           ),
         );
       }

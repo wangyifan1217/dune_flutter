@@ -20,7 +20,11 @@ class NativeQianjiIterationPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -39,9 +43,19 @@ class NativeQianjiIterationPage extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: DunesColors.borderSoft),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -54,7 +68,11 @@ class NativeQianjiIterationPage extends StatelessWidget {
                                 fontSize: 22,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: -0.4,
-                                color: DunesColors.text,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text,
+                                ),
+                                context: context,
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -68,7 +86,11 @@ class NativeQianjiIterationPage extends StatelessWidget {
                                 iteration.phase,
                                 style: DunesTypography.sans(
                                   fontSize: 13,
-                                  color: DunesColors.text2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text2,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             ],
@@ -79,7 +101,11 @@ class NativeQianjiIterationPage extends StatelessWidget {
                           iteration.meta,
                           style: DunesTypography.sans(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],
@@ -93,7 +119,9 @@ class NativeQianjiIterationPage extends StatelessWidget {
                       children: [
                         QianjiInfoRow(
                           '当前阶段',
-                          iteration.phase.isEmpty ? iteration.statusLabel : iteration.phase,
+                          iteration.phase.isEmpty
+                              ? iteration.statusLabel
+                              : iteration.phase,
                           accent: true,
                         ),
                         QianjiInfoRow('负责人', iteration.owner, accent: true),
@@ -103,7 +131,11 @@ class NativeQianjiIterationPage extends StatelessWidget {
                           '迭代说明',
                           style: DunesTypography.sans(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -112,7 +144,11 @@ class NativeQianjiIterationPage extends StatelessWidget {
                           style: DunesTypography.sans(
                             fontSize: 13,
                             height: 1.45,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],
@@ -128,9 +164,11 @@ class NativeQianjiIterationPage extends StatelessWidget {
                       ),
                       child: Column(
                         children: [
-                          for (var i = 0;
-                              i < iteration.requirements.length;
-                              i++) ...[
+                          for (
+                            var i = 0;
+                            i < iteration.requirements.length;
+                            i++
+                          ) ...[
                             if (i > 0) const SizedBox(height: 8),
                             _ReqItem(iteration.requirements[i]),
                           ],
@@ -146,8 +184,9 @@ class NativeQianjiIterationPage extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 11,
                         color: iteration.active
-                            ? DunesColors.blue
-                            : DunesColors.green,
+                            ? DunesColors.resolve(context, DunesColors.blue)
+                            : DunesColors.resolve(context, DunesColors.green),
+                        context: context,
                       ),
                     ),
                     child: QianjiGanttBlock(
@@ -183,9 +222,11 @@ class NativeQianjiIterationPage extends StatelessWidget {
                       title: '关联人员变更',
                       child: Column(
                         children: [
-                          for (var i = 0;
-                              i < iteration.personChanges.length;
-                              i++) ...[
+                          for (
+                            var i = 0;
+                            i < iteration.personChanges.length;
+                            i++
+                          ) ...[
                             if (i > 0) const SizedBox(height: 8),
                             _ChangeItem(
                               version: iteration.version,
@@ -217,7 +258,11 @@ class _ReqItem extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -225,7 +270,11 @@ class _ReqItem extends StatelessWidget {
         children: [
           Text(
             req.code,
-            style: DunesTypography.mono(fontSize: 11, color: DunesColors.accent),
+            style: DunesTypography.mono(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.accent),
+              context: context,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -233,7 +282,8 @@ class _ReqItem extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           if (req.kind.isNotEmpty || req.phase.isNotEmpty) ...[
@@ -243,7 +293,11 @@ class _ReqItem extends StatelessWidget {
                 if (req.kind.isNotEmpty) req.kind,
                 if (req.phase.isNotEmpty) req.phase,
               ].join(' · '),
-              style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
+              ),
             ),
           ],
         ],
@@ -263,7 +317,11 @@ class _FileItem extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -272,10 +330,18 @@ class _FileItem extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: DunesColors.accentSoft,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.accentSoft,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(file.icon, size: 18, color: DunesColors.accentDeep),
+            child: Icon(
+              file.icon,
+              size: 18,
+              color: DunesColors.resolve(context, DunesColors.accentDeep),
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -287,7 +353,8 @@ class _FileItem extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 if (file.meta.isNotEmpty) ...[
@@ -296,7 +363,8 @@ class _FileItem extends StatelessWidget {
                     file.meta,
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ] else
@@ -304,13 +372,18 @@ class _FileItem extends StatelessWidget {
                     file.size,
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
               ],
             ),
           ),
-          Icon(Icons.download_rounded, size: 18, color: DunesColors.text3),
+          Icon(
+            Icons.download_rounded,
+            size: 18,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ],
       ),
     );
@@ -329,7 +402,11 @@ class _ChangeItem extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -340,7 +417,11 @@ class _ChangeItem extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: DunesColors.blueSoft,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.blueSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -348,7 +429,8 @@ class _ChangeItem extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.blue,
+                    color: DunesColors.resolve(context, DunesColors.blue),
+                    context: context,
                   ),
                 ),
               ),
@@ -358,7 +440,8 @@ class _ChangeItem extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
             ],
@@ -371,7 +454,8 @@ class _ChangeItem extends StatelessWidget {
                   change.from,
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
                 ),
               ),
@@ -381,7 +465,8 @@ class _ChangeItem extends StatelessWidget {
                   '→',
                   style: DunesTypography.sans(
                     fontSize: 14,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -391,7 +476,8 @@ class _ChangeItem extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.accentDeep,
+                    color: DunesColors.resolve(context, DunesColors.accentDeep),
+                    context: context,
                   ),
                 ),
               ),
@@ -400,7 +486,11 @@ class _ChangeItem extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             change.time,
-            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ],
       ),

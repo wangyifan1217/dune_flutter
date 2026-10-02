@@ -8,6 +8,7 @@ import '../shell/dunes_toast.dart';
 import 'task_api.dart';
 import 'task_chat_share.dart';
 import 'task_models.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 Future<void> forwardTaskToConversation({
   required BuildContext context,
@@ -245,9 +246,13 @@ class _TaskForwardLoadingDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Dialog(
-    backgroundColor: Colors.white,
+    backgroundColor: DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    ),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-    child: const Padding(
+    child: Padding(
       padding: EdgeInsets.symmetric(horizontal: 24, vertical: 22),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -257,7 +262,7 @@ class _TaskForwardLoadingDialog extends StatelessWidget {
             height: 22,
             child: CircularProgressIndicator(
               strokeWidth: 2.5,
-              color: Color(0xFF7054D8),
+              color: DunesColors.resolve(context, Color(0xFF7054D8)),
             ),
           ),
           SizedBox(width: 14),

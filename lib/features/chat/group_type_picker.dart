@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// 建群类型。创建后群主可在群资料里转换。
 enum NewGroupType {
@@ -48,10 +49,26 @@ class _CreateGroupTypeDialogState extends State<_CreateGroupTypeDialog> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected ? _accent : const Color(0xFFE3E5EA),
+            color: selected
+                ? _accent
+                : DunesColors.resolve(
+                    context,
+                    const Color(0xFFE3E5EA),
+                    role: DunesColorRole.border,
+                  ),
             width: selected ? 1.5 : 1,
           ),
-          color: selected ? const Color(0xFFF4F0FD) : Colors.white,
+          color: selected
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFFF4F0FD),
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -59,7 +76,9 @@ class _CreateGroupTypeDialogState extends State<_CreateGroupTypeDialog> {
             Icon(
               selected ? Icons.radio_button_checked : Icons.radio_button_off,
               size: 20,
-              color: selected ? _accent : const Color(0xFFB0B4BD),
+              color: selected
+                  ? _accent
+                  : DunesColors.resolve(context, const Color(0xFFB0B4BD)),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -68,19 +87,25 @@ class _CreateGroupTypeDialogState extends State<_CreateGroupTypeDialog> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF1F2329),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF1F2329),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     desc,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       height: 1.35,
-                      color: Color(0xFF6B7078),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF6B7078),
+                      ),
                     ),
                   ),
                 ],
@@ -102,9 +127,12 @@ class _CreateGroupTypeDialogState extends State<_CreateGroupTypeDialog> {
         children: [
           Text(widget.membersText),
           const SizedBox(height: 14),
-          const Text(
+          Text(
             '群类型（创建后群主可转换）',
-            style: TextStyle(fontSize: 13, color: Color(0xFF6B7078)),
+            style: TextStyle(
+              fontSize: 13,
+              color: DunesColors.resolveNullable(context, Color(0xFF6B7078)),
+            ),
           ),
           const SizedBox(height: 8),
           _option(NewGroupType.normal, '普通群', '日常沟通，与现在的群聊一样。'),

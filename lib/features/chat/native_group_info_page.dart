@@ -48,7 +48,7 @@ class NativeGroupInfoPage extends StatefulWidget {
   final VoidCallback? onOpenApproval;
   final ValueChanged<int>? onExitedGroup;
   final void Function({required int conversationId, bool? muted, bool? pinned})?
-      onChatSettingsChanged;
+  onChatSettingsChanged;
   final ValueChanged<NativeGroupInfo>? onGroupTypeChanged;
 
   @override
@@ -82,7 +82,10 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       final info = await _service.fetchGroupInfo(convId);
       Map<String, dynamic>? linked;
       if (info.hasLinkedApproval) {
-        linked = await _service.fetchApprovalTrail(info.businessType!, info.businessId!);
+        linked = await _service.fetchApprovalTrail(
+          info.businessType!,
+          info.businessId!,
+        );
       }
       if (!mounted) return;
       setState(() {
@@ -112,22 +115,24 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     try {
       await _service.patchMySettings(info.id, muted: nextMuted);
       if (!mounted) return;
-      setState(() => _info = NativeGroupInfo(
-            id: info.id,
-            kind: info.kind,
-            title: info.title,
-            members: info.members,
-            muted: nextMuted,
-            pinned: info.pinned,
-            isOwner: info.isOwner,
-            canLeave: info.canLeave,
-            canMute: info.canMute,
-            replySla: info.replySla,
-            dissolved: info.dissolved,
-            createdAt: info.createdAt,
-            businessType: info.businessType,
-            businessId: info.businessId,
-          ));
+      setState(
+        () => _info = NativeGroupInfo(
+          id: info.id,
+          kind: info.kind,
+          title: info.title,
+          members: info.members,
+          muted: nextMuted,
+          pinned: info.pinned,
+          isOwner: info.isOwner,
+          canLeave: info.canLeave,
+          canMute: info.canMute,
+          replySla: info.replySla,
+          dissolved: info.dissolved,
+          createdAt: info.createdAt,
+          businessType: info.businessType,
+          businessId: info.businessId,
+        ),
+      );
       widget.onChatSettingsChanged?.call(
         conversationId: info.id,
         muted: nextMuted,
@@ -146,22 +151,24 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     try {
       await _service.patchMySettings(info.id, pinned: nextPinned);
       if (!mounted) return;
-      setState(() => _info = NativeGroupInfo(
-            id: info.id,
-            kind: info.kind,
-            title: info.title,
-            members: info.members,
-            muted: info.muted,
-            pinned: nextPinned,
-            isOwner: info.isOwner,
-            canLeave: info.canLeave,
-            canMute: info.canMute,
-            replySla: info.replySla,
-            dissolved: info.dissolved,
-            createdAt: info.createdAt,
-            businessType: info.businessType,
-            businessId: info.businessId,
-          ));
+      setState(
+        () => _info = NativeGroupInfo(
+          id: info.id,
+          kind: info.kind,
+          title: info.title,
+          members: info.members,
+          muted: info.muted,
+          pinned: nextPinned,
+          isOwner: info.isOwner,
+          canLeave: info.canLeave,
+          canMute: info.canMute,
+          replySla: info.replySla,
+          dissolved: info.dissolved,
+          createdAt: info.createdAt,
+          businessType: info.businessType,
+          businessId: info.businessId,
+        ),
+      );
       widget.onChatSettingsChanged?.call(
         conversationId: info.id,
         muted: info.muted,
@@ -191,7 +198,10 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
           decoration: const InputDecoration(hintText: '群名称'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             child: const Text('保存'),
@@ -228,9 +238,19 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: DunesColors.brandPurpleSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.brandPurpleSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DunesColors.brandPurpleLine),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.brandPurpleLine,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -239,7 +259,8 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
             work ? '工作群' : '普通群',
             style: DunesTypography.sans(
               fontSize: 13,
-              color: const Color(0xFF6B7078),
+              color: DunesColors.resolve(context, const Color(0xFF6B7078)),
+              context: context,
             ),
           ),
           const SizedBox(width: 8),
@@ -248,13 +269,14 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
             style: DunesTypography.sans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: DunesColors.brandPurple,
+              color: DunesColors.resolve(context, DunesColors.brandPurple),
+              context: context,
             ),
           ),
-          const Icon(
+          Icon(
             Icons.chevron_right_rounded,
             size: 16,
-            color: DunesColors.brandPurple,
+            color: DunesColors.resolve(context, DunesColors.brandPurple),
           ),
         ],
       ),
@@ -263,7 +285,10 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
 
   Future<void> _confirmConvertGroupType() async {
     final info = _detail;
-    if (info == null || !info.isOwner || info.dissolved || !_canConvertGroupType(info)) {
+    if (info == null ||
+        !info.isOwner ||
+        info.dissolved ||
+        !_canConvertGroupType(info)) {
       _toast(context, '只有群主可以转换群类型');
       return;
     }
@@ -278,7 +303,10 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
               : '确定把这个工作群转为普通群？之后不再启用已读不回。转换前的聊天记录保持原样。',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('确定转换'),
@@ -314,9 +342,18 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
         title: const Text('解散群聊'),
         content: const Text('解散后群聊仍保留历史记录，但所有成员将无法再发送消息或操作群设置。确定解散？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: DunesColors.coral),
+            style: FilledButton.styleFrom(
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                DunesColors.coral,
+                role: DunesColorRole.surface,
+              ),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('解散'),
           ),
@@ -339,10 +376,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     final info = _detail;
     if (info == null) return;
     if (!info.canLeave && !info.dissolved) {
-      _toast(
-        context,
-        info.replySla ? '工作群不能主动退出，群主解散后可退出' : '系统群不可退出',
-      );
+      _toast(context, info.replySla ? '工作群不能主动退出，群主解散后可退出' : '系统群不可退出');
       return;
     }
     final dissolved = info.dissolved;
@@ -352,9 +386,18 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
         title: Text(dissolved ? '退出已解散群聊' : '退出群聊'),
         content: Text(dissolved ? '该群已解散，退出后将从你的会话列表中移除。确定退出？' : '确定退出该群聊？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: DunesColors.coral),
+            style: FilledButton.styleFrom(
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                DunesColors.coral,
+                role: DunesColorRole.surface,
+              ),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('退出'),
           ),
@@ -363,7 +406,10 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     );
     if (ok != true) return;
     try {
-      final serverRemoved = await _service.exitGroupMembership(info.id, dissolved: dissolved);
+      final serverRemoved = await _service.exitGroupMembership(
+        info.id,
+        dissolved: dissolved,
+      );
       final permanent = dissolved || !serverRemoved;
       await InboxHiddenStorage.hide(info.id, permanent: permanent);
       if (!mounted) return;
@@ -415,7 +461,9 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       _toast(context, '仅群主可移除成员');
       return;
     }
-    final candidates = info.members.where((m) => m.userId != widget.session.userId).toList();
+    final candidates = info.members
+        .where((m) => m.userId != widget.session.userId)
+        .toList();
     if (candidates.isEmpty) {
       _toast(context, '暂无可移除成员');
       return;
@@ -452,19 +500,23 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     final hint = widget.conversationHint;
     final info = _detail;
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F2),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF2F2F2),
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             ChatConvHeader(
               title: '聊天信息',
-              subtitle: info != null ? _headerSubtitle(info) : '${hint.memberCount} 成员',
+              subtitle: info != null
+                  ? _headerSubtitle(info)
+                  : '${hint.memberCount} 成员',
               onBack: widget.onBack,
             ),
-            Expanded(
-              child: groupInfoPageShell(child: _buildBody(hint)),
-            ),
+            Expanded(child: groupInfoPageShell(child: _buildBody(hint))),
           ],
         ),
       ),
@@ -473,14 +525,25 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
 
   Widget _buildBody(NativeConversation hint) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.accent));
+      return Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: DunesColors.resolve(context, DunesColors.accent),
+        ),
+      );
     }
     if (_error != null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: const TextStyle(color: DunesColors.text3, fontSize: 12)),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+                fontSize: 12,
+              ),
+            ),
             const SizedBox(height: 10),
             OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
@@ -534,7 +597,11 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
                   textAlign: TextAlign.right,
                   style: DunesTypography.sans(
                     fontSize: 15,
-                    color: const Color(0xFF888888),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF888888),
+                    ),
+                    context: context,
                   ),
                 ),
               ),
@@ -565,7 +632,8 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
               '即将上线',
               style: DunesTypography.sans(
                 fontSize: 15,
-                color: const Color(0xFF888888),
+                color: DunesColors.resolve(context, const Color(0xFF888888)),
+                context: context,
               ),
             ),
           ),
@@ -586,7 +654,8 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
               '工作群不可开启',
               style: DunesTypography.sans(
                 fontSize: 14,
-                color: const Color(0xFF888888),
+                color: DunesColors.resolve(context, const Color(0xFF888888)),
+                context: context,
               ),
             ),
           ),
@@ -601,7 +670,9 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
           icon: Icons.search,
           title: '查找聊天内容',
           trailing: const GroupInfoChevron(),
-          onTap: widget.onOpenSearch == null ? null : () => widget.onOpenSearch!(info.id),
+          onTap: widget.onOpenSearch == null
+              ? null
+              : () => widget.onOpenSearch!(info.id),
         ),
         if (showOwnerActions)
           GroupInfoDangerRow(label: '解散群聊', onTap: _confirmDissolve),
@@ -618,7 +689,8 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
               textAlign: TextAlign.center,
               style: DunesTypography.sans(
                 fontSize: 12,
-                color: const Color(0xFF888888),
+                color: DunesColors.resolve(context, const Color(0xFF888888)),
+                context: context,
               ),
             ),
           ),
@@ -673,7 +745,6 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
   }
 }
 
-
 class _MemberPickerSheet extends StatefulWidget {
   const _MemberPickerSheet({
     required this.contacts,
@@ -708,7 +779,9 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
   bool get _isRemoveMode => widget.candidates != null;
 
   bool _isEligible(NativeContact c) {
-    if (c.userId <= 0 || c.userId == widget.session.userId || c.enabled == false) {
+    if (c.userId <= 0 ||
+        c.userId == widget.session.userId ||
+        c.enabled == false) {
       return false;
     }
     final exclude = widget.excludeIds;
@@ -726,15 +799,16 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
 
   NativeContact _contactFromMember(NativeGroupMember m) {
     final enriched = _contactById[m.userId];
-    final title = _cleanJob(m.title) ??
+    final title =
+        _cleanJob(m.title) ??
         _cleanJob(enriched?.title) ??
         _cleanJob(m.roleLabel) ??
         _cleanJob(enriched?.roleLabel);
     final department = (m.department ?? '').trim().isNotEmpty
         ? m.department!.trim()
         : ((enriched?.department ?? '').trim().isNotEmpty
-            ? enriched!.department!.trim()
-            : null);
+              ? enriched!.department!.trim()
+              : null);
     return NativeContact(
       userId: m.userId,
       displayName: m.displayName,
@@ -766,8 +840,8 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
         .whereType<NativeDepartment>()
         .toList(growable: false);
     if (users.isEmpty && children.isEmpty) return null;
-    final count = users.length +
-        children.fold<int>(0, (n, c) => n + c.userCount);
+    final count =
+        users.length + children.fold<int>(0, (n, c) => n + c.userCount);
     return NativeDepartment(
       id: dep.id,
       name: dep.name,
@@ -799,7 +873,9 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
       }
       if (!mounted) return;
       setState(() {
-        _rows = widget.candidates!.map(_contactFromMember).toList(growable: false);
+        _rows = widget.candidates!
+            .map(_contactFromMember)
+            .toList(growable: false);
         _loading = false;
       });
       return;
@@ -894,7 +970,11 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
           padding: const EdgeInsets.all(24),
           child: Text(
             _isRemoveMode ? '暂无可移除成员' : '无匹配联系人',
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         );
       }
@@ -903,18 +983,26 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
         children: [
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
               children: [
                 for (var i = 0; i < _rows.length; i++) ...[
                   if (i > 0)
-                    const Divider(
+                    Divider(
                       height: 1,
                       thickness: 1,
                       indent: 66,
-                      color: Color(0xFFF0F1F3),
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFF0F1F3),
+                        role: DunesColorRole.border,
+                      ),
                     ),
                   ContactRowTile(
                     contact: _rows[i],
@@ -938,7 +1026,11 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
         padding: const EdgeInsets.all(24),
         child: Text(
           '暂无可添加的同事',
-          style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       );
     }
@@ -950,7 +1042,11 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
           Container(
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0F1F3),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF0F1F3),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
             clipBehavior: Clip.antiAlias,
@@ -974,8 +1070,12 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return Container(
       margin: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.12),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF5F6F8),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFF5F6F8),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Padding(
@@ -994,7 +1094,8 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
                         style: DunesTypography.sans(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                     ),
@@ -1008,26 +1109,44 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEDEEF1),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFEDEEF1),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.search_rounded, size: 18, color: DunesColors.text3),
+                      Icon(
+                        Icons.search_rounded,
+                        size: 18,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextField(
                           controller: _search,
-                          style: DunesTypography.sans(fontSize: 14),
+                          style: DunesTypography.sans(
+                            fontSize: 14,
+                            context: context,
+                          ),
                           decoration: InputDecoration(
                             isDense: true,
                             border: InputBorder.none,
                             hintText: '搜索姓名 / 部门',
                             hintStyle: DunesTypography.sans(
                               fontSize: 14,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -1047,10 +1166,24 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
                           ? null
                           : () => Navigator.pop(context, _selected.toList()),
                       style: FilledButton.styleFrom(
-                        backgroundColor: DunesColors.accent,
-                        disabledBackgroundColor: const Color(0xFFD8D8D8),
-                        foregroundColor: Colors.white,
-                        disabledForegroundColor: const Color(0xFF888888),
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          DunesColors.accent,
+                          role: DunesColorRole.surface,
+                        ),
+                        disabledBackgroundColor: DunesColors.resolve(
+                          context,
+                          const Color(0xFFD8D8D8),
+                          role: DunesColorRole.surface,
+                        ),
+                        foregroundColor: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                        ),
+                        disabledForegroundColor: DunesColors.resolve(
+                          context,
+                          const Color(0xFF888888),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(22),
@@ -1061,6 +1194,7 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
                         style: DunesTypography.sans(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
+                          context: context,
                         ),
                       ),
                     ),

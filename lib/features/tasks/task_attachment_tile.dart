@@ -121,16 +121,26 @@ class _TaskAttachmentTileState extends State<TaskAttachmentTile> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         children: [
           Icon(
             _isImage ? Icons.image_outlined : Icons.insert_drive_file_outlined,
             size: 18,
-            color: _themePurple,
+            color: DunesColors.resolveNullable(context, _themePurple),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -146,9 +156,9 @@ class _TaskAttachmentTileState extends State<TaskAttachmentTile> {
                 if (sizeText.isNotEmpty)
                   Text(
                     sizeText,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
               ],

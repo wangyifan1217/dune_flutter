@@ -47,6 +47,7 @@ class NativeAdministrativeNoticePage extends StatefulWidget {
   final NativeConversation? conversationHint;
   final int? initialNoticeId;
   final bool embedded;
+
   /// PC 双栏保活时，切走会话会把页面藏进 Offstage；回到本页时需要补拉列表。
   final bool isActive;
   final bool showBackButton;
@@ -257,9 +258,7 @@ class _NativeAdministrativeNoticePageState
       final rows = await _service.fetchNotices(inboxOnly: !widget.embedded);
       if (!mounted) return;
       setState(() {
-        _items = rows
-            .map((row) => _retainKnownRecipients(row))
-            .toList();
+        _items = rows.map((row) => _retainKnownRecipients(row)).toList();
         _loading = false;
         _error = null;
       });
@@ -304,7 +303,8 @@ class _NativeAdministrativeNoticePageState
   Future<void> _refreshSelectedDetail(int noticeId) async {
     if (noticeId <= 0) return;
     final needPlaceholder =
-        widget.embedded && (_selected?.id != noticeId || _selected!.recipients.isEmpty);
+        widget.embedded &&
+        (_selected?.id != noticeId || _selected!.recipients.isEmpty);
     if (needPlaceholder && mounted) {
       setState(() {
         _receiptsLoading = true;
@@ -317,7 +317,10 @@ class _NativeAdministrativeNoticePageState
       setState(() {
         _selected = detail;
         _items = _items
-            .map((item) => item.id == detail.id ? _mergeListItem(item, detail) : item)
+            .map(
+              (item) =>
+                  item.id == detail.id ? _mergeListItem(item, detail) : item,
+            )
             .toList();
         _receiptsLoading = false;
         _receiptsError = null;
@@ -339,10 +342,13 @@ class _NativeAdministrativeNoticePageState
         break;
       }
     }
-    if (fresh.id == _selected?.id && (_selected?.recipients.isNotEmpty ?? false)) {
+    if (fresh.id == _selected?.id &&
+        (_selected?.recipients.isNotEmpty ?? false)) {
       prev = _selected;
     }
-    if (prev == null || prev.recipients.isEmpty || fresh.recipients.isNotEmpty) {
+    if (prev == null ||
+        prev.recipients.isEmpty ||
+        fresh.recipients.isNotEmpty) {
       return fresh;
     }
     return AdministrativeNotice(
@@ -434,8 +440,14 @@ class _NativeAdministrativeNoticePageState
           return Align(
             alignment: Alignment.bottomCenter,
             child: Material(
-              color: const Color(0xFFF5F6F8),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF5F6F8),
+                role: DunesColorRole.surface,
+              ),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(18),
+              ),
               clipBehavior: Clip.antiAlias,
               child: SizedBox(
                 height: sheetHeight,
@@ -447,7 +459,11 @@ class _NativeAdministrativeNoticePageState
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFD8DCE2),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFD8DCE2),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
@@ -466,8 +482,7 @@ class _NativeAdministrativeNoticePageState
         },
       );
     } else {
-      picked = await Navigator.of(context)
-          .push<(Set<int>, Map<int, String>)>(
+      picked = await Navigator.of(context).push<(Set<int>, Map<int, String>)>(
         MaterialPageRoute(
           builder: (ctx) => _recipientPickerPage(
             onCancel: () => Navigator.pop(ctx),
@@ -613,7 +628,11 @@ class _NativeAdministrativeNoticePageState
   @override
   Widget build(BuildContext context) {
     final content = ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: IndexedStack(
         index: _page.index,
         children: [_buildList(), _buildDetail(), _buildComposer()],
@@ -625,11 +644,13 @@ class _NativeAdministrativeNoticePageState
     final detailTitle = (_selected?.title ?? '').trim();
     // IM 会话入口不展示「+」发布；发布入口只在工作台 embedded。
     final showComposeAction =
-        widget.embedded &&
-        _page == _AdministrativeNoticePage.list &&
-        _access;
+        widget.embedded && _page == _AdministrativeNoticePage.list && _access;
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -648,18 +669,24 @@ class _NativeAdministrativeNoticePageState
               onBack: onDetail || onCompose
                   ? () => _showPage(_AdministrativeNoticePage.list)
                   : (widget.onBack ?? () => Navigator.maybePop(context)),
-              showBackButton:
-                  onDetail || onCompose || widget.showBackButton,
+              showBackButton: onDetail || onCompose || widget.showBackButton,
               leadingAvatar: Container(
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEDE7FF),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFEDE7FF),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.campaign_outlined,
-                  color: Color(0xFF7652B8),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF7652B8),
+                  ),
                 ),
               ),
               actions: [
@@ -716,7 +743,13 @@ class _NativeAdministrativeNoticePageState
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFE6E8EC)),
+        side: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            Color(0xFFE6E8EC),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -724,19 +757,27 @@ class _NativeAdministrativeNoticePageState
         child: Padding(
           padding: EdgeInsets.fromLTRB(16, 14, showProgress ? 14 : 12, 14),
           child: Row(
-            crossAxisAlignment:
-                showProgress ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+            crossAxisAlignment: showProgress
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
             children: [
               Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEDE7FF),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFEDE7FF),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(13),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.campaign_outlined,
-                  color: Color(0xFF7652B8),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF7652B8),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -748,9 +789,9 @@ class _NativeAdministrativeNoticePageState
                       notice.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                     const SizedBox(height: 5),
@@ -758,16 +799,16 @@ class _NativeAdministrativeNoticePageState
                       notice.body.isEmpty ? '暂无正文' : notice.body,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: DunesColors.text3,
+                      style: TextStyle(
+                        color: DunesColors.resolve(context, DunesColors.text3),
                         fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 5),
                     Text(
                       '${notice.senderName} · ${_formatDate(notice.createdAt)}',
-                      style: const TextStyle(
-                        color: DunesColors.text3,
+                      style: TextStyle(
+                        color: DunesColors.resolve(context, DunesColors.text3),
                         fontSize: 11,
                       ),
                     ),
@@ -792,24 +833,34 @@ class _NativeAdministrativeNoticePageState
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF4E5),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFFFF4E5),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Text(
+                    child: Text(
                       '待确认',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFFB07A2B),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFFB07A2B),
+                        ),
                         height: 1.15,
                       ),
                     ),
                   )
                 else
-                  const Text(
+                  Text(
                     '已确认',
                     style: TextStyle(
-                      color: Color(0xFF3D7A8C),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF3D7A8C),
+                      ),
                       fontSize: 12,
                     ),
                   ),
@@ -831,7 +882,11 @@ class _NativeAdministrativeNoticePageState
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF7F8FA),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -842,8 +897,8 @@ class _NativeAdministrativeNoticePageState
               fontSize: 13,
               fontWeight: FontWeight.w700,
               color: allConfirmed
-                  ? const Color(0xFF3D7A8C)
-                  : DunesColors.text,
+                  ? DunesColors.resolve(context, const Color(0xFF3D7A8C))
+                  : DunesColors.resolve(context, DunesColors.text),
               height: 1.1,
             ),
           ),
@@ -853,8 +908,8 @@ class _NativeAdministrativeNoticePageState
             style: TextStyle(
               fontSize: 11,
               color: allConfirmed
-                  ? const Color(0xFF3D7A8C)
-                  : DunesColors.text2,
+                  ? DunesColors.resolve(context, const Color(0xFF3D7A8C))
+                  : DunesColors.resolve(context, DunesColors.text2),
               height: 1.1,
             ),
           ),
@@ -862,19 +917,19 @@ class _NativeAdministrativeNoticePageState
           if (pendingCount > 0)
             Text(
               '待确认 $pendingCount',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFFB07A2B),
+                color: DunesColors.resolveNullable(context, Color(0xFFB07A2B)),
                 height: 1.1,
               ),
             )
           else
             Text(
               '共 $total 人',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
                 height: 1.1,
               ),
             ),
@@ -901,9 +956,19 @@ class _NativeAdministrativeNoticePageState
         Container(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -924,18 +989,24 @@ class _NativeAdministrativeNoticePageState
                       children: [
                         Text(
                           notice.title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
                             height: 1.3,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           '$senderName · ${_formatDate(notice.createdAt)}',
-                          style: const TextStyle(
-                            color: DunesColors.text3,
+                          style: TextStyle(
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                             fontSize: 12,
                           ),
                         ),
@@ -947,20 +1018,20 @@ class _NativeAdministrativeNoticePageState
               const SizedBox(height: 14),
               Text(
                 notice.body.isEmpty ? '暂无正文' : notice.body,
-                style: const TextStyle(
+                style: TextStyle(
                   height: 1.65,
                   fontSize: 15,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
               if (notice.attachments.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   '附件',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -985,17 +1056,25 @@ class _NativeAdministrativeNoticePageState
                 ),
               ] else if (!isSender) ...[
                 const SizedBox(height: 16),
-                const Row(
+                Row(
                   children: [
                     Icon(
                       Icons.check_circle_rounded,
-                      color: Color(0xFF3D7A8C),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF3D7A8C),
+                      ),
                       size: 18,
                     ),
                     SizedBox(width: 6),
                     Text(
                       '你已确认',
-                      style: TextStyle(color: Color(0xFF3D7A8C)),
+                      style: TextStyle(
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF3D7A8C),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -1003,10 +1082,7 @@ class _NativeAdministrativeNoticePageState
             ],
           ),
         ),
-        if (showProgress) ...[
-          const SizedBox(height: 12),
-          _receiptCard(notice),
-        ],
+        if (showProgress) ...[const SizedBox(height: 12), _receiptCard(notice)],
       ],
     );
   }
@@ -1022,23 +1098,33 @@ class _NativeAdministrativeNoticePageState
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '确认进度 ${notice.acknowledgedCount}/${notice.recipientCount}',
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           if (_receiptsLoading && !hasNames) ...[
             const SizedBox(height: 16),
-            const Row(
+            Row(
               children: [
                 SizedBox(
                   width: 16,
@@ -1048,7 +1134,10 @@ class _NativeAdministrativeNoticePageState
                 SizedBox(width: 8),
                 Text(
                   '正在加载确认名单…',
-                  style: TextStyle(fontSize: 13, color: DunesColors.text3),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
               ],
             ),
@@ -1056,7 +1145,10 @@ class _NativeAdministrativeNoticePageState
             const SizedBox(height: 12),
             Text(
               '确认名单加载失败',
-              style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
             const SizedBox(height: 8),
             TextButton(
@@ -1066,14 +1158,16 @@ class _NativeAdministrativeNoticePageState
           ] else ...[
             const SizedBox(height: 12),
             _receiptSection(
-              title: '未确认 · ${hasNames ? pending.length : (notice.recipientCount - notice.acknowledgedCount).clamp(0, notice.recipientCount)}',
+              title:
+                  '未确认 · ${hasNames ? pending.length : (notice.recipientCount - notice.acknowledgedCount).clamp(0, notice.recipientCount)}',
               people: pending,
               emptyText: hasNames ? '没有待确认的人' : '暂无未确认名单',
               pending: true,
             ),
             const SizedBox(height: 14),
             _receiptSection(
-              title: '已确认 · ${hasNames ? confirmed.length : notice.acknowledgedCount}',
+              title:
+                  '已确认 · ${hasNames ? confirmed.length : notice.acknowledgedCount}',
               people: confirmed,
               emptyText: hasNames ? '还没有人确认' : '暂无已确认名单',
               pending: false,
@@ -1098,7 +1192,9 @@ class _NativeAdministrativeNoticePageState
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: pending ? const Color(0xFFB07A2B) : const Color(0xFF3D7A8C),
+            color: pending
+                ? DunesColors.resolve(context, const Color(0xFFB07A2B))
+                : DunesColors.resolve(context, const Color(0xFF3D7A8C)),
           ),
         ),
         const SizedBox(height: 6),
@@ -1107,7 +1203,10 @@ class _NativeAdministrativeNoticePageState
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
               emptyText,
-              style: const TextStyle(fontSize: 13, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           )
         else
@@ -1133,9 +1232,9 @@ class _NativeAdministrativeNoticePageState
                       recipient.displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ),
@@ -1144,8 +1243,11 @@ class _NativeAdministrativeNoticePageState
                     style: TextStyle(
                       fontSize: 12,
                       color: pending
-                          ? DunesColors.text3
-                          : const Color(0xFF3D7A8C),
+                          ? DunesColors.resolve(context, DunesColors.text3)
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFF3D7A8C),
+                            ),
                     ),
                   ),
                 ],
@@ -1176,7 +1278,11 @@ class _NativeAdministrativeNoticePageState
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: const Color(0xFFF7F8FA),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF7F8FA),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -1197,10 +1303,10 @@ class _NativeAdministrativeNoticePageState
                         attachment.fileName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -1208,9 +1314,12 @@ class _NativeAdministrativeNoticePageState
                         isImage
                             ? '图片 · ${_formatSize(attachment.sizeBytes)}'
                             : _formatSize(attachment.sizeBytes),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
@@ -1379,7 +1488,11 @@ class _NativeAdministrativeNoticePageState
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Material(
-                  color: const Color(0xFFF5F6F8),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF5F6F8),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(10),
@@ -1392,7 +1505,13 @@ class _NativeAdministrativeNoticePageState
                       ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE8EAED)),
+                        border: Border.all(
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFE8EAED),
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                       ),
                       child: Row(
                         children: [
@@ -1400,12 +1519,19 @@ class _NativeAdministrativeNoticePageState
                             width: 36,
                             height: 36,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFE4ECEB),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFE4ECEB),
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.contacts_outlined,
-                              color: _noticeAccent,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _noticeAccent,
+                              ),
                               size: 20,
                             ),
                           ),
@@ -1418,14 +1544,23 @@ class _NativeAdministrativeNoticePageState
                               style: TextStyle(
                                 fontSize: 14,
                                 color: _selectedUserIds.isEmpty
-                                    ? DunesColors.text3
-                                    : DunesColors.text,
+                                    ? DunesColors.resolve(
+                                        context,
+                                        DunesColors.text3,
+                                      )
+                                    : DunesColors.resolve(
+                                        context,
+                                        DunesColors.text,
+                                      ),
                               ),
                             ),
                           ),
                           Icon(
                             Icons.chevron_right_rounded,
-                            color: DunesColors.text3.withValues(alpha: 0.8),
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ).withValues(alpha: 0.8),
                           ),
                         ],
                       ),
@@ -1438,17 +1573,20 @@ class _NativeAdministrativeNoticePageState
                     spacing: 8,
                     runSpacing: 8,
                     children: _selectedUserIds.map((userId) {
-                      final name =
-                          _selectedUserNames[userId] ?? '用户 $userId';
+                      final name = _selectedUserNames[userId] ?? '用户 $userId';
                       return InputChip(
                         label: Text(name),
                         deleteIcon: const Icon(Icons.close, size: 16),
                         onDeleted: () => _removeRecipient(userId),
-                        backgroundColor: const Color(0xFFE4ECEB),
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          const Color(0xFFE4ECEB),
+                          role: DunesColorRole.surface,
+                        ),
                         side: BorderSide.none,
-                        labelStyle: const TextStyle(
+                        labelStyle: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
                         ),
                       );
                     }).toList(),
@@ -1482,12 +1620,12 @@ class _NativeAdministrativeNoticePageState
               ),
               onPressed: _sending ? null : _send,
               child: _sending
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                       ),
                     )
                   : const Text(
@@ -1510,9 +1648,19 @@ class _NativeAdministrativeNoticePageState
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1523,7 +1671,11 @@ class _NativeAdministrativeNoticePageState
                 width: 3,
                 height: 14,
                 decoration: BoxDecoration(
-                  color: _noticeAccent,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    _noticeAccent,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -1531,10 +1683,10 @@ class _NativeAdministrativeNoticePageState
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
               ),
@@ -1556,21 +1708,37 @@ class _NativeAdministrativeNoticePageState
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F6F8),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF5F6F8),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: TextField(
         controller: controller,
         minLines: minLines,
         maxLines: maxLines,
-        style: const TextStyle(fontSize: 14, color: DunesColors.text),
+        style: TextStyle(
+          fontSize: 14,
+          color: DunesColors.resolve(context, DunesColors.text),
+        ),
         decoration: InputDecoration(
           isDense: true,
           border: InputBorder.none,
           hintText: hintText,
-          hintStyle: const TextStyle(color: DunesColors.text3, fontSize: 14),
+          hintStyle: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+            fontSize: 14,
+          ),
         ),
       ),
     );
@@ -1582,12 +1750,18 @@ class _NativeAdministrativeNoticePageState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 48, color: DunesColors.text3),
+          Icon(
+            icon,
+            size: 48,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
           const SizedBox(height: 12),
           Text(
             text,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text3),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),

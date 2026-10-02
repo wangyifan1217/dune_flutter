@@ -18,7 +18,11 @@ class NativeQianjiProjectsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -33,16 +37,29 @@ class NativeQianjiProjectsPage extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: DunesColors.coralSoft,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.coralSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFF5C4B5)),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFF5C4B5),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.warning_amber_rounded,
                           size: 18,
-                          color: DunesColors.coral,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.coral,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -50,7 +67,11 @@ class NativeQianjiProjectsPage extends StatelessWidget {
                             TextSpan(
                               style: DunesTypography.sans(
                                 fontSize: 12,
-                                color: const Color(0xFF7A2E10),
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF7A2E10),
+                                ),
+                                context: context,
                               ),
                               children: const [
                                 TextSpan(
@@ -66,14 +87,20 @@ class NativeQianjiProjectsPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  _sectionHd('我负责的项目', '${QianjiProjectCatalog.owned.length} 项'),
+                  _sectionHd(
+                    '我负责的项目',
+                    '${QianjiProjectCatalog.owned.length} 项',
+                  ),
                   const SizedBox(height: 6),
                   for (final p in QianjiProjectCatalog.owned) ...[
                     _ProjectCard(project: p, onTap: () => onOpenProject(p)),
                     const SizedBox(height: 10),
                   ],
                   const SizedBox(height: 4),
-                  _sectionHd('我参与开发', '${QianjiProjectCatalog.joined.length} 项'),
+                  _sectionHd(
+                    '我参与开发',
+                    '${QianjiProjectCatalog.joined.length} 项',
+                  ),
                   const SizedBox(height: 6),
                   for (final p in QianjiProjectCatalog.joined) ...[
                     _ProjectCard(project: p, onTap: () => onOpenProject(p)),
@@ -117,7 +144,11 @@ class _Hero extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.12),
+            color: DunesColors.resolveNullable(
+              context,
+              Colors.white.withValues(alpha: 0.12),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Column(
@@ -127,7 +158,9 @@ class _Hero extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: valueColor ?? Colors.white,
+                  color:
+                      valueColor ?? DunesColors.resolve(context, Colors.white),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 4),
@@ -135,7 +168,11 @@ class _Hero extends StatelessWidget {
                 l,
                 style: DunesTypography.sans(
                   fontSize: 10,
-                  color: Colors.white.withValues(alpha: 0.8),
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                  ).withValues(alpha: 0.8),
+                  context: context,
                 ),
               ),
             ],
@@ -162,7 +199,11 @@ class _Hero extends StatelessWidget {
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.08),
+                color: DunesColors.resolveNullable(
+                  context,
+                  Colors.white.withValues(alpha: 0.08),
+                  role: DunesColorRole.surface,
+                ),
               ),
             ),
           ),
@@ -174,7 +215,8 @@ class _Hero extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 12),
@@ -184,9 +226,23 @@ class _Hero extends StatelessWidget {
                   const SizedBox(width: 6),
                   cell('12', '进行任务'),
                   const SizedBox(width: 6),
-                  cell('2', '已延期', valueColor: const Color(0xFFFFD580)),
+                  cell(
+                    '2',
+                    '已延期',
+                    valueColor: DunesColors.resolve(
+                      context,
+                      const Color(0xFFFFD580),
+                    ),
+                  ),
                   const SizedBox(width: 6),
-                  cell('8', '本周提交', valueColor: const Color(0xFF80FFD4)),
+                  cell(
+                    '8',
+                    '本周提交',
+                    valueColor: DunesColors.resolve(
+                      context,
+                      const Color(0xFF80FFD4),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -208,23 +264,27 @@ class _ProjectCard extends StatelessWidget {
     final late = project.status == QianjiProjectStatus.late;
     final done = project.status == QianjiProjectStatus.done;
     final fill = late
-        ? DunesColors.coral
+        ? DunesColors.resolve(context, DunesColors.coral)
         : done
-            ? DunesColors.green
-            : QianjiPerfTheme.purple;
+        ? DunesColors.resolve(context, DunesColors.green)
+        : DunesColors.resolve(context, QianjiPerfTheme.purple);
     final iconBg = late
-        ? DunesColors.coralSoft
+        ? DunesColors.resolve(context, DunesColors.coralSoft)
         : done
-            ? DunesColors.greenSoft
-            : QianjiPerfTheme.purpleSoft;
+        ? DunesColors.resolve(context, DunesColors.greenSoft)
+        : DunesColors.resolve(context, QianjiPerfTheme.purpleSoft);
     final border = late
-        ? const Color(0xFFF5C4B5)
+        ? DunesColors.resolve(context, const Color(0xFFF5C4B5))
         : project.id == 'voice-prd'
-            ? QianjiPerfTheme.purpleLine
-            : DunesColors.borderSoft;
+        ? DunesColors.resolve(context, QianjiPerfTheme.purpleLine)
+        : DunesColors.resolve(context, DunesColors.borderSoft);
 
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -244,10 +304,18 @@ class _ProjectCard extends StatelessWidget {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: iconBg,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        iconBg,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(11),
                     ),
-                    child: Icon(project.icon, size: 18, color: fill),
+                    child: Icon(
+                      project.icon,
+                      size: 18,
+                      color: DunesColors.resolveNullable(context, fill),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -262,7 +330,11 @@ class _ProjectCard extends StatelessWidget {
                                 style: DunesTypography.sans(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
-                                  color: DunesColors.text,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -270,15 +342,33 @@ class _ProjectCard extends StatelessWidget {
                             _chip(
                               project.statusLabel,
                               late
-                                  ? DunesColors.coralSoft
+                                  ? DunesColors.resolve(
+                                      context,
+                                      DunesColors.coralSoft,
+                                    )
                                   : done
-                                      ? DunesColors.greenSoft
-                                      : QianjiPerfTheme.purpleSoft,
+                                  ? DunesColors.resolve(
+                                      context,
+                                      DunesColors.greenSoft,
+                                    )
+                                  : DunesColors.resolve(
+                                      context,
+                                      QianjiPerfTheme.purpleSoft,
+                                    ),
                               late
-                                  ? DunesColors.coral
+                                  ? DunesColors.resolve(
+                                      context,
+                                      DunesColors.coral,
+                                    )
                                   : done
-                                      ? DunesColors.green
-                                      : QianjiPerfTheme.purple,
+                                  ? DunesColors.resolve(
+                                      context,
+                                      DunesColors.green,
+                                    )
+                                  : DunesColors.resolve(
+                                      context,
+                                      QianjiPerfTheme.purple,
+                                    ),
                             ),
                           ],
                         ),
@@ -287,7 +377,11 @@ class _ProjectCard extends StatelessWidget {
                           project.meta,
                           style: DunesTypography.sans(
                             fontSize: 11,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
                         ),
                       ],
@@ -305,7 +399,11 @@ class _ProjectCard extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: project.progress,
                         minHeight: 4,
-                        backgroundColor: DunesColors.bgSoft,
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          DunesColors.bgSoft,
+                          role: DunesColorRole.surface,
+                        ),
                         color: fill,
                       ),
                     ),
@@ -319,6 +417,7 @@ class _ProjectCard extends StatelessWidget {
                       style: DunesTypography.mono(
                         fontSize: 10,
                         color: fill,
+                        context: context,
                       ),
                     ),
                   ),
@@ -332,7 +431,8 @@ class _ProjectCard extends StatelessWidget {
                       project.taskSummary,
                       style: DunesTypography.sans(
                         fontSize: 11,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
                       ),
                     ),
                   ),
@@ -340,17 +440,22 @@ class _ProjectCard extends StatelessWidget {
                     late
                         ? Icons.warning_amber_rounded
                         : done
-                            ? Icons.check_rounded
-                            : Icons.calendar_today_outlined,
+                        ? Icons.check_rounded
+                        : Icons.calendar_today_outlined,
                     size: 12,
-                    color: late ? DunesColors.coral : DunesColors.text3,
+                    color: late
+                        ? DunesColors.resolve(context, DunesColors.coral)
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                   const SizedBox(width: 4),
                   Text(
                     project.deadline,
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: late ? DunesColors.coral : DunesColors.text3,
+                      color: late
+                          ? DunesColors.resolve(context, DunesColors.coral)
+                          : DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ],

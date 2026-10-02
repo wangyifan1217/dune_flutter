@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../auth/auth_session.dart';
 import 'work_profile_service.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 class WorkProfileChatShare {
   const WorkProfileChatShare({
@@ -98,10 +99,14 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
           width: 330,
           padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF34264D), Color(0xFF67489A), Color(0xFF8B69C5)],
+              colors: [
+                DunesColors.resolve(context, Color(0xFF34264D)),
+                DunesColors.resolve(context, Color(0xFF67489A)),
+                DunesColors.resolve(context, Color(0xFF8B69C5)),
+              ],
             ),
             borderRadius: BorderRadius.circular(20),
             boxShadow: const [
@@ -122,15 +127,19 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
                     height: 42,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: .16),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Colors.white.withValues(alpha: .16),
+                        role: DunesColorRole.surface,
+                      ),
                       shape: BoxShape.circle,
                     ),
                     child: Text(
                       widget.share.name.isEmpty
                           ? '员'
                           : widget.share.name.characters.first,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: DunesColors.resolve(context, Colors.white),
                         fontWeight: FontWeight.w800,
                         fontSize: 18,
                       ),
@@ -145,8 +154,8 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
                           widget.share.name.isEmpty
                               ? '员工画像'
                               : widget.share.name,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: DunesColors.resolve(context, Colors.white),
                             fontWeight: FontWeight.w800,
                             fontSize: 16,
                           ),
@@ -158,17 +167,23 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
                               : widget.share.departmentName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFFDCD2EF),
+                          style: TextStyle(
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFFDCD2EF),
+                            ),
                             fontSize: 11,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.verified_user_outlined,
-                    color: Color(0xFFDCD2EF),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFFDCD2EF),
+                    ),
                     size: 18,
                   ),
                 ],
@@ -176,24 +191,33 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
               const SizedBox(height: 13),
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.calendar_month_rounded,
-                    color: Color(0xFFE7DFFF),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFFE7DFFF),
+                    ),
                     size: 15,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     _formatMonth(widget.share.month),
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: DunesColors.resolve(context, Colors.white),
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const Spacer(),
-                  const Text(
+                  Text(
                     '工作画像',
-                    style: TextStyle(color: Color(0xFFDCD2EF), fontSize: 10),
+                    style: TextStyle(
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFDCD2EF),
+                      ),
+                      fontSize: 10,
+                    ),
                   ),
                 ],
               ),
@@ -201,25 +225,32 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
               Container(
                 height: 146,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: .08),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Colors.white.withValues(alpha: .08),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: snapshot.connectionState != ConnectionState.done
-                    ? const Center(
+                    ? Center(
                         child: SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white70,
+                            color: DunesColors.resolve(context, Colors.white70),
                           ),
                         ),
                       )
                     : snapshot.hasError
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           '当前账号无权查看此画像',
-                          style: TextStyle(color: Colors.white70, fontSize: 11),
+                          style: TextStyle(
+                            color: DunesColors.resolve(context, Colors.white70),
+                            fontSize: 11,
+                          ),
                         ),
                       )
                     : CustomPaint(
@@ -237,21 +268,36 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
               ),
               const SizedBox(height: 10),
               Row(
-                children: const [
+                children: [
                   Icon(
                     Icons.touch_app_rounded,
                     size: 14,
-                    color: Color(0xFFE5DBF8),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFFE5DBF8),
+                    ),
                   ),
                   SizedBox(width: 5),
                   Text(
                     '点开查看工作记录明细',
-                    style: TextStyle(fontSize: 10, color: Color(0xFFE5DBF8)),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFE5DBF8),
+                      ),
+                    ),
                   ),
                   Spacer(),
                   Text(
                     '管理参考 · 非绩效评级',
-                    style: TextStyle(fontSize: 9, color: Color(0xFFD5C9EA)),
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFD5C9EA),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -268,13 +314,16 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
       children: [
         Text(
           label,
-          style: const TextStyle(color: Color(0xFFCEBEEA), fontSize: 10),
+          style: TextStyle(
+            color: DunesColors.resolveNullable(context, Color(0xFFCEBEEA)),
+            fontSize: 10,
+          ),
         ),
         const SizedBox(height: 2),
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: DunesColors.resolve(context, Colors.white),
             fontSize: 12,
             fontWeight: FontWeight.w700,
           ),
@@ -292,7 +341,11 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFFF8F6FA),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF8F6FA),
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -309,7 +362,11 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFD8D2DF),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFD8D2DF),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -317,22 +374,35 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
               const SizedBox(height: 18),
               Text(
                 '${person.name} · 工作画像',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 19,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF342740),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF342740),
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 '${person.departmentName} · ${_formatMonth(widget.share.month)}',
-                style: const TextStyle(color: Color(0xFF817589), fontSize: 12),
+                style: TextStyle(
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF817589),
+                  ),
+                  fontSize: 12,
+                ),
               ),
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Column(
@@ -362,13 +432,20 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF4EFFA),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFF4EFFA),
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
                               '${dimension.label} ${dimension.value}',
-                              style: const TextStyle(
-                                color: Color(0xFF5F4684),
+                              style: TextStyle(
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFF5F4684),
+                                ),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -401,12 +478,15 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
                   '已发布绩效',
                   '${person.performanceMonth} · ${person.performanceScore!.toStringAsFixed(2)} · ${person.performanceGrade}',
                 ),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Text(
                   '只展示业务记录，不读取聊天内容或薪酬信息；雷达各轴为独立记录量参考，不构成能力评分。',
                   style: TextStyle(
-                    color: Color(0xFF817589),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF817589),
+                    ),
                     fontSize: 11,
                     height: 1.5,
                   ),
@@ -423,7 +503,11 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
     margin: const EdgeInsets.only(bottom: 8),
     padding: const EdgeInsets.all(13),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
     ),
     child: Column(
@@ -431,8 +515,8 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Color(0xFF7651B8),
+          style: TextStyle(
+            color: DunesColors.resolveNullable(context, Color(0xFF7651B8)),
             fontWeight: FontWeight.w700,
             fontSize: 12,
           ),
@@ -440,8 +524,8 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            color: Color(0xFF4A4251),
+          style: TextStyle(
+            color: DunesColors.resolveNullable(context, Color(0xFF4A4251)),
             fontSize: 12,
             height: 1.45,
           ),

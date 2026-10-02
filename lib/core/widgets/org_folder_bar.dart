@@ -52,8 +52,16 @@ class OrgFolderBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         color: uncategorized
-            ? const Color(0xFFF0EEE8)
-            : DunesColors.brandPurpleSoft,
+            ? DunesColors.resolve(
+                context,
+                const Color(0xFFF0EEE8),
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                DunesColors.brandPurpleSoft,
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -62,7 +70,9 @@ class OrgFolderBadge extends StatelessWidget {
           Icon(
             uncategorized ? Icons.inbox_outlined : Icons.folder_outlined,
             size: 11,
-            color: uncategorized ? DunesColors.text3 : DunesColors.brandPurple,
+            color: uncategorized
+                ? DunesColors.resolve(context, DunesColors.text3)
+                : DunesColors.resolve(context, DunesColors.brandPurple),
           ),
           const SizedBox(width: 3),
           Text(
@@ -73,8 +83,8 @@ class OrgFolderBadge extends StatelessWidget {
               fontSize: 10,
               fontWeight: FontWeight.w500,
               color: uncategorized
-                  ? DunesColors.text3
-                  : DunesColors.brandPurple,
+                  ? DunesColors.resolve(context, DunesColors.text3)
+                  : DunesColors.resolve(context, DunesColors.brandPurple),
             ),
           ),
         ],
@@ -109,8 +119,7 @@ class OrgFolderFilter {
     OrgFolderKind.folder => folderId == null ? null : '$folderId',
   };
 
-  int? get uploadFolderId =>
-      kind == OrgFolderKind.folder ? folderId : null;
+  int? get uploadFolderId => kind == OrgFolderKind.folder ? folderId : null;
 
   bool get isAll => kind == OrgFolderKind.all;
 }
@@ -199,10 +208,8 @@ Future<OrgFolderItem?> showOrgFolderPickDialog(
               ListTile(
                 leading: const Icon(Icons.inbox_outlined),
                 title: const Text('未分类'),
-                onTap: () => Navigator.pop(
-                  ctx,
-                  const OrgFolderItem(id: 0, name: '未分类'),
-                ),
+                onTap: () =>
+                    Navigator.pop(ctx, const OrgFolderItem(id: 0, name: '未分类')),
               ),
             for (final folder in folders)
               ListTile(
@@ -346,11 +353,22 @@ class _OrgUserFolderChip extends StatelessWidget {
               showCheckmark: false,
               avatar: const Icon(Icons.folder_outlined, size: 16),
               label: Text(folder.name, style: const TextStyle(fontSize: 12)),
-              selectedColor: DunesColors.brandPurpleSoft,
+              selectedColor: DunesColors.resolve(
+                context,
+                DunesColors.brandPurpleSoft,
+              ),
               side: BorderSide(
                 color: selected
-                    ? DunesColors.brandPurple
-                    : DunesColors.borderSoft,
+                    ? DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
+                        role: DunesColorRole.border,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        DunesColors.borderSoft,
+                        role: DunesColorRole.border,
+                      ),
               ),
               onSelected: (_) => onTap(),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -361,12 +379,12 @@ class _OrgUserFolderChip extends StatelessWidget {
               key: ValueKey('folder-more-${folder.id}'),
               onTap: () => unawaited(_openActions(context)),
               borderRadius: BorderRadius.circular(10),
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 child: Icon(
                   Icons.more_horiz,
                   size: 18,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
             ),
@@ -388,19 +406,16 @@ Future<String?> showOrgFolderManageActions(BuildContext context) async {
         position: RelativeRect.fromRect(
           Rect.fromPoints(
             box.localToGlobal(Offset.zero, ancestor: overlay),
-            box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay),
+            box.localToGlobal(
+              box.size.bottomRight(Offset.zero),
+              ancestor: overlay,
+            ),
           ),
           Offset.zero & overlay.size,
         ),
         items: const [
-          PopupMenuItem<String>(
-            value: 'rename',
-            child: Text('重命名'),
-          ),
-          PopupMenuItem<String>(
-            value: 'delete',
-            child: Text('删除文件夹（内容回到未分类）'),
-          ),
+          PopupMenuItem<String>(value: 'rename', child: Text('重命名')),
+          PopupMenuItem<String>(value: 'delete', child: Text('删除文件夹（内容回到未分类）')),
         ],
       );
     }
@@ -447,7 +462,10 @@ class OrgFolderMultiSelectButton extends StatelessWidget {
         icon: const Icon(Icons.close_rounded, size: 18),
         label: const Text('取消多选'),
         style: TextButton.styleFrom(
-          foregroundColor: DunesColors.brandPurple,
+          foregroundColor: DunesColors.resolve(
+            context,
+            DunesColors.brandPurple,
+          ),
           visualDensity: VisualDensity.compact,
         ),
       );
@@ -457,8 +475,14 @@ class OrgFolderMultiSelectButton extends StatelessWidget {
       icon: const Icon(Icons.checklist_rounded, size: 18),
       label: const Text('多选'),
       style: OutlinedButton.styleFrom(
-        foregroundColor: DunesColors.brandPurple,
-        side: const BorderSide(color: DunesColors.brandPurple),
+        foregroundColor: DunesColors.resolve(context, DunesColors.brandPurple),
+        side: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.brandPurple,
+            role: DunesColorRole.border,
+          ),
+        ),
         visualDensity: VisualDensity.compact,
         padding: const EdgeInsets.symmetric(horizontal: 10),
       ),
@@ -488,7 +512,11 @@ class OrgFolderSelectBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       elevation: 8,
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         top: false,
         child: Padding(

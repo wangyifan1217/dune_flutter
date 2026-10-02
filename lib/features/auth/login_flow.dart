@@ -458,8 +458,9 @@ class _PhoneStepState extends State<_PhoneStep> {
             style: DunesTypography.sans(
               fontSize: 28,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
               letterSpacing: -0.02 * 28,
+              context: context,
             ),
           ),
           const SizedBox(height: 8),
@@ -468,8 +469,9 @@ class _PhoneStepState extends State<_PhoneStep> {
             textAlign: TextAlign.center,
             style: DunesTypography.sans(
               fontSize: 14,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
               height: 1.5,
+              context: context,
             ),
           ),
           const SizedBox(height: 48),
@@ -478,7 +480,8 @@ class _PhoneStepState extends State<_PhoneStep> {
             style: DunesTypography.sans(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           const SizedBox(height: 12),
@@ -492,8 +495,9 @@ class _PhoneStepState extends State<_PhoneStep> {
             style: DunesTypography.sans(
               fontSize: 18,
               fontWeight: FontWeight.w500,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
               letterSpacing: 1.2,
+              context: context,
             ),
             decoration:
                 authInputDecoration(

@@ -298,8 +298,8 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
       if (widget.onOpenCashFlow != null)
         _AlipayAssetRow(
           icon: Icons.account_balance_rounded,
-          iconBgColor: const Color(0xFFE8F5E9),
-          iconColor: const Color(0xFF2E7D32),
+          iconBgColor: DunesColors.resolve(context, const Color(0xFFE8F5E9)),
+          iconColor: DunesColors.resolve(context, const Color(0xFF2E7D32)),
           title: '资金流向',
           subtitle: '公司账户 · 由大到小',
           actionText: '实时看板',
@@ -308,7 +308,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
       if (widget.onOpenMonthlyBill != null)
         _AlipayAssetRow(
           icon: Icons.receipt_long_rounded,
-          iconBgColor: const Color(0xFFEDE7F6),
+          iconBgColor: DunesColors.resolve(context, const Color(0xFFEDE7F6)),
           iconColor: _themePurple,
           title: '月结',
           subtitle: '应收 · 应付',
@@ -318,8 +318,8 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
       if (widget.onOpenFundSecondment != null)
         _AlipayAssetRow(
           icon: Icons.account_balance_wallet_rounded,
-          iconBgColor: const Color(0xFFFFF3E0),
-          iconColor: const Color(0xFFE65100),
+          iconBgColor: DunesColors.resolve(context, const Color(0xFFFFF3E0)),
+          iconColor: DunesColors.resolve(context, const Color(0xFFE65100)),
           title: '资金借调',
           subtitle: '已通过借款单',
           actionText: '借还明细',
@@ -328,8 +328,8 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
       if (widget.onOpenTravel != null)
         _AlipayAssetRow(
           icon: Icons.flight_takeoff_rounded,
-          iconBgColor: const Color(0xFFE0F7FA),
-          iconColor: const Color(0xFF00838F),
+          iconBgColor: DunesColors.resolve(context, const Color(0xFFE0F7FA)),
+          iconColor: DunesColors.resolve(context, const Color(0xFF00838F)),
           title: '差旅管理',
           subtitle: '出行成本 · 地图',
           actionText: '行程地图',
@@ -347,7 +347,10 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
             ? '态势 · 能效'
             : (widget.session?.workSituationViewAll == true ? '全部部门' : '本人及下级'),
         icon: Icons.groups_outlined,
-        gradientColors: const [Color(0xFF8B6BE8), Color(0xFF6743D3)],
+        gradientColors: [
+          DunesColors.resolve(context, Color(0xFF8B6BE8)),
+          DunesColors.resolve(context, Color(0xFF6743D3)),
+        ],
         onTap: workSituationTap,
       ),
       if (widget.onOpenWorkProfileManagement != null)
@@ -355,14 +358,20 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           title: '员工画像',
           subtitle: '团队概览 · 工作成果',
           icon: Icons.person_search_rounded,
-          gradientColors: const [Color(0xFF9A75D4), Color(0xFF6743A0)],
+          gradientColors: [
+            DunesColors.resolve(context, Color(0xFF9A75D4)),
+            DunesColors.resolve(context, Color(0xFF6743A0)),
+          ],
           onTap: widget.onOpenWorkProfileManagement,
         ),
       _SuperviseItemData(
         title: '使用热力',
         subtitle: widget.session?.appUsageViewAll == true ? '全部人员' : '本人及下级',
         icon: Icons.grid_view_rounded,
-        gradientColors: const [Color(0xFF6B5CE8), Color(0xFF4A3BC7)],
+        gradientColors: [
+          DunesColors.resolve(context, Color(0xFF6B5CE8)),
+          DunesColors.resolve(context, Color(0xFF4A3BC7)),
+        ],
         onTap: widget.onOpenAppUsage,
       ),
     ];
@@ -372,56 +381,81 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
         title: '会议纪要',
         subtitle: '',
         icon: Icons.fact_check_outlined,
-        gradientColors: const [Color(0xFF9E43C2), Color(0xFF7A25A0)],
+        gradientColors: [
+          DunesColors.resolve(context, Color(0xFF9E43C2)),
+          DunesColors.resolve(context, Color(0xFF7A25A0)),
+        ],
         onTap: widget.onOpenMeetingSupervise,
       ),
       _SuperviseItemData(
         title: 'IM会话',
         subtitle: '',
         icon: Icons.forum_outlined,
-        gradientColors: const [Color(0xFF4884E8), Color(0xFF2E63BE)],
+        gradientColors: [
+          DunesColors.resolve(context, Color(0xFF4884E8)),
+          DunesColors.resolve(context, Color(0xFF2E63BE)),
+        ],
         onTap: widget.onOpenSessionSupervise,
       ),
       _SuperviseItemData(
         title: '知识库',
         subtitle: '',
         icon: Icons.folder_shared_outlined,
-        gradientColors: const [Color(0xFFD67E33), Color(0xFFB5611B)],
+        gradientColors: [
+          DunesColors.resolve(context, Color(0xFFD67E33)),
+          DunesColors.resolve(context, Color(0xFFB5611B)),
+        ],
         onTap: widget.onOpenKbSupervise,
       ),
       _SuperviseItemData(
         title: '任务',
         subtitle: '',
         icon: Icons.task_alt_outlined,
-        gradientColors: const [Color(0xFF2F8F7E), Color(0xFF1F6F62)],
+        gradientColors: [
+          DunesColors.resolve(context, Color(0xFF2F8F7E)),
+          DunesColors.resolve(context, Color(0xFF1F6F62)),
+        ],
         onTap: widget.onOpenTaskMonitor,
       ),
       _SuperviseItemData(
         title: '日报',
         subtitle: '',
         icon: Icons.edit_calendar_outlined,
-        gradientColors: const [Color(0xFF3D7A8C), Color(0xFF2A5C6B)],
+        gradientColors: [
+          DunesColors.resolve(context, Color(0xFF3D7A8C)),
+          DunesColors.resolve(context, Color(0xFF2A5C6B)),
+        ],
         onTap: widget.onOpenDailyReportMonitor,
       ),
       _SuperviseItemData(
         title: '群响应',
         subtitle: '',
         icon: Icons.mark_chat_unread_outlined,
-        gradientColors: const [Color(0xFF5B6FC4), Color(0xFF3E529E)],
+        gradientColors: [
+          DunesColors.resolve(context, Color(0xFF5B6FC4)),
+          DunesColors.resolve(context, Color(0xFF3E529E)),
+        ],
         onTap: widget.onOpenGroupReply,
       ),
       _SuperviseItemData(
         title: '研发账号',
         subtitle: '',
         icon: Icons.manage_accounts_outlined,
-        gradientColors: const [Color(0xFF4A3E66), Color(0xFF322849)],
+        gradientColors: [
+          DunesColors.resolve(context, Color(0xFF4A3E66)),
+          DunesColors.resolve(context, Color(0xFF322849)),
+        ],
         onTap: widget.onOpenCursorAccount,
       ),
     ];
     const lookupSubtitle = '任务 · 日报 · 群响应';
 
     return ColoredBox(
-      color: _bgSurface,
+      color: DunesColors.resolve(
+        context,
+        _bgSurface,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -437,14 +471,18 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                     right: 0,
                     height: 160,
                     child: Container(
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Color(0xFFEFE9FA),
-                            Color(0xFFF7F4FD),
-                            _bgSurface,
+                            DunesColors.resolve(context, Color(0xFFEFE9FA)),
+                            DunesColors.resolve(context, Color(0xFFF7F4FD)),
+                            DunesColors.resolve(
+                              context,
+                              _bgSurface,
+                              role: DunesColorRole.surface,
+                            ),
                           ],
                           stops: [0.0, 0.6, 1.0],
                         ),
@@ -537,7 +575,11 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
   Widget _buildFinanceAssetCard(List<Widget> assetRows, {bool isWide = false}) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _cardBorder),
         boxShadow: [
@@ -559,26 +601,33 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                   width: 4,
                   height: 16,
                   decoration: BoxDecoration(
-                    color: _themePurple,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   '资金看板',
                   style: TextStyle(
                     fontSize: 15.5,
                     fontWeight: FontWeight.w700,
-                    color: _deepPurple,
+                    color: DunesColors.resolveNullable(context, _deepPurple),
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Text(
                     '账户流向 · 月结 · 差旅',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11.5, color: _subText),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: DunesColors.resolveNullable(context, _subText),
+                    ),
                   ),
                 ),
               ],
@@ -593,11 +642,15 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                     for (var i = 0; i < assetRows.length; i++) ...[
                       assetRows[i],
                       if (i < assetRows.length - 1)
-                        const Divider(
+                        Divider(
                           height: 1,
                           indent: 64,
                           endIndent: 16,
-                          color: Color(0xFFF3F0F7),
+                          color: DunesColors.resolve(
+                            context,
+                            Color(0xFFF3F0F7),
+                            role: DunesColorRole.border,
+                          ),
                         ),
                     ],
                   ],
@@ -616,13 +669,25 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                         decoration: BoxDecoration(
                           border: Border(
                             right: i.isEven
-                                ? const BorderSide(color: Color(0xFFF3F0F7))
+                                ? BorderSide(
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Color(0xFFF3F0F7),
+                                      role: DunesColorRole.border,
+                                    ),
+                                  )
                                 : BorderSide.none,
                             bottom:
                                 i <
                                     assetRows.length -
                                         (assetRows.length.isOdd ? 1 : 2)
-                                ? const BorderSide(color: Color(0xFFF3F0F7))
+                                ? BorderSide(
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Color(0xFFF3F0F7),
+                                      role: DunesColorRole.border,
+                                    ),
+                                  )
                                 : BorderSide.none,
                           ),
                         ),
@@ -647,7 +712,11 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _cardBorder),
         boxShadow: [
@@ -671,17 +740,21 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                     width: 4,
                     height: 16,
                     decoration: BoxDecoration(
-                      color: _themePurple,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        _themePurple,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15.5,
                       fontWeight: FontWeight.w700,
-                      color: _deepPurple,
+                      color: DunesColors.resolveNullable(context, _deepPurple),
                     ),
                   ),
                   if (subtitle.isNotEmpty) ...[
@@ -691,7 +764,10 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                         subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11.5, color: _subText),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: DunesColors.resolveNullable(context, _subText),
+                        ),
                       ),
                     ),
                   ],
@@ -750,17 +826,21 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                 width: 4,
                 height: 16,
                 decoration: BoxDecoration(
-                  color: _themePurple,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    _themePurple,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 'AI 数字员工',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: _deepPurple,
+                  color: DunesColors.resolveNullable(context, _deepPurple),
                 ),
               ),
               if (_loadingDigitalEmployees) ...[
@@ -778,20 +858,31 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1EBF9),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF1EBF9),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.bolt_rounded, size: 12, color: _themePurple),
+                    Icon(
+                      Icons.bolt_rounded,
+                      size: 12,
+                      color: DunesColors.resolveNullable(context, _themePurple),
+                    ),
                     SizedBox(width: 2),
                     Text(
                       '7×24h 在岗运行',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     ),
                   ],
@@ -846,17 +937,21 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                 width: 4,
                 height: 16,
                 decoration: BoxDecoration(
-                  color: _themePurple,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    _themePurple,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 '智能机器人矩阵',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: _deepPurple,
+                  color: DunesColors.resolveNullable(context, _deepPurple),
                 ),
               ),
               if (_loadingRobots) ...[
@@ -875,7 +970,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                 InkWell(
                   onTap: widget.onOpenRobotHome,
                   borderRadius: BorderRadius.circular(6),
-                  child: const Padding(
+                  child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                     child: Row(
                       children: [
@@ -883,14 +978,17 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                           '服务大厅',
                           style: TextStyle(
                             fontSize: 12,
-                            color: _subText,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _subText,
+                            ),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         Icon(
                           Icons.chevron_right_rounded,
                           size: 16,
-                          color: _subText,
+                          color: DunesColors.resolveNullable(context, _subText),
                         ),
                       ],
                     ),
@@ -918,7 +1016,11 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                       width: itemWidth,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: _cardBorder),
                           boxShadow: [
@@ -949,7 +1051,11 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
 
             return Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: _cardBorder),
                 boxShadow: [
@@ -974,11 +1080,15 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                       },
                     ),
                     if (i < robots.length - 1)
-                      const Divider(
+                      Divider(
                         height: 1,
                         indent: 64,
                         endIndent: 16,
-                        color: Color(0xFFF3F0F7),
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFF3F0F7),
+                          role: DunesColorRole.border,
+                        ),
                       ),
                   ],
                 ],
@@ -992,7 +1102,11 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
 
   Widget _buildNoAccessView() {
     return ColoredBox(
-      color: _bgSurface,
+      color: DunesColors.resolve(
+        context,
+        _bgSurface,
+        role: DunesColorRole.surface,
+      ),
       child: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -1003,14 +1117,18 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF0EEF7),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF0EEF7),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: _cardBorder),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.lock_outline_rounded,
                   size: 28,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
               const SizedBox(height: 18),
@@ -1019,7 +1137,8 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 8),
@@ -1028,8 +1147,9 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                   height: 1.5,
+                  context: context,
                 ),
               ),
             ],
@@ -1092,11 +1212,19 @@ class _AlipayAssetRow extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: iconBgColor,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    iconBgColor,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, color: iconColor, size: 21),
+                child: Icon(
+                  icon,
+                  color: DunesColors.resolveNullable(context, iconColor),
+                  size: 21,
+                ),
               ),
               const SizedBox(width: 14),
 
@@ -1107,10 +1235,13 @@ class _AlipayAssetRow extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: _deepPurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _deepPurple,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -1118,9 +1249,9 @@ class _AlipayAssetRow extends StatelessWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: _subText,
+                        color: DunesColors.resolveNullable(context, _subText),
                         fontWeight: FontWeight.w400,
                       ),
                     ),
@@ -1131,17 +1262,20 @@ class _AlipayAssetRow extends StatelessWidget {
               // 右侧辅助说明文案 + 细箭头
               Text(
                 actionText,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
-                  color: Color(0xFF9F98AC),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF9F98AC),
+                  ),
                   fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(width: 2),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 size: 18,
-                color: Color(0xFFB5AFBF),
+                color: DunesColors.resolveNullable(context, Color(0xFFB5AFBF)),
               ),
             ],
           ),
@@ -1199,7 +1333,11 @@ class _AlipayGridItem extends StatelessWidget {
                   ],
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, color: Colors.white, size: 21),
+                child: Icon(
+                  icon,
+                  color: DunesColors.resolve(context, Colors.white),
+                  size: 21,
+                ),
               ),
               const SizedBox(height: 8),
 
@@ -1208,10 +1346,10 @@ class _AlipayGridItem extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: _deepPurple,
+                  color: DunesColors.resolveNullable(context, _deepPurple),
                   letterSpacing: -0.2,
                 ),
               ),
@@ -1221,9 +1359,9 @@ class _AlipayGridItem extends StatelessWidget {
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: _subText,
+                    color: DunesColors.resolveNullable(context, _subText),
                     fontWeight: FontWeight.w400,
                   ),
                 ),
@@ -1246,7 +1384,11 @@ class _DigitalEmployeeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -1273,14 +1415,24 @@ class _DigitalEmployeeCard extends StatelessWidget {
                     width: 30,
                     height: 30,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF0EBF9),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFF0EBF9),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE2D6F5)),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFE2D6F5),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                     alignment: Alignment.center,
                     child: Icon(
                       digitalEmployeeIcon(item.iconKey),
-                      color: _themePurple,
+                      color: DunesColors.resolveNullable(context, _themePurple),
                       size: 16,
                     ),
                   ),
@@ -1293,10 +1445,13 @@ class _DigitalEmployeeCard extends StatelessWidget {
                           item.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: _deepPurple,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _deepPurple,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -1306,15 +1461,22 @@ class _DigitalEmployeeCard extends StatelessWidget {
                             vertical: 1,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEDE7F6),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFEDE7F6),
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text(
+                          child: Text(
                             'AI 协同助理',
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.w600,
-                              color: _themePurple,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _themePurple,
+                              ),
                             ),
                           ),
                         ),
@@ -1328,10 +1490,10 @@ class _DigitalEmployeeCard extends StatelessWidget {
                 item.subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   height: 1.25,
-                  color: _subText,
+                  color: DunesColors.resolveNullable(context, _subText),
                 ),
               ),
               const SizedBox(height: 6),
@@ -1344,10 +1506,14 @@ class _DigitalEmployeeCard extends StatelessWidget {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: _themePurple.withValues(alpha: 0.08),
+                      color: DunesColors.resolve(
+                        context,
+                        _themePurple,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
@@ -1355,14 +1521,20 @@ class _DigitalEmployeeCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w600,
-                            color: _themePurple,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _themePurple,
+                            ),
                           ),
                         ),
                         SizedBox(width: 2),
                         Icon(
                           Icons.arrow_forward_rounded,
                           size: 12,
-                          color: _themePurple,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _themePurple,
+                          ),
                         ),
                       ],
                     ),
@@ -1412,7 +1584,11 @@ class _RobotListTile extends StatelessWidget {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: role.accent.withValues(alpha: 0.12),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            role.accent.withValues(alpha: 0.12),
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(13),
                         ),
                         alignment: Alignment.center,
@@ -1431,10 +1607,25 @@ class _RobotListTile extends StatelessWidget {
                           height: 10,
                           decoration: BoxDecoration(
                             color: role.canChat
-                                ? const Color(0xFF2E7D32)
-                                : const Color(0xFFD67E33),
+                                ? DunesColors.resolve(
+                                    context,
+                                    const Color(0xFF2E7D32),
+                                    role: DunesColorRole.surface,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    const Color(0xFFD67E33),
+                                    role: DunesColorRole.surface,
+                                  ),
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 1.8),
+                            border: Border.all(
+                              color: DunesColors.resolve(
+                                context,
+                                Colors.white,
+                                role: DunesColorRole.border,
+                              ),
+                              width: 1.8,
+                            ),
                           ),
                         ),
                       ),
@@ -1454,10 +1645,13 @@ class _RobotListTile extends StatelessWidget {
                                 role.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 14.5,
                                   fontWeight: FontWeight.w700,
-                                  color: _deepPurple,
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    _deepPurple,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1469,15 +1663,22 @@ class _RobotListTile extends StatelessWidget {
                                   vertical: 1,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFFF3E0),
+                                  color: DunesColors.resolve(
+                                    context,
+                                    const Color(0xFFFFF3E0),
+                                    role: DunesColorRole.surface,
+                                  ),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   '仅推送',
                                   style: TextStyle(
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w600,
-                                    color: Color(0xFFB5611B),
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      Color(0xFFB5611B),
+                                    ),
                                   ),
                                 ),
                               )
@@ -1488,15 +1689,22 @@ class _RobotListTile extends StatelessWidget {
                                   vertical: 1,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFE8F5E9),
+                                  color: DunesColors.resolve(
+                                    context,
+                                    const Color(0xFFE8F5E9),
+                                    role: DunesColorRole.surface,
+                                  ),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   '在线',
                                   style: TextStyle(
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w600,
-                                    color: Color(0xFF2E7D32),
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      Color(0xFF2E7D32),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1507,9 +1715,12 @@ class _RobotListTile extends StatelessWidget {
                           role.desc.isNotEmpty ? role.desc : role.category,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11.5,
-                            color: _subText,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _subText,
+                            ),
                           ),
                         ),
                       ],
@@ -1523,7 +1734,11 @@ class _RobotListTile extends StatelessWidget {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: _themePurple.withValues(alpha: 0.08),
+                      color: DunesColors.resolve(
+                        context,
+                        _themePurple,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -1531,16 +1746,22 @@ class _RobotListTile extends StatelessWidget {
                       children: [
                         Text(
                           role.canChat ? '咨询' : '详情',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: _themePurple,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _themePurple,
+                            ),
                           ),
                         ),
-                        const Icon(
+                        Icon(
                           Icons.chevron_right_rounded,
                           size: 15,
-                          color: _themePurple,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _themePurple,
+                          ),
                         ),
                       ],
                     ),

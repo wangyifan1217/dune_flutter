@@ -58,7 +58,7 @@ class WorkProfileSelectField extends StatelessWidget {
     return PopupMenuButton<String>(
       tooltip: label,
       offset: const Offset(0, 8),
-      color: Colors.white,
+      color: DunesColors.resolve(context, Colors.white),
       elevation: 8,
       shadowColor: const Color(0x33543675),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -78,16 +78,25 @@ class WorkProfileSelectField extends StatelessWidget {
                           ? FontWeight.w700
                           : FontWeight.w500,
                       color: option.$1 == value
-                          ? const Color(0xFF6B46A8)
-                          : const Color(0xFF342740),
+                          ? DunesColors.resolve(
+                              context,
+                              const Color(0xFF6B46A8),
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFF342740),
+                            ),
                     ),
                   ),
                 ),
                 if (option.$1 == value)
-                  const Icon(
+                  Icon(
                     Icons.check_rounded,
                     size: 18,
-                    color: Color(0xFF7651B8),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF7651B8),
+                    ),
                   ),
               ],
             ),
@@ -97,9 +106,19 @@ class WorkProfileSelectField extends StatelessWidget {
         height: 52,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE6DCF0)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE6DCF0),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Row(
           children: [
@@ -107,10 +126,18 @@ class WorkProfileSelectField extends StatelessWidget {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFFF4ECFA),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF4ECFA),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, size: 18, color: const Color(0xFF7651B8)),
+              child: Icon(
+                icon,
+                size: 18,
+                color: DunesColors.resolve(context, const Color(0xFF7651B8)),
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -120,9 +147,12 @@ class WorkProfileSelectField extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF817589),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF817589),
+                      ),
                     ),
                   ),
                   Text(
@@ -132,15 +162,19 @@ class WorkProfileSelectField extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: const Color(0xFF342740),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF342740),
+                      ),
+                      context: context,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               Icons.keyboard_arrow_down_rounded,
-              color: Color(0xFF9A7FB8),
+              color: DunesColors.resolveNullable(context, Color(0xFF9A7FB8)),
             ),
           ],
         ),
@@ -164,7 +198,11 @@ class WorkProfileGhostButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFF6F0FC),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF6F0FC),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -174,18 +212,31 @@ class WorkProfileGhostButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE6DCF0)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE6DCF0),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 18, color: const Color(0xFF7651B8)),
+              Icon(
+                icon,
+                size: 18,
+                color: DunesColors.resolve(context, const Color(0xFF7651B8)),
+              ),
               const SizedBox(width: 6),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF5A3D86),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF5A3D86),
+                  ),
                 ),
               ),
             ],
@@ -227,9 +278,19 @@ class WorkProfileMonthBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE6DCF0)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE6DCF0),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -240,19 +301,22 @@ class WorkProfileMonthBar extends StatelessWidget {
                 tooltip: '上个月',
                 onPressed: canPrev && !loading ? onPrev : null,
                 icon: const Icon(Icons.chevron_left_rounded),
-                color: const Color(0xFF4A3866),
+                color: DunesColors.resolve(context, const Color(0xFF4A3866)),
               ),
               Expanded(
                 child: TextButton.icon(
                   key: monthKey,
                   onPressed: loading ? null : onPick,
                   icon: loading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Color(0xFF7045B2),
+                            color: DunesColors.resolve(
+                              context,
+                              Color(0xFF7045B2),
+                            ),
                           ),
                         )
                       : const Icon(Icons.calendar_month_rounded, size: 17),
@@ -261,7 +325,11 @@ class WorkProfileMonthBar extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: const Color(0xFF312249),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF312249),
+                      ),
+                      context: context,
                     ),
                   ),
                 ),
@@ -271,19 +339,23 @@ class WorkProfileMonthBar extends StatelessWidget {
                 tooltip: '下个月',
                 onPressed: canNext && !loading ? onNext : null,
                 icon: const Icon(Icons.chevron_right_rounded),
-                color: const Color(0xFF4A3866),
+                color: DunesColors.resolve(context, const Color(0xFF4A3866)),
               ),
             ],
           ),
           if (loading)
-            const Padding(
+            Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: ClipRRect(
                 borderRadius: BorderRadius.all(Radius.circular(99)),
                 child: LinearProgressIndicator(
                   minHeight: 2.5,
-                  backgroundColor: Color(0xFFEFE8F5),
-                  color: Color(0xFF7045B2),
+                  backgroundColor: DunesColors.resolve(
+                    context,
+                    Color(0xFFEFE8F5),
+                    role: DunesColorRole.surface,
+                  ),
+                  color: DunesColors.resolve(context, Color(0xFF7045B2)),
                 ),
               ),
             ),
@@ -309,7 +381,17 @@ class _FilterPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFF6F0FC) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF6F0FC),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         key: Key('work-profile-filter-$id'),
@@ -322,8 +404,16 @@ class _FilterPill extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
               color: selected
-                  ? const Color(0xFFD2BBE8)
-                  : const Color(0xFFE6DCF0),
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0xFFD2BBE8),
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE6DCF0),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -332,8 +422,8 @@ class _FilterPill extends StatelessWidget {
               fontSize: 13,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
               color: selected
-                  ? const Color(0xFF6B46A8)
-                  : const Color(0xFF5D536B),
+                  ? DunesColors.resolve(context, const Color(0xFF6B46A8))
+                  : DunesColors.resolve(context, const Color(0xFF5D536B)),
             ),
           ),
         ),

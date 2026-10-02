@@ -66,9 +66,12 @@ Future<String> loadNovaAttachmentMarkdown({
   Object? lastError;
 
   Future<String> tryDirect(String absolute) async {
-    final needsAuth = novaImageUrlNeedsAuthFetch(absolute) ||
+    final needsAuth =
+        novaImageUrlNeedsAuthFetch(absolute) ||
         RegExp(r'/v1/files/download', caseSensitive: false).hasMatch(absolute);
-    final headers = needsAuth ? resolver.novaDownloadHeaders() : const <String, String>{};
+    final headers = needsAuth
+        ? resolver.novaDownloadHeaders()
+        : const <String, String>{};
     if (isDirectHttpUrl(absolute) &&
         (needsAuth || isUrlLikelyDeviceReachable(absolute))) {
       return _fetchHttpText(absolute, headers: headers);
@@ -118,7 +121,9 @@ Future<String> loadNovaAttachmentMarkdown({
   }
 
   if (lastError != null) {
-    throw lastError is Exception ? lastError as Exception : Exception('$lastError');
+    throw lastError is Exception
+        ? lastError as Exception
+        : Exception('$lastError');
   }
   throw Exception('无法读取文档内容');
 }
@@ -279,7 +284,11 @@ class _NovaDocumentGlassOverlayState extends State<NovaDocumentGlassOverlay> {
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                     child: Material(
-                      color: const Color(0xD8FFFFFF),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xD8FFFFFF),
+                        role: DunesColorRole.surface,
+                      ),
                       child: Column(
                         children: [
                           Padding(
@@ -299,7 +308,11 @@ class _NovaDocumentGlassOverlayState extends State<NovaDocumentGlassOverlay> {
                                         '生成文件',
                                         style: DunesTypography.sans(
                                           fontSize: 11,
-                                          color: DunesColors.text3,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.text3,
+                                          ),
+                                          context: context,
                                         ),
                                       ),
                                       Text(
@@ -309,7 +322,11 @@ class _NovaDocumentGlassOverlayState extends State<NovaDocumentGlassOverlay> {
                                         style: DunesTypography.sans(
                                           fontSize: 15,
                                           fontWeight: FontWeight.w700,
-                                          color: DunesColors.text,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.text,
+                                          ),
+                                          context: context,
                                         ),
                                       ),
                                     ],
@@ -323,7 +340,14 @@ class _NovaDocumentGlassOverlayState extends State<NovaDocumentGlassOverlay> {
                               ],
                             ),
                           ),
-                          const Divider(height: 1, color: Color(0x22FFFFFF)),
+                          Divider(
+                            height: 1,
+                            color: DunesColors.resolve(
+                              context,
+                              Color(0x22FFFFFF),
+                              role: DunesColorRole.border,
+                            ),
+                          ),
                           Expanded(child: _buildBody()),
                         ],
                       ),
@@ -360,10 +384,7 @@ class _NovaDocumentGlassOverlayState extends State<NovaDocumentGlassOverlay> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 28),
       children: [
-        NovaMarkdownBody(
-          text: _markdown ?? '',
-          mediaResolver: widget.resolver,
-        ),
+        NovaMarkdownBody(text: _markdown ?? '', mediaResolver: widget.resolver),
       ],
     );
   }
@@ -443,9 +464,19 @@ class _NovaInlineDocumentGlassState extends State<NovaInlineDocumentGlass> {
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           decoration: BoxDecoration(
-            color: const Color(0x73FFFFFF),
+            color: DunesColors.resolve(
+              context,
+              const Color(0x73FFFFFF),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0x55FFFFFF)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0x55FFFFFF),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: _buildInner(),
         ),
@@ -463,22 +494,27 @@ class _NovaInlineDocumentGlassState extends State<NovaInlineDocumentGlass> {
     if (_error != null) {
       return Text(
         _error!,
-        style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+        style: DunesTypography.sans(
+          fontSize: 12,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
+        ),
       );
     }
     final raw = _text ?? '';
     if (raw.isEmpty) {
       return Text(
         '空文档',
-        style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+        style: DunesTypography.sans(
+          fontSize: 12,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
+        ),
       );
     }
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
-      child: NovaMarkdownBody(
-        text: raw,
-        mediaResolver: widget.resolver,
-      ),
+      child: NovaMarkdownBody(text: raw, mediaResolver: widget.resolver),
     );
   }
 }

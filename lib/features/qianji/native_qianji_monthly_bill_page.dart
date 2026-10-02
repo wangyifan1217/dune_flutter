@@ -101,19 +101,20 @@ class _NativeQianjiMonthlyBillPageState
     try {
       if (widget.loader != null || widget.session == null) {
         final demo = monthlyBillDemoBoard(_month);
-        final rows = [
-          for (final r in demo.rows)
-            if (r.side == _side)
-              if (_filter == _BillFilter.all ||
-                  (_filter == _BillFilter.channel && r.kind == 'channel') ||
-                  (_filter == _BillFilter.supply && r.kind == 'supply') ||
-                  (_filter == _BillFilter.overdue && r.isOverdue))
-                r,
-        ]..sort((a, b) {
-          final od = b.overdueDays.compareTo(a.overdueDays);
-          if (od != 0) return od;
-          return b.unpaidYuan.compareTo(a.unpaidYuan);
-        });
+        final rows =
+            [
+              for (final r in demo.rows)
+                if (r.side == _side)
+                  if (_filter == _BillFilter.all ||
+                      (_filter == _BillFilter.channel && r.kind == 'channel') ||
+                      (_filter == _BillFilter.supply && r.kind == 'supply') ||
+                      (_filter == _BillFilter.overdue && r.isOverdue))
+                    r,
+            ]..sort((a, b) {
+              final od = b.overdueDays.compareTo(a.overdueDays);
+              if (od != 0) return od;
+              return b.unpaidYuan.compareTo(a.unpaidYuan);
+            });
         if (!mounted || seq != _itemSeq) return;
         setState(() {
           _items = rows;
@@ -218,9 +219,12 @@ class _NativeQianjiMonthlyBillPageState
                         child: Text(
                           '仅列出前 ${_items.length} 张，其余 ${_itemTotal - _items.length} 张按逾期靠前省略。',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                       ),
@@ -238,22 +242,29 @@ class _NativeQianjiMonthlyBillPageState
     final back = Material(
       color: Colors.transparent,
       child: InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: widget.onBack,
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
-            SizedBox(width: 2),
-            Text(
-              '饕',
-              style: TextStyle(fontSize: 13, color: DunesColors.text2),
-            ),
-          ],
+        borderRadius: BorderRadius.circular(8),
+        onTap: widget.onBack,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.arrow_back_ios_new,
+                size: 14,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
+              SizedBox(width: 2),
+              Text(
+                '饕',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
     return Padding(
@@ -262,7 +273,7 @@ class _NativeQianjiMonthlyBillPageState
         children: [
           back,
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               '月结',
               maxLines: 1,
@@ -270,7 +281,7 @@ class _NativeQianjiMonthlyBillPageState
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ),
@@ -278,8 +289,16 @@ class _NativeQianjiMonthlyBillPageState
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: widget.session == null
-                  ? DunesColors.amberSoft
-                  : const Color(0xFFF0EEF7),
+                  ? DunesColors.resolve(
+                      context,
+                      DunesColors.amberSoft,
+                      role: DunesColorRole.surface,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFF0EEF7),
+                      role: DunesColorRole.surface,
+                    ),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
@@ -287,7 +306,9 @@ class _NativeQianjiMonthlyBillPageState
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: widget.session == null ? DunesColors.amber : _themePurple,
+                color: widget.session == null
+                    ? DunesColors.resolve(context, DunesColors.amber)
+                    : DunesColors.resolve(context, _themePurple),
               ),
             ),
           ),
@@ -298,7 +319,11 @@ class _NativeQianjiMonthlyBillPageState
 
   Widget _buildError() {
     return Material(
-      color: DunesColors.coralSoft,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.coralSoft,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: _reload,
@@ -307,14 +332,20 @@ class _NativeQianjiMonthlyBillPageState
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: DunesColors.coral.withValues(alpha: 0.35)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.coral,
+                role: DunesColorRole.border,
+              ).withValues(alpha: 0.35),
+            ),
           ),
           child: Text(
             '月结加载失败：$_error  点此重试',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
               height: 1.45,
-              color: DunesColors.coral,
+              color: DunesColors.resolve(context, DunesColors.coral),
             ),
           ),
         ),
@@ -324,11 +355,16 @@ class _NativeQianjiMonthlyBillPageState
 
   Widget _buildMonthBar(MonthlyBillBoard board) {
     final i = _months.indexOf(_month);
-    final label = '${_month.substring(0, 4)}年${int.parse(_month.substring(5))}月';
+    final label =
+        '${_month.substring(0, 4)}年${int.parse(_month.substring(5))}月';
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
@@ -346,16 +382,18 @@ class _NativeQianjiMonthlyBillPageState
                 child: Text(
                   label,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
               ),
               IconButton(
                 tooltip: '下一月',
-                onPressed: i >= _months.length - 1 ? null : () => _shiftMonth(1),
+                onPressed: i >= _months.length - 1
+                    ? null
+                    : () => _shiftMonth(1),
                 icon: const Icon(Icons.chevron_right_rounded),
               ),
             ],
@@ -364,10 +402,10 @@ class _NativeQianjiMonthlyBillPageState
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
               '窗口 ${board.from} ~ ${board.to}，周期重叠即计入。渠道应收、全部应付仅含已出账单；供给返利可跨月末。',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 height: 1.4,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
             ),
           ),
@@ -389,7 +427,17 @@ class _NativeQianjiMonthlyBillPageState
   Widget _sideTab(String side, String label) {
     final on = _side == side;
     return Material(
-      color: on ? _themePurple : Colors.white,
+      color: on
+          ? DunesColors.resolve(
+              context,
+              _themePurple,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () {
@@ -405,14 +453,28 @@ class _NativeQianjiMonthlyBillPageState
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: on ? _themePurple : _cardBorder),
+            border: Border.all(
+              color: on
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      _cardBorder,
+                      role: DunesColorRole.border,
+                    ),
+            ),
           ),
           child: Text(
             label,
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: on ? Colors.white : DunesColors.text,
+              color: on
+                  ? DunesColors.resolve(context, Colors.white)
+                  : DunesColors.resolve(context, DunesColors.text),
             ),
           ),
         ),
@@ -428,12 +490,14 @@ class _NativeQianjiMonthlyBillPageState
       _KpiCell(
         label: paidLabel,
         value: monthlyBillFmtYuan(kpi.paidYuan),
-        valueColor: DunesColors.green,
+        valueColor: DunesColors.resolve(context, DunesColors.green),
       ),
       _KpiCell(
         label: unpaidLabel,
         value: monthlyBillFmtYuan(kpi.unpaidYuan),
-        valueColor: kpi.unpaidYuan > 0 ? DunesColors.coral : DunesColors.green,
+        valueColor: kpi.unpaidYuan > 0
+            ? DunesColors.resolve(context, DunesColors.coral)
+            : DunesColors.resolve(context, DunesColors.green),
       ),
       _KpiCell(
         label: '逾期',
@@ -441,13 +505,19 @@ class _NativeQianjiMonthlyBillPageState
         sub: kpi.overdueCount > 0
             ? monthlyBillFmtYuan(kpi.overdueAmountYuan)
             : '无超期',
-        valueColor: kpi.overdueCount > 0 ? DunesColors.amber : DunesColors.green,
+        valueColor: kpi.overdueCount > 0
+            ? DunesColors.resolve(context, DunesColors.amber)
+            : DunesColors.resolve(context, DunesColors.green),
       ),
     ];
     return Container(
       padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
@@ -458,10 +528,10 @@ class _NativeQianjiMonthlyBillPageState
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: Text(
               payable ? '应付总览' : '应收总览',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
               ),
             ),
           ),
@@ -482,7 +552,10 @@ class _NativeQianjiMonthlyBillPageState
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
             child: Text(
               '对账 ${monthlyBillFmtYuan(kpi.reconcileYuan)} · 差异 ${monthlyBillFmtYuan(kpi.payDiffYuan)} · ${kpi.count} 张账单',
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         ],
@@ -497,7 +570,11 @@ class _NativeQianjiMonthlyBillPageState
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
@@ -506,10 +583,10 @@ class _NativeQianjiMonthlyBillPageState
         children: [
           Text(
             payable ? '渠道 / 供应商' : '渠道 / 供给',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 10),
@@ -521,11 +598,23 @@ class _NativeQianjiMonthlyBillPageState
                 children: [
                   Expanded(
                     flex: (channelPct * 1000).round().clamp(1, 999),
-                    child: const ColoredBox(color: _themePurple),
+                    child: ColoredBox(
+                      color: DunesColors.resolve(
+                        context,
+                        _themePurple,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   ),
                   Expanded(
                     flex: ((1 - channelPct) * 1000).round().clamp(1, 999),
-                    child: const ColoredBox(color: Color(0xFFC4B5FD)),
+                    child: ColoredBox(
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFC4B5FD),
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -558,16 +647,21 @@ class _NativeQianjiMonthlyBillPageState
       children: [
         Text(
           payable ? '应付账单' : '应收账单',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
           ),
         ),
         const SizedBox(width: 8),
         Text(
-          _itemTotal > 0 ? '共 $_itemTotal 张 · 逾期靠前 · 点开看 14 列' : '逾期靠前 · 点开看 14 列',
-          style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          _itemTotal > 0
+              ? '共 $_itemTotal 张 · 逾期靠前 · 点开看 14 列'
+              : '逾期靠前 · 点开看 14 列',
+          style: TextStyle(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       ],
     );
@@ -584,7 +678,11 @@ class _NativeQianjiMonthlyBillPageState
           const SizedBox(width: 6),
           _chip(_BillFilter.supply, supply),
           const SizedBox(width: 6),
-          _chip(_BillFilter.overdue, '逾期', key: const Key('monthly-bill-overdue')),
+          _chip(
+            _BillFilter.overdue,
+            '逾期',
+            key: const Key('monthly-bill-overdue'),
+          ),
         ],
       ),
     );
@@ -594,7 +692,17 @@ class _NativeQianjiMonthlyBillPageState
     final on = _filter == value;
     return Material(
       key: key,
-      color: on ? _themePurple : Colors.white,
+      color: on
+          ? DunesColors.resolve(
+              context,
+              _themePurple,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: () {
@@ -606,14 +714,28 @@ class _NativeQianjiMonthlyBillPageState
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: on ? _themePurple : _cardBorder),
+            border: Border.all(
+              color: on
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      _cardBorder,
+                      role: DunesColorRole.border,
+                    ),
+            ),
           ),
           child: Text(
             label,
             style: TextStyle(
               fontSize: 12,
               fontWeight: on ? FontWeight.w600 : FontWeight.w500,
-              color: on ? Colors.white : DunesColors.text2,
+              color: on
+                  ? DunesColors.resolve(context, Colors.white)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -625,14 +747,21 @@ class _NativeQianjiMonthlyBillPageState
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
-      child: const Text(
+      child: Text(
         '这一筛选项下没有账单。',
         textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 13, color: DunesColors.text3),
+        style: TextStyle(
+          fontSize: 13,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
       ),
     );
   }
@@ -644,7 +773,11 @@ class _NativeQianjiMonthlyBillPageState
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -678,7 +811,11 @@ class _NativeQianjiMonthlyBillPageState
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE5E7EB),
+                        color: DunesColors.resolve(
+                          ctx,
+                          const Color(0xFFE5E7EB),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
@@ -686,10 +823,10 @@ class _NativeQianjiMonthlyBillPageState
                   const SizedBox(height: 12),
                   Text(
                     row.billNo,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(ctx, DunesColors.text),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -703,19 +840,25 @@ class _NativeQianjiMonthlyBillPageState
                             width: 92,
                             child: Text(
                               f.$1,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  ctx,
+                                  DunesColors.text3,
+                                ),
                               ),
                             ),
                           ),
                           Expanded(
                             child: Text(
                               f.$2,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 height: 1.35,
-                                color: DunesColors.text,
+                                color: DunesColors.resolve(
+                                  ctx,
+                                  DunesColors.text,
+                                ),
                               ),
                             ),
                           ),
@@ -755,7 +898,10 @@ class _KpiCell extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             const SizedBox(height: 4),
             Text(
@@ -763,14 +909,19 @@ class _KpiCell extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: valueColor ?? DunesColors.text,
+                color:
+                    valueColor ??
+                    DunesColors.resolve(context, DunesColors.text),
               ),
             ),
             if (sub != null) ...[
               const SizedBox(height: 2),
               Text(
                 sub!,
-                style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ],
           ],
@@ -793,15 +944,18 @@ class _SplitStat extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
         const SizedBox(height: 2),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
           ),
         ),
       ],
@@ -824,7 +978,11 @@ class _BillCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final kind = monthlyBillKindLabel(row.kind, payable: payable);
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -846,15 +1004,22 @@ class _BillCard extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF0EEF7),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFF0EEF7),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       kind,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     ),
                   ),
@@ -864,20 +1029,20 @@ class _BillCard extends StatelessWidget {
                       row.typeName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ),
                   if (row.isOverdue)
                     Text(
                       '逾期 ${row.overdueDays} 天',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.coral,
+                        color: DunesColors.resolve(context, DunesColors.coral),
                       ),
                     ),
                 ],
@@ -887,33 +1052,36 @@ class _BillCard extends StatelessWidget {
                 row.counterparty,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
                   Text(
                     monthlyBillFmtYuan(row.amountYuan),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Text(
                     '${payable ? '已付' : '已回'} ${monthlyBillFmtYuan(row.paidYuan)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                   const Spacer(),
                   Text(
                     row.billNo,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 ],

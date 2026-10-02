@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// 沙丘平台生态树 · 可交互 (Flutter 版)
 ///
@@ -74,9 +75,9 @@ class _PlatformTreeState extends State<PlatformTree>
   }
 
   AnimationController _makeCtrl(int ms) => AnimationController(
-        vsync: this,
-        duration: Duration(milliseconds: ms),
-      )..repeat(reverse: true);
+    vsync: this,
+    duration: Duration(milliseconds: ms),
+  )..repeat(reverse: true);
 
   @override
   void dispose() {
@@ -124,90 +125,92 @@ class _PlatformTreeState extends State<PlatformTree>
                 ),
               ),
 
-                // 果实 · 资管
-                _AnimatedFruit(
-                  bounds: const Rect.fromLTWH(220, 195, 66, 90),
-                  localCenter: const Offset(33, 27),
-                  localPivot: const Offset(33, 80),
-                  label: '资管',
-                  palette: _FruitPalette.warm(dark: dark, stem: palette.stem),
-                  controller: _fruitWSwing,
-                  onTap: widget.onAssetTap,
-                ),
+              // 果实 · 资管
+              _AnimatedFruit(
+                bounds: const Rect.fromLTWH(220, 195, 66, 90),
+                localCenter: const Offset(33, 27),
+                localPivot: const Offset(33, 80),
+                label: '资管',
+                palette: _FruitPalette.warm(dark: dark, stem: palette.stem),
+                controller: _fruitWSwing,
+                onTap: widget.onAssetTap,
+              ),
 
-                // 果实 · NOVA
-                _AnimatedFruit(
-                  bounds: const Rect.fromLTWH(384, 195, 66, 90),
-                  localCenter: const Offset(33, 27),
-                  localPivot: const Offset(33, 80),
-                  label: 'NOVA',
-                  palette: _FruitPalette.cool(dark: dark, stem: palette.stem),
-                  controller: _fruitCSwing,
-                  onTap: widget.onNovaTap,
-                ),
+              // 果实 · NOVA
+              _AnimatedFruit(
+                bounds: const Rect.fromLTWH(384, 195, 66, 90),
+                localCenter: const Offset(33, 27),
+                localPivot: const Offset(33, 80),
+                label: 'NOVA',
+                palette: _FruitPalette.cool(dark: dark, stem: palette.stem),
+                controller: _fruitCSwing,
+                onTap: widget.onNovaTap,
+              ),
 
-                // 灯笼 · 灯塔
-                _AnimatedLantern(
-                  bounds: const Rect.fromLTWH(60, 115, 176, 155),
-                  localCenter: const Offset(88, 73),
-                  localPivot: const Offset(88, 7),
-                  title: '灯塔',
-                  subtitle: '市场部 · 统计平台',
-                  palette: _LanternPalette.warm(
-                    dark: dark,
-                    string: palette.string,
-                  ),
-                  swingCtrl: _lanternWSwing,
-                  glowCtrl: _glowW,
-                  glow1Range: const _Range(0.30, 0.44),
-                  glow2Range: const _Range(0.22, 0.34),
-                  onTap: () => _select(_TreeNode.lighthouse),
+              // 灯笼 · 灯塔
+              _AnimatedLantern(
+                bounds: const Rect.fromLTWH(60, 115, 176, 155),
+                localCenter: const Offset(88, 73),
+                localPivot: const Offset(88, 7),
+                title: '灯塔',
+                subtitle: '市场部 · 统计平台',
+                palette: _LanternPalette.warm(
+                  dark: dark,
+                  string: palette.string,
                 ),
+                swingCtrl: _lanternWSwing,
+                glowCtrl: _glowW,
+                glow1Range: const _Range(0.30, 0.44),
+                glow2Range: const _Range(0.22, 0.34),
+                onTap: () => _select(_TreeNode.lighthouse),
+              ),
 
-                // 灯笼 · 千机
-                _AnimatedLantern(
-                  bounds: const Rect.fromLTWH(434, 115, 176, 155),
-                  localCenter: const Offset(88, 73),
-                  localPivot: const Offset(88, 7),
-                  title: '千机',
-                  subtitle: '研发部 · 统计平台',
-                  palette: _LanternPalette.cool(
-                    dark: dark,
-                    string: palette.string,
-                  ),
-                  swingCtrl: _lanternCSwing,
-                  glowCtrl: _glowC,
-                  glow1Range: const _Range(0.32, 0.46),
-                  glow2Range: const _Range(0.22, 0.32),
-                  onTap: widget.onQianjiTap,
+              // 灯笼 · 千机
+              _AnimatedLantern(
+                bounds: const Rect.fromLTWH(434, 115, 176, 155),
+                localCenter: const Offset(88, 73),
+                localPivot: const Offset(88, 7),
+                title: '千机',
+                subtitle: '研发部 · 统计平台',
+                palette: _LanternPalette.cool(
+                  dark: dark,
+                  string: palette.string,
                 ),
+                swingCtrl: _lanternCSwing,
+                glowCtrl: _glowC,
+                glow1Range: const _Range(0.32, 0.46),
+                glow2Range: const _Range(0.22, 0.32),
+                onTap: widget.onQianjiTap,
+              ),
 
-                // 灯塔总结卡 · 悬在灯笼上方
-                if (_selected == _TreeNode.lighthouse)
-                  Positioned(
-                    left: 28,
-                    top: 4,
-                    width: 248,
-                    child: _NodeSummaryCard(
-                      title: '灯塔',
-                      kicker: '市场部 · 统计平台',
-                      accent: const Color(0xFFC47A3A),
-                      lines: const [
-                        ('哨兵', '折扣改写 / 利润跳变 / 口径偏差'),
-                        ('规模', '双口径利润 · 本期偏差追踪'),
-                        ('结构', 'Top3 增幅 / 塌陷 / 反常'),
-                      ],
-                      actionLabel: '进入灯塔',
-                      onAction: widget.onLighthouseTap,
-                      onClose: () =>
-                          setState(() => _selected = _TreeNode.none),
+              // 灯塔总结卡 · 悬在灯笼上方
+              if (_selected == _TreeNode.lighthouse)
+                Positioned(
+                  left: 28,
+                  top: 4,
+                  width: 248,
+                  child: _NodeSummaryCard(
+                    title: '灯塔',
+                    kicker: '市场部 · 统计平台',
+                    accent: DunesColors.resolve(
+                      context,
+                      const Color(0xFFC47A3A),
                     ),
+                    lines: const [
+                      ('哨兵', '折扣改写 / 利润跳变 / 口径偏差'),
+                      ('规模', '双口径利润 · 本期偏差追踪'),
+                      ('结构', 'Top3 增幅 / 塌陷 / 反常'),
+                    ],
+                    actionLabel: '进入灯塔',
+                    onAction: widget.onLighthouseTap,
+                    onClose: () => setState(() => _selected = _TreeNode.none),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
-      );
+      ),
+    );
   }
 }
 
@@ -241,7 +244,11 @@ class _NodeSummaryCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFFBF8F1),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFFBF8F1),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: accent.withAlpha(90), width: 1),
           boxShadow: [
@@ -262,7 +269,11 @@ class _NodeSummaryCard extends StatelessWidget {
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: accent,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      accent,
+                      role: DunesColorRole.surface,
+                    ),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -270,20 +281,26 @@ class _NodeSummaryCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF2A241C),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF2A241C),
+                      ),
                       letterSpacing: 0.4,
                     ),
                   ),
                 ),
                 GestureDetector(
                   onTap: onClose,
-                  child: const Icon(
+                  child: Icon(
                     Icons.close_rounded,
                     size: 16,
-                    color: Color(0xFF9A8F7E),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF9A8F7E),
+                    ),
                   ),
                 ),
               ],
@@ -294,7 +311,10 @@ class _NodeSummaryCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color: accent.withAlpha(220),
+                color: DunesColors.resolveNullable(
+                  context,
+                  accent.withAlpha(220),
+                ),
                 letterSpacing: 0.6,
               ),
             ),
@@ -309,10 +329,13 @@ class _NodeSummaryCard extends StatelessWidget {
                       width: 36,
                       child: Text(
                         line.$1,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF5A458F),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF5A458F),
+                          ),
                           letterSpacing: 0.3,
                         ),
                       ),
@@ -320,10 +343,13 @@ class _NodeSummaryCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         line.$2,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           height: 1.35,
-                          color: Color(0xFF5A5348),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF5A5348),
+                          ),
                         ),
                       ),
                     ),
@@ -338,7 +364,7 @@ class _NodeSummaryCard extends StatelessWidget {
                 onPressed: onAction,
                 style: TextButton.styleFrom(
                   backgroundColor: accent,
-                  foregroundColor: Colors.white,
+                  foregroundColor: DunesColors.resolve(context, Colors.white),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -483,30 +509,24 @@ class _LanternPalette {
   factory _LanternPalette.warm({required bool dark, required Color string}) =>
       _LanternPalette(
         bodyFill: dark ? const Color(0xFF2C1810) : const Color(0xFFFBF6ED),
-        bodyStroke:
-            dark ? const Color(0xFFF0997B) : const Color(0xFFB8884A),
+        bodyStroke: dark ? const Color(0xFFF0997B) : const Color(0xFFB8884A),
         cap: const Color(0xFFB8884A),
         glow1: const Color(0xFFF0997B),
         glow2: const Color(0xFFEF9F27),
-        titleColor:
-            dark ? const Color(0xFFF5C4B3) : const Color(0xFF4A1B0C),
-        subtitleColor:
-            dark ? const Color(0xFFB8A88C) : const Color(0xFF6B5A42),
+        titleColor: dark ? const Color(0xFFF5C4B3) : const Color(0xFF4A1B0C),
+        subtitleColor: dark ? const Color(0xFFB8A88C) : const Color(0xFF6B5A42),
         string: string,
       );
 
   factory _LanternPalette.cool({required bool dark, required Color string}) =>
       _LanternPalette(
         bodyFill: dark ? const Color(0xFF0A2620) : const Color(0xFFF0F7F4),
-        bodyStroke:
-            dark ? const Color(0xFF5DCAA5) : const Color(0xFF1D9E75),
+        bodyStroke: dark ? const Color(0xFF5DCAA5) : const Color(0xFF1D9E75),
         cap: const Color(0xFF1D9E75),
         glow1: const Color(0xFF5DCAA5),
         glow2: const Color(0xFF85B7EB),
-        titleColor:
-            dark ? const Color(0xFF9FE1CB) : const Color(0xFF04342C),
-        subtitleColor:
-            dark ? const Color(0xFFB8A88C) : const Color(0xFF6B5A42),
+        titleColor: dark ? const Color(0xFF9FE1CB) : const Color(0xFF04342C),
+        subtitleColor: dark ? const Color(0xFFB8A88C) : const Color(0xFF6B5A42),
         string: string,
       );
 }
@@ -715,11 +735,7 @@ class _TreePainter extends CustomPainter {
 
   void _drawSun(Canvas canvas) {
     final center = const Offset(520, 88);
-    canvas.drawCircle(
-      center,
-      72,
-      Paint()..color = palette.sunGlow,
-    );
+    canvas.drawCircle(center, 72, Paint()..color = palette.sunGlow);
     canvas.drawCircle(
       center,
       36,
@@ -755,8 +771,14 @@ class _TreePainter extends CustomPainter {
     final paint = Paint()
       ..color = palette.soilLine
       ..strokeWidth = 0.5;
-    _dashedLine(canvas, const Offset(60, 465), const Offset(620, 465), paint,
-        dash: 3, gap: 6);
+    _dashedLine(
+      canvas,
+      const Offset(60, 465),
+      const Offset(620, 465),
+      paint,
+      dash: 3,
+      gap: 6,
+    );
   }
 
   void _drawRoots(Canvas canvas) {
@@ -969,7 +991,11 @@ class _TreePainter extends CustomPainter {
       canvas.translate(leaf.center.dx, leaf.center.dy);
       canvas.rotate(leaf.angleDeg * math.pi / 180);
       canvas.drawOval(
-        Rect.fromCenter(center: Offset.zero, width: leaf.rx * 2, height: leaf.ry * 2),
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: leaf.rx * 2,
+          height: leaf.ry * 2,
+        ),
         Paint()..color = color,
       );
       canvas.restore();
@@ -1062,12 +1088,11 @@ class _LanternPainter extends CustomPainter {
 
     // 灯身
     final bodyRect = Rect.fromLTWH(center.dx - 50, 36, 100, 70);
-    final bodyRRect =
-        RRect.fromRectAndRadius(bodyRect, const Radius.circular(18));
-    canvas.drawRRect(
-      bodyRRect,
-      Paint()..color = palette.bodyFill,
+    final bodyRRect = RRect.fromRectAndRadius(
+      bodyRect,
+      const Radius.circular(18),
     );
+    canvas.drawRRect(bodyRRect, Paint()..color = palette.bodyFill);
     canvas.drawRRect(
       bodyRRect,
       Paint()
@@ -1117,11 +1142,7 @@ class _LanternPainter extends CustomPainter {
       canvas,
       subtitle,
       Offset(center.dx, 89),
-      TextStyle(
-        color: palette.subtitleColor,
-        fontSize: 12,
-        height: 1.0,
-      ),
+      TextStyle(color: palette.subtitleColor, fontSize: 12, height: 1.0),
     );
   }
 
@@ -1162,11 +1183,7 @@ class _FruitPainter extends CustomPainter {
     );
 
     // 果身
-    canvas.drawCircle(
-      center,
-      19,
-      Paint()..color = palette.fill,
-    );
+    canvas.drawCircle(center, 19, Paint()..color = palette.fill);
     canvas.drawCircle(
       center,
       19,

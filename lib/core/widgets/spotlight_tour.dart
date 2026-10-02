@@ -227,7 +227,7 @@ class _TourSkipButton extends StatelessWidget {
     return TextButton(
       onPressed: onTap,
       style: TextButton.styleFrom(
-        foregroundColor: Colors.white,
+        foregroundColor: DunesColors.resolve(context, Colors.white),
         backgroundColor: Colors.white.withValues(alpha: 0.16),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         minimumSize: Size.zero,
@@ -337,7 +337,11 @@ class _TourCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       elevation: 10,
       shadowColor: const Color(0x66000000),
       borderRadius: BorderRadius.circular(14),
@@ -352,18 +356,18 @@ class _TourCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                 ),
                 Text(
                   '$page / $total',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ],
@@ -371,10 +375,10 @@ class _TourCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               body,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 height: 1.45,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             ),
             const SizedBox(height: 12),
@@ -383,7 +387,10 @@ class _TourCard extends StatelessWidget {
                 TextButton(
                   onPressed: onSkip,
                   style: TextButton.styleFrom(
-                    foregroundColor: DunesColors.text2,
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      DunesColors.text2,
+                    ),
                     visualDensity: VisualDensity.compact,
                   ),
                   child: const Text('跳过'),
@@ -395,7 +402,10 @@ class _TourCard extends StatelessWidget {
                     child: TextButton(
                       onPressed: onPrev,
                       style: TextButton.styleFrom(
-                        foregroundColor: DunesColors.brandPurple,
+                        foregroundColor: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                        ),
                         visualDensity: VisualDensity.compact,
                       ),
                       child: const Text('上一步'),
@@ -404,8 +414,12 @@ class _TourCard extends StatelessWidget {
                 FilledButton(
                   onPressed: onNext,
                   style: FilledButton.styleFrom(
-                    backgroundColor: DunesColors.brandPurple,
-                    foregroundColor: Colors.white,
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurple,
+                      role: DunesColorRole.surface,
+                    ),
+                    foregroundColor: DunesColors.resolve(context, Colors.white),
                     visualDensity: VisualDensity.compact,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                   ),

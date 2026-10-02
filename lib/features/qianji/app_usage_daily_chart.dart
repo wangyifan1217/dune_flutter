@@ -71,11 +71,21 @@ class _AppUsageDailyChartState extends State<AppUsageDailyChart> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFEDE8F5)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFEDE8F5),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
-        child: const Column(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -83,14 +93,17 @@ class _AppUsageDailyChartState extends State<AppUsageDailyChart> {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF261D38),
+                color: DunesColors.resolveNullable(context, Color(0xFF261D38)),
               ),
             ),
             SizedBox(height: 12),
             Center(
               child: Text(
                 '暂无每日数据',
-                style: TextStyle(fontSize: 13, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ),
           ],
@@ -103,9 +116,8 @@ class _AppUsageDailyChartState extends State<AppUsageDailyChart> {
       (sum, d) => sum + d.durationMs,
     );
     final avgDurationMs = totalDurationMs ~/ widget.days.length;
-    final selectedDay = widget.days[
-      _selectedIndex.clamp(0, widget.days.length - 1)
-    ];
+    final selectedDay =
+        widget.days[_selectedIndex.clamp(0, widget.days.length - 1)];
     final scaleMax = _niceDurationMaxMs(
       math.max(widget.maxDay, selectedDay.durationMs),
     );
@@ -113,9 +125,19 @@ class _AppUsageDailyChartState extends State<AppUsageDailyChart> {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFEDE8F5)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFEDE8F5),
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF7B5CD8).withValues(alpha: 0.04),
@@ -140,16 +162,23 @@ class _AppUsageDailyChartState extends State<AppUsageDailyChart> {
                           height: 14,
                           margin: const EdgeInsets.only(right: 7),
                           decoration: BoxDecoration(
-                            color: _themePurple,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _themePurple,
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
-                        const Text(
+                        Text(
                           '每日使用',
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF261D38),
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFF261D38),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -159,24 +188,34 @@ class _AppUsageDailyChartState extends State<AppUsageDailyChart> {
                             vertical: 1.5,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF3EEFA),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFF3EEFA),
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             '${widget.days.length}天',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: _themePurple,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _themePurple,
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 3),
-                    const Text(
+                    Text(
                       '不含后台挂机时间',
-                      style: TextStyle(fontSize: 11, color: DunesColors.text3),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
                   ],
                 ),
@@ -188,16 +227,26 @@ class _AppUsageDailyChartState extends State<AppUsageDailyChart> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFAF7FD),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFFAF7FD),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFEDE5F7)),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFEDE5F7),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                   ),
                   child: Text(
                     '日均 ${_formatCompactDuration(avgDurationMs)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
-                      color: _themePurple,
+                      color: DunesColors.resolveNullable(context, _themePurple),
                     ),
                   ),
                 ),
@@ -225,10 +274,7 @@ class _AppUsageDailyChartState extends State<AppUsageDailyChart> {
                 children: [
                   SizedBox(
                     width: axisWidth,
-                    child: _YAxis(
-                      maxMs: scaleMax,
-                      compact: compact,
-                    ),
+                    child: _YAxis(maxMs: scaleMax, compact: compact),
                   ),
                   Expanded(
                     child: shouldScroll
@@ -265,20 +311,26 @@ class _AppUsageDailyChartState extends State<AppUsageDailyChart> {
                   SizedBox(height: chartHeight, child: plot),
                   if (shouldScroll) ...[
                     const SizedBox(height: 6),
-                    const Row(
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         Icon(
                           Icons.swipe_rounded,
                           size: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                         SizedBox(width: 3),
                         Text(
                           '左右滑动查看更多日期',
                           style: TextStyle(
                             fontSize: 10.5,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                       ],
@@ -304,7 +356,11 @@ class _SelectedDayBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F5FD),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF8F5FD),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -312,26 +368,29 @@ class _SelectedDayBanner extends StatelessWidget {
           Expanded(
             child: Text(
               _formatDateFullWithWeekday(day.date),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF261D38),
+                color: DunesColors.resolveNullable(context, Color(0xFF261D38)),
               ),
             ),
           ),
           Text(
             _formatCompactDuration(day.durationMs),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: _themePurple,
+              color: DunesColors.resolveNullable(context, _themePurple),
             ),
           ),
           if (day.pv > 0) ...[
             const SizedBox(width: 8),
             Text(
               '浏览 ${day.pv}次',
-              style: const TextStyle(fontSize: 11.5, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 11.5,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
           ],
         ],
@@ -369,7 +428,7 @@ class _YAxis extends StatelessWidget {
                   style: TextStyle(
                     fontSize: compact ? 9 : 10,
                     height: 1,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ),
@@ -409,36 +468,36 @@ class _ChartBody extends StatelessWidget {
       },
       child: Column(
         children: [
-        Expanded(
-          child: CustomPaint(
-            painter: _DailyBarPainter(
-              days: days,
-              maxMs: maxMs,
-              selectedIndex: selectedIndex,
-              slotWidth: slotWidth,
-              compact: compact,
+          Expanded(
+            child: CustomPaint(
+              painter: _DailyBarPainter(
+                days: days,
+                maxMs: maxMs,
+                selectedIndex: selectedIndex,
+                slotWidth: slotWidth,
+                compact: compact,
+              ),
+              child: const SizedBox.expand(),
             ),
-            child: const SizedBox.expand(),
           ),
-        ),
-        SizedBox(
-          height: labelH,
-          child: Row(
-            children: [
-              for (var i = 0; i < days.length; i++)
-                SizedBox(
-                  width: slotWidth,
-                  child: _DateLabel(
-                    date: days[i].date,
-                    selected: selectedIndex == i,
-                    compact: compact,
+          SizedBox(
+            height: labelH,
+            child: Row(
+              children: [
+                for (var i = 0; i < days.length; i++)
+                  SizedBox(
+                    width: slotWidth,
+                    child: _DateLabel(
+                      date: days[i].date,
+                      selected: selectedIndex == i,
+                      compact: compact,
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
+        ],
+      ),
     );
   }
 }
@@ -467,7 +526,9 @@ class _DateLabel extends StatelessWidget {
           fontSize: compact ? 9.5 : 10.5,
           height: 1,
           fontWeight: selected || today ? FontWeight.w700 : FontWeight.w500,
-          color: selected || today ? _themePurple : DunesColors.text3,
+          color: selected || today
+              ? DunesColors.resolve(context, _themePurple)
+              : DunesColors.resolve(context, DunesColors.text3),
         ),
       ),
     );
@@ -520,10 +581,7 @@ class _DailyBarPainter extends CustomPainter {
           ),
           const Radius.circular(8),
         );
-        canvas.drawRRect(
-          highlight,
-          Paint()..color = const Color(0xFFF4EEFC),
-        );
+        canvas.drawRRect(highlight, Paint()..color = const Color(0xFFF4EEFC));
       }
 
       final ratio = maxMs <= 0 ? 0.0 : (day.durationMs / maxMs).clamp(0.0, 1.0);
@@ -538,10 +596,7 @@ class _DailyBarPainter extends CustomPainter {
         radius,
       );
       if (day.durationMs <= 0) {
-        canvas.drawRRect(
-          rect,
-          Paint()..color = const Color(0xFFD9CDEA),
-        );
+        canvas.drawRRect(rect, Paint()..color = const Color(0xFFD9CDEA));
         continue;
       }
       final paint = Paint()

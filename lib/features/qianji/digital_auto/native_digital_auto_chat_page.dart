@@ -330,7 +330,11 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      backgroundColor: const Color(0xFFF5F6F8),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: TweenAnimationBuilder<double>(
@@ -415,9 +419,21 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
     final wide = isWideChatLayout(context);
     return Container(
       padding: EdgeInsets.fromLTRB(4, 8, wide ? 8 : 4, 8),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE8EAED))),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -428,11 +444,19 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
           Container(
             width: 38,
             height: 38,
-            decoration: const BoxDecoration(
-              color: _assistantPurple,
+            decoration: BoxDecoration(
+              color: DunesColors.resolveNullable(
+                context,
+                _assistantPurple,
+                role: DunesColorRole.surface,
+              ),
               shape: BoxShape.circle,
             ),
-            child: Icon(_assistantIcon, color: Colors.white, size: 20),
+            child: Icon(
+              _assistantIcon,
+              color: DunesColors.resolve(context, Colors.white),
+              size: 20,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -447,7 +471,8 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
                   style: DunesTypography.sans(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 Text(
@@ -456,7 +481,8 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
                   overflow: TextOverflow.ellipsis,
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ],
@@ -487,6 +513,7 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                   color: _assistantPurple,
+                  context: context,
                 ),
               ),
             ),
@@ -499,13 +526,22 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFF1EDFF), Color(0xFFFAF9FF)],
+          colors: [
+            DunesColors.resolve(context, Color(0xFFF1EDFF)),
+            DunesColors.resolve(context, Color(0xFFFAF9FF)),
+          ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2DCFF)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE2DCFF),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -515,7 +551,8 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
             style: DunesTypography.sans(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: const Color(0xFF49338B),
+              color: DunesColors.resolve(context, const Color(0xFF49338B)),
+              context: context,
             ),
           ),
           const SizedBox(height: 8),
@@ -524,7 +561,8 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
             style: DunesTypography.sans(
               fontSize: 13,
               height: 1.55,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
           const SizedBox(height: 16),
@@ -559,8 +597,26 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
           wide ? 12 : 8,
         ),
         decoration: BoxDecoration(
-          color: wide ? Colors.white : const Color(0xFFF7F7F7),
-          border: const Border(top: BorderSide(color: Color(0xFFE8E8E8))),
+          color: wide
+              ? DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFFF7F7F7),
+                  role: DunesColorRole.surface,
+                ),
+          border: Border(
+            top: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8E8E8),
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -570,9 +626,19 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
                 borderRadius: BorderRadius.circular(wide ? 10 : 8),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(wide ? 10 : 8),
-                    border: Border.all(color: const Color(0xFFE3DCEE)),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFE3DCEE),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                   ),
                   child: Focus(
                     canRequestFocus: false,
@@ -605,13 +671,18 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
                       style: DunesTypography.sans(
                         fontSize: fontSize,
                         height: 1.4,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                       decoration: InputDecoration(
                         hintText: '输入你的问题…',
                         hintStyle: DunesTypography.sans(
                           fontSize: fontSize,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                         border: InputBorder.none,
                         isDense: true,
@@ -685,7 +756,17 @@ class _ComposerSendButton extends StatelessWidget {
     final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.3);
     if (wide) {
       return Material(
-        color: enabled || sending ? _assistantPurple : const Color(0xFFD4CFE6),
+        color: enabled || sending
+            ? DunesColors.resolve(
+                context,
+                _assistantPurple,
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                const Color(0xFFD4CFE6),
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
@@ -696,12 +777,12 @@ class _ComposerSendButton extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Center(
                 child: sending
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
                         ),
                       )
                     : Text(
@@ -709,7 +790,8 @@ class _ComposerSendButton extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
+                          context: context,
                         ),
                       ),
               ),
@@ -720,7 +802,17 @@ class _ComposerSendButton extends StatelessWidget {
     }
     final size = 40.0 * scale;
     return Material(
-      color: enabled || sending ? _assistantPurple : const Color(0xFFD4CFE6),
+      color: enabled || sending
+          ? DunesColors.resolve(
+              context,
+              _assistantPurple,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFD4CFE6),
+              role: DunesColorRole.surface,
+            ),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -729,16 +821,16 @@ class _ComposerSendButton extends StatelessWidget {
           width: size,
           height: size,
           child: sending
-              ? const Padding(
+              ? Padding(
                   padding: EdgeInsets.all(10),
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
                   ),
                 )
-              : const Icon(
+              : Icon(
                   Icons.arrow_upward_rounded,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
                   size: 20,
                 ),
         ),
@@ -756,7 +848,11 @@ class _PromptChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
@@ -765,7 +861,13 @@ class _PromptChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: const Color(0xFFD8D0FB)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFD8D0FB),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Text(
             label,
@@ -773,8 +875,9 @@ class _PromptChip extends StatelessWidget {
               fontSize: 12,
               height: 1.25,
               color: onTap == null
-                  ? DunesColors.text3
-                  : const Color(0xFF5D43AE),
+                  ? DunesColors.resolve(context, DunesColors.text3)
+                  : DunesColors.resolve(context, const Color(0xFF5D43AE)),
+              context: context,
             ),
           ),
         ),
@@ -798,9 +901,21 @@ class _HeaderAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = primary ? Colors.white : const Color(0xFF5D43AE);
+    final foreground = primary
+        ? DunesColors.resolve(context, Colors.white)
+        : DunesColors.resolve(context, const Color(0xFF5D43AE));
     return Material(
-      color: primary ? _assistantPurple : Colors.white,
+      color: primary
+          ? DunesColors.resolve(
+              context,
+              _assistantPurple,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(9),
       child: InkWell(
         borderRadius: BorderRadius.circular(9),
@@ -809,12 +924,24 @@ class _HeaderAction extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(9),
-            border: primary ? null : Border.all(color: const Color(0xFFD8D0FB)),
+            border: primary
+                ? null
+                : Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFD8D0FB),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 15, color: foreground),
+              Icon(
+                icon,
+                size: 15,
+                color: DunesColors.resolveNullable(context, foreground),
+              ),
               const SizedBox(width: 5),
               Text(
                 label,
@@ -822,6 +949,7 @@ class _HeaderAction extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: foreground,
+                  context: context,
                 ),
               ),
             ],
@@ -850,13 +978,27 @@ class _StatusBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F4FF),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF7F4FF),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2DCFF)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE2DCFF),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: const Color(0xFF5D43AE)),
+          Icon(
+            icon,
+            size: 16,
+            color: DunesColors.resolve(context, const Color(0xFF5D43AE)),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -864,7 +1006,8 @@ class _StatusBanner extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 12,
                 height: 1.4,
-                color: const Color(0xFF5D43AE),
+                color: DunesColors.resolve(context, const Color(0xFF5D43AE)),
+                context: context,
               ),
             ),
           ),
@@ -883,6 +1026,7 @@ class _StatusBanner extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
+                  context: context,
                 ),
               ),
             ),
@@ -909,7 +1053,11 @@ class _UserBubble extends StatelessWidget {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: _assistantPurple,
+          color: DunesColors.resolveNullable(
+            context,
+            _assistantPurple,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Text(
@@ -917,7 +1065,8 @@ class _UserBubble extends StatelessWidget {
           style: DunesTypography.sans(
             fontSize: 13,
             height: 1.45,
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
+            context: context,
           ),
         ),
       ),
@@ -951,11 +1100,19 @@ class _AssistantBubble extends StatelessWidget {
         Container(
           width: 32,
           height: 32,
-          decoration: const BoxDecoration(
-            color: _assistantPurple,
+          decoration: BoxDecoration(
+            color: DunesColors.resolveNullable(
+              context,
+              _assistantPurple,
+              role: DunesColorRole.surface,
+            ),
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, color: Colors.white, size: 17),
+          child: Icon(
+            icon,
+            color: DunesColors.resolve(context, Colors.white),
+            size: 17,
+          ),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -967,9 +1124,19 @@ class _AssistantBubble extends StatelessWidget {
             ),
             padding: const EdgeInsets.all(13),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE8EAED)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -979,12 +1146,15 @@ class _AssistantBubble extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
                       children: [
-                        const SizedBox(
+                        SizedBox(
                           width: 12,
                           height: 12,
                           child: CircularProgressIndicator(
                             strokeWidth: 1.6,
-                            color: Color(0xFF5D43AE),
+                            color: DunesColors.resolve(
+                              context,
+                              Color(0xFF5D43AE),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -993,7 +1163,11 @@ class _AssistantBubble extends StatelessWidget {
                             toolStatus,
                             style: DunesTypography.sans(
                               fontSize: 12,
-                              color: const Color(0xFF5D43AE),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFF5D43AE),
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -1019,7 +1193,8 @@ class _AssistantBubble extends StatelessWidget {
                     '正在思考…',
                     style: DunesTypography.sans(
                       fontSize: 13,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 if (showActions)
@@ -1080,13 +1255,18 @@ class _ActionChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 15, color: DunesColors.text3),
+            Icon(
+              icon,
+              size: 15,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
             const SizedBox(width: 4),
             Text(
               label,
               style: DunesTypography.sans(
                 fontSize: 12,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],

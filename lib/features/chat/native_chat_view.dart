@@ -3728,7 +3728,11 @@ class _NativeChatViewState extends State<NativeChatView>
             conversationId: activeConversationId,
             maxPer10Minutes: ImEggSettings.instance.maxPer10Minutes,
           )) {
-        showImEggEffectOnOverlay(effectOverlay!, sentEffect, seed: sent?.id ?? 0);
+        showImEggEffectOnOverlay(
+          effectOverlay!,
+          sentEffect,
+          seed: sent?.id ?? 0,
+        );
       }
       if (mounted) {
         setState(_clearPendingNewMessages);
@@ -5072,7 +5076,13 @@ class _NativeChatViewState extends State<NativeChatView>
                 fit: StackFit.expand,
                 children: [
                   Image.memory(bytes, fit: BoxFit.cover),
-                  Container(color: Colors.black45),
+                  Container(
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.black45,
+                      role: DunesColorRole.surface,
+                    ),
+                  ),
                   Center(
                     child: SizedBox(
                       width: 44,
@@ -5080,8 +5090,12 @@ class _NativeChatViewState extends State<NativeChatView>
                       child: CircularProgressIndicator(
                         value: progress > 0 && progress < 1 ? progress : null,
                         strokeWidth: 3,
-                        color: Colors.white,
-                        backgroundColor: Colors.white24,
+                        color: DunesColors.resolve(context, Colors.white),
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          Colors.white24,
+                          role: DunesColorRole.surface,
+                        ),
                       ),
                     ),
                   ),
@@ -5089,17 +5103,21 @@ class _NativeChatViewState extends State<NativeChatView>
                     top: 6,
                     right: 6,
                     child: Material(
-                      color: Colors.black.withValues(alpha: 0.45),
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.black,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.45),
                       shape: const CircleBorder(),
                       child: InkWell(
                         customBorder: const CircleBorder(),
                         onTap: _cancelPendingUpload,
-                        child: const Padding(
+                        child: Padding(
                           padding: EdgeInsets.all(4),
                           child: Icon(
                             Icons.close_rounded,
                             size: 16,
-                            color: Colors.white,
+                            color: DunesColors.resolve(context, Colors.white),
                           ),
                         ),
                       ),
@@ -5113,8 +5131,8 @@ class _NativeChatViewState extends State<NativeChatView>
                       child: Text(
                         '${(progress * 100).round()}%',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: DunesColors.resolve(context, Colors.white),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -5528,7 +5546,11 @@ class _NativeChatViewState extends State<NativeChatView>
                 left: left,
                 top: top,
                 child: Material(
-                  color: const Color(0xF0303030),
+                  color: DunesColors.resolve(
+                    ctx,
+                    const Color(0xF0303030),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: menuWidth),
@@ -5554,7 +5576,10 @@ class _NativeChatViewState extends State<NativeChatView>
                                         Icon(
                                           item.icon,
                                           size: 19,
-                                          color: Colors.white,
+                                          color: DunesColors.resolve(
+                                            ctx,
+                                            Colors.white,
+                                          ),
                                         ),
                                         const SizedBox(height: 5),
                                         Text(
@@ -5563,7 +5588,11 @@ class _NativeChatViewState extends State<NativeChatView>
                                           overflow: TextOverflow.ellipsis,
                                           style: DunesTypography.sans(
                                             fontSize: 11,
-                                            color: Colors.white,
+                                            color: DunesColors.resolve(
+                                              ctx,
+                                              Colors.white,
+                                            ),
+                                            context: ctx,
                                           ),
                                         ),
                                       ],
@@ -5685,12 +5714,12 @@ class _NativeChatViewState extends State<NativeChatView>
   Color _replySlaStatusColor(ReplySlaItem item) {
     switch (item.status) {
       case ReplySlaStatus.pending:
-        return const Color(0xFFD4380D);
+        return DunesColors.resolve(context, const Color(0xFFD4380D));
       case ReplySlaStatus.replied:
-        return DunesColors.readReceipt;
+        return DunesColors.resolve(context, DunesColors.readReceipt);
       case ReplySlaStatus.unread:
       case ReplySlaStatus.voided:
-        return DunesColors.text3;
+        return DunesColors.resolve(context, DunesColors.text3);
     }
   }
 
@@ -5745,6 +5774,7 @@ class _NativeChatViewState extends State<NativeChatView>
                     style: DunesTypography.sans(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
+                      context: ctx,
                     ),
                   ),
                 ),
@@ -5762,6 +5792,7 @@ class _NativeChatViewState extends State<NativeChatView>
                           style: DunesTypography.mono(
                             fontSize: 12,
                             color: _replySlaStatusColor(i),
+                            context: ctx,
                           ),
                         ),
                       );
@@ -5847,16 +5878,20 @@ class _NativeChatViewState extends State<NativeChatView>
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
-            color: const Color(0xFFD4380D),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFD4380D),
+              role: DunesColorRole.surface,
+            ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.keyboard_arrow_up_rounded,
                 size: 16,
-                color: Colors.white,
+                color: DunesColors.resolve(context, Colors.white),
               ),
               const SizedBox(width: 2),
               Text(
@@ -5864,7 +5899,8 @@ class _NativeChatViewState extends State<NativeChatView>
                 style: DunesTypography.sans(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
+                  context: context,
                 ),
               ),
             ],
@@ -5886,6 +5922,7 @@ class _NativeChatViewState extends State<NativeChatView>
       fontSize: 10.5,
       fontWeight: FontWeight.w500,
       color: c,
+      context: context,
     );
 
     ReplySlaItem? myItem;
@@ -5914,19 +5951,27 @@ class _NativeChatViewState extends State<NativeChatView>
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: DunesColors.accentSoft,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.accentSoft,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: DunesColors.accent.withValues(alpha: 0.35),
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.accent,
+                        role: DunesColorRole.border,
+                      ).withValues(alpha: 0.35),
                     ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.reply_rounded,
                         size: 13,
-                        color: DunesColors.accent,
+                        color: DunesColors.resolve(context, DunesColors.accent),
                       ),
                       const SizedBox(width: 3),
                       Text(
@@ -5934,7 +5979,11 @@ class _NativeChatViewState extends State<NativeChatView>
                         style: DunesTypography.mono(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.accent,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.accent,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -5974,15 +6023,21 @@ class _NativeChatViewState extends State<NativeChatView>
                     _replySlaSummary(others),
                     style: style(
                       others.any((i) => i.isOpen)
-                          ? const Color(0xFFD4380D)
-                          : DunesColors.readReceipt,
+                          ? DunesColors.resolve(
+                              context,
+                              const Color(0xFFD4380D),
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              DunesColors.readReceipt,
+                            ),
                     ),
                   ),
                 ),
-                const Icon(
+                Icon(
                   Icons.chevron_right,
                   size: 14,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ],
             ),
@@ -6029,9 +6084,21 @@ class _NativeChatViewState extends State<NativeChatView>
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -6046,6 +6113,7 @@ class _NativeChatViewState extends State<NativeChatView>
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
+                  context: context,
                 ),
               ),
             ),
@@ -6071,9 +6139,21 @@ class _NativeChatViewState extends State<NativeChatView>
                 : 8) +
             2,
       ),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -6112,14 +6192,19 @@ class _NativeChatViewState extends State<NativeChatView>
             Icon(
               icon,
               size: 22,
-              color: enabled ? DunesColors.text2 : DunesColors.text3,
+              color: enabled
+                  ? DunesColors.resolve(context, DunesColors.text2)
+                  : DunesColors.resolve(context, DunesColors.text3),
             ),
             const SizedBox(height: 2),
             Text(
               label,
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: enabled ? DunesColors.text2 : DunesColors.text3,
+                color: enabled
+                    ? DunesColors.resolve(context, DunesColors.text2)
+                    : DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],
@@ -6328,9 +6413,21 @@ class _NativeChatViewState extends State<NativeChatView>
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: SizedBox(
         height: 66,
@@ -6348,9 +6445,19 @@ class _NativeChatViewState extends State<NativeChatView>
                   Positioned.fill(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: DunesColors.borderSoft),
+                        border: Border.all(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.borderSoft,
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(5),
@@ -6380,7 +6487,11 @@ class _NativeChatViewState extends State<NativeChatView>
                                         overflow: TextOverflow.ellipsis,
                                         style: DunesTypography.sans(
                                           fontSize: 11,
-                                          color: DunesColors.text2,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.text2,
+                                          ),
+                                          context: context,
                                         ),
                                       ),
                                     ),
@@ -6394,7 +6505,11 @@ class _NativeChatViewState extends State<NativeChatView>
                     top: -6,
                     right: -6,
                     child: Material(
-                      color: const Color(0xFF625B6D),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF625B6D),
+                        role: DunesColorRole.surface,
+                      ),
                       shape: const CircleBorder(),
                       child: InkWell(
                         customBorder: const CircleBorder(),
@@ -6402,12 +6517,12 @@ class _NativeChatViewState extends State<NativeChatView>
                             ? null
                             : () =>
                                   _removeDesktopComposerAttachment(attachment),
-                        child: const SizedBox(
+                        child: SizedBox(
                           width: 20,
                           height: 20,
                           child: Icon(
                             Icons.close_rounded,
-                            color: Colors.white,
+                            color: DunesColors.resolve(context, Colors.white),
                             size: 15,
                           ),
                         ),
@@ -6817,7 +6932,11 @@ class _NativeChatViewState extends State<NativeChatView>
           margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
           decoration: BoxDecoration(
-            color: DunesColors.bgApp,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(16),
             boxShadow: const [
               BoxShadow(
@@ -6873,7 +6992,11 @@ class _NativeChatViewState extends State<NativeChatView>
     required VoidCallback onTap,
   }) {
     return Material(
-      color: DunesColors.bgSoft,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgSoft,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -6883,14 +7006,19 @@ class _NativeChatViewState extends State<NativeChatView>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 20, color: DunesColors.accentDeep),
+              Icon(
+                icon,
+                size: 20,
+                color: DunesColors.resolve(context, DunesColors.accentDeep),
+              ),
               const SizedBox(height: 8),
               Text(
                 title,
                 style: DunesTypography.sans(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 3),
@@ -6898,7 +7026,8 @@ class _NativeChatViewState extends State<NativeChatView>
                 subtitle,
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ],
@@ -7823,7 +7952,7 @@ class _NativeChatViewState extends State<NativeChatView>
         title: const Text('存入我的知识库'),
         content: Text(
           '将把「$title」存入你的知识库，上传后可检索引用。\n\n是否继续？',
-          style: DunesTypography.sans(fontSize: 14, height: 1.55),
+          style: DunesTypography.sans(fontSize: 14, height: 1.55, context: ctx),
         ),
         actions: [
           TextButton(
@@ -8186,7 +8315,11 @@ class _NativeChatViewState extends State<NativeChatView>
         title: const Text('下载文件'),
         content: Text(
           '确定要下载以下文件吗？\n\n$detail',
-          style: DunesTypography.sans(fontSize: 13.5, height: 1.5),
+          style: DunesTypography.sans(
+            fontSize: 13.5,
+            height: 1.5,
+            context: ctx,
+          ),
         ),
         actions: [
           TextButton(
@@ -8928,8 +9061,24 @@ class _NativeChatViewState extends State<NativeChatView>
               clipBehavior: Clip.hardEdge,
               padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
               decoration: BoxDecoration(
-                color: mine ? DunesColors.accentSoft : DunesColors.bgApp,
-                border: Border.all(color: DunesColors.borderSoft),
+                color: mine
+                    ? DunesColors.resolve(
+                        context,
+                        DunesColors.accentSoft,
+                        role: DunesColorRole.surface,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        DunesColors.bgApp,
+                        role: DunesColorRole.surface,
+                      ),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(mine ? 12 : 4),
                   topRight: Radius.circular(mine ? 4 : 12),
@@ -9151,8 +9300,9 @@ class _NativeChatViewState extends State<NativeChatView>
       e.text.isEmpty ? '[消息]' : e.text,
       style: DunesTypography.sans(
         fontSize: 14,
-        color: DunesColors.text,
+        color: DunesColors.resolve(context, DunesColors.text),
         height: 1.5,
+        context: context,
       ),
     );
   }
@@ -9179,9 +9329,19 @@ class _NativeChatViewState extends State<NativeChatView>
               ),
               padding: const EdgeInsets.fromLTRB(11, 9, 11, 8),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: const Color(0xFFE9E9E9)),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFE9E9E9),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -9193,7 +9353,8 @@ class _NativeChatViewState extends State<NativeChatView>
                     style: DunesTypography.sans(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 5),
@@ -9206,19 +9367,31 @@ class _NativeChatViewState extends State<NativeChatView>
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 13,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Divider(height: 1, color: Color(0xFFEFEFEF)),
+                  Divider(
+                    height: 1,
+                    color: DunesColors.resolve(
+                      context,
+                      Color(0xFFEFEFEF),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                   const SizedBox(height: 5),
                   Text(
                     '聊天记录',
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ],
@@ -9263,8 +9436,12 @@ class _NativeChatViewState extends State<NativeChatView>
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(sheetContext).size.height * 0.92,
           ),
-          decoration: const BoxDecoration(
-            color: DunesColors.bgPage,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.bgPage,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: SafeArea(
@@ -9288,7 +9465,11 @@ class _NativeChatViewState extends State<NativeChatView>
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: DunesColors.border,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.border,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
@@ -9297,20 +9478,33 @@ class _NativeChatViewState extends State<NativeChatView>
                       child: Row(
                         children: [
                           Material(
-                            color: Colors.white,
-                            shape: const CircleBorder(
-                              side: BorderSide(color: DunesColors.borderSoft),
+                            color: DunesColors.resolve(
+                              context,
+                              Colors.white,
+                              role: DunesColorRole.surface,
+                            ),
+                            shape: CircleBorder(
+                              side: BorderSide(
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.borderSoft,
+                                  role: DunesColorRole.border,
+                                ),
+                              ),
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: InkWell(
                               onTap: () => Navigator.of(context).pop(),
-                              child: const SizedBox(
+                              child: SizedBox(
                                 width: 34,
                                 height: 34,
                                 child: Icon(
                                   Icons.close_rounded,
                                   size: 18,
-                                  color: DunesColors.text2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text2,
+                                  ),
                                 ),
                               ),
                             ),
@@ -9326,7 +9520,11 @@ class _NativeChatViewState extends State<NativeChatView>
                                   style: DunesTypography.sans(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
-                                    color: DunesColors.text,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text,
+                                    ),
+                                    context: context,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
@@ -9334,7 +9532,11 @@ class _NativeChatViewState extends State<NativeChatView>
                                   '共 ${bundle.entries.length} 条记录',
                                   style: DunesTypography.sans(
                                     fontSize: 11,
-                                    color: DunesColors.text3,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text3,
+                                    ),
+                                    context: context,
                                   ),
                                 ),
                               ],
@@ -9343,9 +9545,19 @@ class _NativeChatViewState extends State<NativeChatView>
                           Tooltip(
                             message: '复制全部',
                             child: Material(
-                              color: Colors.white,
-                              shape: const CircleBorder(
-                                side: BorderSide(color: DunesColors.borderSoft),
+                              color: DunesColors.resolve(
+                                context,
+                                Colors.white,
+                                role: DunesColorRole.surface,
+                              ),
+                              shape: CircleBorder(
+                                side: BorderSide(
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.borderSoft,
+                                    role: DunesColorRole.border,
+                                  ),
+                                ),
                               ),
                               clipBehavior: Clip.antiAlias,
                               child: InkWell(
@@ -9354,13 +9566,16 @@ class _NativeChatViewState extends State<NativeChatView>
                                     _forwardBundleCopyText(bundle),
                                   ),
                                 ),
-                                child: const SizedBox(
+                                child: SizedBox(
                                   width: 34,
                                   height: 34,
                                   child: Icon(
                                     Icons.copy_rounded,
                                     size: 16,
-                                    color: DunesColors.text2,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text2,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -9377,20 +9592,31 @@ class _NativeChatViewState extends State<NativeChatView>
                             setModalState(() => keyword = value),
                         style: DunesTypography.sans(
                           fontSize: 14,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
-                        cursorColor: DunesColors.accent,
+                        cursorColor: DunesColors.resolve(
+                          context,
+                          DunesColors.accent,
+                        ),
                         textInputAction: TextInputAction.search,
                         decoration: InputDecoration(
                           hintText: '搜索聊天记录',
                           hintStyle: DunesTypography.sans(
                             fontSize: 14,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
                           ),
-                          prefixIcon: const Icon(
+                          prefixIcon: Icon(
                             Icons.search_rounded,
                             size: 20,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                           prefixIconConstraints: const BoxConstraints(
                             minWidth: 42,
@@ -9404,10 +9630,13 @@ class _NativeChatViewState extends State<NativeChatView>
                                     setModalState(() => keyword = '');
                                   },
                                   padding: EdgeInsets.zero,
-                                  icon: const Icon(
+                                  icon: Icon(
                                     Icons.cancel_rounded,
                                     size: 18,
-                                    color: DunesColors.text3,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text3,
+                                    ),
                                   ),
                                 ),
                           suffixIconConstraints: const BoxConstraints(
@@ -9415,7 +9644,11 @@ class _NativeChatViewState extends State<NativeChatView>
                             minHeight: 38,
                           ),
                           filled: true,
-                          fillColor: Colors.white,
+                          fillColor: DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.surface,
+                          ),
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -9423,20 +9656,32 @@ class _NativeChatViewState extends State<NativeChatView>
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: DunesColors.borderSoft,
+                            borderSide: BorderSide(
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.borderSoft,
+                                role: DunesColorRole.border,
+                              ),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: DunesColors.borderSoft,
+                            borderSide: BorderSide(
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.borderSoft,
+                                role: DunesColorRole.border,
+                              ),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: DunesColors.accentLine,
+                            borderSide: BorderSide(
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.accentLine,
+                                role: DunesColorRole.border,
+                              ),
                             ),
                           ),
                         ),
@@ -9451,16 +9696,21 @@ class _NativeChatViewState extends State<NativeChatView>
                                   Icon(
                                     Icons.manage_search_rounded,
                                     size: 40,
-                                    color: DunesColors.text3.withValues(
-                                      alpha: 0.6,
-                                    ),
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text3,
+                                    ).withValues(alpha: 0.6),
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
                                     '未找到相关记录',
                                     style: DunesTypography.sans(
                                       fontSize: 13,
-                                      color: DunesColors.text3,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text3,
+                                      ),
+                                      context: context,
                                     ),
                                   ),
                                 ],
@@ -9521,7 +9771,11 @@ class _NativeChatViewState extends State<NativeChatView>
                         style: DunesTypography.sans(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                          context: context,
                         ),
                       ),
                     ),
@@ -9531,7 +9785,11 @@ class _NativeChatViewState extends State<NativeChatView>
                         e.timeLabel,
                         style: DunesTypography.sans(
                           fontSize: 11,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -9548,7 +9806,11 @@ class _NativeChatViewState extends State<NativeChatView>
                             vertical: 9,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: DunesColors.resolve(
+                              context,
+                              Colors.white,
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: const BorderRadius.only(
                               topLeft: Radius.circular(4),
                               topRight: Radius.circular(14),
@@ -9766,7 +10028,13 @@ class _NativeChatViewState extends State<NativeChatView>
           child: Stack(
             children: [
               Positioned.fill(
-                child: Container(color: Colors.black.withValues(alpha: 0.35)),
+                child: Container(
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.black,
+                    role: DunesColorRole.surface,
+                  ).withValues(alpha: 0.35),
+                ),
               ),
               Align(
                 alignment: Alignment.bottomCenter,
@@ -9806,19 +10074,32 @@ class _NativeChatViewState extends State<NativeChatView>
   @override
   Widget build(BuildContext context) {
     if (!_bootstrapped && _loading && _conversation == null) {
-      return const Scaffold(
-        backgroundColor: DunesColors.bgApp,
+      return Scaffold(
+        backgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         body: Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
     if (_error != null && !_bootstrapped && _conversation == null) {
       return Scaffold(
-        backgroundColor: DunesColors.bgApp,
+        backgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_error!, style: const TextStyle(color: DunesColors.text3)),
+              Text(
+                _error!,
+                style: TextStyle(
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
+              ),
               const SizedBox(height: 12),
               OutlinedButton(onPressed: _load, child: const Text('重试')),
             ],
@@ -9829,8 +10110,12 @@ class _NativeChatViewState extends State<NativeChatView>
 
     final conv = _conversation;
     if (conv == null) {
-      return const Scaffold(
-        backgroundColor: DunesColors.bgApp,
+      return Scaffold(
+        backgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         body: Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
@@ -9865,7 +10150,11 @@ class _NativeChatViewState extends State<NativeChatView>
 
     final scaffold = Scaffold(
       resizeToAvoidBottomInset: true,
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: DropTarget(
@@ -9932,14 +10221,21 @@ class _NativeChatViewState extends State<NativeChatView>
                                       width: 45,
                                       height: 45,
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF7B5CD8),
+                                        color: DunesColors.resolve(
+                                          context,
+                                          const Color(0xFF7B5CD8),
+                                          role: DunesColorRole.surface,
+                                        ),
                                         borderRadius: BorderRadius.circular(
                                           45 * 0.18,
                                         ),
                                       ),
-                                      child: const Icon(
+                                      child: Icon(
                                         Icons.folder_copy_outlined,
-                                        color: Colors.white,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          Colors.white,
+                                        ),
                                         size: 24,
                                       ),
                                     )
@@ -9964,10 +10260,13 @@ class _NativeChatViewState extends State<NativeChatView>
                                     tooltip: '智能分析',
                                     onPressed: () =>
                                         widget.onOpenAiSummary!(conv.id),
-                                    icon: const Icon(
+                                    icon: Icon(
                                       Icons.auto_awesome_rounded,
                                       size: 20,
-                                      color: Color(0xFF7B5CD8),
+                                      color: DunesColors.resolveNullable(
+                                        context,
+                                        Color(0xFF7B5CD8),
+                                      ),
                                     ),
                                   ),
                                 // 私聊：三点进资料（历史/免打扰/置顶在资料页）
@@ -10034,8 +10333,11 @@ class _NativeChatViewState extends State<NativeChatView>
                                           Text(
                                             _error!,
                                             textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              color: DunesColors.text3,
+                                            style: TextStyle(
+                                              color: DunesColors.resolve(
+                                                context,
+                                                DunesColors.text3,
+                                              ),
                                             ),
                                           ),
                                           const SizedBox(height: 12),
@@ -10318,9 +10620,15 @@ class _NativeChatViewState extends State<NativeChatView>
                                                         milliseconds: 200,
                                                       ),
                                                       decoration: BoxDecoration(
-                                                        color: DunesColors
-                                                            .accentSoft
-                                                            .withValues(
+                                                        color:
+                                                            DunesColors.resolve(
+                                                              context,
+                                                              DunesColors
+                                                                  .accentSoft,
+                                                              role:
+                                                                  DunesColorRole
+                                                                      .surface,
+                                                            ).withValues(
                                                               alpha: 0.45,
                                                             ),
                                                         borderRadius:
@@ -10372,10 +10680,16 @@ class _NativeChatViewState extends State<NativeChatView>
                                                                     .radio_button_unchecked,
                                                           size: 22,
                                                           color: selected
-                                                              ? DunesColors
-                                                                    .accent
-                                                              : DunesColors
-                                                                    .text3,
+                                                              ? DunesColors.resolve(
+                                                                  context,
+                                                                  DunesColors
+                                                                      .accent,
+                                                                )
+                                                              : DunesColors.resolve(
+                                                                  context,
+                                                                  DunesColors
+                                                                      .text3,
+                                                                ),
                                                         ),
                                                       ),
                                                     ),
@@ -10440,7 +10754,11 @@ class _NativeChatViewState extends State<NativeChatView>
                                       child: Material(
                                         elevation: 1,
                                         borderRadius: BorderRadius.circular(16),
-                                        color: DunesColors.bgApp,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.bgApp,
+                                          role: DunesColorRole.surface,
+                                        ),
                                         child: Padding(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 12,
@@ -10462,7 +10780,11 @@ class _NativeChatViewState extends State<NativeChatView>
                                                 '定位中…',
                                                 style: DunesTypography.sans(
                                                   fontSize: 11,
-                                                  color: DunesColors.text3,
+                                                  color: DunesColors.resolve(
+                                                    context,
+                                                    DunesColors.text3,
+                                                  ),
+                                                  context: context,
                                                 ),
                                               ),
                                             ],
@@ -10493,15 +10815,27 @@ class _NativeChatViewState extends State<NativeChatView>
                                               isDesktopCommOnly ? 999 : 14,
                                             ),
                                             color: isDesktopCommOnly
-                                                ? const Color(0xFF07C160)
-                                                : Colors.white,
+                                                ? DunesColors.resolve(
+                                                    context,
+                                                    const Color(0xFF07C160),
+                                                    role:
+                                                        DunesColorRole.surface,
+                                                  )
+                                                : DunesColors.resolve(
+                                                    context,
+                                                    Colors.white,
+                                                    role:
+                                                        DunesColorRole.surface,
+                                                  ),
                                             border: isDesktopCommOnly
                                                 ? null
                                                 : Border.all(
-                                                    color: DunesColors.accent
-                                                        .withValues(
-                                                          alpha: 0.32,
-                                                        ),
+                                                    color: DunesColors.resolve(
+                                                      context,
+                                                      DunesColors.accent,
+                                                      role:
+                                                          DunesColorRole.border,
+                                                    ).withValues(alpha: 0.32),
                                                   ),
                                           ),
                                           padding: const EdgeInsets.symmetric(
@@ -10512,11 +10846,14 @@ class _NativeChatViewState extends State<NativeChatView>
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               if (!isDesktopCommOnly) ...[
-                                                const Icon(
+                                                Icon(
                                                   Icons
                                                       .mark_chat_unread_outlined,
                                                   size: 15,
-                                                  color: DunesColors.accentDeep,
+                                                  color: DunesColors.resolve(
+                                                    context,
+                                                    DunesColors.accentDeep,
+                                                  ),
                                                 ),
                                                 const SizedBox(width: 5),
                                               ],
@@ -10526,8 +10863,16 @@ class _NativeChatViewState extends State<NativeChatView>
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w600,
                                                   color: isDesktopCommOnly
-                                                      ? Colors.white
-                                                      : DunesColors.accentDeep,
+                                                      ? DunesColors.resolve(
+                                                          context,
+                                                          Colors.white,
+                                                        )
+                                                      : DunesColors.resolve(
+                                                          context,
+                                                          DunesColors
+                                                              .accentDeep,
+                                                        ),
+                                                  context: context,
                                                 ),
                                               ),
                                               const SizedBox(width: 2),
@@ -10535,8 +10880,14 @@ class _NativeChatViewState extends State<NativeChatView>
                                                 Icons.keyboard_arrow_up_rounded,
                                                 size: 16,
                                                 color: isDesktopCommOnly
-                                                    ? Colors.white
-                                                    : DunesColors.accentDeep,
+                                                    ? DunesColors.resolve(
+                                                        context,
+                                                        Colors.white,
+                                                      )
+                                                    : DunesColors.resolve(
+                                                        context,
+                                                        DunesColors.accentDeep,
+                                                      ),
                                               ),
                                             ],
                                           ),
@@ -10568,14 +10919,30 @@ class _NativeChatViewState extends State<NativeChatView>
                                               borderRadius:
                                                   BorderRadius.circular(999),
                                               color: _pendingNewMessageCount > 0
-                                                  ? const Color(0xFF7E64BD)
-                                                  : Colors.white,
+                                                  ? DunesColors.resolve(
+                                                      context,
+                                                      const Color(0xFF7E64BD),
+                                                      role: DunesColorRole
+                                                          .surface,
+                                                    )
+                                                  : DunesColors.resolve(
+                                                      context,
+                                                      Colors.white,
+                                                      role: DunesColorRole
+                                                          .surface,
+                                                    ),
                                               border:
                                                   _pendingNewMessageCount > 0
                                                   ? null
                                                   : Border.all(
-                                                      color: DunesColors
-                                                          .borderSoft,
+                                                      color:
+                                                          DunesColors.resolve(
+                                                            context,
+                                                            DunesColors
+                                                                .borderSoft,
+                                                            role: DunesColorRole
+                                                                .border,
+                                                          ),
                                                     ),
                                             ),
                                             padding: const EdgeInsets.symmetric(
@@ -10592,8 +10959,15 @@ class _NativeChatViewState extends State<NativeChatView>
                                                   color:
                                                       _pendingNewMessageCount >
                                                           0
-                                                      ? Colors.white
-                                                      : DunesColors.accentDeep,
+                                                      ? DunesColors.resolve(
+                                                          context,
+                                                          Colors.white,
+                                                        )
+                                                      : DunesColors.resolve(
+                                                          context,
+                                                          DunesColors
+                                                              .accentDeep,
+                                                        ),
                                                 ),
                                                 const SizedBox(width: 4),
                                                 Text(
@@ -10606,9 +10980,16 @@ class _NativeChatViewState extends State<NativeChatView>
                                                     color:
                                                         _pendingNewMessageCount >
                                                             0
-                                                        ? Colors.white
-                                                        : DunesColors
-                                                              .accentDeep,
+                                                        ? DunesColors.resolve(
+                                                            context,
+                                                            Colors.white,
+                                                          )
+                                                        : DunesColors.resolve(
+                                                            context,
+                                                            DunesColors
+                                                                .accentDeep,
+                                                          ),
+                                                    context: context,
                                                   ),
                                                 ),
                                               ],
@@ -10635,7 +11016,11 @@ class _NativeChatViewState extends State<NativeChatView>
                                       child: Material(
                                         elevation: 0,
                                         borderRadius: BorderRadius.circular(20),
-                                        color: Colors.white,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          Colors.white,
+                                          role: DunesColorRole.surface,
+                                        ),
                                         child: InkWell(
                                           onTap: _jumpToLatest,
                                           borderRadius: BorderRadius.circular(
@@ -10649,18 +11034,24 @@ class _NativeChatViewState extends State<NativeChatView>
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                const Icon(
+                                                Icon(
                                                   Icons.arrow_downward,
                                                   size: 14,
-                                                  color: DunesColors.accentDeep,
+                                                  color: DunesColors.resolve(
+                                                    context,
+                                                    DunesColors.accentDeep,
+                                                  ),
                                                 ),
                                                 const SizedBox(width: 6),
                                                 Text(
                                                   '回到最新消息',
                                                   style: DunesTypography.sans(
                                                     fontSize: 12,
-                                                    color:
-                                                        DunesColors.accentDeep,
+                                                    color: DunesColors.resolve(
+                                                      context,
+                                                      DunesColors.accentDeep,
+                                                    ),
+                                                    context: context,
                                                   ),
                                                 ),
                                               ],
@@ -10701,9 +11092,17 @@ class _NativeChatViewState extends State<NativeChatView>
                   child: IgnorePointer(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: DunesColors.accent.withValues(alpha: 0.1),
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.accent,
+                          role: DunesColorRole.surface,
+                        ).withValues(alpha: 0.1),
                         border: Border.all(
-                          color: DunesColors.accent.withValues(alpha: 0.55),
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.accent,
+                            role: DunesColorRole.border,
+                          ).withValues(alpha: 0.55),
                           width: 2,
                         ),
                       ),
@@ -10714,7 +11113,11 @@ class _NativeChatViewState extends State<NativeChatView>
                             vertical: 14,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: DunesColors.resolve(
+                              context,
+                              Colors.white,
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(14),
                             boxShadow: [
                               BoxShadow(
@@ -10730,7 +11133,10 @@ class _NativeChatViewState extends State<NativeChatView>
                               Icon(
                                 Icons.file_upload_outlined,
                                 size: 22,
-                                color: DunesColors.accentDeep,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.accentDeep,
+                                ),
                               ),
                               const SizedBox(width: 10),
                               Text(
@@ -10738,7 +11144,11 @@ class _NativeChatViewState extends State<NativeChatView>
                                 style: DunesTypography.sans(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
-                                  color: DunesColors.accentDeep,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.accentDeep,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             ],
@@ -10799,7 +11209,11 @@ class _SheetHandle extends StatelessWidget {
         width: 36,
         height: 4,
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.12),
+          color: DunesColors.resolve(
+            context,
+            Colors.black,
+            role: DunesColorRole.surface,
+          ).withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(99),
         ),
       ),
@@ -10994,8 +11408,12 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
         alignment: Alignment.bottomCenter,
         child: Container(
           height: sheetHeight,
-          decoration: const BoxDecoration(
-            color: DunesColors.bgApp,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             boxShadow: [
               BoxShadow(
@@ -11017,6 +11435,7 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                     style: DunesTypography.sans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
+                      context: context,
                     ),
                   ),
                 ),
@@ -11029,7 +11448,8 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                     '可多选成员，支持按姓名、部门、职位搜索',
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ),
@@ -11042,18 +11462,26 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: DunesColors.bgSoft,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.bgSoft,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Colors.black.withValues(alpha: 0.06),
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.black,
+                        role: DunesColorRole.border,
+                      ).withValues(alpha: 0.06),
                     ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.search,
                         size: 16,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -11061,14 +11489,21 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                           controller: _search,
                           focusNode: _searchFocus,
                           autofocus: false,
-                          style: DunesTypography.sans(fontSize: 14),
+                          style: DunesTypography.sans(
+                            fontSize: 14,
+                            context: context,
+                          ),
                           decoration: InputDecoration(
                             isDense: true,
                             border: InputBorder.none,
                             hintText: '搜索姓名 / 部门 / 职位',
                             hintStyle: DunesTypography.sans(
                               fontSize: 14,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
                             ),
                             contentPadding: EdgeInsets.zero,
                           ),
@@ -11091,7 +11526,11 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                             '未找到匹配成员',
                             style: DunesTypography.sans(
                               fontSize: 13,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -11106,7 +11545,11 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                 decoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(
-                      color: Colors.black.withValues(alpha: 0.06),
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.black,
+                        role: DunesColorRole.border,
+                      ).withValues(alpha: 0.06),
                     ),
                   ),
                 ),
@@ -11119,10 +11562,19 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: _selectedCount > 0
-                            ? const [Color(0xFF7E64BD), Color(0xFF553B96)]
+                            ? [
+                                DunesColors.resolve(context, Color(0xFF7E64BD)),
+                                DunesColors.resolve(context, Color(0xFF553B96)),
+                              ]
                             : [
-                                DunesColors.text3.withValues(alpha: 0.35),
-                                DunesColors.text3.withValues(alpha: 0.35),
+                                DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ).withValues(alpha: 0.35),
+                                DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ).withValues(alpha: 0.35),
                               ],
                       ),
                     ),
@@ -11139,7 +11591,11 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                               style: DunesTypography.sans(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
+                                context: context,
                               ),
                             ),
                           ),
@@ -11167,10 +11623,13 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFE85D4C), Color(0xFFF07A5A)],
+            colors: [
+              DunesColors.resolve(context, Color(0xFFE85D4C)),
+              DunesColors.resolve(context, Color(0xFFF07A5A)),
+            ],
           ),
         ),
         child: Text(
@@ -11178,7 +11637,8 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
           style: DunesTypography.sans(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
+            context: context,
           ),
         ),
       ),
@@ -11233,7 +11693,13 @@ class _AtMentionSheetRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Material(
-        color: selected ? const Color(0x14553B96) : Colors.transparent,
+        color: selected
+            ? DunesColors.resolve(
+                context,
+                const Color(0x14553B96),
+                role: DunesColorRole.surface,
+              )
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: onTap,
@@ -11243,7 +11709,13 @@ class _AtMentionSheetRow extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: selected
-                  ? Border.all(color: const Color(0x29553B96))
+                  ? Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0x29553B96),
+                        role: DunesColorRole.border,
+                      ),
+                    )
                   : null,
             ),
             child: Row(
@@ -11263,6 +11735,7 @@ class _AtMentionSheetRow extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -11272,7 +11745,11 @@ class _AtMentionSheetRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 11,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -11303,19 +11780,30 @@ class _AtMentionCheck extends StatelessWidget {
         border: selected
             ? null
             : Border.all(
-                color: Colors.black.withValues(alpha: 0.18),
+                color: DunesColors.resolve(
+                  context,
+                  Colors.black,
+                  role: DunesColorRole.border,
+                ).withValues(alpha: 0.18),
                 width: 1.5,
               ),
         gradient: selected
-            ? const LinearGradient(
+            ? LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF553B96), Color(0xFF7B5CB8)],
+                colors: [
+                  DunesColors.resolve(context, Color(0xFF553B96)),
+                  DunesColors.resolve(context, Color(0xFF7B5CB8)),
+                ],
               )
             : null,
       ),
       child: selected
-          ? const Icon(Icons.check, size: 12, color: Colors.white)
+          ? Icon(
+              Icons.check,
+              size: 12,
+              color: DunesColors.resolve(context, Colors.white),
+            )
           : null,
     );
   }
@@ -11339,8 +11827,12 @@ class _GroupReadSheet extends StatelessWidget {
       top: false,
       child: Container(
         constraints: BoxConstraints(maxHeight: maxHeight.clamp(280.0, 480.0)),
-        decoration: const BoxDecoration(
-          color: DunesColors.bgApp,
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.bgApp,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -11356,6 +11848,7 @@ class _GroupReadSheet extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
+                    context: context,
                   ),
                 ),
               ),
@@ -11411,7 +11904,8 @@ class _GroupReadSheetSection extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
         ),
@@ -11422,7 +11916,8 @@ class _GroupReadSheetSection extends StatelessWidget {
               emptyText,
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           )
@@ -11472,6 +11967,7 @@ class _GroupReadSheetRow extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
+                      context: context,
                     ),
                   ),
                   if (person.sub.isNotEmpty)
@@ -11483,7 +11979,11 @@ class _GroupReadSheetRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 11,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ),

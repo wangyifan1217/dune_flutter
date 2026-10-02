@@ -670,8 +670,12 @@ class _NativeMyWorkProfileCenterPageState
       builder: (ctx) => SafeArea(
         top: false,
         child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              ctx,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
           ),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -684,7 +688,11 @@ class _NativeMyWorkProfileCenterPageState
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: DunesColors.borderSoft,
+                    color: DunesColors.resolve(
+                      ctx,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -695,7 +703,8 @@ class _NativeMyWorkProfileCenterPageState
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(ctx, DunesColors.text),
+                  context: ctx,
                 ),
               ),
               const SizedBox(height: 6),
@@ -703,7 +712,8 @@ class _NativeMyWorkProfileCenterPageState
                 '调整后将作用于整个应用',
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(ctx, DunesColors.text3),
+                  context: ctx,
                 ),
               ),
               const SizedBox(height: 12),
@@ -715,13 +725,17 @@ class _NativeMyWorkProfileCenterPageState
                     style: DunesTypography.sans(
                       fontSize: 15 * AppTextScaleController.presets[i],
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(ctx, DunesColors.text),
+                      context: ctx,
                     ),
                   ),
                   trailing: i == controller.presetIndex
-                      ? const Icon(
+                      ? Icon(
                           Icons.check_rounded,
-                          color: Color(0xFF7E64BD),
+                          color: DunesColors.resolveNullable(
+                            ctx,
+                            Color(0xFF7E64BD),
+                          ),
                         )
                       : null,
                   onTap: () => Navigator.pop(ctx, i),
@@ -750,7 +764,13 @@ class _NativeMyWorkProfileCenterPageState
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: DunesColors.coral),
+            style: FilledButton.styleFrom(
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                DunesColors.coral,
+                role: DunesColorRole.surface,
+              ),
+            ),
             child: const Text('退出'),
           ),
         ],
@@ -783,8 +803,12 @@ class _NativeMyWorkProfileCenterPageState
       builder: (ctx) => SafeArea(
         top: false,
         child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              ctx,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
@@ -797,7 +821,11 @@ class _NativeMyWorkProfileCenterPageState
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: DunesColors.borderSoft,
+                    color: DunesColors.resolve(
+                      ctx,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -808,13 +836,20 @@ class _NativeMyWorkProfileCenterPageState
                   Container(
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF7045B2).withValues(alpha: .12),
+                      color: DunesColors.resolve(
+                        ctx,
+                        const Color(0xFF7045B2),
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: .12),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.settings_rounded,
                       size: 20,
-                      color: Color(0xFF7045B2),
+                      color: DunesColors.resolveNullable(
+                        ctx,
+                        Color(0xFF7045B2),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -823,16 +858,20 @@ class _NativeMyWorkProfileCenterPageState
                     style: DunesTypography.sans(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
-                      color: const Color(0xFF2C1E3F),
+                      color: DunesColors.resolve(ctx, const Color(0xFF2C1E3F)),
+                      context: ctx,
                     ),
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.of(ctx).pop(),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close_rounded,
                       size: 20,
-                      color: Color(0xFF8A7A9E),
+                      color: DunesColors.resolveNullable(
+                        ctx,
+                        Color(0xFF8A7A9E),
+                      ),
                     ),
                   ),
                 ],
@@ -840,7 +879,7 @@ class _NativeMyWorkProfileCenterPageState
               const SizedBox(height: 12),
               _buildSettingTile(
                 icon: Icons.format_size_rounded,
-                iconColor: const Color(0xFF7045B2),
+                iconColor: DunesColors.resolve(ctx, const Color(0xFF7045B2)),
                 title: '字号调节',
                 subtitle:
                     '当前：${AppTextScaleController.labels[AppTextScaleController.instance.presetIndex]}',
@@ -852,7 +891,7 @@ class _NativeMyWorkProfileCenterPageState
               if (!isDesktopCommOnly) ...[
                 _buildSettingTile(
                   icon: Icons.dark_mode_outlined,
-                  iconColor: const Color(0xFF6552B8),
+                  iconColor: DunesColors.resolve(ctx, const Color(0xFF6552B8)),
                   title: '日夜主题',
                   subtitle: '自动切换，或临时选择日间 / 夜间',
                   onTap: () {
@@ -863,7 +902,7 @@ class _NativeMyWorkProfileCenterPageState
               ],
               _buildSettingTile(
                 icon: Icons.history_rounded,
-                iconColor: const Color(0xFF3880FF),
+                iconColor: DunesColors.resolve(ctx, const Color(0xFF3880FF)),
                 title: '发版历史与更新记录',
                 subtitle: '${AppUpdateService.platformDisplayName()} 版本历史与公告',
                 onTap: () {
@@ -873,7 +912,7 @@ class _NativeMyWorkProfileCenterPageState
               ),
               _buildSettingTile(
                 icon: Icons.cleaning_services_rounded,
-                iconColor: const Color(0xFF10B981),
+                iconColor: DunesColors.resolve(ctx, const Color(0xFF10B981)),
                 title: '清理本地缓存',
                 subtitle: '清理工作画像与本地离线数据缓存',
                 onTap: () {
@@ -883,10 +922,17 @@ class _NativeMyWorkProfileCenterPageState
                 },
               ),
               if (widget.onLogout != null) ...[
-                const Divider(height: 20, color: Color(0xFFEFE8F5)),
+                Divider(
+                  height: 20,
+                  color: DunesColors.resolve(
+                    ctx,
+                    Color(0xFFEFE8F5),
+                    role: DunesColorRole.border,
+                  ),
+                ),
                 _buildSettingTile(
                   icon: Icons.logout_rounded,
-                  iconColor: DunesColors.coral,
+                  iconColor: DunesColors.resolve(ctx, DunesColors.coral),
                   title: '退出登录',
                   subtitle: '退出当前登录账号',
                   isDanger: true,
@@ -923,21 +969,54 @@ class _NativeMyWorkProfileCenterPageState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('APP 外观', style: DunesTypography.sans(fontSize: 17, fontWeight: FontWeight.w700, color: const Color(0xFF37274C))),
+              Text(
+                'APP 外观',
+                style: DunesTypography.sans(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.resolve(context, const Color(0xFF37274C)),
+                  context: context,
+                ),
+              ),
               const SizedBox(height: 8),
-              Text(canOverride ? '仅影响 iOS / Android APP。自动模式按管理员设置的本地时段切换。' : '仅影响 iOS / Android APP；手动切换由管理员关闭。', style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3)),
+              Text(
+                canOverride
+                    ? '仅影响 iOS / Android APP。自动模式按管理员设置的本地时段切换。'
+                    : '仅影响 iOS / Android APP；手动切换由管理员关闭。',
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
+                ),
+              ),
               const SizedBox(height: 12),
               for (final option in options)
                 ValueListenableBuilder<String>(
                   valueListenable: controller.manualOverride,
                   builder: (context, selected, _) => ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(option.$3, color: const Color(0xFF7045B2)),
+                    leading: Icon(
+                      option.$3,
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF7045B2),
+                      ),
+                    ),
                     title: Text(option.$2),
-                    trailing: selected == option.$1 ? const Icon(Icons.check_circle_rounded, color: Color(0xFF7045B2)) : null,
+                    trailing: selected == option.$1
+                        ? Icon(
+                            Icons.check_circle_rounded,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFF7045B2),
+                            ),
+                          )
+                        : null,
                     onTap: () async {
                       await controller.setOverride(option.$1);
-                      if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                      if (sheetContext.mounted) {
+                        Navigator.of(sheetContext).pop();
+                      }
                     },
                   ),
                 ),
@@ -969,10 +1048,18 @@ class _NativeMyWorkProfileCenterPageState
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: .12),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    iconColor.withValues(alpha: .12),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, size: 19, color: iconColor),
+                child: Icon(
+                  icon,
+                  size: 19,
+                  color: DunesColors.resolveNullable(context, iconColor),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -985,8 +1072,11 @@ class _NativeMyWorkProfileCenterPageState
                         fontSize: 14.5,
                         fontWeight: FontWeight.w600,
                         color: isDanger
-                            ? DunesColors.coral
-                            : const Color(0xFF2C1E3F),
+                            ? DunesColors.resolve(context, DunesColors.coral)
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFF2C1E3F),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -995,8 +1085,14 @@ class _NativeMyWorkProfileCenterPageState
                       style: TextStyle(
                         fontSize: 11.5,
                         color: isDanger
-                            ? DunesColors.coral.withValues(alpha: .8)
-                            : const Color(0xFF8A7A9E),
+                            ? DunesColors.resolve(
+                                context,
+                                DunesColors.coral,
+                              ).withValues(alpha: .8)
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFF8A7A9E),
+                              ),
                       ),
                     ),
                   ],
@@ -1005,7 +1101,9 @@ class _NativeMyWorkProfileCenterPageState
               Icon(
                 Icons.chevron_right_rounded,
                 size: 20,
-                color: isDanger ? DunesColors.coral : const Color(0xFFB5A9C4),
+                color: isDanger
+                    ? DunesColors.resolve(context, DunesColors.coral)
+                    : DunesColors.resolve(context, const Color(0xFFB5A9C4)),
               ),
             ],
           ),
@@ -1064,7 +1162,11 @@ class _NativeMyWorkProfileCenterPageState
         stats.pendingInitiateForMe;
 
     return ColoredBox(
-      color: const Color(0xFFF7F5FA),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF7F5FA),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Stack(
@@ -1158,19 +1260,34 @@ class _NativeMyWorkProfileCenterPageState
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFEFE8F5))),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFEFE8F5),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
           RichText(
-            text: const TextSpan(
+            text: TextSpan(
               children: [
                 TextSpan(
                   text: '沙丘',
                   style: TextStyle(
-                    color: Color(0xFF7045B2),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF7045B2),
+                    ),
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.2,
@@ -1179,7 +1296,10 @@ class _NativeMyWorkProfileCenterPageState
                 TextSpan(
                   text: '  ·  个人工作画像',
                   style: TextStyle(
-                    color: Color(0xFF4C3666),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF4C3666),
+                    ),
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1194,7 +1314,7 @@ class _NativeMyWorkProfileCenterPageState
               tooltip: '扫一扫',
               onPressed: _openQrScanner,
               icon: const Icon(Icons.qr_code_scanner_rounded, size: 21),
-              color: const Color(0xFF6B5882),
+              color: DunesColors.resolve(context, const Color(0xFF6B5882)),
             ),
           _buildMoreMenu(),
         ],
@@ -1207,10 +1327,13 @@ class _NativeMyWorkProfileCenterPageState
     return PopupMenuButton<String>(
       tooltip: '更多功能',
       position: PopupMenuPosition.under,
-      icon: const Icon(Icons.more_horiz_rounded, color: Color(0xFF6B5882)),
+      icon: Icon(
+        Icons.more_horiz_rounded,
+        color: DunesColors.resolveNullable(context, Color(0xFF6B5882)),
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       elevation: 12,
-      color: Colors.white,
+      color: DunesColors.resolve(context, Colors.white),
       onSelected: (action) {
         switch (action) {
           case 'workbench':
@@ -1237,63 +1360,71 @@ class _NativeMyWorkProfileCenterPageState
       itemBuilder: (ctx) => [
         if (widget.onOpenWorkbench != null ||
             (!isDesktopCommOnly && !widget.session.isExternalUser))
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'workbench',
             child: Row(
               children: [
-                Icon(Icons.apps_rounded, size: 19, color: Color(0xFF6366F1)),
+                Icon(
+                  Icons.apps_rounded,
+                  size: 19,
+                  color: DunesColors.resolveNullable(ctx, Color(0xFF6366F1)),
+                ),
                 SizedBox(width: 10),
                 Text('打开工作台'),
               ],
             ),
           ),
         if (!isDesktopCommOnly)
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'scan',
             child: Row(
               children: [
                 Icon(
                   Icons.qr_code_scanner_rounded,
                   size: 19,
-                  color: Color(0xFF7045B2),
+                  color: DunesColors.resolveNullable(ctx, Color(0xFF7045B2)),
                 ),
                 SizedBox(width: 10),
                 Text('扫一扫'),
               ],
             ),
           ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'font_scale',
           child: Row(
             children: [
               Icon(
                 Icons.format_size_rounded,
                 size: 19,
-                color: Color(0xFF6B5882),
+                color: DunesColors.resolveNullable(ctx, Color(0xFF6B5882)),
               ),
               SizedBox(width: 10),
               Text('字号调节'),
             ],
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'refresh',
           child: Row(
             children: [
-              Icon(Icons.refresh_rounded, size: 19, color: Color(0xFF6B5882)),
+              Icon(
+                Icons.refresh_rounded,
+                size: 19,
+                color: DunesColors.resolveNullable(ctx, Color(0xFF6B5882)),
+              ),
               SizedBox(width: 10),
               Text('刷新画像与事项'),
             ],
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'clear_cache',
           child: Row(
             children: [
               Icon(
                 Icons.cleaning_services_rounded,
                 size: 19,
-                color: Color(0xFF6B5882),
+                color: DunesColors.resolveNullable(ctx, Color(0xFF6B5882)),
               ),
               SizedBox(width: 10),
               Text('清理缓存'),
@@ -1305,9 +1436,18 @@ class _NativeMyWorkProfileCenterPageState
           value: 'logout',
           child: Row(
             children: [
-              Icon(Icons.logout_rounded, size: 19, color: DunesColors.coral),
+              Icon(
+                Icons.logout_rounded,
+                size: 19,
+                color: DunesColors.resolve(ctx, DunesColors.coral),
+              ),
               const SizedBox(width: 10),
-              Text('退出登录', style: TextStyle(color: DunesColors.coral)),
+              Text(
+                '退出登录',
+                style: TextStyle(
+                  color: DunesColors.resolve(ctx, DunesColors.coral),
+                ),
+              ),
             ],
           ),
         ),
@@ -1373,7 +1513,11 @@ class _NativeMyWorkProfileCenterPageState
             Container(
               padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .14),
+                color: DunesColors.resolveNullable(
+                  context,
+                  Colors.white.withValues(alpha: .14),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: Colors.white.withValues(alpha: .20),
@@ -1383,7 +1527,10 @@ class _NativeMyWorkProfileCenterPageState
               child: Icon(
                 icon,
                 size: 13,
-                color: Colors.white.withValues(alpha: .95),
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                ).withValues(alpha: .95),
               ),
             ),
             const SizedBox(width: 8),
@@ -1393,8 +1540,8 @@ class _NativeMyWorkProfileCenterPageState
               children: [
                 Text(
                   value,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, Colors.white),
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.2,
@@ -1405,7 +1552,10 @@ class _NativeMyWorkProfileCenterPageState
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: .75),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Colors.white.withValues(alpha: .75),
+                    ),
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1424,12 +1574,12 @@ class _NativeMyWorkProfileCenterPageState
         return Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(22),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               colors: [
-                Color(0xFF140E24),
-                Color(0xFF1B132F),
-                Color(0xFF281946),
-                Color(0xFF19102C),
+                DunesColors.resolve(context, Color(0xFF140E24)),
+                DunesColors.resolve(context, Color(0xFF1B132F)),
+                DunesColors.resolve(context, Color(0xFF281946)),
+                DunesColors.resolve(context, Color(0xFF19102C)),
               ],
               stops: [0.0, 0.35, 0.75, 1.0],
               begin: Alignment.topLeft,
@@ -1460,8 +1610,14 @@ class _NativeMyWorkProfileCenterPageState
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        const Color(0xFF8855DF).withValues(alpha: .24),
-                        const Color(0xFF8855DF).withValues(alpha: 0),
+                        DunesColors.resolve(
+                          context,
+                          const Color(0xFF8855DF),
+                        ).withValues(alpha: .24),
+                        DunesColors.resolve(
+                          context,
+                          const Color(0xFF8855DF),
+                        ).withValues(alpha: 0),
                       ],
                     ),
                   ),
@@ -1537,14 +1693,20 @@ class _NativeMyWorkProfileCenterPageState
                                   fallbackText: avatarText,
                                 ),
                               ),
-                              if (ImEggSettings.instance.seasonalDecoration.isNotEmpty)
+                              if (ImEggSettings
+                                  .instance
+                                  .seasonalDecoration
+                                  .isNotEmpty)
                                 Positioned(
                                   right: -3,
                                   top: -7,
                                   child: IgnorePointer(
                                     child: Text(
                                       ImEggSettings.instance.seasonalDecoration,
-                                      style: const TextStyle(fontSize: 18, height: 1),
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        height: 1,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1555,7 +1717,11 @@ class _NativeMyWorkProfileCenterPageState
                                   width: 20,
                                   height: 20,
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                      role: DunesColorRole.surface,
+                                    ),
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
@@ -1572,7 +1738,10 @@ class _NativeMyWorkProfileCenterPageState
                                         ? Icons.more_horiz
                                         : Icons.edit_rounded,
                                     size: 12,
-                                    color: const Color(0xFF65399E),
+                                    color: DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF65399E),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1605,10 +1774,13 @@ class _NativeMyWorkProfileCenterPageState
                                     width: 0.7,
                                   ),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   '个人工作画像',
                                   style: TextStyle(
-                                    color: Colors.white,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ),
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 0.6,
@@ -1620,10 +1792,13 @@ class _NativeMyWorkProfileCenterPageState
                                 name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.w800,
-                                  color: Colors.white,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Colors.white,
+                                  ),
                                   letterSpacing: 0.3,
                                 ),
                               ),
@@ -1634,7 +1809,10 @@ class _NativeMyWorkProfileCenterPageState
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.white.withValues(alpha: .82),
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Colors.white,
+                                  ).withValues(alpha: .82),
                                   height: 1.2,
                                 ),
                               ),
@@ -1714,9 +1892,20 @@ class _NativeMyWorkProfileCenterPageState
       height: 44,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFFEBE3F2),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFEBE3F2),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: const Color(0xFFDDD2E9), width: 0.6),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFDDD2E9),
+            role: DunesColorRole.border,
+          ),
+          width: 0.6,
+        ),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1734,7 +1923,11 @@ class _NativeMyWorkProfileCenterPageState
                   width: pillWidth,
                   height: double.infinity,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(99),
                     boxShadow: [
                       BoxShadow(
@@ -1766,8 +1959,14 @@ class _NativeMyWorkProfileCenterPageState
                               Icons.dashboard_customize_rounded,
                               size: 16,
                               color: _activeTabIndex == 0
-                                  ? const Color(0xFF683CA3)
-                                  : const Color(0xFF7A688F),
+                                  ? DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF683CA3),
+                                    )
+                                  : DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF7A688F),
+                                    ),
                             ),
                             const SizedBox(width: 6),
                             Text(
@@ -1778,8 +1977,14 @@ class _NativeMyWorkProfileCenterPageState
                                     ? FontWeight.w700
                                     : FontWeight.w500,
                                 color: _activeTabIndex == 0
-                                    ? const Color(0xFF351C55)
-                                    : const Color(0xFF7A688F),
+                                    ? DunesColors.resolve(
+                                        context,
+                                        const Color(0xFF351C55),
+                                      )
+                                    : DunesColors.resolve(
+                                        context,
+                                        const Color(0xFF7A688F),
+                                      ),
                               ),
                             ),
                             if (unreadBadge > 0) ...[
@@ -1790,13 +1995,20 @@ class _NativeMyWorkProfileCenterPageState
                                   vertical: 1,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: DunesColors.coral,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.coral,
+                                    role: DunesColorRole.surface,
+                                  ),
                                   borderRadius: BorderRadius.circular(99),
                                 ),
                                 child: Text(
                                   unreadBadge > 99 ? '99+' : '$unreadBadge',
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ),
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -1824,8 +2036,14 @@ class _NativeMyWorkProfileCenterPageState
                               Icons.diamond_rounded,
                               size: 16,
                               color: _activeTabIndex == 1
-                                  ? const Color(0xFF683CA3)
-                                  : const Color(0xFF7A688F),
+                                  ? DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF683CA3),
+                                    )
+                                  : DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF7A688F),
+                                    ),
                             ),
                             const SizedBox(width: 6),
                             Text(
@@ -1836,8 +2054,14 @@ class _NativeMyWorkProfileCenterPageState
                                     ? FontWeight.w700
                                     : FontWeight.w500,
                                 color: _activeTabIndex == 1
-                                    ? const Color(0xFF351C55)
-                                    : const Color(0xFF7A688F),
+                                    ? DunesColors.resolve(
+                                        context,
+                                        const Color(0xFF351C55),
+                                      )
+                                    : DunesColors.resolve(
+                                        context,
+                                        const Color(0xFF7A688F),
+                                      ),
                               ),
                             ),
                           ],
@@ -1886,9 +2110,19 @@ class _NativeMyWorkProfileCenterPageState
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFECE4F3)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFECE4F3),
+                role: DunesColorRole.border,
+              ),
+            ),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF6B5882).withValues(alpha: .06),
@@ -1902,19 +2136,22 @@ class _NativeMyWorkProfileCenterPageState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+                  gradient: LinearGradient(
+                    colors: [
+                      DunesColors.resolve(context, Color(0xFF8B5CF6)),
+                      DunesColors.resolve(context, Color(0xFF6D28D9)),
+                    ],
                   ),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.auto_graph_rounded,
                   size: 18,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1923,13 +2160,22 @@ class _NativeMyWorkProfileCenterPageState
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF2C1E3F),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF2C1E3F),
+                        ),
                       ),
                     ),
                     SizedBox(height: 2),
                     Text(
                       '展示已有业务记录与阶段趋势，不计算综合能力分或员工排名',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF7A688F)),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF7A688F),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -1939,9 +2185,12 @@ class _NativeMyWorkProfileCenterPageState
                 onPressed: _portraitLoading
                     ? null
                     : () => unawaited(_forwardMyWorkProfile()),
-                icon: const Icon(
+                icon: Icon(
                   Icons.ios_share_rounded,
-                  color: Color(0xFF7651B8),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF7651B8),
+                  ),
                   size: 19,
                 ),
               ),
@@ -1973,12 +2222,12 @@ class _NativeMyWorkProfileCenterPageState
         // 5. 工作分类与明细入口
         Row(
           children: [
-            const Text(
+            Text(
               '工作记录与成果',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF37274C),
+                color: DunesColors.resolveNullable(context, Color(0xFF37274C)),
               ),
             ),
             const Spacer(),
@@ -1986,7 +2235,10 @@ class _NativeMyWorkProfileCenterPageState
               '点击卡片可按月深度复盘',
               style: TextStyle(
                 fontSize: 11.5,
-                color: const Color(0xFF6B5882).withValues(alpha: .8),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFF6B5882),
+                ).withValues(alpha: .8),
               ),
             ),
           ],
@@ -2074,9 +2326,19 @@ class _NativeMyWorkProfileCenterPageState
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFEFE8F5)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFEFE8F5),
+                  role: DunesColorRole.border,
+                ),
+              ),
               boxShadow: [
                 BoxShadow(
                   color: const Color(0xFF552D8E).withValues(alpha: .03),
@@ -2095,10 +2357,18 @@ class _NativeMyWorkProfileCenterPageState
                       width: 26,
                       height: 26,
                       decoration: BoxDecoration(
-                        color: color.withValues(alpha: .12),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          color.withValues(alpha: .12),
+                          role: DunesColorRole.surface,
+                        ),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(icon, color: color, size: 14),
+                      child: Icon(
+                        icon,
+                        color: DunesColors.resolveNullable(context, color),
+                        size: 14,
+                      ),
                     ),
                     if (badge > 0)
                       Positioned(
@@ -2106,8 +2376,12 @@ class _NativeMyWorkProfileCenterPageState
                         top: -3,
                         child: Container(
                           padding: const EdgeInsets.all(3),
-                          decoration: const BoxDecoration(
-                            color: DunesColors.coral,
+                          decoration: BoxDecoration(
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.coral,
+                              role: DunesColorRole.surface,
+                            ),
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -2117,18 +2391,24 @@ class _NativeMyWorkProfileCenterPageState
                 const SizedBox(height: 5),
                 Text(
                   count,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF2C1E3F),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF2C1E3F),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 1),
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: Color(0xFF7E728F),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF7E728F),
+                    ),
                   ),
                 ),
               ],
@@ -2141,27 +2421,40 @@ class _NativeMyWorkProfileCenterPageState
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFBF8FD),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFFBF8FD),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE9E0F2)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE9E0F2),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.flash_on_rounded,
                 size: 17,
-                color: Color(0xFF8A5AB8),
+                color: DunesColors.resolveNullable(context, Color(0xFF8A5AB8)),
               ),
               const SizedBox(width: 5),
-              const Text(
+              Text(
                 '我的事项快捷通道',
                 style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF452D64),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF452D64),
+                  ),
                 ),
               ),
             ],
@@ -2171,7 +2464,7 @@ class _NativeMyWorkProfileCenterPageState
             children: [
               miniItem(
                 icon: Icons.assignment_turned_in_rounded,
-                color: const Color(0xFF7C5CE6),
+                color: DunesColors.resolve(context, const Color(0xFF7C5CE6)),
                 title: '我审批的',
                 count: '${stats.pendingForMe}',
                 badge: stats.pendingForMe,
@@ -2180,7 +2473,7 @@ class _NativeMyWorkProfileCenterPageState
               const SizedBox(width: 8),
               miniItem(
                 icon: Icons.article_rounded,
-                color: const Color(0xFF3880FF),
+                color: DunesColors.resolve(context, const Color(0xFF3880FF)),
                 title: '会议纪要',
                 count: '$_meetingCount场',
                 onTap: () => widget.navigation.go('MM-L'),
@@ -2188,7 +2481,7 @@ class _NativeMyWorkProfileCenterPageState
               const SizedBox(width: 8),
               miniItem(
                 icon: Icons.auto_stories_rounded,
-                color: const Color(0xFF10B981),
+                color: DunesColors.resolve(context, const Color(0xFF10B981)),
                 title: '知识库',
                 count: '$kbDocCount篇',
                 onTap: () => widget.navigation.go('K1'),
@@ -2196,7 +2489,7 @@ class _NativeMyWorkProfileCenterPageState
               const SizedBox(width: 8),
               miniItem(
                 icon: Icons.add_task_rounded,
-                color: const Color(0xFFE67E22),
+                color: DunesColors.resolve(context, const Color(0xFFE67E22)),
                 title: '审批发起',
                 count: '填写',
                 onTap: () => widget.onOpenB3(),
@@ -2223,10 +2516,14 @@ class _NativeMyWorkProfileCenterPageState
         if (stats.pendingForMe > 0)
           _buildAlertIsland(
             icon: Icons.notifications_active_rounded,
-            bgColor: const Color(0xFFFFF7EB),
-            borderColor: const Color(0xFFFFDFB0),
-            iconColor: const Color(0xFFD97706),
-            textColor: const Color(0xFF92400E),
+            bgColor: DunesColors.resolve(context, const Color(0xFFFFF7EB)),
+            borderColor: DunesColors.resolve(
+              context,
+              const Color(0xFFFFDFB0),
+              role: DunesColorRole.border,
+            ),
+            iconColor: DunesColors.resolve(context, const Color(0xFFD97706)),
+            textColor: DunesColors.resolve(context, const Color(0xFF92400E)),
             text: '您有 ${stats.pendingForMe} 条待审批事项，请及时处理',
             onTap: () => widget.navigation.go('B1'),
           ),
@@ -2234,10 +2531,14 @@ class _NativeMyWorkProfileCenterPageState
           const SizedBox(height: 8),
           _buildAlertIsland(
             icon: Icons.warning_amber_rounded,
-            bgColor: const Color(0xFFFEF2F2),
-            borderColor: const Color(0xFFFECACA),
-            iconColor: const Color(0xFFDC2626),
-            textColor: const Color(0xFF991B1B),
+            bgColor: DunesColors.resolve(context, const Color(0xFFFEF2F2)),
+            borderColor: DunesColors.resolve(
+              context,
+              const Color(0xFFFECACA),
+              role: DunesColorRole.border,
+            ),
+            iconColor: DunesColors.resolve(context, const Color(0xFFDC2626)),
+            textColor: DunesColors.resolve(context, const Color(0xFF991B1B)),
             text: '您有 ${stats.approvalRejected} 条审批被驳回，点击进入处理',
             onTap: () => widget.onOpenB14(),
           ),
@@ -2246,10 +2547,14 @@ class _NativeMyWorkProfileCenterPageState
           const SizedBox(height: 8),
           _buildAlertIsland(
             icon: Icons.assignment_ind_rounded,
-            bgColor: const Color(0xFFEFF6FF),
-            borderColor: const Color(0xFFBFDBFE),
-            iconColor: const Color(0xFF2563EB),
-            textColor: const Color(0xFF1E40AF),
+            bgColor: DunesColors.resolve(context, const Color(0xFFEFF6FF)),
+            borderColor: DunesColors.resolve(
+              context,
+              const Color(0xFFBFDBFE),
+              role: DunesColorRole.border,
+            ),
+            iconColor: DunesColors.resolve(context, const Color(0xFF2563EB)),
+            textColor: DunesColors.resolve(context, const Color(0xFF1E40AF)),
             text: '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
             onTap: () => widget.onOpenB14(filter: 'PENDING_INITIATE'),
           ),
@@ -2260,14 +2565,14 @@ class _NativeMyWorkProfileCenterPageState
           const SizedBox(height: 12),
 
         // 2. 审批中心 Bento Grid 四宫格
-        const Row(
+        Row(
           children: [
             Text(
               '审批流转中心',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF37274C),
+                color: DunesColors.resolveNullable(context, Color(0xFF37274C)),
               ),
             ),
           ],
@@ -2277,14 +2582,14 @@ class _NativeMyWorkProfileCenterPageState
         const SizedBox(height: 14),
 
         // 3. 高效协同办公专属卡片 (工作台、审批填写、会议纪要、知识库)
-        const Row(
+        Row(
           children: [
             Text(
               '日常办公与协作沉淀',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF37274C),
+                color: DunesColors.resolveNullable(context, Color(0xFF37274C)),
               ),
             ),
           ],
@@ -2295,7 +2600,10 @@ class _NativeMyWorkProfileCenterPageState
             (!isDesktopCommOnly && !widget.session.isExternalUser)) ...[
           _buildActionBentoCard(
             icon: Icons.apps_rounded,
-            iconGradient: const [Color(0xFF6366F1), Color(0xFF4338CA)],
+            iconGradient: [
+              DunesColors.resolve(context, Color(0xFF6366F1)),
+              DunesColors.resolve(context, Color(0xFF4338CA)),
+            ],
             title: '工作台',
             subtitle: '任务与协作 · 综合协同看板 · 日常经营管理',
             onTap: () {
@@ -2312,7 +2620,10 @@ class _NativeMyWorkProfileCenterPageState
         // 审批单填写卡片
         _buildActionBentoCard(
           icon: Icons.add_task_rounded,
-          iconGradient: const [Color(0xFF7C5CE6), Color(0xFF552D8E)],
+          iconGradient: [
+            DunesColors.resolve(context, Color(0xFF7C5CE6)),
+            DunesColors.resolve(context, Color(0xFF552D8E)),
+          ],
           title: '审批填写',
           subtitle: '选择并在线发起各类审批流程单据',
           onTap: () => widget.onOpenB3(),
@@ -2322,7 +2633,10 @@ class _NativeMyWorkProfileCenterPageState
           const SizedBox(height: 10),
           _buildActionBentoCard(
             icon: Icons.request_quote_outlined,
-            iconGradient: const [Color(0xFF0EA5E9), Color(0xFF0369A1)],
+            iconGradient: [
+              DunesColors.resolve(context, Color(0xFF0EA5E9)),
+              DunesColors.resolve(context, Color(0xFF0369A1)),
+            ],
             title: '销售提案',
             subtitle: '协作提案 · 列表与填报',
             onTap: () => _openProposalIntake('sales'),
@@ -2330,7 +2644,10 @@ class _NativeMyWorkProfileCenterPageState
           const SizedBox(height: 10),
           _buildActionBentoCard(
             icon: Icons.shopping_bag_outlined,
-            iconGradient: const [Color(0xFFF59E0B), Color(0xFFB45309)],
+            iconGradient: [
+              DunesColors.resolve(context, Color(0xFFF59E0B)),
+              DunesColors.resolve(context, Color(0xFFB45309)),
+            ],
             title: '采购提案',
             subtitle: '协作提案 · 列表与填报',
             onTap: () => _openProposalIntake('purchase'),
@@ -2341,7 +2658,10 @@ class _NativeMyWorkProfileCenterPageState
         // 会议纪要卡片
         _buildActionBentoCard(
           icon: Icons.article_rounded,
-          iconGradient: const [Color(0xFF3880FF), Color(0xFF1E40AF)],
+          iconGradient: [
+            DunesColors.resolve(context, Color(0xFF3880FF)),
+            DunesColors.resolve(context, Color(0xFF1E40AF)),
+          ],
           title: '会议纪要',
           subtitle: '$_meetingCount 场会议 · 实时语音转写 · AI纪要生成',
           badgeText: '$_meetingCount场',
@@ -2352,7 +2672,10 @@ class _NativeMyWorkProfileCenterPageState
         // 知识库卡片
         _buildActionBentoCard(
           icon: Icons.auto_stories_rounded,
-          iconGradient: const [Color(0xFF10B981), Color(0xFF047857)],
+          iconGradient: [
+            DunesColors.resolve(context, Color(0xFF10B981)),
+            DunesColors.resolve(context, Color(0xFF047857)),
+          ],
           title: '企业知识库',
           subtitle: '$kbDocCount 篇文档 · $kbCategoryCount 体系分类 · 组织经验沉淀',
           badgeText: '$kbDocCount篇',
@@ -2361,14 +2684,17 @@ class _NativeMyWorkProfileCenterPageState
         const SizedBox(height: 14),
 
         if (!isDesktopCommOnly) ...[
-          const Row(
+          Row(
             children: [
               Text(
                 '系统与支持',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF37274C),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF37274C),
+                  ),
                 ),
               ),
             ],
@@ -2376,7 +2702,10 @@ class _NativeMyWorkProfileCenterPageState
           const SizedBox(height: 10),
           _buildActionBentoCard(
             icon: Icons.settings_suggest_rounded,
-            iconGradient: const [Color(0xFF7045B2), Color(0xFF4C2783)],
+            iconGradient: [
+              DunesColors.resolve(context, Color(0xFF7045B2)),
+              DunesColors.resolve(context, Color(0xFF4C2783)),
+            ],
             title: '系统设置',
             subtitle: '字号调节 · 本地缓存清理 · 账号管理',
             onTap: _openAppSettingsSheet,
@@ -2410,7 +2739,11 @@ class _NativeMyWorkProfileCenterPageState
     required VoidCallback onTap,
   }) {
     return Material(
-      color: bgColor,
+      color: DunesColors.resolveNullable(
+        context,
+        bgColor,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -2423,7 +2756,11 @@ class _NativeMyWorkProfileCenterPageState
           ),
           child: Row(
             children: [
-              Icon(icon, size: 18, color: iconColor),
+              Icon(
+                icon,
+                size: 18,
+                color: DunesColors.resolveNullable(context, iconColor),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -2431,11 +2768,15 @@ class _NativeMyWorkProfileCenterPageState
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
-                    color: textColor,
+                    color: DunesColors.resolveNullable(context, textColor),
                   ),
                 ),
               ),
-              Icon(Icons.arrow_forward_ios_rounded, size: 13, color: iconColor),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 13,
+                color: DunesColors.resolveNullable(context, iconColor),
+              ),
             ],
           ),
         ),
@@ -2462,9 +2803,19 @@ class _NativeMyWorkProfileCenterPageState
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFECE4F3)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFECE4F3),
+                  role: DunesColorRole.border,
+                ),
+              ),
               boxShadow: [
                 BoxShadow(
                   color: const Color(0xFF552D8E).withValues(alpha: .03),
@@ -2480,14 +2831,21 @@ class _NativeMyWorkProfileCenterPageState
                 // 顶部行：微型精致线条图标 + 标题 + 状态小徽标
                 Row(
                   children: [
-                    Icon(icon, color: iconColor, size: 15),
+                    Icon(
+                      icon,
+                      color: DunesColors.resolveNullable(context, iconColor),
+                      size: 15,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF433454),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF433454),
+                        ),
                       ),
                     ),
                     const Spacer(),
@@ -2498,23 +2856,30 @@ class _NativeMyWorkProfileCenterPageState
                           vertical: 1.5,
                         ),
                         decoration: BoxDecoration(
-                          color: DunesColors.coral,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.coral,
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(99),
                         ),
                         child: Text(
                           '$badge',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: DunesColors.resolve(context, Colors.white),
                             fontSize: 9.5,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                       )
                     else
-                      const Icon(
+                      Icon(
                         Icons.chevron_right_rounded,
                         size: 15,
-                        color: Color(0xFFC4B8D1),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFFC4B8D1),
+                        ),
                       ),
                   ],
                 ),
@@ -2527,10 +2892,13 @@ class _NativeMyWorkProfileCenterPageState
                   children: [
                     Text(
                       '$count',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF261838),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF261838),
+                        ),
                         letterSpacing: -0.5,
                         height: 1.0,
                       ),
@@ -2538,10 +2906,13 @@ class _NativeMyWorkProfileCenterPageState
                     const SizedBox(width: 4),
                     Text(
                       countUnit,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF7D708E),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF7D708E),
+                        ),
                       ),
                     ),
                   ],
@@ -2553,9 +2924,12 @@ class _NativeMyWorkProfileCenterPageState
                   secondaryText,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: Color(0xFF9E92AB),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF9E92AB),
+                    ),
                   ),
                 ),
               ],
@@ -2575,7 +2949,7 @@ class _NativeMyWorkProfileCenterPageState
               countUnit: '待我审',
               secondaryText: '${stats.handledThisMonth} 已审核 · 效率良好',
               icon: Icons.verified_user_outlined,
-              iconColor: const Color(0xFF7C5CE6),
+              iconColor: DunesColors.resolve(context, const Color(0xFF7C5CE6)),
               badge: stats.pendingForMe,
               onTap: () => widget.navigation.go('B1'),
             ),
@@ -2586,7 +2960,7 @@ class _NativeMyWorkProfileCenterPageState
               countUnit: '待办理',
               secondaryText: '${stats.handledTodoThisMonth} 本月已办',
               icon: Icons.task_alt_rounded,
-              iconColor: const Color(0xFF2E86DE),
+              iconColor: DunesColors.resolve(context, const Color(0xFF2E86DE)),
               badge: stats.pendingTodoForMe,
               onTap: () => widget.navigation.go('B13'),
             ),
@@ -2601,7 +2975,7 @@ class _NativeMyWorkProfileCenterPageState
               countUnit: '审批中',
               secondaryText: '共 ${stats.initiatedTotal} 条全周期流程',
               icon: Icons.send_outlined,
-              iconColor: const Color(0xFF10AC84),
+              iconColor: DunesColors.resolve(context, const Color(0xFF10AC84)),
               badge: stats.approvalPending,
               onTap: () => widget.onOpenB14(),
             ),
@@ -2612,7 +2986,7 @@ class _NativeMyWorkProfileCenterPageState
               countUnit: '份抄送',
               secondaryText: '${stats.ccProposalPending} 条进行中',
               icon: Icons.mark_email_read_outlined,
-              iconColor: const Color(0xFFEE5253),
+              iconColor: DunesColors.resolve(context, const Color(0xFFEE5253)),
               onTap: () => widget.navigation.go('P1'),
             ),
           ],
@@ -2632,7 +3006,11 @@ class _NativeMyWorkProfileCenterPageState
     required VoidCallback onTap,
   }) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -2641,7 +3019,13 @@ class _NativeMyWorkProfileCenterPageState
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFEDE4F4)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFEDE4F4),
+                role: DunesColorRole.border,
+              ),
+            ),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF552D8E).withValues(alpha: .03),
@@ -2671,7 +3055,11 @@ class _NativeMyWorkProfileCenterPageState
                     ),
                   ],
                 ),
-                child: Icon(icon, color: Colors.white, size: 17),
+                child: Icon(
+                  icon,
+                  color: DunesColors.resolve(context, Colors.white),
+                  size: 17,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2682,10 +3070,13 @@ class _NativeMyWorkProfileCenterPageState
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13.5,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF2C1E3F),
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFF2C1E3F),
+                            ),
                           ),
                         ),
                         if (badgeText != null) ...[
@@ -2696,15 +3087,22 @@ class _NativeMyWorkProfileCenterPageState
                               vertical: 1.5,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF1EBF9),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFF1EBF9),
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
                               badgeText,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF6F3FAF),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFF6F3FAF),
+                                ),
                               ),
                             ),
                           ),
@@ -2714,9 +3112,12 @@ class _NativeMyWorkProfileCenterPageState
                     const SizedBox(height: 3),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11.5,
-                        color: Color(0xFF837794),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF837794),
+                        ),
                       ),
                     ),
                   ],
@@ -2729,23 +3130,30 @@ class _NativeMyWorkProfileCenterPageState
                     vertical: 5,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF7C5CE6),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF7C5CE6),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     trailingText,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                     ),
                   ),
                 )
               else
-                const Icon(
+                Icon(
                   Icons.arrow_forward_ios_rounded,
                   size: 13,
-                  color: Color(0xFFB4A7C2),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFB4A7C2),
+                  ),
                 ),
             ],
           ),
@@ -2766,7 +3174,17 @@ class _NativeMyWorkProfileCenterPageState
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: paused ? DunesColors.text3 : DunesColors.coral,
+            color: paused
+                ? DunesColors.resolve(
+                    context,
+                    DunesColors.text3,
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    DunesColors.coral,
+                    role: DunesColorRole.surface,
+                  ),
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
@@ -2783,14 +3201,14 @@ class _NativeMyWorkProfileCenterPageState
             children: [
               Icon(
                 paused ? Icons.pause_rounded : Icons.mic_rounded,
-                color: Colors.white,
+                color: DunesColors.resolve(context, Colors.white),
                 size: 18,
               ),
               const SizedBox(width: 6),
               Text(
                 paused ? '纪要录音已暂停' : '纪要录音中 $elapsedText',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: DunesColors.resolve(context, Colors.white),
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
                 ),

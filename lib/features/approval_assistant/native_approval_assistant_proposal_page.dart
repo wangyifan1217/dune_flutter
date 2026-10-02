@@ -5,6 +5,7 @@ import '../proposal_intake/native_proposal_intake_page.dart';
 import '../proposal_intake/proposal_intake_models.dart';
 import '../proposal_intake/proposal_intake_ui.dart';
 import '../tasks/native_task_home_pane.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// 审批助手「销售提案 / 采购提案」：只显示当前用户待处理的该类提案。
 class NativeApprovalAssistantProposalPage extends StatefulWidget {
@@ -34,7 +35,11 @@ class _NativeApprovalAssistantProposalPageState
   Widget build(BuildContext context) {
     final inForm = _chrome.onBack != null;
     return Scaffold(
-      backgroundColor: ProposalPalette.page,
+      backgroundColor: DunesColors.resolve(
+        context,
+        ProposalPalette.page,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
         title: Text(_kindTitle),
         leading: widget.onBack == null && !inForm

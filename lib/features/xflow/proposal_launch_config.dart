@@ -172,7 +172,11 @@ class ProposalQuickLaunchCell extends StatelessWidget {
     final tappable = item.enabled && onTap != null;
 
     return Material(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -184,8 +188,16 @@ class ProposalQuickLaunchCell extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: tappable
-                  ? DunesColors.borderSoft
-                  : const Color(0xFFEFEFEF),
+                  ? DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFEFEFEF),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Stack(
@@ -209,7 +221,11 @@ class ProposalQuickLaunchCell extends StatelessWidget {
                         ),
                       ],
                     ),
-                    child: Icon(item.icon, color: Colors.white, size: 16),
+                    child: Icon(
+                      item.icon,
+                      color: DunesColors.resolve(context, Colors.white),
+                      size: 16,
+                    ),
                   ),
                   const SizedBox(height: 5),
                   Text(
@@ -220,8 +236,9 @@ class ProposalQuickLaunchCell extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w500,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                       height: 1.15,
+                      context: context,
                     ),
                   ),
                 ],
@@ -236,14 +253,22 @@ class ProposalQuickLaunchCell extends StatelessWidget {
                       vertical: 1,
                     ),
                     decoration: BoxDecoration(
-                      color: DunesColors.accentSoft,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.accentSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                     child: Text(
                       badge,
                       style: DunesTypography.sans(
                         fontSize: 7.5,
-                        color: DunesColors.accentDeep,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.accentDeep,
+                        ),
+                        context: context,
                       ),
                     ),
                   ),
@@ -307,9 +332,19 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: XflowApprovalPalette.line),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            XflowApprovalPalette.line,
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: XflowApprovalPalette.accentDeep.withValues(alpha: .06),
@@ -321,10 +356,20 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
       child: Column(
         children: [
           DecoratedBox(
-            decoration: const BoxDecoration(
-              color: XflowApprovalPalette.soft,
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                context,
+                XflowApprovalPalette.soft,
+                role: DunesColorRole.surface,
+              ),
               border: Border(
-                bottom: BorderSide(color: XflowApprovalPalette.line),
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    XflowApprovalPalette.line,
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
             ),
             child: Padding(
@@ -334,13 +379,21 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
                   Container(
                     width: 3,
                     height: eyebrowText.isEmpty ? 15 : 26,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          XflowApprovalPalette.accent,
-                          XflowApprovalPalette.accentDeep,
+                          DunesColors.resolve(
+                            context,
+                            XflowApprovalPalette.accent,
+                            role: DunesColorRole.surface,
+                          ),
+                          DunesColors.resolve(
+                            context,
+                            XflowApprovalPalette.accentDeep,
+                            role: DunesColorRole.surface,
+                          ),
                         ],
                       ),
                     ),
@@ -356,8 +409,12 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
                             style: DunesTypography.mono(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
-                              color: XflowApprovalPalette.accent,
+                              color: DunesColors.resolve(
+                                context,
+                                XflowApprovalPalette.accent,
+                              ),
                               letterSpacing: 1.1,
+                              context: context,
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -367,7 +424,11 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
                           style: DunesTypography.sans(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: XflowApprovalPalette.accentDeep,
+                            color: DunesColors.resolve(
+                              context,
+                              XflowApprovalPalette.accentDeep,
+                            ),
+                            context: context,
                           ),
                         ),
                         if (description.trim().isNotEmpty) ...[
@@ -378,7 +439,11 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: DunesTypography.sans(
                               fontSize: 11,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
+                              context: context,
                             ),
                           ),
                         ],
@@ -391,7 +456,11 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
                     style: DunesTypography.mono(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: XflowApprovalPalette.accent,
+                      color: DunesColors.resolve(
+                        context,
+                        XflowApprovalPalette.accent,
+                      ),
+                      context: context,
                     ),
                   ),
                   const SizedBox(width: 2),
@@ -399,7 +468,8 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
                     '项',
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ],
@@ -408,11 +478,15 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
           ),
           for (var index = 0; index < templates.length; index++) ...[
             if (index > 0)
-              const Divider(
+              Divider(
                 height: 1,
                 indent: 49,
                 endIndent: 12,
-                color: DunesColors.borderSoft,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
               ),
             ProposalTemplateListTile(
               template: templates[index],
@@ -457,7 +531,11 @@ class ProposalTemplateListTile extends StatelessWidget {
     final serial = index == null ? '' : index!.toString().padLeft(2, '0');
 
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: InkWell(
         onTap: tappable ? onTap : null,
         child: Padding(
@@ -471,20 +549,39 @@ class ProposalTemplateListTile extends StatelessWidget {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: tappable
-                      ? XflowApprovalPalette.soft
-                      : DunesColors.bgSoft,
+                      ? DunesColors.resolve(
+                          context,
+                          XflowApprovalPalette.soft,
+                          role: DunesColorRole.surface,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          DunesColors.bgSoft,
+                          role: DunesColorRole.surface,
+                        ),
                   borderRadius: BorderRadius.circular(7),
                   border: Border.all(
                     color: tappable
-                        ? XflowApprovalPalette.line
-                        : DunesColors.borderSoft,
+                        ? DunesColors.resolve(
+                            context,
+                            XflowApprovalPalette.line,
+                            role: DunesColorRole.border,
+                          )
+                        : DunesColors.resolve(
+                            context,
+                            DunesColors.borderSoft,
+                            role: DunesColorRole.border,
+                          ),
                   ),
                 ),
                 child: Icon(
                   xflowTemplateIcon(template),
                   color: tappable
-                      ? XflowApprovalPalette.accentDeep
-                      : DunesColors.text3,
+                      ? DunesColors.resolve(
+                          context,
+                          XflowApprovalPalette.accentDeep,
+                        )
+                      : DunesColors.resolve(context, DunesColors.text3),
                   size: 15,
                 ),
               ),
@@ -500,7 +597,8 @@ class ProposalTemplateListTile extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                     ),
                     if (subtitle.isNotEmpty ||
@@ -515,16 +613,22 @@ class ProposalTemplateListTile extends StatelessWidget {
                               style: DunesTypography.mono(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w600,
-                                color: XflowApprovalPalette.accent.withValues(
-                                  alpha: .72,
-                                ),
+                                color: DunesColors.resolve(
+                                  context,
+                                  XflowApprovalPalette.accent,
+                                ).withValues(alpha: .72),
+                                context: context,
                               ),
                             ),
                             const SizedBox(width: 6),
                             Container(
                               width: 1,
                               height: 9,
-                              color: XflowApprovalPalette.line,
+                              color: DunesColors.resolve(
+                                context,
+                                XflowApprovalPalette.line,
+                                role: DunesColorRole.surface,
+                              ),
                             ),
                             const SizedBox(width: 6),
                           ],
@@ -538,8 +642,12 @@ class ProposalTemplateListTile extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: DunesTypography.sans(
                                 fontSize: 11,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
                                 height: 1.3,
+                                context: context,
                               ),
                             ),
                           ),
@@ -554,14 +662,18 @@ class ProposalTemplateListTile extends StatelessWidget {
                 Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
-                  color: XflowApprovalPalette.accent.withValues(alpha: .55),
+                  color: DunesColors.resolve(
+                    context,
+                    XflowApprovalPalette.accent,
+                  ).withValues(alpha: .55),
                 )
               else
                 Text(
                   '停用',
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
             ],

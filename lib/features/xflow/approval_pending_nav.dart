@@ -13,7 +13,11 @@ class MyOpenApprovalQueue {
 
   int get total => items.length;
 
-  bool _sameBusiness(XflowProposalItem item, String businessType, int businessId) {
+  bool _sameBusiness(
+    XflowProposalItem item,
+    String businessType,
+    int businessId,
+  ) {
     final bt = businessType.toUpperCase();
     final bid = item.todoHint?.businessId ?? item.id;
     return item.businessType.toUpperCase() == bt && bid == businessId;
@@ -37,7 +41,9 @@ class MyOpenApprovalQueue {
   XflowProposalItem? get firstOrNull => items.isEmpty ? null : items.first;
 }
 
-Future<MyOpenApprovalQueue> loadMyOpenApprovalQueue(XflowService service) async {
+Future<MyOpenApprovalQueue> loadMyOpenApprovalQueue(
+  XflowService service,
+) async {
   final items = await service.fetchMyOpenApprovalInbox();
   return MyOpenApprovalQueue(items: items);
 }
@@ -94,9 +100,19 @@ class XfDetNextPendingFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         border: Border(
-          top: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.9)),
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ).withValues(alpha: 0.9),
+          ),
         ),
       ),
       child: XfDetNextPendingBar(

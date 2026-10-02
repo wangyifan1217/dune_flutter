@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import '../../core/theme/dunes_theme.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../core/theme/dunes_theme.dart';
+import 'im_egg_visuals.dart';
 
 enum ImEggEffectKind {
   birthday,
@@ -52,13 +54,13 @@ class ImEggEffect {
   List<String> get particles =>
       customParticles ??
       switch (kind) {
-        ImEggEffectKind.birthday => const ['🎂'],
+        ImEggEffectKind.birthday => const ['🎂', '🍰', '🧁', '🎂', '🍰'],
         ImEggEffectKind.nationalDay => const ['🇨🇳'],
-        ImEggEffectKind.redEnvelope => const ['🧧'],
-        ImEggEffectKind.fireworks => const ['🎆'],
+        ImEggEffectKind.redEnvelope => const ['🧧', '✨', '🧧', '💰'],
+        ImEggEffectKind.fireworks => const ['🎆', '🎉', '✨', '🎊'],
         ImEggEffectKind.moonFestival => const ['🌕', '🐇', '🥮'],
-        ImEggEffectKind.snow => const ['❄️'],
-        ImEggEffectKind.gratitude => const ['💜'],
+        ImEggEffectKind.snow => const ['❄️', '⭐', '🎄', '❄️'],
+        ImEggEffectKind.gratitude => const ['💜', '✨', '💫', '🫶'],
         ImEggEffectKind.graduation => const ['🎓'],
         ImEggEffectKind.welcome => const ['👋'],
         ImEggEffectKind.recovery => const ['🌱'],
@@ -114,6 +116,11 @@ class ImEggRule {
 
 class ImEggSettings {
   ImEggSettings._();
+
+  @visibleForTesting
+  ImEggSettings.fromConfiguration(Map<String, dynamic> configuration) {
+    _config = Map<String, dynamic>.from(configuration);
+  }
 
   static final ImEggSettings instance = ImEggSettings._();
   static const _cacheKey = 'dunes_app_easter_egg_config_v1';
@@ -275,6 +282,7 @@ class ImEggSettings {
       },
       {
         'date': '10-01',
+        'endDate': '10-07',
         'name': '国庆节快乐',
         'category': 'china',
         'greeting': '国庆节快乐',
@@ -325,7 +333,8 @@ class ImEggSettings {
                 : configuredIcon;
             return <String, String>{
               'date': startDate,
-              'endDate': (item['endDate'] ?? startDate).toString(),
+              'endDate': (item['endDate'] ?? fallback?['endDate'] ?? startDate)
+                  .toString(),
               'name': name,
               'category': (item['category'] ?? fallback?['category'] ?? 'china')
                   .toString(),
@@ -609,8 +618,7 @@ class ImEggSettings {
       : 'fall';
 }
 
-OverlayEntry? _activeHolidayOverlay;
-Timer? _holidayOverlayTimer;
+bool _holidayWelcomeVisible = false;
 
 void showAppHolidayWelcome(
   BuildContext context,
@@ -618,107 +626,34 @@ void showAppHolidayWelcome(
   String message = '愿今天有好心情，也有小惊喜',
   String icon = '✨',
 }) {
-  final overlay = Overlay.maybeOf(context, rootOverlay: true);
-  if (overlay == null) return;
-  _holidayOverlayTimer?.cancel();
-  _activeHolidayOverlay?.remove();
-  late final OverlayEntry entry;
-  void dismiss() {
-    if (!identical(_activeHolidayOverlay, entry)) return;
-    entry.remove();
-    _activeHolidayOverlay = null;
-    _holidayOverlayTimer?.cancel();
-    _holidayOverlayTimer = null;
-  }
-
-  entry = OverlayEntry(
-    builder: (_) => Positioned.fill(
-      child: Material(
-        color: Colors.transparent,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: dismiss,
-              ),
-            ),
-            Center(
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: GestureDetector(
-                    onTap: dismiss,
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 340),
-                      padding: const EdgeInsets.fromLTRB(26, 24, 26, 20),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFDFCFBFF),
-                        borderRadius: BorderRadius.circular(26),
-                        border: Border.all(color: const Color(0xFFE9E0F4)),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x3349316D),
-                            blurRadius: 28,
-                            offset: Offset(0, 12),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(icon, style: const TextStyle(fontSize: 64)),
-                          const SizedBox(height: 14),
-                          Text(
-                            greeting,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 25,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF49316D),
-                            ),
-                          ),
-                          if (message.trim().isNotEmpty) ...[
-                            const SizedBox(height: 9),
-                            Text(
-                              message,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                height: 1.5,
-                                color: Color(0xFF796A8D),
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 20),
-                          const Text(
-                            '轻触任意位置继续',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF9A8DAA),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
+  if (_holidayWelcomeVisible || !context.mounted) return;
+  _holidayWelcomeVisible = true;
+  // A dedicated welcome scene, not a dimming barrier over the current page.
+  unawaited(
+    showGeneralDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      barrierColor: Colors.transparent,
+      barrierDismissible: false,
+      transitionDuration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 220),
+      routeSettings: const RouteSettings(name: '/app-holiday-welcome'),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) =>
+          AppHolidayWelcome(
+            greeting: greeting,
+            message: message,
+            icon: icon,
+            onDismiss: () {
+              if (ModalRoute.of(dialogContext)?.isCurrent == true) {
+                Navigator.of(dialogContext, rootNavigator: true).pop();
+              }
+            },
+          ),
+      transitionBuilder: (context, animation, secondaryAnimation, child) =>
+          FadeTransition(opacity: animation, child: child),
+    ).whenComplete(() => _holidayWelcomeVisible = false),
   );
-  _activeHolidayOverlay = entry;
-  overlay.insert(entry);
-  _holidayOverlayTimer = Timer(const Duration(seconds: 4), () {
-    if (identical(_activeHolidayOverlay, entry)) {
-      entry.remove();
-      _activeHolidayOverlay = null;
-      _holidayOverlayTimer = null;
-    }
-  });
 }
 
 void maybeShowTaskCompletionEffect(BuildContext context, int userId) {
@@ -741,8 +676,9 @@ void maybeShowTaskCompletionEffect(BuildContext context, int userId) {
 
 /// Device-local day/night override. Theme is applied by the app root on mobile;
 /// web and desktop keep their established appearance.
-class AppEggThemeController {
+class AppEggThemeController with WidgetsBindingObserver {
   AppEggThemeController._() {
+    WidgetsBinding.instance.addObserver(this);
     Timer.periodic(const Duration(minutes: 1), (_) => refresh());
   }
 
@@ -770,12 +706,21 @@ class AppEggThemeController {
         ? value
         : 'auto';
     manualOverride.value = normalized;
+    refresh();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_overrideKey, normalized);
     } catch (_) {}
     refresh();
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) refresh();
+  }
+
+  @override
+  void didChangePlatformBrightness() => refresh();
 
   void refresh() {
     final isNight = ImEggSettings.instance.isNightTheme;
@@ -868,17 +813,23 @@ void showImEggEffectOnOverlay(
 
   late final OverlayEntry entry;
   entry = OverlayEntry(
-    builder: (_) => _ImCelebrationRain(
-      effect: effect,
-      seed: seed,
-      onFinished: () {
-        if (identical(_activeEggOverlay, entry)) {
-          _activeEggOverlay?.remove();
-          _activeEggOverlay = null;
-          _eggOverlayTimer?.cancel();
-          _eggOverlayTimer = null;
-        }
-      },
+    builder: (_) => Positioned.fill(
+      child: ImEggParticleField(
+        glyphs: effect.particles,
+        duration: effect.duration,
+        count: ImEggSettings.instance.particleCount(effect.particleCount),
+        seed: seed,
+        birthday: effect.isBirthday,
+        motion: effect.customMotion ?? 'fall',
+        onFinished: () {
+          if (identical(_activeEggOverlay, entry)) {
+            _activeEggOverlay?.remove();
+            _activeEggOverlay = null;
+            _eggOverlayTimer?.cancel();
+            _eggOverlayTimer = null;
+          }
+        },
+      ),
     ),
   );
   _activeEggOverlay = entry;
@@ -893,206 +844,4 @@ void showImEggEffectOnOverlay(
       }
     },
   );
-}
-
-class _ImCelebrationRain extends StatefulWidget {
-  const _ImCelebrationRain({
-    required this.effect,
-    required this.seed,
-    required this.onFinished,
-  });
-
-  final ImEggEffect effect;
-  final int seed;
-  final VoidCallback onFinished;
-
-  @override
-  State<_ImCelebrationRain> createState() => _ImCelebrationRainState();
-}
-
-class _ImCelebrationRainState extends State<_ImCelebrationRain>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final List<_EggParticle> _particles;
-  bool _reducedMotion = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller =
-        AnimationController(vsync: this, duration: widget.effect.duration)
-          ..addStatusListener((status) {
-            if (status == AnimationStatus.completed) widget.onFinished();
-          });
-    final random = math.Random(
-      widget.seed == 0 ? DateTime.now().microsecondsSinceEpoch : widget.seed,
-    );
-    final particles = widget.effect.particles;
-    _particles = List<_EggParticle>.generate(
-      ImEggSettings.instance.particleCount(widget.effect.particleCount),
-      (index) => _EggParticle(
-        x: .025 + random.nextDouble() * .95,
-        phase: random.nextDouble() * math.pi * 2,
-        drift: 10 + random.nextDouble() * 36,
-        size: widget.effect.isBirthday
-            ? 20 + random.nextDouble() * 17
-            : 18 + random.nextDouble() * 15,
-        delay: random.nextDouble() * .2,
-        duration: .72 + random.nextDouble() * .28,
-        emoji: particles[random.nextInt(particles.length)],
-      ),
-    );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _reducedMotion = MediaQuery.disableAnimationsOf(context);
-    if (_reducedMotion) {
-      Future<void>.delayed(const Duration(milliseconds: 1500), () {
-        if (mounted) widget.onFinished();
-      });
-    } else if (!_controller.isAnimating && !_controller.isCompleted) {
-      _controller.forward();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                final height = constraints.maxHeight;
-                return Stack(
-                  clipBehavior: Clip.hardEdge,
-                  children: <Widget>[
-                    for (var i = 0; i < _particles.length; i++)
-                      _buildParticle(i, width, height),
-                  ],
-                );
-              },
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildParticle(int index, double width, double height) {
-    final particle = _particles[index];
-    final progress = _reducedMotion
-        ? particle.x
-        : ((_controller.value - particle.delay) / particle.duration)
-              .clamp(0.0, 1.0)
-              .toDouble();
-    final active = _reducedMotion || _controller.value >= particle.delay;
-    final fadeIn = (progress / .1).clamp(0.0, 1.0).toDouble();
-    final fadeOut = ((1 - progress) / .16).clamp(0.0, 1.0).toDouble();
-    final opacity = active ? math.min(fadeIn, fadeOut).toDouble() : 0.0;
-    final motion = widget.effect.customMotion ?? 'fall';
-    final centerX = width / 2;
-    final centerY = height / 2;
-    final (x, y) = switch (motion) {
-      'float' => (
-        width * particle.x +
-            math.sin(progress * math.pi + particle.phase) * particle.drift,
-        height + 45 - (height + 90) * progress,
-      ),
-      'burst' => (
-        centerX + math.cos(particle.phase) * width * .62 * progress,
-        centerY + math.sin(particle.phase) * height * .62 * progress,
-      ),
-      'orbit' => (
-        centerX +
-            math.cos(particle.phase + progress * math.pi * 4) *
-                width *
-                (.08 + progress * .35),
-        centerY +
-            math.sin(particle.phase + progress * math.pi * 4) *
-                height *
-                (.08 + progress * .35),
-      ),
-      _ => (
-        width * particle.x +
-            math.sin(progress * math.pi * 2 + particle.phase) * particle.drift,
-        -45 + (height + 110) * progress,
-      ),
-    };
-    return Positioned(
-      left: x,
-      top: y,
-      child: Opacity(
-        opacity: opacity,
-        child: Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.identity()
-            ..setEntry(3, 2, 0.0012)
-            ..rotateY(
-              _reducedMotion
-                  ? 0
-                  : math.sin(progress * math.pi * 2 + particle.phase) * .28,
-            )
-            ..rotateZ(
-              _reducedMotion ? 0 : progress * math.pi * 2 + particle.phase,
-            ),
-          child: Text(
-            particle.emoji,
-            textScaler: TextScaler.noScaling,
-            style: TextStyle(
-              fontSize: particle.size,
-              height: 1,
-              shadows: <Shadow>[
-                Shadow(
-                  color: const Color(0x50361E51),
-                  blurRadius: 5,
-                  offset: const Offset(2, 4),
-                ),
-                Shadow(
-                  color: widget.effect.washColor.withValues(alpha: .3),
-                  blurRadius: 10,
-                  offset: Offset.zero,
-                ),
-                const Shadow(
-                  color: Color(0x66FFFFFF),
-                  blurRadius: 1,
-                  offset: Offset(-1, -1),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EggParticle {
-  const _EggParticle({
-    required this.x,
-    required this.phase,
-    required this.drift,
-    required this.size,
-    required this.delay,
-    required this.duration,
-    required this.emoji,
-  });
-
-  final double x;
-  final double phase;
-  final double drift;
-  final double size;
-  final double delay;
-  final double duration;
-  final String emoji;
 }

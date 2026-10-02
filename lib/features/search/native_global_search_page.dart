@@ -408,11 +408,19 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
               height: _desktop ? 44 : 38,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: _focus.hasFocus
-                      ? DunesColors.brandPurple.withValues(alpha: 0.45)
+                      ? DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                          role: DunesColorRole.border,
+                        ).withValues(alpha: 0.45)
                       : _line,
                 ),
                 boxShadow: [
@@ -428,7 +436,10 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                   Icon(
                     Icons.search_rounded,
                     size: 20,
-                    color: DunesColors.brandPurple.withValues(alpha: 0.7),
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurple,
+                    ).withValues(alpha: 0.7),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -444,7 +455,8 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                       onSubmitted: (v) => _runSearch(v, persist: true),
                       style: DunesTypography.sans(
                         fontSize: 15,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                       decoration: InputDecoration(
                         isDense: true,
@@ -452,7 +464,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                         hintText: '搜索联系人、群聊、聊天记录与办公事项',
                         hintStyle: DunesTypography.sans(
                           fontSize: 14,
-                          color: const Color(0xFFB8B0C4),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFB8B0C4),
+                          ),
+                          context: context,
                         ),
                         contentPadding: EdgeInsets.zero,
                       ),
@@ -475,7 +491,10 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
           TextButton(
             onPressed: widget.onBack,
             style: TextButton.styleFrom(
-              foregroundColor: DunesColors.brandPurple,
+              foregroundColor: DunesColors.resolve(
+                context,
+                DunesColors.brandPurple,
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               minimumSize: const Size(48, 40),
               tapTargetSize: MaterialTapTargetSize.padded,
@@ -485,7 +504,8 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
               style: DunesTypography.sans(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.brandPurple,
+                color: DunesColors.resolve(context, DunesColors.brandPurple),
+                context: context,
               ),
             ),
           ),
@@ -498,8 +518,16 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     return Container(
       height: 42,
       margin: const EdgeInsets.only(bottom: 4),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: _line)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _line,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: ListView.separated(
         padding: EdgeInsets.symmetric(horizontal: _desktop ? 16 : 10),
@@ -518,7 +546,13 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(
-                    color: on ? DunesColors.brandPurple : Colors.transparent,
+                    color: on
+                        ? DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                            role: DunesColorRole.border,
+                          )
+                        : Colors.transparent,
                     width: 2.2,
                   ),
                 ),
@@ -528,7 +562,10 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: on ? FontWeight.w700 : FontWeight.w500,
-                  color: on ? DunesColors.brandPurple : DunesColors.text2,
+                  color: on
+                      ? DunesColors.resolve(context, DunesColors.brandPurple)
+                      : DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
             ),
@@ -543,7 +580,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
       padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
       child: Text(
         '正在搜索更多结果',
-        style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+        style: DunesTypography.sans(
+          fontSize: 12,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
+        ),
       ),
     );
   }
@@ -555,7 +596,8 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
         _snap!.queryHint,
         style: DunesTypography.sans(
           fontSize: 12,
-          color: DunesColors.brandPurple,
+          color: DunesColors.resolve(context, DunesColors.brandPurple),
+          context: context,
         ),
       ),
     );
@@ -590,10 +632,19 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
             height: 46,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              gradient: const LinearGradient(
-                colors: [Color(0xFFF3ECFB), Color(0xFFFFFFFF)],
+              gradient: LinearGradient(
+                colors: [
+                  DunesColors.resolve(context, Color(0xFFF3ECFB)),
+                  DunesColors.resolve(context, Color(0xFFFFFFFF)),
+                ],
               ),
-              border: Border.all(color: const Color(0xFFDCCFF0)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFDCCFF0),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -601,7 +652,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                 Icon(
                   Icons.auto_awesome,
                   size: 16,
-                  color: DunesColors.brandPurple,
+                  color: DunesColors.resolve(context, DunesColors.brandPurple),
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -609,7 +660,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.brandPurple,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurple,
+                    ),
+                    context: context,
                   ),
                 ),
               ],
@@ -688,7 +743,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
           child: Text(
             '输入关键字搜索${_tab.label}',
             textAlign: TextAlign.center,
-            style: DunesTypography.sans(fontSize: 14, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 14,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ),
       ],
@@ -772,7 +831,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                 Icon(
                   Icons.arrow_back_ios_new_rounded,
                   size: 14,
-                  color: DunesColors.brandPurple,
+                  color: DunesColors.resolve(context, DunesColors.brandPurple),
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -780,7 +839,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.brandPurple,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurple,
+                    ),
+                    context: context,
                   ),
                 ),
               ],
@@ -864,7 +927,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
             if (preview && g.total > g.items.length)
               _HoverText(
                 label: '查看全部 ${g.total} 条',
-                color: DunesColors.brandPurple,
+                color: DunesColors.resolve(context, DunesColors.brandPurple),
                 onTap: () => _selectTab(g.category),
               ),
           ],
@@ -876,7 +939,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
   Widget _retryRow(GlobalSearchGroupState g) {
     return _HoverText(
       label: g.error.isEmpty ? '超时，点击重试' : g.error,
-      color: DunesColors.brandPurple,
+      color: DunesColors.resolve(context, DunesColors.brandPurple),
       onTap: () => _retry(g.category),
     );
   }
@@ -943,7 +1006,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
         children: [
           Text(
             '没有找到相关结果',
-            style: DunesTypography.sans(fontSize: 15, color: DunesColors.text2),
+            style: DunesTypography.sans(
+              fontSize: 15,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
+            ),
           ),
           const SizedBox(height: 14),
           Wrap(
@@ -971,7 +1038,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
       child: Text(
         '没有找到${cat.label}',
         textAlign: TextAlign.center,
-        style: DunesTypography.sans(fontSize: 14, color: DunesColors.text3),
+        style: DunesTypography.sans(
+          fontSize: 14,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
+        ),
       ),
     );
   }
@@ -985,9 +1056,25 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
-          color: active ? DunesColors.brandPurpleSoft : Colors.white,
+          color: active
+              ? DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurpleSoft,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
           border: Border.all(
-            color: active ? DunesColors.brandPurpleLine : _line,
+            color: active
+                ? DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurpleLine,
+                    role: DunesColorRole.border,
+                  )
+                : _line,
           ),
         ),
         child: Text(
@@ -995,7 +1082,10 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
           style: DunesTypography.sans(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: active ? DunesColors.brandPurple : DunesColors.text2,
+            color: active
+                ? DunesColors.resolve(context, DunesColors.brandPurple)
+                : DunesColors.resolve(context, DunesColors.text2),
+            context: context,
           ),
         ),
       ),
@@ -1016,8 +1106,9 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
             style: DunesTypography.sans(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
               letterSpacing: 0.3,
+              context: context,
             ),
           ),
           const Spacer(),
@@ -1027,12 +1118,13 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                     action,
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   )
                 : _HoverText(
                     label: action,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                     onTap: onAction,
                   ),
         ],
@@ -1044,7 +1136,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     if (tiles.isEmpty) return const SizedBox.shrink();
     return Container(
       decoration: BoxDecoration(
-        color: _panelColor,
+        color: DunesColors.resolveNullable(
+          context,
+          _panelColor,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _line),
         boxShadow: [
@@ -1108,7 +1204,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                     : EdgeInsets.zero,
                 decoration: badge
                     ? BoxDecoration(
-                        color: DunesColors.brandPurpleSoft,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurpleSoft,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(999),
                       )
                     : null,
@@ -1117,7 +1217,10 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                   style: DunesTypography.sans(
                     fontSize: 11,
                     fontWeight: badge ? FontWeight.w700 : FontWeight.w400,
-                    color: badge ? DunesColors.brandPurple : DunesColors.text3,
+                    color: badge
+                        ? DunesColors.resolve(context, DunesColors.brandPurple)
+                        : DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -1247,43 +1350,73 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     const size = 36.0;
     final (colors, icon) = switch (c) {
       _ when c.isReconciliationAssistant => (
-        const [Color(0xFF5B6FC4), Color(0xFF7652B8)],
+        [
+          DunesColors.resolve(context, Color(0xFF5B6FC4)),
+          DunesColors.resolve(context, Color(0xFF7652B8)),
+        ],
         Icons.sync_alt_rounded,
       ),
       _ when c.isTaskAssistant => (
-        const [Color(0xFF2F8F7E), Color(0xFF5EAEDE)],
+        [
+          DunesColors.resolve(context, Color(0xFF2F8F7E)),
+          DunesColors.resolve(context, Color(0xFF5EAEDE)),
+        ],
         Icons.assignment_turned_in_outlined,
       ),
       _ when c.isApprovalAssistant => (
-        const [DunesColors.brandPurple, DunesColors.brandPurpleDeep],
+        [
+          DunesColors.resolve(context, DunesColors.brandPurple),
+          DunesColors.resolve(context, DunesColors.brandPurpleDeep),
+        ],
         Icons.fact_check_outlined,
       ),
       _ when c.isKpiAssistant => (
-        const [Color(0xFF8C5A91), Color(0xFFC17B7B)],
+        [
+          DunesColors.resolve(context, Color(0xFF8C5A91)),
+          DunesColors.resolve(context, Color(0xFFC17B7B)),
+        ],
         Icons.insights_outlined,
       ),
       _ when c.isDriveAssistant => (
-        const [Color(0xFF3B82F6), Color(0xFF2563EB)],
+        [
+          DunesColors.resolve(context, Color(0xFF3B82F6)),
+          DunesColors.resolve(context, Color(0xFF2563EB)),
+        ],
         Icons.cloud_outlined,
       ),
       _ when c.isXrxsAssistant => (
-        const [Color(0xFF0F766E), Color(0xFF0D9488)],
+        [
+          DunesColors.resolve(context, Color(0xFF0F766E)),
+          DunesColors.resolve(context, Color(0xFF0D9488)),
+        ],
         Icons.badge_outlined,
       ),
       _ when c.isWeeklySummary => (
-        const [Color(0xFFC4A574), Color(0xFF8B6A3F)],
+        [
+          DunesColors.resolve(context, Color(0xFFC4A574)),
+          DunesColors.resolve(context, Color(0xFF8B6A3F)),
+        ],
         Icons.auto_stories_outlined,
       ),
       _ when c.isAdministrativeNotice => (
-        const [Color(0xFF3D7A8C), Color(0xFF5DA7A2)],
+        [
+          DunesColors.resolve(context, Color(0xFF3D7A8C)),
+          DunesColors.resolve(context, Color(0xFF5DA7A2)),
+        ],
         Icons.campaign_outlined,
       ),
       _ when c.isSelfMemo => (
-        const [Color(0xFF7B5CD8), Color(0xFF5B3FB0)],
+        [
+          DunesColors.resolve(context, Color(0xFF7B5CD8)),
+          DunesColors.resolve(context, Color(0xFF5B3FB0)),
+        ],
         Icons.folder_copy_outlined,
       ),
       _ => (
-        const [Color(0xFFB8A4E8), Color(0xFF7B5CD8)],
+        [
+          DunesColors.resolve(context, Color(0xFFB8A4E8)),
+          DunesColors.resolve(context, Color(0xFF7B5CD8)),
+        ],
         Icons.smart_toy_outlined,
       ),
     };
@@ -1299,7 +1432,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
         ),
       ),
       alignment: Alignment.center,
-      child: Icon(icon, color: Colors.white, size: 20),
+      child: Icon(
+        icon,
+        color: DunesColors.resolve(context, Colors.white),
+        size: 20,
+      ),
     );
   }
 
@@ -1324,29 +1461,38 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
   Widget _letterAvatar(String title, IconData icon) {
     final letter = title.trim().isEmpty ? '' : title.trim().substring(0, 1);
     final palette = <Color>[
-      const Color(0xFF7B5CD8),
-      const Color(0xFF3B6E96),
-      const Color(0xFF5D8A4E),
-      const Color(0xFFB07A2B),
-      const Color(0xFFA05670),
+      DunesColors.resolve(context, const Color(0xFF7B5CD8)),
+      DunesColors.resolve(context, const Color(0xFF3B6E96)),
+      DunesColors.resolve(context, const Color(0xFF5D8A4E)),
+      DunesColors.resolve(context, const Color(0xFFB07A2B)),
+      DunesColors.resolve(context, const Color(0xFFA05670)),
     ];
     final color = palette[title.hashCode.abs() % palette.length];
     return Container(
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: DunesColors.resolveNullable(
+          context,
+          color.withValues(alpha: 0.12),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(11),
       ),
       alignment: Alignment.center,
       child: letter.isEmpty
-          ? Icon(icon, size: 16, color: color)
+          ? Icon(
+              icon,
+              size: 16,
+              color: DunesColors.resolveNullable(context, color),
+            )
           : Text(
               letter,
               style: DunesTypography.sans(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
                 color: color,
+                context: context,
               ),
             ),
     );
@@ -1356,7 +1502,10 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     final style = DunesTypography.sans(
       fontSize: bold ? 14 : 12,
       fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
-      color: bold ? DunesColors.text : DunesColors.text3,
+      color: bold
+          ? DunesColors.resolve(context, DunesColors.text)
+          : DunesColors.resolve(context, DunesColors.text3),
+      context: context,
     );
     final q = query.trim();
     if (q.isEmpty) {
@@ -1382,7 +1531,9 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
           TextSpan(text: text.substring(0, idx), style: style),
           TextSpan(
             text: text.substring(idx, idx + q.length),
-            style: style.copyWith(color: DunesColors.brandPurple),
+            style: style.copyWith(
+              color: DunesColors.resolve(context, DunesColors.brandPurple),
+            ),
           ),
           TextSpan(text: text.substring(idx + q.length), style: style),
         ],
@@ -1447,7 +1598,13 @@ class _HoverSurfaceState extends State<_HoverSurface> {
         onTap: widget.onTap,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: _hover ? const Color(0xFFF4EFFB) : Colors.transparent,
+            color: _hover
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFF4EFFB),
+                    role: DunesColorRole.surface,
+                  )
+                : Colors.transparent,
             borderRadius: widget.radius,
           ),
           child: widget.child,
@@ -1481,6 +1638,7 @@ class _HoverText extends StatelessWidget {
             fontSize: 13,
             fontWeight: FontWeight.w600,
             color: color,
+            context: context,
           ),
         ),
       ),
@@ -1501,7 +1659,11 @@ class _HoverIcon extends StatelessWidget {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.all(4),
-        child: Icon(icon, size: 16, color: const Color(0xFFB2B2B2)),
+        child: Icon(
+          icon,
+          size: 16,
+          color: DunesColors.resolve(context, const Color(0xFFB2B2B2)),
+        ),
       ),
     );
   }
@@ -1557,7 +1719,11 @@ class _SearchSlideLayerState extends State<SearchSlideLayer> {
         child: IgnorePointer(
           ignoring: !widget.open,
           child: ColoredBox(
-            color: const Color(0xFFF6F3FA),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF6F3FA),
+              role: DunesColorRole.surface,
+            ),
             child: widget.child,
           ),
         ),

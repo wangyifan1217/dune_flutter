@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'proposal_intake_ui.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 class ProposalSelectOption<T> {
   const ProposalSelectOption({
@@ -311,7 +312,11 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
           groupId: _tapGroup,
           child: Material(
             key: const ValueKey('proposal-select-menu'),
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             elevation: 10,
             shadowColor: const Color(0x334E3A6C),
             borderRadius: BorderRadius.circular(10),
@@ -329,8 +334,11 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                       ),
                       child: Text(
                         emptyText,
-                        style: const TextStyle(
-                          color: ProposalPalette.text3,
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.text3,
+                          ),
                           fontSize: 12,
                         ),
                       ),
@@ -365,7 +373,10 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                                           maxLines: 3,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
-                                            color: ProposalPalette.text,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              ProposalPalette.text,
+                                            ),
                                             fontSize: 13,
                                             height: 1.35,
                                             fontWeight: active
@@ -382,8 +393,11 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                                               option.meta!,
                                               maxLines: 2,
                                               overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: ProposalPalette.text3,
+                                              style: TextStyle(
+                                                color: DunesColors.resolve(
+                                                  context,
+                                                  ProposalPalette.text3,
+                                                ),
                                                 fontSize: 11,
                                                 height: 1.3,
                                               ),
@@ -393,10 +407,13 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                                     ),
                                   ),
                                   if (active)
-                                    const Icon(
+                                    Icon(
                                       Icons.check_rounded,
                                       size: 16,
-                                      color: ProposalPalette.purple,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        ProposalPalette.purple,
+                                      ),
                                     ),
                                 ],
                               ),
@@ -418,15 +435,24 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                           horizontal: 12,
                           vertical: 10,
                         ),
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           border: Border(
-                            top: BorderSide(color: ProposalPalette.borderSoft),
+                            top: BorderSide(
+                              color: DunesColors.resolve(
+                                context,
+                                ProposalPalette.borderSoft,
+                                role: DunesColorRole.border,
+                              ),
+                            ),
                           ),
                         ),
                         child: Text(
                           '+ ${widget.addLabel}',
-                          style: const TextStyle(
-                            color: ProposalPalette.purpleDeep,
+                          style: TextStyle(
+                            color: DunesColors.resolve(
+                              context,
+                              ProposalPalette.purpleDeep,
+                            ),
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -451,10 +477,10 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
       readOnly: !_canSearch,
       minLines: 1,
       maxLines: MediaQuery.sizeOf(context).width < 620 ? 1 : 2,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 13,
         height: 1.35,
-        color: ProposalPalette.text,
+        color: DunesColors.resolve(context, ProposalPalette.text),
         fontWeight: FontWeight.w500,
       ),
       decoration:
@@ -479,7 +505,7 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                     ),
                     onPressed: () => _choose(null),
                     icon: const Icon(Icons.close_rounded, size: 16),
-                    color: ProposalPalette.text3,
+                    color: DunesColors.resolve(context, ProposalPalette.text3),
                   ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
@@ -499,7 +525,7 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                         ? Icons.expand_more_rounded
                         : Icons.lock_outline_rounded,
                     size: _enabled ? 19 : 15,
-                    color: ProposalPalette.text3,
+                    color: DunesColors.resolve(context, ProposalPalette.text3),
                   ),
                 ),
                 const SizedBox(width: 8),

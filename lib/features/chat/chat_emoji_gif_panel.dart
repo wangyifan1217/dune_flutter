@@ -8,10 +8,7 @@ const kChatEmojiGifPanelHeight = 280.0;
 
 /// 聊天表情面板。
 class ChatEmojiGifPanel extends StatelessWidget {
-  const ChatEmojiGifPanel({
-    super.key,
-    required this.controller,
-  });
+  const ChatEmojiGifPanel({super.key, required this.controller});
 
   final TextEditingController controller;
 
@@ -19,9 +16,21 @@ class ChatEmojiGifPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: kChatEmojiGifPanelHeight,
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: EmojiPicker(
         textEditingController: controller,
@@ -29,21 +38,31 @@ class ChatEmojiGifPanel extends StatelessWidget {
           height: kChatEmojiGifPanelHeight,
           checkPlatformCompatibility: true,
           emojiViewConfig: EmojiViewConfig(
-            backgroundColor: DunesColors.bgApp,
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             columns: 8,
             emojiSizeMax: 28,
           ),
           skinToneConfig: const SkinToneConfig(enabled: true),
           categoryViewConfig: CategoryViewConfig(
-            backgroundColor: DunesColors.bgApp,
-            indicatorColor: DunesColors.accent,
-            iconColorSelected: DunesColors.accent,
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
+            indicatorColor: DunesColors.resolve(context, DunesColors.accent),
+            iconColorSelected: DunesColors.resolve(context, DunesColors.accent),
           ),
-          bottomActionBarConfig: const BottomActionBarConfig(
-            enabled: false,
-          ),
+          bottomActionBarConfig: const BottomActionBarConfig(enabled: false),
           searchViewConfig: SearchViewConfig(
-            backgroundColor: DunesColors.bgApp,
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             hintText: '搜索表情',
           ),
         ),

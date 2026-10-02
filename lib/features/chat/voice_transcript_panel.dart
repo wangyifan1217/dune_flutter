@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import 'chat_voice_player.dart';
 import 'chat_voice_temp_stub.dart'
-    if (dart.library.io) 'chat_voice_temp_io.dart' as voice_temp;
+    if (dart.library.io) 'chat_voice_temp_io.dart'
+    as voice_temp;
 
 enum VoiceTranscriptAction { text, original }
 
@@ -186,7 +187,13 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
         fit: StackFit.expand,
         children: [
           // 露出上层聊天并压暗。
-          const ColoredBox(color: Color(0xA3000000)),
+          ColoredBox(
+            color: DunesColors.resolve(
+              context,
+              Color(0xA3000000),
+              role: DunesColorRole.surface,
+            ),
+          ),
           Align(
             alignment: Alignment.bottomCenter,
             child: ConstrainedBox(
@@ -195,11 +202,13 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
                 maxHeight: maxSheetHeight,
               ),
               child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFF19191B),
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(18),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF19191B),
+                    role: DunesColorRole.surface,
                   ),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
                 ),
                 child: SafeArea(
                   top: false,
@@ -218,7 +227,11 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
                           width: 36,
                           height: 4,
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.22),
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Colors.white.withValues(alpha: 0.22),
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -245,9 +258,19 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFF242426),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFF242426),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2E2E31)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFF2E2E31),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
       child: Column(
@@ -255,9 +278,16 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildPlaybackRow(),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 11),
-            child: Divider(height: 1, color: Color(0xFF303034)),
+            child: Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                Color(0xFF303034),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           TextField(
             controller: _controller,
@@ -266,13 +296,17 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
             style: DunesTypography.sans(
               fontSize: 16,
               height: 1.5,
-              color: Colors.white,
+              color: DunesColors.resolve(context, Colors.white),
+              context: context,
             ),
-            cursorColor: const Color(0xFF07C160),
+            cursorColor: DunesColors.resolve(context, const Color(0xFF07C160)),
             decoration: InputDecoration.collapsed(
               hintText: '识别结果',
               hintStyle: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4),
+                color: DunesColors.resolveNullable(
+                  context,
+                  Colors.white.withValues(alpha: 0.4),
+                ),
               ),
             ),
           ),
@@ -305,6 +339,7 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
               style: DunesTypography.mono(
                 fontSize: 12.5,
                 color: Colors.white.withValues(alpha: 0.55),
+                context: context,
               ),
             ),
           ],
@@ -320,12 +355,19 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
         height: 30,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white.withValues(alpha: 0.22),
+          color: DunesColors.resolveNullable(
+            context,
+            Colors.white.withValues(alpha: 0.22),
+            role: DunesColorRole.surface,
+          ),
         ),
         child: Icon(
           Icons.play_arrow_rounded,
           size: 18,
-          color: Colors.white.withValues(alpha: 0.7),
+          color: DunesColors.resolveNullable(
+            context,
+            Colors.white.withValues(alpha: 0.7),
+          ),
         ),
       );
     }
@@ -333,28 +375,32 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
       onTap: _togglePlay,
       behavior: HitTestBehavior.opaque,
       child: _preparingPlay
-          ? const SizedBox(
+          ? SizedBox(
               width: 30,
               height: 30,
               child: Padding(
                 padding: EdgeInsets.all(6),
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Color(0xFF07C160),
+                  color: DunesColors.resolve(context, Color(0xFF07C160)),
                 ),
               ),
             )
           : Container(
               width: 30,
               height: 30,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Color(0xFF07C160),
+                color: DunesColors.resolveNullable(
+                  context,
+                  Color(0xFF07C160),
+                  role: DunesColorRole.surface,
+                ),
               ),
               child: Icon(
                 playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
                 size: 18,
-                color: Colors.white,
+                color: DunesColors.resolve(context, Colors.white),
               ),
             ),
     );
@@ -364,15 +410,20 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Color(0xFF2A2A2D))),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFF2A2A2D),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
-          _ActionCapsule(
-            label: '取消',
-            onTap: () => Navigator.of(context).pop(),
-          ),
+          _ActionCapsule(label: '取消', onTap: () => Navigator.of(context).pop()),
           const SizedBox(width: 10),
           _ActionCapsule(
             label: '发送原语音',
@@ -411,8 +462,16 @@ class _ActionCapsule extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: enabled
-              ? const Color(0xFF2E2E31)
-              : const Color(0xFF2E2E31).withValues(alpha: 0.5),
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFF2E2E31),
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFF2E2E31),
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(19),
         ),
         child: Text(
@@ -421,8 +480,9 @@ class _ActionCapsule extends StatelessWidget {
             fontSize: 14.5,
             fontWeight: FontWeight.w500,
             color: enabled
-                ? Colors.white
+                ? DunesColors.resolve(context, Colors.white)
                 : Colors.white.withValues(alpha: 0.4),
+            context: context,
           ),
         ),
       ),
@@ -447,8 +507,16 @@ class _SendCapsule extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: enabled
-              ? const Color(0xFF07C160)
-              : const Color(0xFF07C160).withValues(alpha: 0.35),
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFF07C160),
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFF07C160),
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.35),
           borderRadius: BorderRadius.circular(19),
         ),
         child: Text(
@@ -456,7 +524,8 @@ class _SendCapsule extends StatelessWidget {
           style: DunesTypography.sans(
             fontSize: 14.5,
             fontWeight: FontWeight.w600,
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
+            context: context,
           ),
         ),
       ),
@@ -483,17 +552,24 @@ class _VoicePrintBars extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: List.generate(_barCount, (index) {
-            final seed = (math.sin(index * 1.73) + math.sin(index * 0.61)).abs();
+            final seed = (math.sin(index * 1.73) + math.sin(index * 0.61))
+                .abs();
             final base = 3 + (seed % 1) * 12;
             final sway = playing
-                ? math.sin(controller.value * math.pi * 2 + index * 0.62).abs() *
+                ? math
+                          .sin(controller.value * math.pi * 2 + index * 0.62)
+                          .abs() *
                       7
                 : 0.0;
             return Container(
               width: 2.5,
               height: base + sway,
               decoration: BoxDecoration(
-                color: _green.withValues(alpha: playing ? 0.95 : 0.42),
+                color: DunesColors.resolveNullable(
+                  context,
+                  _green.withValues(alpha: playing ? 0.95 : 0.42),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(2),
               ),
             );

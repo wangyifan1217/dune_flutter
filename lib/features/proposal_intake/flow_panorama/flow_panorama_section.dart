@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import 'flow_ctx.dart';
 import 'flow_topology.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 //  4. 几何：端点、贝塞尔路径、采样点（用于点击命中与标签定位）
 // ============================================================================
@@ -396,7 +397,9 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
           TextSpan(
             text: e.label(ctx),
             style: TextStyle(
-              color: st.level == FlowLevel.ok ? const Color(0xFFEDE8F6) : tone,
+              color: st.level == FlowLevel.ok
+                  ? DunesColors.resolve(context, const Color(0xFFEDE8F6))
+                  : tone,
               fontSize: 10.5,
               fontWeight: FontWeight.w500,
             ),
@@ -407,8 +410,8 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
         spans.add(
           TextSpan(
             text: '${spans.isEmpty ? '' : '  '}$sub',
-            style: const TextStyle(
-              color: Color(0xFF8F84A8),
+            style: TextStyle(
+              color: DunesColors.resolveNullable(context, Color(0xFF8F84A8)),
               fontSize: 9,
               fontFamily: 'monospace',
             ),
@@ -421,7 +424,7 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
             text:
                 '${spans.isEmpty ? '' : '  '}${kLevel[st.level]!.name} · ${st.text}',
             style: TextStyle(
-              color: tone,
+              color: DunesColors.resolveNullable(context, tone),
               fontSize: 9.5,
               fontWeight: FontWeight.w500,
             ),
@@ -432,7 +435,10 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
         spans.add(
           TextSpan(
             text: '${spans.isEmpty ? '' : '  '}$ownerName',
-            style: const TextStyle(color: Color(0xFFB7ACCB), fontSize: 9.5),
+            style: TextStyle(
+              color: DunesColors.resolveNullable(context, Color(0xFFB7ACCB)),
+              fontSize: 9.5,
+            ),
           ),
         );
       }
@@ -654,15 +660,23 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
 
   Widget _fullscreenFab() {
     return Material(
-      color: const Color(0xCC2B2340),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xCC2B2340),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: _openFullscreen,
         borderRadius: BorderRadius.circular(10),
-        child: const SizedBox(
+        child: SizedBox(
           width: 36,
           height: 36,
-          child: Icon(Icons.fullscreen, size: 18, color: Colors.white),
+          child: Icon(
+            Icons.fullscreen,
+            size: 18,
+            color: DunesColors.resolve(context, Colors.white),
+          ),
         ),
       ),
     );
@@ -759,7 +773,13 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
         return Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF221B31)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFF221B31),
+                role: DunesColorRole.border,
+              ),
+            ),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF382A56).withOpacity(0.18),
@@ -788,7 +808,9 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
   Widget _toolbar() {
     Widget tab(String text, FlowKind? k) {
       final on = _flow == k;
-      final bg = k == null ? const Color(0xFF2E2740) : kKind[k]!.ink;
+      final bg = k == null
+          ? DunesColors.resolve(context, const Color(0xFF2E2740))
+          : kKind[k]!.ink;
       return _Hoverable(
         builder: (hovering) => GestureDetector(
           onTap: () => setState(() => _flow = k),
@@ -799,7 +821,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
               color: on
                   ? bg
                   : (hovering
-                        ? const Color(0xFF7B5CD8).withOpacity(0.06)
+                        ? DunesColors.resolve(
+                            context,
+                            const Color(0xFF7B5CD8),
+                            role: DunesColorRole.surface,
+                          ).withOpacity(0.06)
                         : Colors.transparent),
               borderRadius: BorderRadius.circular(999),
               boxShadow: on
@@ -822,10 +848,22 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: on
-                        ? Colors.white
+                        ? DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.surface,
+                          )
                         : (hovering
-                                  ? const Color(0xFF4B4159)
-                                  : const Color(0xFF7A7086))
+                                  ? DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF4B4159),
+                                      role: DunesColorRole.surface,
+                                    )
+                                  : DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF7A7086),
+                                      role: DunesColorRole.surface,
+                                    ))
                               .withOpacity(0.9),
                   ),
                 ),
@@ -835,10 +873,16 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                   style: TextStyle(
                     fontSize: 11.5,
                     color: on
-                        ? Colors.white
+                        ? DunesColors.resolve(context, Colors.white)
                         : (hovering
-                              ? const Color(0xFF4B4159)
-                              : const Color(0xFF7A7086)),
+                              ? DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF4B4159),
+                                )
+                              : DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF7A7086),
+                                )),
                     fontWeight: on ? FontWeight.w500 : FontWeight.w400,
                   ),
                 ),
@@ -852,8 +896,18 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
     Widget group(String title, List<Widget> children) => Container(
       padding: const EdgeInsets.fromLTRB(4, 3, 8, 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAF8FC),
-        border: Border.all(color: const Color(0xFFEAE3F1)),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFFAF8FC),
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFEAE3F1),
+            role: DunesColorRole.border,
+          ),
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Wrap(
@@ -863,9 +917,9 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
             padding: const EdgeInsets.only(left: 6, right: 4),
             child: Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 9,
-                color: Color(0xFFA79DB5),
+                color: DunesColors.resolveNullable(context, Color(0xFFA79DB5)),
                 fontFamily: 'monospace',
                 letterSpacing: 0.6,
               ),
@@ -886,10 +940,26 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: value
-                  ? const Color(0xFFEDE4FA)
-                  : (hovering ? const Color(0xFFF2ECF8) : Colors.transparent),
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0xFFEDE4FA),
+                      role: DunesColorRole.surface,
+                    )
+                  : (hovering
+                        ? DunesColors.resolve(
+                            context,
+                            const Color(0xFFF2ECF8),
+                            role: DunesColorRole.surface,
+                          )
+                        : Colors.transparent),
               border: Border.all(
-                color: value ? const Color(0xFFDCCDF3) : Colors.transparent,
+                color: value
+                    ? DunesColors.resolve(
+                        context,
+                        const Color(0xFFDCCDF3),
+                        role: DunesColorRole.border,
+                      )
+                    : Colors.transparent,
               ),
               borderRadius: BorderRadius.circular(999),
             ),
@@ -901,11 +971,25 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                   height: 6,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: value ? const Color(0xFF7B5CD8) : Colors.transparent,
+                    color: value
+                        ? DunesColors.resolve(
+                            context,
+                            const Color(0xFF7B5CD8),
+                            role: DunesColorRole.surface,
+                          )
+                        : Colors.transparent,
                     border: Border.all(
                       color: value
-                          ? const Color(0xFF7B5CD8)
-                          : const Color(0xFFC4B9D2),
+                          ? DunesColors.resolve(
+                              context,
+                              const Color(0xFF7B5CD8),
+                              role: DunesColorRole.border,
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFFC4B9D2),
+                              role: DunesColorRole.border,
+                            ),
                       width: 1.5,
                     ),
                     boxShadow: value
@@ -925,10 +1009,16 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                   style: TextStyle(
                     fontSize: 10.5,
                     color: value
-                        ? const Color(0xFF5B3FA8)
+                        ? DunesColors.resolve(context, const Color(0xFF5B3FA8))
                         : (hovering
-                              ? const Color(0xFF5B5069)
-                              : const Color(0xFF8B8098)),
+                              ? DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF5B5069),
+                                )
+                              : DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF8B8098),
+                                )),
                     fontWeight: value ? FontWeight.w500 : FontWeight.w400,
                   ),
                 ),
@@ -948,8 +1038,18 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
         Container(
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: const Color(0xFFF8F6FB),
-            border: Border.all(color: const Color(0xFFE7E0EE)),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF8F6FB),
+              role: DunesColorRole.surface,
+            ),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE7E0EE),
+                role: DunesColorRole.border,
+              ),
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Wrap(
@@ -992,9 +1092,12 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Text(
                   '${(_scale * 100).round()}%',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: Color(0xFF5B5069),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF5B5069),
+                    ),
                     fontFamily: 'monospace',
                     fontWeight: FontWeight.w600,
                   ),
@@ -1021,7 +1124,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
           child: SizedBox(
             width: 36,
             height: 36,
-            child: Icon(icon, size: 18, color: Colors.white),
+            child: Icon(
+              icon,
+              size: 18,
+              color: DunesColors.resolve(context, Colors.white),
+            ),
           ),
         ),
       );
@@ -1031,7 +1138,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
       right: 10,
       bottom: 12,
       child: Material(
-        color: const Color(0xCC2B2340),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xCC2B2340),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1043,8 +1154,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Text(
                   '${(_scale * 100).round()}%',
-                  style: const TextStyle(
-                    color: Color(0xFFE4DCF2),
+                  style: TextStyle(
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFFE4DCF2),
+                    ),
                     fontSize: 10,
                     fontFamily: 'monospace',
                   ),
@@ -1065,12 +1179,27 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
   Widget _canvas(Map<FlowLevel, int> counts) {
     final labels = _buildLabels();
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: Color(0xFF171223),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFF171223),
+          role: DunesColorRole.surface,
+        ),
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF241D36), Color(0xFF151020)],
+          colors: [
+            DunesColors.resolve(
+              context,
+              Color(0xFF241D36),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFF151020),
+              role: DunesColorRole.surface,
+            ),
+          ],
         ),
       ),
       child: Stack(
@@ -1146,17 +1275,51 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                     begin: const Alignment(-0.7, -1),
                     end: const Alignment(0.7, 1),
                     colors: n.hub
-                        ? [const Color(0xF7564484), const Color(0xF72D2346)]
-                        : [const Color(0xF7342B4A), const Color(0xF7211A31)],
+                        ? [
+                            DunesColors.resolve(
+                              context,
+                              const Color(0xF7564484),
+                            ),
+                            DunesColors.resolve(
+                              context,
+                              const Color(0xF72D2346),
+                            ),
+                          ]
+                        : [
+                            DunesColors.resolve(
+                              context,
+                              const Color(0xF7342B4A),
+                            ),
+                            DunesColors.resolve(
+                              context,
+                              const Color(0xF7211A31),
+                            ),
+                          ],
                   ),
                   border: Border.all(
                     color: pinned
-                        ? const Color(0xFFB8A4E8).withOpacity(0.75)
+                        ? DunesColors.resolve(
+                            context,
+                            const Color(0xFFB8A4E8),
+                            role: DunesColorRole.border,
+                          ).withOpacity(0.75)
                         : hovering
-                        ? Colors.white.withOpacity(0.26)
+                        ? DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.border,
+                          ).withOpacity(0.26)
                         : n.hub
-                        ? const Color(0xFFB8A4E8).withOpacity(0.4)
-                        : Colors.white.withOpacity(0.11),
+                        ? DunesColors.resolve(
+                            context,
+                            const Color(0xFFB8A4E8),
+                            role: DunesColorRole.border,
+                          ).withOpacity(0.4)
+                        : DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.border,
+                          ).withOpacity(0.11),
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -1190,9 +1353,12 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                             children: [
                               Text(
                                 n.role,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 9,
-                                  color: Color(0xFF8A7EA5),
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    Color(0xFF8A7EA5),
+                                  ),
                                   fontFamily: 'monospace',
                                   letterSpacing: 0.7,
                                 ),
@@ -1231,17 +1397,25 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                                                 fontSize: n.hub ? 17 : 14,
                                                 height: 1.3,
                                                 color: _isPlaceholderName(n)
-                                                    ? const Color(0xFFB8A4E8)
-                                                    : const Color(0xFFF4F1FA),
+                                                    ? DunesColors.resolve(
+                                                        context,
+                                                        const Color(0xFFB8A4E8),
+                                                      )
+                                                    : DunesColors.resolve(
+                                                        context,
+                                                        const Color(0xFFF4F1FA),
+                                                      ),
                                                 fontWeight: FontWeight.w500,
                                                 decoration:
                                                     n.editable &&
                                                         widget.canRename
                                                     ? TextDecoration.underline
                                                     : TextDecoration.none,
-                                                decorationColor: const Color(
-                                                  0x66B8A4E8,
-                                                ),
+                                                decorationColor:
+                                                    DunesColors.resolve(
+                                                      context,
+                                                      const Color(0x66B8A4E8),
+                                                    ),
                                               ),
                                             ),
                                           ),
@@ -1254,10 +1428,13 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                                   n.meta!(ctx),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10,
                                     height: 1.35,
-                                    color: Color(0xFF8A7EA5),
+                                    color: DunesColors.resolveNullable(
+                                      context,
+                                      Color(0xFF8A7EA5),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1271,7 +1448,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                                       vertical: 5,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.06),
+                                      color: DunesColors.resolve(
+                                        context,
+                                        Colors.white,
+                                        role: DunesColorRole.surface,
+                                      ).withOpacity(0.06),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Row(
@@ -1280,9 +1461,12 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                                       children: [
                                         Text(
                                           r[0],
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 10,
-                                            color: Color(0xFFB8ACD0),
+                                            color: DunesColors.resolveNullable(
+                                              context,
+                                              Color(0xFFB8ACD0),
+                                            ),
                                           ),
                                         ),
                                         const SizedBox(width: 10),
@@ -1292,9 +1476,13 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             textAlign: TextAlign.right,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 10.5,
-                                              color: Color(0xFFF2ECFB),
+                                              color:
+                                                  DunesColors.resolveNullable(
+                                                    context,
+                                                    Color(0xFFF2ECFB),
+                                                  ),
                                               fontWeight: FontWeight.w500,
                                             ),
                                           ),
@@ -1315,7 +1503,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                         width: 26,
                         height: 26,
                         decoration: BoxDecoration(
-                          color: n.accent.withOpacity(0.92),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            n.accent.withOpacity(0.92),
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(9),
                           boxShadow: [
                             BoxShadow(
@@ -1325,7 +1517,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                             ),
                           ],
                         ),
-                        child: Icon(n.icon, size: 14, color: Colors.white),
+                        child: Icon(
+                          n.icon,
+                          size: 14,
+                          color: DunesColors.resolve(context, Colors.white),
+                        ),
                       ),
                     ),
                   ],
@@ -1345,27 +1541,48 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
       child: TextField(
         controller: _editCtl,
         focusNode: _editFocus,
-        cursorColor: const Color(0xFFB8A4E8),
+        cursorColor: DunesColors.resolve(context, const Color(0xFFB8A4E8)),
         onSubmitted: (_) => _commitRename(),
         style: TextStyle(
           fontSize: n.hub ? 17 : 14,
           height: 1.3,
-          color: const Color(0xFFF4F1FA),
+          color: DunesColors.resolve(context, const Color(0xFFF4F1FA)),
           fontWeight: FontWeight.w500,
         ),
         decoration: InputDecoration(
           isDense: true,
           hintText: '输入机构名称',
-          hintStyle: const TextStyle(color: Color(0xFF8A7EA5), fontSize: 13),
+          hintStyle: TextStyle(
+            color: DunesColors.resolveNullable(context, Color(0xFF8A7EA5)),
+            fontSize: 13,
+          ),
           contentPadding: EdgeInsets.zero,
-          border: const UnderlineInputBorder(
-            borderSide: BorderSide(color: Color(0xB3B8A4E8)),
+          border: UnderlineInputBorder(
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xB3B8A4E8),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
-          enabledBorder: const UnderlineInputBorder(
-            borderSide: BorderSide(color: Color(0xB3B8A4E8)),
+          enabledBorder: UnderlineInputBorder(
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xB3B8A4E8),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
-          focusedBorder: const UnderlineInputBorder(
-            borderSide: BorderSide(color: Color(0xB3B8A4E8)),
+          focusedBorder: UnderlineInputBorder(
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xB3B8A4E8),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ),
       ),
@@ -1380,11 +1597,23 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
         margin: const EdgeInsets.only(left: 7),
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF171222).withOpacity(0.8),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFF171222),
+            role: DunesColorRole.surface,
+          ).withOpacity(0.8),
           border: Border.all(
             color: hot
-                ? const Color(0xFFF08A8A).withOpacity(0.45)
-                : Colors.white.withOpacity(0.09),
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFF08A8A),
+                    role: DunesColorRole.border,
+                  ).withOpacity(0.45)
+                : DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.border,
+                  ).withOpacity(0.09),
           ),
           borderRadius: BorderRadius.circular(999),
         ),
@@ -1394,7 +1623,14 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
             Container(
               width: 6,
               height: 6,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: s.color),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: DunesColors.resolveNullable(
+                  context,
+                  s.color,
+                  role: DunesColorRole.surface,
+                ),
+              ),
             ),
             const SizedBox(width: 6),
             Text(
@@ -1402,7 +1638,9 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
               style: TextStyle(
                 fontSize: 9.5,
                 fontFamily: 'monospace',
-                color: hot ? const Color(0xFFF3B3B3) : const Color(0xFFB5AAC9),
+                color: hot
+                    ? DunesColors.resolve(context, const Color(0xFFF3B3B3))
+                    : DunesColors.resolve(context, const Color(0xFFB5AAC9)),
               ),
             ),
           ],
@@ -1422,8 +1660,14 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                const Color(0xFF100C18).withOpacity(0.78),
-                const Color(0xFF100C18).withOpacity(0),
+                DunesColors.resolve(
+                  context,
+                  const Color(0xFF100C18),
+                ).withOpacity(0.78),
+                DunesColors.resolve(
+                  context,
+                  const Color(0xFF100C18),
+                ).withOpacity(0),
               ],
             ),
           ),
@@ -1437,27 +1681,36 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                   size: const Size(17, 17),
                   painter: _PulseDotPainter(
                     t: ((_clock.value * 120) / 1.8) % 1.0,
-                    color: const Color(0xFF8FD1A6),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF8FD1A6),
+                    ),
                     radius: 3.5,
                   ),
                 ),
               ),
               const SizedBox(width: 9),
-              const Text(
+              Text(
                 '提案全链路 · 四流实时串联',
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: Color(0xFFCFC4E2),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFCFC4E2),
+                  ),
                   fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(width: 10),
               Text(
                 '${kNodes.length} 个主体 · ${kEdges.length} 条链路',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 9.5,
                   fontFamily: 'monospace',
-                  color: Color(0xFF7E7295),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF7E7295),
+                  ),
                 ),
               ),
               const Spacer(),
@@ -1484,8 +1737,14 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
               begin: Alignment.bottomCenter,
               end: Alignment.topCenter,
               colors: [
-                const Color(0xFF0E0A15).withOpacity(0.82),
-                const Color(0xFF0E0A15).withOpacity(0),
+                DunesColors.resolve(
+                  context,
+                  const Color(0xFF0E0A15),
+                ).withOpacity(0.82),
+                DunesColors.resolve(
+                  context,
+                  const Color(0xFF0E0A15),
+                ).withOpacity(0),
               ],
             ),
           ),
@@ -1504,25 +1763,35 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                     width: 18,
                     height: 2.5,
                     decoration: BoxDecoration(
-                      color: kKind[k]!.color,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        kKind[k]!.color,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                   const SizedBox(width: 7),
                   Text(
                     kKind[k]!.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10,
-                      color: Color(0xFF948AA8),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF948AA8),
+                      ),
                     ),
                   ),
                   if (!widget.compact) ...[
                     const SizedBox(width: 4),
                     Text(
                       kKind[k]!.desc,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
-                        color: Color(0xFF6E6486),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF6E6486),
+                        ),
                       ),
                     ),
                   ],
@@ -1532,10 +1801,13 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                   widget.compact
                       ? '拖动查看 · 双指缩放 · 右下角可全屏'
                       : '点击补贴方 / 清算 / 开票 / 承接机构即可填写',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 9.5,
                     fontFamily: 'monospace',
-                    color: Color(0xFF6E6486),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF6E6486),
+                    ),
                   ),
                 ),
               ],
@@ -1559,8 +1831,18 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFFFCFBFD),
-            border: Border.all(color: const Color(0xFFEAE3F0)),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFFCFBFD),
+              role: DunesColorRole.surface,
+            ),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFEAE3F0),
+                role: DunesColorRole.border,
+              ),
+            ),
             borderRadius: BorderRadius.circular(13),
           ),
           child: Column(
@@ -1572,33 +1854,50 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
-                      color: kind.color,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        kind.color,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(3),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     kind.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF3F3748),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF3F3748),
+                      ),
                     ),
                   ),
                   const Spacer(),
                   Text(
                     '${lane.length} 条${bad > 0 ? ' · $bad 异常' : ''}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 9,
                       fontFamily: 'monospace',
-                      color: Color(0xFFA097AB),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFA097AB),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 8, bottom: 9),
-                child: Divider(height: 1, color: Color(0xFFF0EAF5)),
+                child: Divider(
+                  height: 1,
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFF0EAF5),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               for (final e in lane) _detailItem(e, kind),
             ],
@@ -1651,14 +1950,18 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
     Color bg;
     Color border;
     if (st.level == FlowLevel.block) {
-      bg = const Color(0xFFFEF7F7);
-      border = const Color(0xFFF1D2D2);
+      bg = DunesColors.resolve(context, const Color(0xFFFEF7F7));
+      border = DunesColors.resolve(context, const Color(0xFFF1D2D2));
     } else if (st.level == FlowLevel.warn) {
-      bg = const Color(0xFFFEFBF5);
-      border = const Color(0xFFEFDCBB);
+      bg = DunesColors.resolve(context, const Color(0xFFFEFBF5));
+      border = DunesColors.resolve(context, const Color(0xFFEFDCBB));
     } else {
-      bg = highlight ? const Color(0xFFF6F2FB) : Colors.transparent;
-      border = highlight ? const Color(0xFFE4DAEF) : Colors.transparent;
+      bg = highlight
+          ? DunesColors.resolve(context, const Color(0xFFF6F2FB))
+          : Colors.transparent;
+      border = highlight
+          ? DunesColors.resolve(context, const Color(0xFFE4DAEF))
+          : Colors.transparent;
     }
 
     return _Hoverable(
@@ -1680,7 +1983,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
           margin: const EdgeInsets.only(bottom: 4),
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
           decoration: BoxDecoration(
-            color: bg,
+            color: DunesColors.resolveNullable(
+              context,
+              bg,
+              role: DunesColorRole.surface,
+            ),
             border: Border.all(color: border),
             borderRadius: BorderRadius.circular(10),
           ),
@@ -1694,21 +2001,30 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                 children: [
                   Text(
                     nodeName(kNodeById[e.a.node]!),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF3B3345),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF3B3345),
+                      ),
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.arrow_right_alt,
                     size: 13,
-                    color: Color(0xFFB0A5BE),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFFB0A5BE),
+                    ),
                   ),
                   Text(
                     nodeName(kNodeById[e.b.node]!),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF3B3345),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF3B3345),
+                      ),
                     ),
                   ),
                   Container(
@@ -1717,7 +2033,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                       vertical: 1,
                     ),
                     decoration: BoxDecoration(
-                      color: kind.chip,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        kind.chip,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(5),
                     ),
                     child: Text(
@@ -1725,7 +2045,7 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                       style: TextStyle(
                         fontSize: 8.5,
                         fontFamily: 'monospace',
-                        color: kind.ink,
+                        color: DunesColors.resolveNullable(context, kind.ink),
                       ),
                     ),
                   ),
@@ -1738,36 +2058,53 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                     width: 16,
                     height: 16,
                     alignment: Alignment.center,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
                         begin: Alignment(-0.7, -1),
                         end: Alignment(0.7, 1),
-                        colors: [Color(0xFFB7A3E0), Color(0xFF7B5CD8)],
+                        colors: [
+                          DunesColors.resolve(
+                            context,
+                            Color(0xFFB7A3E0),
+                            role: DunesColorRole.surface,
+                          ),
+                          DunesColors.resolve(
+                            context,
+                            Color(0xFF7B5CD8),
+                            role: DunesColorRole.surface,
+                          ),
+                        ],
                       ),
                     ),
                     child: Text(
                       owner.isEmpty ? '·' : owner.substring(0, 1),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 8.5,
-                        color: Colors.white,
+                        color: DunesColors.resolve(context, Colors.white),
                       ),
                     ),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     owner,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10,
-                      color: Color(0xFF5D5468),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF5D5468),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     kOwnerRole[e.own] ?? '责任人',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 9,
-                      color: Color(0xFFA097AB),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFA097AB),
+                      ),
                     ),
                   ),
                   const Spacer(),
@@ -1777,7 +2114,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: tone.chip,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        tone.chip,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Row(
@@ -1788,7 +2129,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                           height: 6,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: tone.color,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              tone.color,
+                              role: DunesColorRole.surface,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 5),
@@ -1797,7 +2142,10 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                           style: TextStyle(
                             fontSize: 9,
                             fontFamily: 'monospace',
-                            color: tone.ink,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              tone.ink,
+                            ),
                           ),
                         ),
                       ],
@@ -1815,25 +2163,31 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                         style: TextStyle(
                           fontSize: 9.5,
                           height: 1.45,
-                          color: tone.ink,
+                          color: DunesColors.resolveNullable(context, tone.ink),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const TextSpan(
+                      TextSpan(
                         text: ' ｜ ',
                         style: TextStyle(
                           fontSize: 9.5,
                           height: 1.45,
-                          color: Color(0xFF8C8296),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFF8C8296),
+                          ),
                         ),
                       ),
                     ],
                     TextSpan(
                       text: e.note?.call(ctx) ?? '',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 9.5,
                         height: 1.45,
-                        color: Color(0xFF8C8296),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF8C8296),
+                        ),
                       ),
                     ),
                   ],
@@ -2332,10 +2686,18 @@ class _FlowPanoramaFullscreenPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF151020),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFF151020),
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF241D36),
-        foregroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          context,
+          const Color(0xFF241D36),
+          role: DunesColorRole.surface,
+        ),
+        foregroundColor: DunesColors.resolve(context, Colors.white),
         title: const Text('四流全屏'),
       ),
       body: SafeArea(

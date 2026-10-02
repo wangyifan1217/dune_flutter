@@ -306,22 +306,60 @@ class _NativeQianjiRecordSupervisePageState
           data: theme.copyWith(
             colorScheme: theme.colorScheme.copyWith(
               primary: _themePurple,
-              onPrimary: Colors.white,
+              onPrimary: DunesColors.resolve(context, Colors.white),
               secondary: _themePurple,
-              onSecondary: Colors.white,
-              surface: Colors.white,
-              onSurface: DunesColors.text,
+              onSecondary: DunesColors.resolve(context, Colors.white),
+              surface: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
+              onSurface: DunesColors.resolve(context, DunesColors.text),
             ),
             datePickerTheme: theme.datePickerTheme.copyWith(
-              backgroundColor: const Color(0xFFFCFBFE),
-              rangePickerBackgroundColor: const Color(0xFFFCFBFE),
-              headerBackgroundColor: Colors.white,
-              headerForegroundColor: DunesColors.text,
-              rangePickerHeaderBackgroundColor: const Color(0xFFF6F2FC),
-              rangePickerHeaderForegroundColor: DunesColors.text,
-              rangeSelectionBackgroundColor: const Color(0xFFEAE2FC),
-              todayForegroundColor: const WidgetStatePropertyAll(_themePurple),
-              todayBorder: const BorderSide(color: _themePurple),
+              backgroundColor: DunesColors.resolve(
+                context,
+                const Color(0xFFFCFBFE),
+                role: DunesColorRole.surface,
+              ),
+              rangePickerBackgroundColor: DunesColors.resolve(
+                context,
+                const Color(0xFFFCFBFE),
+                role: DunesColorRole.surface,
+              ),
+              headerBackgroundColor: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
+              headerForegroundColor: DunesColors.resolve(
+                context,
+                DunesColors.text,
+              ),
+              rangePickerHeaderBackgroundColor: DunesColors.resolve(
+                context,
+                const Color(0xFFF6F2FC),
+                role: DunesColorRole.surface,
+              ),
+              rangePickerHeaderForegroundColor: DunesColors.resolve(
+                context,
+                DunesColors.text,
+              ),
+              rangeSelectionBackgroundColor: DunesColors.resolve(
+                context,
+                const Color(0xFFEAE2FC),
+                role: DunesColorRole.surface,
+              ),
+              todayForegroundColor: WidgetStatePropertyAll(
+                DunesColors.resolve(context, _themePurple),
+              ),
+              todayBorder: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  _themePurple,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
           ),
           child: child!,
@@ -346,7 +384,11 @@ class _NativeQianjiRecordSupervisePageState
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -377,7 +419,7 @@ class _NativeQianjiRecordSupervisePageState
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: widget.onBack,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -385,12 +427,15 @@ class _NativeQianjiRecordSupervisePageState
                   Icon(
                     Icons.arrow_back_ios_new,
                     size: 14,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                   SizedBox(width: 2),
                   Text(
                     '饕',
-                    style: TextStyle(fontSize: 13, color: DunesColors.text2),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
                   ),
                 ],
               ),
@@ -400,10 +445,10 @@ class _NativeQianjiRecordSupervisePageState
           Expanded(
             child: Text(
               _title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ),
@@ -412,10 +457,10 @@ class _NativeQianjiRecordSupervisePageState
               widget.kind == QianjiRecordSuperviseKind.groupReply
                   ? '响应记录 ${_listTotal > 0 ? _listTotal : _total}'
                   : '合计 ${_listTotal > 0 ? _listTotal : _total}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             ),
         ],
@@ -441,22 +486,44 @@ class _NativeQianjiRecordSupervisePageState
                 )
               : null,
           filled: true,
-          fillColor: Colors.white,
+          fillColor: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 12,
             vertical: 10,
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _themePurple),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                _themePurple,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ),
       ),
@@ -471,12 +538,12 @@ class _NativeQianjiRecordSupervisePageState
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 '时间范围',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const Spacer(),
@@ -502,7 +569,11 @@ class _NativeQianjiRecordSupervisePageState
             ],
           ),
           Material(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(8),
             child: InkWell(
               borderRadius: BorderRadius.circular(8),
@@ -515,14 +586,20 @@ class _NativeQianjiRecordSupervisePageState
                 ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE8EAED)),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.date_range_rounded,
                       size: 16,
-                      color: _themePurple,
+                      color: DunesColors.resolveNullable(context, _themePurple),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -530,17 +607,17 @@ class _NativeQianjiRecordSupervisePageState
                         '${_dateKey(_selectedDateRange.start)} 至 ${_dateKey(_selectedDateRange.end)}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
                         ),
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.expand_more_rounded,
                       size: 18,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ],
                 ),
@@ -561,20 +638,20 @@ class _NativeQianjiRecordSupervisePageState
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 '部门筛选',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 _superviseAll ? '全部门' : '管辖范围',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: _themePurple,
+                  color: DunesColors.resolveNullable(context, _themePurple),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -615,7 +692,17 @@ class _NativeQianjiRecordSupervisePageState
     required VoidCallback onTap,
   }) {
     return Material(
-      color: selected ? const Color(0xFFF0EEF7) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EEF7),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -625,7 +712,17 @@ class _NativeQianjiRecordSupervisePageState
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? _themePurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Row(
@@ -636,7 +733,9 @@ class _NativeQianjiRecordSupervisePageState
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? _themePurple : DunesColors.text2,
+                  color: selected
+                      ? DunesColors.resolve(context, _themePurple)
+                      : DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 6),
@@ -645,7 +744,9 @@ class _NativeQianjiRecordSupervisePageState
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: selected ? _themePurple : DunesColors.text3,
+                  color: selected
+                      ? DunesColors.resolve(context, _themePurple)
+                      : DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
             ],
@@ -674,7 +775,9 @@ class _NativeQianjiRecordSupervisePageState
           Text(
             friendlyErrorText(_error, fallback: '加载失败，请稍后重试'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -694,7 +797,10 @@ class _NativeQianjiRecordSupervisePageState
           Center(
             child: Text(
               _empty,
-              style: const TextStyle(color: DunesColors.text3, fontSize: 14),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -759,13 +865,23 @@ class _NativeQianjiRecordSupervisePageState
         final row = _rows[index];
         final title = row.title.isEmpty ? _title : row.title;
         return Material(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
           child: Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE8EAED)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE8EAED),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -791,10 +907,13 @@ class _NativeQianjiRecordSupervisePageState
                               title,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
-                                color: DunesColors.text,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text,
+                                ),
                               ),
                             ),
                           ),
@@ -802,10 +921,13 @@ class _NativeQianjiRecordSupervisePageState
                             const SizedBox(width: 8),
                             Text(
                               row.status,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: DunesColors.text2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
                               ),
                             ),
                           ],
@@ -825,9 +947,12 @@ class _NativeQianjiRecordSupervisePageState
                           ].where((e) => e.isNotEmpty).join(' · '),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: DunesColors.text3,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
                           ),
                         ),
                       ],

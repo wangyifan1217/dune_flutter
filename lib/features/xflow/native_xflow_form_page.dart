@@ -690,7 +690,12 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除', style: TextStyle(color: DunesColors.coral)),
+            child: Text(
+              '删除',
+              style: TextStyle(
+                color: DunesColors.resolve(ctx, DunesColors.coral),
+              ),
+            ),
           ),
         ],
       ),
@@ -903,7 +908,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: XfProposalUi.bg,
+      color: DunesColors.resolve(
+        context,
+        XfProposalUi.bg,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         child: Column(
           children: [
@@ -944,10 +953,18 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                 15,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                  role: DunesColorRole.surface,
+                                ),
                                 borderRadius: BorderRadius.circular(21),
                                 border: Border.all(
-                                  color: const Color(0xFFECEAF1),
+                                  color: DunesColors.resolve(
+                                    context,
+                                    const Color(0xFFECEAF1),
+                                    role: DunesColorRole.border,
+                                  ),
                                 ),
                               ),
                               child: Column(
@@ -958,8 +975,12 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                       Container(
                                         width: 7,
                                         height: 7,
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFF8064E6),
+                                        decoration: BoxDecoration(
+                                          color: DunesColors.resolveNullable(
+                                            context,
+                                            Color(0xFF8064E6),
+                                            role: DunesColorRole.surface,
+                                          ),
                                           shape: BoxShape.circle,
                                         ),
                                       ),
@@ -969,8 +990,12 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                         style: DunesTypography.sans(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w700,
-                                          color: const Color(0xFF817B90),
+                                          color: DunesColors.resolve(
+                                            context,
+                                            const Color(0xFF817B90),
+                                          ),
                                           letterSpacing: 1.0,
+                                          context: context,
                                         ),
                                       ),
                                       const Spacer(),
@@ -983,7 +1008,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                             textAlign: TextAlign.right,
                                             style: DunesTypography.sans(
                                               fontSize: 9.5,
-                                              color: const Color(0xFF9691A0),
+                                              color: DunesColors.resolve(
+                                                context,
+                                                const Color(0xFF9691A0),
+                                              ),
+                                              context: context,
                                             ),
                                           ),
                                         ),
@@ -996,7 +1025,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                       fontSize: 20,
                                       fontWeight: FontWeight.w700,
                                       height: 1.25,
-                                      color: const Color(0xFF23212A),
+                                      color: DunesColors.resolve(
+                                        context,
+                                        const Color(0xFF23212A),
+                                      ),
+                                      context: context,
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -1004,14 +1037,21 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                     text: TextSpan(
                                       style: DunesTypography.sans(
                                         fontSize: 11,
-                                        color: const Color(0xFF969F99),
+                                        color: DunesColors.resolve(
+                                          context,
+                                          const Color(0xFF969F99),
+                                        ),
+                                        context: context,
                                       ),
-                                      children: const [
+                                      children: [
                                         TextSpan(text: '请填写申请信息，带 '),
                                         TextSpan(
                                           text: '*',
                                           style: TextStyle(
-                                            color: Color(0xFFD46B6B),
+                                            color: DunesColors.resolveNullable(
+                                              context,
+                                              Color(0xFFD46B6B),
+                                            ),
                                             fontWeight: FontWeight.w700,
                                           ),
                                         ),

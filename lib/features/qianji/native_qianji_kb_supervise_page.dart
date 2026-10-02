@@ -34,8 +34,9 @@ class NativeQianjiKbSupervisePage extends StatefulWidget {
 
 class _NativeQianjiKbSupervisePageState
     extends State<NativeQianjiKbSupervisePage> {
-  late final KbSuperviseService _service =
-      KbSuperviseService(session: widget.session);
+  late final KbSuperviseService _service = KbSuperviseService(
+    session: widget.session,
+  );
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _keywordCtrl = TextEditingController();
 
@@ -80,8 +81,11 @@ class _NativeQianjiKbSupervisePageState
     final now = DateTime.now();
     switch (_rangePreset) {
       case _KbRangePreset.week:
-        final monday = DateTime(now.year, now.month, now.day)
-            .subtract(Duration(days: now.weekday - 1));
+        final monday = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).subtract(Duration(days: now.weekday - 1));
         return (monday, now);
       case _KbRangePreset.all:
         return (null, null);
@@ -112,7 +116,10 @@ class _NativeQianjiKbSupervisePageState
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients || _loading || _loadingMore || !_hasMore) {
+    if (!_scrollController.hasClients ||
+        _loading ||
+        _loadingMore ||
+        !_hasMore) {
       return;
     }
     final pos = _scrollController.position;
@@ -164,7 +171,8 @@ class _NativeQianjiKbSupervisePageState
       setState(() {
         _rows = result.items;
         _page = 0;
-        _hasMore = result.items.length >= _pageSize &&
+        _hasMore =
+            result.items.length >= _pageSize &&
             result.items.length < result.totalCount;
         if (stats != null) {
           _deptStats = stats.departments;
@@ -244,14 +252,26 @@ class _NativeQianjiKbSupervisePageState
           data: base.copyWith(
             colorScheme: base.colorScheme.copyWith(
               primary: _themePurple,
-              onPrimary: Colors.white,
+              onPrimary: DunesColors.resolve(ctx, Colors.white),
               surfaceTint: Colors.transparent,
             ),
             datePickerTheme: base.datePickerTheme.copyWith(
-              rangeSelectionBackgroundColor: const Color(0xFFEFEAFA),
-              backgroundColor: Colors.white,
-              headerBackgroundColor: Colors.white,
-              headerForegroundColor: DunesColors.text,
+              rangeSelectionBackgroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFEFEAFA),
+                role: DunesColorRole.surface,
+              ),
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
+              headerBackgroundColor: DunesColors.resolve(
+                ctx,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
+              headerForegroundColor: DunesColors.resolve(ctx, DunesColors.text),
             ),
           ),
           child: child!,
@@ -303,7 +323,11 @@ class _NativeQianjiKbSupervisePageState
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -334,7 +358,7 @@ class _NativeQianjiKbSupervisePageState
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: widget.onBack,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -342,35 +366,38 @@ class _NativeQianjiKbSupervisePageState
                   Icon(
                     Icons.arrow_back_ios_new,
                     size: 14,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                   SizedBox(width: 2),
                   Text(
                     '饕',
-                    style: TextStyle(fontSize: 13, color: DunesColors.text2),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               '知识库',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ),
           if (_totalDocuments > 0)
             Text(
               '合计 $_totalDocuments',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             ),
         ],
@@ -399,22 +426,44 @@ class _NativeQianjiKbSupervisePageState
                       )
                     : null,
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 10,
                 ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+                  borderSide: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+                  borderSide: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: _themePurple),
+                  borderSide: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -514,20 +563,20 @@ class _NativeQianjiKbSupervisePageState
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 '部门筛选',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 _superviseAll ? '全部门' : '管辖范围',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: _themePurple,
+                  color: DunesColors.resolveNullable(context, _themePurple),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -580,7 +629,9 @@ class _NativeQianjiKbSupervisePageState
           Text(
             friendlyErrorText(_error, fallback: '加载失败，请稍后重试'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -595,12 +646,15 @@ class _NativeQianjiKbSupervisePageState
     if (_rows.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
+        children: [
           SizedBox(height: 120),
           Center(
             child: Text(
               '暂无知识库数据',
-              style: TextStyle(color: DunesColors.text3, fontSize: 14),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -645,7 +699,17 @@ class _RangeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFF0EEF7) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EEF7),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -655,7 +719,17 @@ class _RangeChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? _themePurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -663,7 +737,9 @@ class _RangeChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? _themePurple : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, _themePurple)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -688,7 +764,17 @@ class _DeptChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFF0EEF7) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EEF7),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -698,7 +784,17 @@ class _DeptChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? _themePurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Row(
@@ -709,7 +805,9 @@ class _DeptChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? _themePurple : DunesColors.text2,
+                  color: selected
+                      ? DunesColors.resolve(context, _themePurple)
+                      : DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 6),
@@ -718,7 +816,9 @@ class _DeptChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: selected ? _themePurple : DunesColors.text3,
+                  color: selected
+                      ? DunesColors.resolve(context, _themePurple)
+                      : DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
             ],
@@ -740,13 +840,23 @@ class _PersonCard extends StatelessWidget {
         ? '未分配部门'
         : row.departmentName.trim();
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE8EAED)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -758,19 +868,19 @@ class _PersonCard extends StatelessWidget {
                     row.personLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                 ),
                 Text(
                   '${row.documentCount} 文档',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: _themePurple,
+                    color: DunesColors.resolveNullable(context, _themePurple),
                   ),
                 ),
               ],
@@ -778,12 +888,18 @@ class _PersonCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               '$dept · ${row.folderCount} 知识库',
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               '上传 ${row.uploadedCount} · 纪要 ${row.minutesCount}',
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ],
         ),

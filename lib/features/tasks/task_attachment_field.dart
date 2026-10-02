@@ -169,7 +169,11 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
     final zone = Material(
       color: _dragging
           ? accent.withValues(alpha: 0.08)
-          : const Color(0xFFF5F6F8),
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF5F6F8),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -182,7 +186,11 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
             border: Border.all(
               color: _dragging
                   ? accent.withValues(alpha: 0.45)
-                  : const Color(0xFFE8EAED),
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
               style: BorderStyle.solid,
             ),
           ),
@@ -190,7 +198,9 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
             children: [
               Icon(
                 Icons.cloud_upload_outlined,
-                color: _dragging ? accent : DunesColors.text3,
+                color: _dragging
+                    ? accent
+                    : DunesColors.resolve(context, DunesColors.text3),
               ),
               const SizedBox(height: 6),
               Text(
@@ -200,14 +210,19 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
-                  color: _dragging ? accent : DunesColors.text2,
+                  color: _dragging
+                      ? accent
+                      : DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 '支持 pdf / office / 图片等，单文件 ≤ 30MB，最多 10 个',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ],
           ),
@@ -218,12 +233,12 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           '附件',
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: DunesColors.text2,
+            color: DunesColors.resolve(context, DunesColors.text2),
           ),
         ),
         const SizedBox(height: 8),
@@ -244,16 +259,26 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
               child: Container(
                 padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFE8EAED)),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       Icons.insert_drive_file_outlined,
                       size: 18,
-                      color: accent,
+                      color: DunesColors.resolveNullable(context, accent),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -267,10 +292,10 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       onPressed: () => _remove(i),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.close,
                         size: 18,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],

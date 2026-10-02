@@ -106,10 +106,14 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
             Container(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFF7F6FC),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF7F6FC),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -117,7 +121,7 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: kTaskPurple,
+                      color: DunesColors.resolveNullable(context, kTaskPurple),
                     ),
                   ),
                   SizedBox(height: 4),
@@ -127,7 +131,7 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
                     '协助人不会成为负责人，谁都可以添加。',
                     style: TextStyle(
                       fontSize: 13,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
                       height: 1.45,
                     ),
                   ),
@@ -147,7 +151,11 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
                   icon: const Icon(Icons.arrow_forward, size: 18),
                 ),
                 filled: true,
-                fillColor: const Color(0xFFF5F6F8),
+                fillColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF5F6F8),
+                  role: DunesColorRole.surface,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide.none,
@@ -158,20 +166,32 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
             Expanded(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF5F6F8),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF5F6F8),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: _loading
-                    ? const Center(
+                    ? Center(
                         child: CircularProgressIndicator(
-                          color: DunesColors.brandPurple,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                          ),
                         ),
                       )
                     : _assignees.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           '没有可指派的同事',
-                          style: TextStyle(color: DunesColors.text3),
+                          style: TextStyle(
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                          ),
                         ),
                       )
                     : ListView.builder(
@@ -182,9 +202,11 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
                           return ListTile(
                             selected: selected,
                             selectedColor: kTaskPurple,
-                            selectedTileColor: kTaskPurple.withValues(
-                              alpha: 0.08,
-                            ),
+                            selectedTileColor: DunesColors.resolve(
+                              context,
+                              kTaskPurple,
+                              role: DunesColorRole.surface,
+                            ).withValues(alpha: 0.08),
                             leading: buildTaskUserAvatar(
                               session: widget.session,
                               name: a.displayName,
@@ -199,9 +221,12 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
                                 ? null
                                 : Text(a.departmentName),
                             trailing: selected
-                                ? const Icon(
+                                ? Icon(
                                     Icons.check_circle,
-                                    color: DunesColors.brandPurple,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.brandPurple,
+                                    ),
                                   )
                                 : null,
                             onTap: () => setState(() {
@@ -219,7 +244,11 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
               decoration: InputDecoration(
                 hintText: '指派说明（可选）',
                 filled: true,
-                fillColor: const Color(0xFFF5F6F8),
+                fillColor: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF5F6F8),
+                  role: DunesColorRole.surface,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide.none,
@@ -230,7 +259,13 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
               const SizedBox(height: 8),
               Text(
                 _error!,
-                style: const TextStyle(fontSize: 12, color: Color(0xFFE35D6A)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFE35D6A),
+                  ),
+                ),
               ),
             ],
           ],
@@ -244,7 +279,11 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
         FilledButton(
           key: const Key('task-assign-submit'),
           style: FilledButton.styleFrom(
-            backgroundColor: DunesColors.brandPurple,
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.brandPurple,
+              role: DunesColorRole.surface,
+            ),
           ),
           onPressed: _submit,
           child: const Text('提交指派'),

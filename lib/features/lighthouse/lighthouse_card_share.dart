@@ -7,6 +7,7 @@ import '../conversation/conversation_service.dart';
 import 'lighthouse_feedback.dart';
 import 'lighthouse_message_card_layout.dart';
 import 'lighthouse_shared_card_data.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// Places the forwarding icon in a slot INSIDE the card supplied by its builder.
 class LighthouseShareableCard extends StatefulWidget {
@@ -139,7 +140,7 @@ class _LighthouseShareableCardState extends State<LighthouseShareableCard> {
               onPressed: _busy ? null : _forward,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
-              color: const Color(0xFF6750A4),
+              color: DunesColors.resolve(context, const Color(0xFF6750A4)),
               icon: _busy
                   ? const SizedBox(
                       width: 12,

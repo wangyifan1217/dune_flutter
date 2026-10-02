@@ -13,7 +13,6 @@ class ReplySlaGalleryPage extends StatefulWidget {
 }
 
 class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
-
   static ReplySlaItem _item({
     required int id,
     required ReplySlaStatus status,
@@ -37,17 +36,30 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgPage,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgPage,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
         title: const Text('工作群已读不回 · 补丁演示'),
-        backgroundColor: DunesColors.bgApp,
+        backgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
           Text(
             '只出现在上线后新建的工作群。沙丘职级更高的人 @ 你才产生义务。点「回复此条」不算回复，发出引用才算。「去回复」只定位。',
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text2, height: 1.45),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              height: 1.45,
+              context: context,
+            ),
           ),
           const SizedBox(height: 16),
           _section('群资料', '新工作群：免打扰不可开，未解散不能主动退'),
@@ -75,37 +87,67 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
             mine: false,
             name: '更高职级',
             text: '@我 这份对账今天下班前给一下',
-            item: _item(id: 1, status: ReplySlaStatus.unread, seconds: 25 * 60, receiver: true),
+            item: _item(
+              id: 1,
+              status: ReplySlaStatus.unread,
+              seconds: 25 * 60,
+              receiver: true,
+            ),
           ),
           _bubble(
             mine: false,
             name: '更高职级',
             text: '@我 已读但还没回',
-            item: _item(id: 2, status: ReplySlaStatus.pending, seconds: 40, receiver: true),
+            item: _item(
+              id: 2,
+              status: ReplySlaStatus.pending,
+              seconds: 40,
+              receiver: true,
+            ),
           ),
           _bubble(
             mine: false,
             name: '更高职级',
             text: '@我 已读未回 1 小时 20 分',
-            item: _item(id: 3, status: ReplySlaStatus.pending, seconds: 80 * 60, receiver: true),
+            item: _item(
+              id: 3,
+              status: ReplySlaStatus.pending,
+              seconds: 80 * 60,
+              receiver: true,
+            ),
           ),
           _bubble(
             mine: false,
             name: '更高职级',
             text: '@我 已用引用回复关掉义务',
-            item: _item(id: 4, status: ReplySlaStatus.replied, seconds: 8 * 60, receiver: true),
+            item: _item(
+              id: 4,
+              status: ReplySlaStatus.replied,
+              seconds: 8 * 60,
+              receiver: true,
+            ),
           ),
           _bubble(
             mine: false,
             name: '更高职级',
             text: '@我 原消息撤回 / 离群 / 解散',
-            item: _item(id: 5, status: ReplySlaStatus.voided, seconds: 2 * 3600, receiver: true),
+            item: _item(
+              id: 5,
+              status: ReplySlaStatus.voided,
+              seconds: 2 * 3600,
+              receiver: true,
+            ),
           ),
           _bubble(
             mine: false,
             name: '更高职级',
             text: '@我 未读时群已解散',
-            item: _item(id: 6, status: ReplySlaStatus.voided, seconds: 0, receiver: true),
+            item: _item(
+              id: 6,
+              status: ReplySlaStatus.voided,
+              seconds: 0,
+              receiver: true,
+            ),
             dissolved: true,
           ),
           const SizedBox(height: 18),
@@ -114,31 +156,57 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
             mine: true,
             name: '我',
             text: '@王奕凡 对方还没打开会话',
-            item: _item(id: 7, status: ReplySlaStatus.unread, seconds: 25 * 60, receiver: false),
+            item: _item(
+              id: 7,
+              status: ReplySlaStatus.unread,
+              seconds: 25 * 60,
+              receiver: false,
+            ),
           ),
           _bubble(
             mine: true,
             name: '我',
             text: '@王奕凡 对方已读，还没引用回复',
-            item: _item(id: 8, status: ReplySlaStatus.pending, seconds: 25 * 60, receiver: false),
+            item: _item(
+              id: 8,
+              status: ReplySlaStatus.pending,
+              seconds: 25 * 60,
+              receiver: false,
+            ),
           ),
           _bubble(
             mine: true,
             name: '我',
             text: '@王奕凡 对方已引用回复',
-            item: _item(id: 9, status: ReplySlaStatus.replied, seconds: 12 * 60, receiver: false),
+            item: _item(
+              id: 9,
+              status: ReplySlaStatus.replied,
+              seconds: 12 * 60,
+              receiver: false,
+            ),
           ),
           _bubble(
             mine: true,
             name: '我',
             text: '@王奕凡 群已解散 / 对方离群 / 我撤回',
-            item: _item(id: 10, status: ReplySlaStatus.voided, seconds: 36 * 60, receiver: false),
+            item: _item(
+              id: 10,
+              status: ReplySlaStatus.voided,
+              seconds: 36 * 60,
+              receiver: false,
+            ),
           ),
           const SizedBox(height: 18),
           _section('建群选择', '默认普通群，创建后群主可转换'),
           const SizedBox(height: 8),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: DunesColors.brandPurple),
+            style: FilledButton.styleFrom(
+              backgroundColor: DunesColors.resolve(
+                context,
+                DunesColors.brandPurple,
+                role: DunesColorRole.surface,
+              ),
+            ),
             onPressed: () => showCreateGroupTypeDialog(
               context,
               membersText: '将与 王奕凡、林先敏共 2 人创建群聊，是否继续？',
@@ -160,9 +228,24 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: DunesTypography.sans(fontSize: 15, fontWeight: FontWeight.w600, color: DunesColors.text)),
+          Text(
+            title,
+            style: DunesTypography.sans(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(hint, style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3)),
+          Text(
+            hint,
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
+          ),
         ],
       ),
     );
@@ -181,21 +264,51 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: mine
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           if (!mine) _avatar(name, mine),
           if (!mine) const SizedBox(width: 8),
           Flexible(
             child: Column(
-              crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: mine
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
-                Text(name, style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3)),
+                Text(
+                  name,
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 13,
+                    vertical: 9,
+                  ),
                   decoration: BoxDecoration(
-                    color: mine ? DunesColors.accentSoft : DunesColors.bgApp,
-                    border: Border.all(color: DunesColors.borderSoft),
+                    color: mine
+                        ? DunesColors.resolve(
+                            context,
+                            DunesColors.accentSoft,
+                            role: DunesColorRole.surface,
+                          )
+                        : DunesColors.resolve(
+                            context,
+                            DunesColors.bgApp,
+                            role: DunesColorRole.surface,
+                          ),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.borderSoft,
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(mine ? 12 : 4),
                       topRight: Radius.circular(mine ? 4 : 12),
@@ -203,12 +316,25 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
                       bottomRight: const Radius.circular(12),
                     ),
                   ),
-                  child: Text(text, style: DunesTypography.sans(fontSize: 14, color: DunesColors.text, height: 1.45)),
+                  child: Text(
+                    text,
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      height: 1.45,
+                      context: context,
+                    ),
+                  ),
                 ),
                 if (item != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: _annotation(item, now, mine: mine, dissolved: dissolved),
+                    child: _annotation(
+                      item,
+                      now,
+                      mine: mine,
+                      dissolved: dissolved,
+                    ),
                   ),
                 if (extra != null)
                   Padding(padding: const EdgeInsets.only(top: 6), child: extra),
@@ -228,21 +354,48 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
       height: 32,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: mine ? DunesColors.accentSoft : const Color(0xFFC9D6D4),
+        color: mine
+            ? DunesColors.resolve(
+                context,
+                DunesColors.accentSoft,
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                const Color(0xFFC9D6D4),
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         name.substring(0, 1),
-        style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600, color: DunesColors.accent),
+        style: DunesTypography.sans(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: DunesColors.resolve(context, DunesColors.accent),
+          context: context,
+        ),
       ),
     );
   }
 
-  Widget _annotation(ReplySlaItem item, DateTime now, {required bool mine, required bool dissolved}) {
+  Widget _annotation(
+    ReplySlaItem item,
+    DateTime now, {
+    required bool mine,
+    required bool dissolved,
+  }) {
     final color = switch (item.status) {
-      ReplySlaStatus.pending => const Color(0xFFD4380D),
-      ReplySlaStatus.replied => DunesColors.readReceipt,
-      ReplySlaStatus.unread || ReplySlaStatus.voided => DunesColors.text3,
+      ReplySlaStatus.pending => DunesColors.resolve(
+        context,
+        const Color(0xFFD4380D),
+      ),
+      ReplySlaStatus.replied => DunesColors.resolve(
+        context,
+        DunesColors.readReceipt,
+      ),
+      ReplySlaStatus.unread ||
+      ReplySlaStatus.voided => DunesColors.resolve(context, DunesColors.text3),
     };
     final dur = formatReplySlaDuration(item.liveUnreplied(now));
     final unreadDur = formatReplySlaDuration(item.liveUnread(now));
@@ -250,9 +403,15 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
       ReplySlaStatus.unread => '未读 $unreadDur',
       ReplySlaStatus.pending => '已读 · 未回复 $dur',
       ReplySlaStatus.replied => '已回复 · 用时 $dur',
-      ReplySlaStatus.voided => item.unrepliedSeconds > 0 ? '已失效 · 未回复 $dur' : '已失效',
+      ReplySlaStatus.voided =>
+        item.unrepliedSeconds > 0 ? '已失效 · 未回复 $dur' : '已失效',
     };
-    final style = DunesTypography.mono(fontSize: 10.5, fontWeight: FontWeight.w500, color: color);
+    final style = DunesTypography.mono(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w500,
+      color: color,
+      context: context,
+    );
     final label = mine ? '@${item.receiverName} $text' : text;
     final canReply = !mine && item.isReceiver && item.isOpen && !dissolved;
     return Wrap(
@@ -264,18 +423,37 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(
-              color: DunesColors.accentSoft,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.accentSoft,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: DunesColors.accent.withValues(alpha: 0.35)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.accent,
+                  role: DunesColorRole.border,
+                ).withValues(alpha: 0.35),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.reply_rounded, size: 13, color: DunesColors.accent),
+                Icon(
+                  Icons.reply_rounded,
+                  size: 13,
+                  color: DunesColors.resolve(context, DunesColors.accent),
+                ),
                 const SizedBox(width: 3),
                 Text(
                   '回复此条',
-                  style: DunesTypography.mono(fontSize: 11, fontWeight: FontWeight.w600, color: DunesColors.accent),
+                  style: DunesTypography.mono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolve(context, DunesColors.accent),
+                    context: context,
+                  ),
                 ),
               ],
             ),
@@ -286,11 +464,25 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
   }
 
   Widget _settingsMock() {
-    TextStyle sub = DunesTypography.sans(fontSize: 14, color: const Color(0xFF888888));
+    TextStyle sub = DunesTypography.sans(
+      fontSize: 14,
+      color: DunesColors.resolve(context, const Color(0xFF888888)),
+      context: context,
+    );
     return Container(
       decoration: BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border.all(color: DunesColors.borderSoft),
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -312,7 +504,11 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
             child: Text(
               '工作群不能主动退出，群主解散后可退出。',
               textAlign: TextAlign.center,
-              style: DunesTypography.sans(fontSize: 12, color: const Color(0xFF888888)),
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: DunesColors.resolve(context, const Color(0xFF888888)),
+                context: context,
+              ),
             ),
           ),
         ],
@@ -324,8 +520,18 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
     return Container(
       height: 168,
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
-        border: Border.all(color: DunesColors.borderSoft),
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Stack(
@@ -336,7 +542,12 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
             bottom: 48,
             child: Text(
               '林先敏：那我先下班了…\n更高职级：最新消息把上面那条冲走了。',
-              style: DunesTypography.sans(fontSize: 13, color: DunesColors.text2, height: 1.45),
+              style: DunesTypography.sans(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                height: 1.45,
+                context: context,
+              ),
             ),
           ),
           Positioned(
@@ -345,12 +556,21 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFD4380D),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFD4380D),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
                 '↑ 去回复',
-                style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.resolve(context, Colors.white),
+                  context: context,
+                ),
               ),
             ),
           ),
@@ -360,13 +580,32 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
   }
 
   Widget _atAllLines() {
-    final style = DunesTypography.mono(fontSize: 10.5, fontWeight: FontWeight.w500);
+    final style = DunesTypography.mono(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w500,
+      context: context,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Text('@王奕凡 未读 25m', style: style.copyWith(color: DunesColors.text3)),
-        Text('@李四 已读 · 未回复 40m', style: style.copyWith(color: const Color(0xFFD4380D))),
-        Text('@王五 已回复 · 用时 8m', style: style.copyWith(color: DunesColors.readReceipt)),
+        Text(
+          '@王奕凡 未读 25m',
+          style: style.copyWith(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
+        Text(
+          '@李四 已读 · 未回复 40m',
+          style: style.copyWith(
+            color: DunesColors.resolve(context, const Color(0xFFD4380D)),
+          ),
+        ),
+        Text(
+          '@王五 已回复 · 用时 8m',
+          style: style.copyWith(
+            color: DunesColors.resolve(context, DunesColors.readReceipt),
+          ),
+        ),
       ],
     );
   }
@@ -384,16 +623,50 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('2人未回 · 3人已读未回 · 1人已回 · 1人已失效',
-                      style: DunesTypography.sans(fontSize: 14, fontWeight: FontWeight.w600)),
+                  Text(
+                    '2人未回 · 3人已读未回 · 1人已回 · 1人已失效',
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      context: ctx,
+                    ),
+                  ),
                   const SizedBox(height: 8),
-                  _rosterRow('王奕凡', '未读 25m', DunesColors.text3),
-                  _rosterRow('周可', '未读 1h', DunesColors.text3),
-                  _rosterRow('李四', '已读 · 未回复 40m', const Color(0xFFD4380D)),
-                  _rosterRow('陈六', '已读 · 未回复 1h20m', const Color(0xFFD4380D)),
-                  _rosterRow('赵七', '已读 · 未回复 2h', const Color(0xFFD4380D)),
-                  _rosterRow('王五', '已回复 · 用时 8m', DunesColors.readReceipt),
-                  _rosterRow('钱八', '已失效', DunesColors.text3),
+                  _rosterRow(
+                    '王奕凡',
+                    '未读 25m',
+                    DunesColors.resolve(ctx, DunesColors.text3),
+                  ),
+                  _rosterRow(
+                    '周可',
+                    '未读 1h',
+                    DunesColors.resolve(ctx, DunesColors.text3),
+                  ),
+                  _rosterRow(
+                    '李四',
+                    '已读 · 未回复 40m',
+                    DunesColors.resolve(ctx, const Color(0xFFD4380D)),
+                  ),
+                  _rosterRow(
+                    '陈六',
+                    '已读 · 未回复 1h20m',
+                    DunesColors.resolve(ctx, const Color(0xFFD4380D)),
+                  ),
+                  _rosterRow(
+                    '赵七',
+                    '已读 · 未回复 2h',
+                    DunesColors.resolve(ctx, const Color(0xFFD4380D)),
+                  ),
+                  _rosterRow(
+                    '王五',
+                    '已回复 · 用时 8m',
+                    DunesColors.resolve(ctx, DunesColors.readReceipt),
+                  ),
+                  _rosterRow(
+                    '钱八',
+                    '已失效',
+                    DunesColors.resolve(ctx, DunesColors.text3),
+                  ),
                 ],
               ),
             ),
@@ -405,7 +678,8 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
         style: DunesTypography.sans(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: const Color(0xFFD4380D),
+          color: DunesColors.resolve(context, const Color(0xFFD4380D)),
+          context: context,
         ),
       ),
     );
@@ -416,8 +690,20 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(child: Text(name, style: DunesTypography.sans(fontSize: 14))),
-          Text(status, style: DunesTypography.mono(fontSize: 12, color: color)),
+          Expanded(
+            child: Text(
+              name,
+              style: DunesTypography.sans(fontSize: 14, context: context),
+            ),
+          ),
+          Text(
+            status,
+            style: DunesTypography.mono(
+              fontSize: 12,
+              color: color,
+              context: context,
+            ),
+          ),
         ],
       ),
     );

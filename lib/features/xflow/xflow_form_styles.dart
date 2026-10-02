@@ -34,21 +34,21 @@ class XfActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kind = actionKind ?? '';
-    Color bg = XfProposalUi.cardAlt;
-    Color border = XfProposalUi.line;
-    Color fg = XfProposalUi.ink;
+    Color bg = DunesColors.resolve(context, XfProposalUi.cardAlt);
+    Color border = DunesColors.resolve(context, XfProposalUi.line);
+    Color fg = DunesColors.resolve(context, XfProposalUi.ink);
     if (kind == 'push-colleague') {
-      bg = XfProposalUi.coral;
-      border = XfProposalUi.coral;
-      fg = Colors.white;
+      bg = DunesColors.resolve(context, XfProposalUi.coral);
+      border = DunesColors.resolve(context, XfProposalUi.coral);
+      fg = DunesColors.resolve(context, Colors.white);
     } else if (kind == 'clear-form') {
-      bg = Colors.white;
-      border = XfProposalUi.coral;
-      fg = XfProposalUi.coral;
+      bg = DunesColors.resolve(context, Colors.white);
+      border = DunesColors.resolve(context, XfProposalUi.coral);
+      fg = DunesColors.resolve(context, XfProposalUi.coral);
     } else if (kind == 'ai-summary' || kind == 'ai-policy') {
-      bg = XfProposalUi.coralSoft;
-      border = const Color(0xFFFFD6C8);
-      fg = XfProposalUi.coral;
+      bg = DunesColors.resolve(context, XfProposalUi.coralSoft);
+      border = DunesColors.resolve(context, const Color(0xFFFFD6C8));
+      fg = DunesColors.resolve(context, XfProposalUi.coral);
     }
     return Material(
       color: Colors.transparent,
@@ -57,7 +57,11 @@ class XfActionButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         child: Ink(
           decoration: BoxDecoration(
-            color: bg,
+            color: DunesColors.resolveNullable(
+              context,
+              bg,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: border),
           ),
@@ -69,6 +73,7 @@ class XfActionButton extends StatelessWidget {
               fontWeight: FontWeight.w500,
               color: fg,
               height: 1.2,
+              context: context,
             ),
           ),
         ),
@@ -90,7 +95,10 @@ class XfAddRowButton extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: CustomPaint(
-        painter: _DashedRectPainter(color: DunesColors.border, radius: 7),
+        painter: _DashedRectPainter(
+          color: DunesColors.resolve(context, DunesColors.border),
+          radius: 7,
+        ),
         child: Container(
           width: double.infinity,
           margin: const EdgeInsets.only(top: 4),
@@ -100,8 +108,9 @@ class XfAddRowButton extends StatelessWidget {
             label,
             style: DunesTypography.sans(
               fontSize: 11,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
               height: 1.2,
+              context: context,
             ),
           ),
         ),
@@ -161,8 +170,9 @@ class XfDynCellLabel extends StatelessWidget {
         style: DunesTypography.sans(
           fontSize: comfortable ? 11 : 9,
           fontWeight: FontWeight.w600,
-          color: DunesColors.text3,
+          color: DunesColors.resolve(context, DunesColors.text3),
           height: 1.2,
+          context: context,
         ),
       ),
     );
@@ -263,7 +273,11 @@ class XfRemoveButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: DunesColors.coralSoft,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.coralSoft,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
@@ -271,7 +285,11 @@ class XfRemoveButton extends StatelessWidget {
         child: SizedBox(
           width: size,
           height: size,
-          child: const Icon(Icons.close, size: 14, color: DunesColors.coral),
+          child: Icon(
+            Icons.close,
+            size: 14,
+            color: DunesColors.resolve(context, DunesColors.coral),
+          ),
         ),
       ),
     );
@@ -309,16 +327,20 @@ class XfFieldLabel extends StatelessWidget {
                   fontSize: compact ? 10 : 11,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0,
-                  color: const Color(0xFF69756E),
+                  color: DunesColors.resolve(context, const Color(0xFF69756E)),
                   height: compact ? 1.2 : 1.25,
+                  context: context,
                 ),
               ),
             ),
           ),
           if (required)
-            const Text(
+            Text(
               '*',
-              style: const TextStyle(color: Color(0xFFD46B6B), fontSize: 11),
+              style: TextStyle(
+                color: DunesColors.resolveNullable(context, Color(0xFFD46B6B)),
+                fontSize: 11,
+              ),
             ),
         ],
       ),
@@ -470,25 +492,47 @@ class _XfPickerSuggestionListState extends State<XfPickerSuggestionList> {
     final maxHeight = widget.maxHeight ?? xfPickerSuggestionMaxHeight(context);
     return TextFieldTapRegion(
       child: Material(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
         child: Container(
           constraints: BoxConstraints(maxHeight: maxHeight),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: DunesColors.border),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.border,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: ListView.separated(
             padding: EdgeInsets.zero,
             shrinkWrap: true,
             itemCount: widget.itemCount,
-            separatorBuilder: (_, _) =>
-                const Divider(height: 1, color: DunesColors.borderSoft),
+            separatorBuilder: (_, _) => Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
             itemBuilder: (context, index) {
               final selected = widget.selectedIndex == index;
               final label = widget.labelOf(index).trim();
               return Material(
-                color: selected ? const Color(0xFFF3EEFA) : Colors.transparent,
+                color: selected
+                    ? DunesColors.resolve(
+                        context,
+                        const Color(0xFFF3EEFA),
+                        role: DunesColorRole.surface,
+                      )
+                    : Colors.transparent,
                 child: InkWell(
                   onTap: () => widget.onSelect(index),
                   child: Listener(
@@ -509,7 +553,11 @@ class _XfPickerSuggestionListState extends State<XfPickerSuggestionList> {
                               fontWeight: selected
                                   ? FontWeight.w600
                                   : FontWeight.w400,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -566,9 +614,12 @@ class XflowApprovalSubmitButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final canTap = enabled && !loading && onPressed != null;
     final bgColor = canTap
-        ? const Color(0xFF7054D8)
-        : const Color(0xFF7054D8).withValues(alpha: 0.28);
-    const fgColor = Colors.white;
+        ? DunesColors.resolve(context, const Color(0xFF7054D8))
+        : DunesColors.resolve(
+            context,
+            const Color(0xFF7054D8),
+          ).withValues(alpha: 0.28);
+    final fgColor = DunesColors.resolve(context, Colors.white);
     final fgAlpha = canTap ? 255 : 180;
 
     return GestureDetector(
@@ -582,7 +633,11 @@ class XflowApprovalSubmitButton extends StatelessWidget {
         width: fullWidth ? double.infinity : null,
         padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
         decoration: BoxDecoration(
-          color: bgColor,
+          color: DunesColors.resolveNullable(
+            context,
+            bgColor,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(15),
         ),
         child: Row(
@@ -599,12 +654,22 @@ class XflowApprovalSubmitButton extends StatelessWidget {
                 ),
               )
             else
-              Icon(icon, size: 14, color: fgColor.withAlpha(fgAlpha)),
+              Icon(
+                icon,
+                size: 14,
+                color: DunesColors.resolveNullable(
+                  context,
+                  fgColor.withAlpha(fgAlpha),
+                ),
+              ),
             const SizedBox(width: 7),
             Text(
               loading ? loadingLabel : label,
               style: TextStyle(
-                color: fgColor.withAlpha(fgAlpha),
+                color: DunesColors.resolveNullable(
+                  context,
+                  fgColor.withAlpha(fgAlpha),
+                ),
                 fontSize: 12.5,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 1.2,

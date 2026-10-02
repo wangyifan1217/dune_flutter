@@ -15,7 +15,11 @@ Future<List<int>?> showKpiPublishSheet({
   return showModalBottomSheet<List<int>>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    ),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -112,18 +116,21 @@ class _KpiPublishSheetState extends State<_KpiPublishSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               '按项目组发布',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               '先选板块，再选组。只发已评完的人；未评完的组会提示，但不卡住别的组。',
-              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -141,11 +148,14 @@ class _KpiPublishSheetState extends State<_KpiPublishSheet> {
             ),
             const SizedBox(height: 10),
             if (groups.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 18),
                 child: Text(
                   '这个板块没有可发布的量表结果',
-                  style: TextStyle(fontSize: 13, color: DunesColors.text3),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
               )
             else ...[
@@ -176,7 +186,13 @@ class _KpiPublishSheetState extends State<_KpiPublishSheet> {
               Text(
                 '${pending.map((p) => p.userName).where((n) => n.trim().isNotEmpty).take(6).join('、')}'
                 '${pending.length > 6 ? ' 等' : ''}共 ${pending.length} 人未评完，这次不发他们。',
-                style: const TextStyle(fontSize: 12, color: Color(0xFFB45309)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFB45309),
+                  ),
+                ),
               ),
             ],
             const SizedBox(height: 12),
@@ -218,16 +234,18 @@ class _KpiPublishSheetState extends State<_KpiPublishSheet> {
                   ? Icons.check_box_rounded
                   : Icons.check_box_outline_blank,
               size: 22,
-              color: selected ? _accent : DunesColors.text3,
+              color: selected
+                  ? DunesColors.resolve(context, _accent)
+                  : DunesColors.resolve(context, DunesColors.text3),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 group.name,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
             ),
@@ -236,8 +254,8 @@ class _KpiPublishSheetState extends State<_KpiPublishSheet> {
               style: TextStyle(
                 fontSize: 12,
                 color: group.pending.isEmpty
-                    ? DunesColors.text3
-                    : const Color(0xFFB45309),
+                    ? DunesColors.resolve(context, DunesColors.text3)
+                    : DunesColors.resolve(context, const Color(0xFFB45309)),
                 fontFeatures: _tabular,
               ),
             ),
@@ -254,7 +272,13 @@ class _KpiPublishSheetState extends State<_KpiPublishSheet> {
     required VoidCallback onTap,
   }) {
     return Material(
-      color: selected ? _accent : const Color(0xFFECE7F4),
+      color: selected
+          ? DunesColors.resolve(context, _accent, role: DunesColorRole.surface)
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFECE7F4),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         key: key,
@@ -267,7 +291,9 @@ class _KpiPublishSheetState extends State<_KpiPublishSheet> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, Colors.white)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),

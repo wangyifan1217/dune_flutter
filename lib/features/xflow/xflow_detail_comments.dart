@@ -44,8 +44,9 @@ class XfDetCommentsSection extends StatefulWidget {
 class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
   final _input = TextEditingController();
   final _focus = FocusNode();
-  late final ConversationService _avatarService =
-      ConversationService(session: widget.service.session);
+  late final ConversationService _avatarService = ConversationService(
+    session: widget.service.session,
+  );
   List<ApprovalCommentItem> _comments = const [];
   List<ApprovalStakeholderPerson> _people = const [];
   ApprovalCommentItem? _replyParent;
@@ -147,8 +148,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
     final names = <String>{
       for (final p in _people)
         if (p.displayName.trim().isNotEmpty) p.displayName.trim(),
-    }.toList()
-      ..sort((a, b) => b.length.compareTo(a.length));
+    }.toList()..sort((a, b) => b.length.compareTo(a.length));
     final ranges = <({int start, int coreEnd, int end})>[];
     final occupied = <bool>[for (var i = 0; i < text.length; i++) false];
     for (final name in names) {
@@ -158,8 +158,9 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
         final idx = text.indexOf(token, from);
         if (idx < 0) break;
         final coreEnd = idx + token.length;
-        final end =
-            coreEnd < text.length && text[coreEnd] == ' ' ? coreEnd + 1 : coreEnd;
+        final end = coreEnd < text.length && text[coreEnd] == ' '
+            ? coreEnd + 1
+            : coreEnd;
         var overlap = false;
         for (var i = idx; i < coreEnd; i++) {
           if (occupied[i]) {
@@ -243,7 +244,11 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
         child: Container(
           margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              ctx,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
@@ -256,6 +261,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                   style: DunesTypography.sans(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
+                    context: ctx,
                   ),
                 ),
               ),
@@ -429,8 +435,9 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
     } finally {
       for (final bookmark in accessed) {
         try {
-          await DesktopDrop.instance
-              .stopAccessingSecurityScopedResource(bookmark: bookmark);
+          await DesktopDrop.instance.stopAccessingSecurityScopedResource(
+            bookmark: bookmark,
+          );
         } catch (_) {}
       }
     }
@@ -440,11 +447,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
     if (!mounted) return;
     final name = rawName.trim().isEmpty ? '附件' : rawName.trim();
     if (bytes.length > _kMaxCommentAttachmentBytes) {
-      showDunesToast(
-        context,
-        '「$name」超过 20MB，未添加',
-        kind: DunesToastKind.error,
-      );
+      showDunesToast(context, '「$name」超过 20MB，未添加', kind: DunesToastKind.error);
       return;
     }
     final pending = _PendingAttachment(
@@ -492,15 +495,9 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
       showDunesToast(context, '附件上传中，请稍候');
       return;
     }
-    final failed = _pendingAtts.where(
-      (a) => a.status == _PendingStatus.error,
-    );
+    final failed = _pendingAtts.where((a) => a.status == _PendingStatus.error);
     if (failed.isNotEmpty) {
-      showDunesToast(
-        context,
-        '有附件上传失败，请移除后重试',
-        kind: DunesToastKind.error,
-      );
+      showDunesToast(context, '有附件上传失败，请移除后重试', kind: DunesToastKind.error);
       return;
     }
     final attachments = [
@@ -596,7 +593,8 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                 _error!,
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: const Color(0xFFC44949),
+                  color: DunesColors.resolve(context, const Color(0xFFC44949)),
+                  context: context,
                 ),
               ),
             ),
@@ -617,7 +615,11 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
               padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: DunesColors.bgSoft,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.bgSoft,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
@@ -625,16 +627,24 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             )
           else
             for (var i = 0; i < _roots.length; i++) ...[
               if (i > 0)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 4),
-                  child: Divider(height: 1, color: DunesColors.borderSoft),
+                  child: Divider(
+                    height: 1,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
               _rootThread(_roots[i]),
             ],
@@ -643,20 +653,32 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
               margin: const EdgeInsets.only(bottom: 8, top: 4),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: DunesColors.accentSoft,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.accentSoft,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.reply_rounded, size: 14, color: DunesColors.accent),
+                  Icon(
+                    Icons.reply_rounded,
+                    size: 14,
+                    color: DunesColors.resolve(context, DunesColors.accent),
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       '回复 $replyName',
                       style: DunesTypography.sans(
                         fontSize: 12,
-                        color: DunesColors.accentDeep,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.accentDeep,
+                        ),
                         fontWeight: FontWeight.w600,
+                        context: context,
                       ),
                     ),
                   ),
@@ -666,152 +688,214 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                       '取消',
                       style: DunesTypography.sans(
                         fontSize: 12,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-          _wrapDrop(Container(
-            padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
-            decoration: BoxDecoration(
-              color: _dragging ? DunesColors.accentSoft : DunesColors.bgSoft,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _dragging ? DunesColors.accent : DunesColors.borderSoft,
-                width: _dragging ? 1.4 : 1,
+          _wrapDrop(
+            Container(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+              decoration: BoxDecoration(
+                color: _dragging
+                    ? DunesColors.resolve(
+                        context,
+                        DunesColors.accentSoft,
+                        role: DunesColorRole.surface,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        DunesColors.bgSoft,
+                        role: DunesColorRole.surface,
+                      ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _dragging
+                      ? DunesColors.resolve(
+                          context,
+                          DunesColors.accent,
+                          role: DunesColorRole.border,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          DunesColors.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
+                  width: _dragging ? 1.4 : 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_dragging)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                      child: Text(
+                        '松开即可添加为评论附件',
+                        style: DunesTypography.sans(
+                          fontSize: 11.5,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.accentDeep,
+                          ),
+                          fontWeight: FontWeight.w600,
+                          context: context,
+                        ),
+                      ),
+                    ),
+                  if (_pendingAtts.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final att in _pendingAtts)
+                            _PendingAttachmentChip(
+                              attachment: att,
+                              onRemove: _sending
+                                  ? null
+                                  : () => _removePending(att),
+                            ),
+                        ],
+                      ),
+                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _input,
+                          focusNode: _focus,
+                          minLines: 1,
+                          maxLines: 4,
+                          scrollPadding: const EdgeInsets.fromLTRB(
+                            20,
+                            20,
+                            20,
+                            36,
+                          ),
+                          style: DunesTypography.sans(
+                            fontSize: 13,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                            context: context,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: _replyParent == null
+                                ? '写评论，输入 @ 可提及相关人'
+                                : '写回复…',
+                            hintStyle: DunesTypography.sans(
+                              fontSize: 13,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
+                            ),
+                            isDense: true,
+                            filled: true,
+                            fillColor: Colors.transparent,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                          ),
+                          onTapOutside: (_) => _dismissKeyboard(),
+                          onChanged: (v) {
+                            if (v.endsWith('@')) {
+                              _pickMention();
+                            }
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '添加附件',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: (_sending || _picking)
+                            ? null
+                            : () => unawaited(_pickAttachments()),
+                        icon: Icon(
+                          Icons.attach_file_rounded,
+                          size: 18,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.accent,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '@相关人',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _sending ? null : _pickMention,
+                        icon: Icon(
+                          Icons.alternate_email_rounded,
+                          size: 18,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.accent,
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4, bottom: 4),
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: DunesColors.resolve(
+                              context,
+                              DunesColors.accent,
+                              role: DunesColorRole.surface,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            minimumSize: const Size(0, 36),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: _sending ? null : _send,
+                          child: _sending
+                              ? SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : Text(
+                                  _replyParent == null ? '发送' : '回复',
+                                  style: DunesTypography.sans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ),
+                                    context: context,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_dragging)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-                    child: Text(
-                      '松开即可添加为评论附件',
-                      style: DunesTypography.sans(
-                        fontSize: 11.5,
-                        color: DunesColors.accentDeep,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                if (_pendingAtts.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        for (final att in _pendingAtts)
-                          _PendingAttachmentChip(
-                            attachment: att,
-                            onRemove:
-                                _sending ? null : () => _removePending(att),
-                          ),
-                      ],
-                    ),
-                  ),
-                Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _input,
-                    focusNode: _focus,
-                    minLines: 1,
-                    maxLines: 4,
-                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
-                    style: DunesTypography.sans(fontSize: 13, color: DunesColors.text),
-                    decoration: InputDecoration(
-                      hintText: _replyParent == null
-                          ? '写评论，输入 @ 可提及相关人'
-                          : '写回复…',
-                      hintStyle: DunesTypography.sans(
-                        fontSize: 13,
-                        color: DunesColors.text3,
-                      ),
-                      isDense: true,
-                      filled: true,
-                      fillColor: Colors.transparent,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 10,
-                      ),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                    ),
-                    onTapOutside: (_) => _dismissKeyboard(),
-                    onChanged: (v) {
-                      if (v.endsWith('@')) {
-                        _pickMention();
-                      }
-                    },
-                  ),
-                ),
-                IconButton(
-                  tooltip: '添加附件',
-                  visualDensity: VisualDensity.compact,
-                  onPressed:
-                      (_sending || _picking) ? null : () => unawaited(_pickAttachments()),
-                  icon: Icon(
-                    Icons.attach_file_rounded,
-                    size: 18,
-                    color: DunesColors.accent,
-                  ),
-                ),
-                IconButton(
-                  tooltip: '@相关人',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: _sending ? null : _pickMention,
-                  icon: Icon(
-                    Icons.alternate_email_rounded,
-                    size: 18,
-                    color: DunesColors.accent,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 4, bottom: 4),
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: DunesColors.accent,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      minimumSize: const Size(0, 36),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onPressed: _sending ? null : _send,
-                    child: _sending
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(
-                            _replyParent == null ? '发送' : '回复',
-                            style: DunesTypography.sans(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
-                ),
-              ],
-            ),
-          )),
+          ),
         ],
       ),
     );
@@ -842,15 +926,32 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
               margin: const EdgeInsets.only(left: 40, top: 8),
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
               decoration: BoxDecoration(
-                color: DunesColors.bgSoft,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.bgSoft,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: DunesColors.borderSoft),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               child: Column(
                 children: [
                   for (var i = 0; i < node.children.length; i++) ...[
                     if (i > 0)
-                      const Divider(height: 12, color: DunesColors.borderSoft),
+                      Divider(
+                        height: 12,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     _replyBranch(node.children[i], depth: 1),
                   ],
                 ],
@@ -879,8 +980,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
     final name = c.authorName.trim().isEmpty ? '用户' : c.authorName.trim();
     final time = _formatCommentTime(c.createdAt);
     final parentAuthor = _authorOf(c.parentId);
-    final showReplyTo =
-        parentAuthor.isNotEmpty && parentAuthor != name;
+    final showReplyTo = parentAuthor.isNotEmpty && parentAuthor != name;
     final avatarSize = compact ? 26.0 : 32.0;
 
     return Row(
@@ -900,8 +1000,15 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
               ? null
               : c.authorAvatarObjectKey,
           avatarService: _avatarService,
-          fallbackBackground: DunesColors.accentSoft,
-          fallbackForeground: DunesColors.accentDeep,
+          fallbackBackground: DunesColors.resolve(
+            context,
+            DunesColors.accentSoft,
+            role: DunesColorRole.surface,
+          ),
+          fallbackForeground: DunesColors.resolve(
+            context,
+            DunesColors.accentDeep,
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -918,7 +1025,8 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                     style: DunesTypography.sans(
                       fontSize: compact ? 12.5 : 13,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                   ),
                   if (showReplyTo)
@@ -926,7 +1034,8 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                       '回复 $parentAuthor',
                       style: DunesTypography.sans(
                         fontSize: 11.5,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
                       ),
                     ),
                   if (time.isNotEmpty)
@@ -934,7 +1043,8 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                       time,
                       style: DunesTypography.sans(
                         fontSize: 11,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
                       ),
                     ),
                 ],
@@ -960,7 +1070,8 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                     style: DunesTypography.sans(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.accent,
+                      color: DunesColors.resolve(context, DunesColors.accent),
+                      context: context,
                     ),
                   ),
                 ),
@@ -1049,10 +1160,24 @@ class _PendingAttachmentChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isError ? const Color(0xFFE7B3B3) : DunesColors.borderSoft,
+          color: isError
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFFE7B3B3),
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
         ),
       ),
       child: Row(
@@ -1070,7 +1195,9 @@ class _PendingAttachmentChip extends StatelessWidget {
                   ? Icons.error_outline_rounded
                   : Icons.insert_drive_file_outlined,
               size: 14,
-              color: isError ? const Color(0xFFC44949) : DunesColors.text3,
+              color: isError
+                  ? DunesColors.resolve(context, const Color(0xFFC44949))
+                  : DunesColors.resolve(context, DunesColors.text3),
             ),
           const SizedBox(width: 5),
           ConstrainedBox(
@@ -1081,7 +1208,10 @@ class _PendingAttachmentChip extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: DunesTypography.sans(
                 fontSize: 11.5,
-                color: isError ? const Color(0xFFC44949) : DunesColors.text2,
+                color: isError
+                    ? DunesColors.resolve(context, const Color(0xFFC44949))
+                    : DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
           ),
@@ -1091,7 +1221,8 @@ class _PendingAttachmentChip extends StatelessWidget {
               size,
               style: DunesTypography.sans(
                 fontSize: 10.5,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],
@@ -1099,10 +1230,10 @@ class _PendingAttachmentChip extends StatelessWidget {
             const SizedBox(width: 4),
             GestureDetector(
               onTap: onRemove,
-              child: const Icon(
+              child: Icon(
                 Icons.close_rounded,
                 size: 14,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
               ),
             ),
           ],
@@ -1125,8 +1256,14 @@ class _CommentAttachments extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final images = [for (final a in attachments) if (a.isImage) a];
-    final files = [for (final a in attachments) if (!a.isImage) a];
+    final images = [
+      for (final a in attachments)
+        if (a.isImage) a,
+    ];
+    final files = [
+      for (final a in attachments)
+        if (!a.isImage) a,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1134,9 +1271,7 @@ class _CommentAttachments extends StatelessWidget {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: [
-              for (final att in images) _imageThumb(att),
-            ],
+            children: [for (final att in images) _imageThumb(att)],
           ),
         if (images.isNotEmpty && files.isNotEmpty) const SizedBox(height: 6),
         for (var i = 0; i < files.length; i++) ...[
@@ -1161,7 +1296,11 @@ class _CommentAttachments extends StatelessWidget {
               final bytes = snap.data;
               if (bytes == null || bytes.isEmpty) {
                 return Container(
-                  color: DunesColors.bgSoft,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.bgSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   alignment: Alignment.center,
                   child: snap.connectionState == ConnectionState.waiting
                       ? const SizedBox(
@@ -1169,10 +1308,13 @@ class _CommentAttachments extends StatelessWidget {
                           height: 14,
                           child: CircularProgressIndicator(strokeWidth: 1.6),
                         )
-                      : const Icon(
+                      : Icon(
                           Icons.broken_image_outlined,
                           size: 22,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                 );
               }
@@ -1181,12 +1323,16 @@ class _CommentAttachments extends StatelessWidget {
                 fit: BoxFit.cover,
                 gaplessPlayback: true,
                 errorBuilder: (_, _, _) => Container(
-                  color: DunesColors.bgSoft,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.bgSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   alignment: Alignment.center,
-                  child: const Icon(
+                  child: Icon(
                     Icons.broken_image_outlined,
                     size: 22,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               );
@@ -1254,15 +1400,17 @@ class _MentionText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final names = people
-        .map((e) => e.displayName.trim())
-        .where((e) => e.isNotEmpty)
-        .toList()
-      ..sort((a, b) => b.length.compareTo(a.length));
+    final names =
+        people
+            .map((e) => e.displayName.trim())
+            .where((e) => e.isNotEmpty)
+            .toList()
+          ..sort((a, b) => b.length.compareTo(a.length));
     final base = DunesTypography.sans(
       fontSize: 13,
       height: 1.45,
-      color: DunesColors.text2,
+      color: DunesColors.resolve(context, DunesColors.text2),
+      context: context,
     );
     if (names.isEmpty) {
       return Text(text, style: base);
@@ -1279,8 +1427,8 @@ class _MentionText extends StatelessWidget {
       spans.add(
         TextSpan(
           text: m.group(0),
-          style: const TextStyle(
-            color: Color(0xFF3B7BB5),
+          style: TextStyle(
+            color: DunesColors.resolveNullable(context, Color(0xFF3B7BB5)),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1290,6 +1438,8 @@ class _MentionText extends StatelessWidget {
     if (start < text.length) {
       spans.add(TextSpan(text: text.substring(start)));
     }
-    return RichText(text: TextSpan(style: base, children: spans));
+    return RichText(
+      text: TextSpan(style: base, children: spans),
+    );
   }
 }

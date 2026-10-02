@@ -333,7 +333,10 @@ class _NativeApprovalAssistantPageState
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFC44949),
+              foregroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFC44949),
+              ),
             ),
             child: const Text('清空'),
           ),
@@ -368,7 +371,11 @@ class _NativeApprovalAssistantPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -392,21 +399,24 @@ class _NativeApprovalAssistantPageState
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.delete_outline_rounded, size: 20),
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ],
             ),
             Expanded(child: _buildBody()),
             _BottomActions(
-              onPending: () => widget.onOpenPendingList
-                  ?.call(ApprovalAssistantPickMode.browse),
+              onPending: () => widget.onOpenPendingList?.call(
+                ApprovalAssistantPickMode.browse,
+              ),
               onSalesProposals: () => widget.onOpenProposals?.call('sales'),
               onPurchaseProposals: () =>
                   widget.onOpenProposals?.call('purchase'),
-              onExplain: () => widget.onOpenPendingList
-                  ?.call(ApprovalAssistantPickMode.explain),
-              onUrge: () => widget.onOpenPendingList
-                  ?.call(ApprovalAssistantPickMode.urge),
+              onExplain: () => widget.onOpenPendingList?.call(
+                ApprovalAssistantPickMode.explain,
+              ),
+              onUrge: () => widget.onOpenPendingList?.call(
+                ApprovalAssistantPickMode.urge,
+              ),
             ),
           ],
         ),
@@ -430,7 +440,8 @@ class _NativeApprovalAssistantPageState
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 12),
@@ -447,7 +458,11 @@ class _NativeApprovalAssistantPageState
           child: Text(
             '每天上午 9 点会推送简报（待我审批 + 我发起进行中）。\n也可点下方按钮查看待办、解释或催办。',
             textAlign: TextAlign.center,
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ),
       );
@@ -521,16 +536,15 @@ class _NativeApprovalAssistantPageState
       final mentioned = payload['mentionedMe'] == true;
       final repliedToMe = payload['repliedToMe'] == true;
       final parentId = (payload['parentId'] as num?)?.toInt() ?? 0;
-      final parentAuthor =
-          (payload['parentAuthorDisplayName'] ?? '').toString().trim();
+      final parentAuthor = (payload['parentAuthorDisplayName'] ?? '')
+          .toString()
+          .trim();
       final parentBody = (payload['parentBodyText'] ?? '').toString().trim();
       final isReply = parentId > 0 && parentAuthor.isNotEmpty;
       final who = author.isEmpty ? '有人' : author;
       String? tip;
       if (isReply) {
-        tip = repliedToMe
-            ? '$who 回复了你的评论'
-            : '$who 回复了 $parentAuthor 的评论';
+        tip = repliedToMe ? '$who 回复了你的评论' : '$who 回复了 $parentAuthor 的评论';
       } else if (mentioned) {
         tip = '有人在审批评论中 @ 了你';
       }
@@ -549,8 +563,12 @@ class _NativeApprovalAssistantPageState
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: isReply
-                      ? DunesColors.brandPurpleDeep
-                      : const Color(0xFFB07A2B),
+                      ? DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurpleDeep,
+                        )
+                      : DunesColors.resolve(context, const Color(0xFFB07A2B)),
+                  context: context,
                 ),
               ),
             ),
@@ -560,9 +578,19 @@ class _NativeApprovalAssistantPageState
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
               decoration: BoxDecoration(
-                color: DunesColors.bgSoft,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.bgSoft,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: DunesColors.borderSoft),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               child: Text(
                 '$parentAuthor：$parentBody',
@@ -571,15 +599,13 @@ class _NativeApprovalAssistantPageState
                 style: DunesTypography.sans(
                   fontSize: 12,
                   height: 1.4,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ),
           ],
-          ChatTextBubble(
-            text: bubbleText,
-            mine: false,
-          ),
+          ChatTextBubble(text: bubbleText, mine: false),
           if (share != null) ...[
             const SizedBox(height: 8),
             _approvalCardWidget(share),
@@ -623,7 +649,8 @@ class _NativeApprovalAssistantPageState
     Map<String, dynamic> payload,
   ) {
     final status = (payload['status'] ?? '').toString();
-    final pending = status == 'pending' ||
+    final pending =
+        status == 'pending' ||
         type == 'approvalExplainPending' ||
         type == 'approvalUrgePending';
     final failed = status == 'failed';
@@ -638,7 +665,8 @@ class _NativeApprovalAssistantPageState
     if (rawTargets is List) {
       for (final item in rawTargets) {
         if (item is! Map) continue;
-        final uid = (item['userId'] as num?)?.toInt() ??
+        final uid =
+            (item['userId'] as num?)?.toInt() ??
             (item['id'] as num?)?.toInt() ??
             0;
         if (uid <= 0) continue;
@@ -651,9 +679,7 @@ class _NativeApprovalAssistantPageState
       pending: pending,
       failed: failed,
       pendingText: m.bodyText,
-      sectionTitle: isUrge
-          ? (sent ? '催办话术（已发送）' : '催办话术')
-          : '单据解释',
+      sectionTitle: isUrge ? (sent ? '催办话术（已发送）' : '催办话术') : '单据解释',
       body: body.isEmpty ? m.bodyText : body,
       asMarkdown: !isUrge && !failed && !pending,
       card: share == null
@@ -670,7 +696,8 @@ class _NativeApprovalAssistantPageState
                 actionLabel: share.actionLabel,
               ),
             ),
-      actionLabel: isUrge && !failed && !pending && !sent && (share?.businessId ?? 0) > 0
+      actionLabel:
+          isUrge && !failed && !pending && !sent && (share?.businessId ?? 0) > 0
           ? '选择发送对象'
           : null,
       onAction: isUrge && !failed && !pending && !sent && share != null
@@ -730,7 +757,8 @@ class _NativeApprovalAssistantPageState
       businessType: card.businessType,
     );
     final bt = card.businessType.trim();
-    final generic = raw.isEmpty ||
+    final generic =
+        raw.isEmpty ||
         raw == bt ||
         raw.toUpperCase() == bt.toUpperCase() ||
         raw.startsWith('$bt #') ||
@@ -769,12 +797,30 @@ class _ComboResultBubble extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 340),
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
-        color: failed ? DunesColors.coralSoft : DunesColors.brandPurpleSoft,
+        color: failed
+            ? DunesColors.resolve(
+                context,
+                DunesColors.coralSoft,
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                DunesColors.brandPurpleSoft,
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: failed
-              ? DunesColors.coral.withValues(alpha: 0.35)
-              : DunesColors.brandPurpleLine,
+              ? DunesColors.resolve(
+                  context,
+                  DunesColors.coral,
+                  role: DunesColorRole.border,
+                ).withValues(alpha: 0.35)
+              : DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurpleLine,
+                  role: DunesColorRole.border,
+                ),
         ),
       ),
       child: Column(
@@ -794,23 +840,25 @@ class _ComboResultBubble extends StatelessWidget {
                     pendingText.trim().isEmpty ? '处理中…' : pendingText,
                     style: DunesTypography.sans(
                       fontSize: 13,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                      context: context,
                     ),
                   ),
                 ),
               ],
             ),
           ] else ...[
-            if (card != null) ...[
-              card!,
-              const SizedBox(height: 10),
-            ],
+            if (card != null) ...[card!, const SizedBox(height: 10)],
             Text(
               sectionTitle,
               style: DunesTypography.sans(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.brandPurpleDeep,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurpleDeep,
+                ),
+                context: context,
               ),
             ),
             const SizedBox(height: 8),
@@ -820,7 +868,8 @@ class _ComboResultBubble extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 13,
                   height: 1.45,
-                  color: DunesColors.coral,
+                  color: DunesColors.resolve(context, DunesColors.coral),
+                  context: context,
                 ),
               )
             else if (asMarkdown)
@@ -831,36 +880,54 @@ class _ComboResultBubble extends StatelessWidget {
                   p: DunesTypography.sans(
                     fontSize: 13,
                     height: 1.5,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                   h1: DunesTypography.sans(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.brandPurpleDeep,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleDeep,
+                    ),
+                    context: context,
                   ),
                   h2: DunesTypography.sans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.brandPurpleDeep,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleDeep,
+                    ),
+                    context: context,
                   ),
                   h3: DunesTypography.sans(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.brandPurpleDeep,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleDeep,
+                    ),
+                    context: context,
                   ),
                   strong: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                   listBullet: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
-                  a: const TextStyle(
+                  a: TextStyle(
                     fontFamily: 'Noto Sans SC',
                     fontSize: 13,
-                    color: DunesColors.brandPurpleDeep,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleDeep,
+                    ),
                     decoration: TextDecoration.underline,
                   ),
                 ),
@@ -871,7 +938,8 @@ class _ComboResultBubble extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 13,
                   height: 1.5,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
             if (actionLabel != null && onAction != null) ...[
@@ -881,8 +949,15 @@ class _ComboResultBubble extends StatelessWidget {
                 child: FilledButton.tonal(
                   onPressed: onAction,
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: DunesColors.brandPurpleDeep,
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ),
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleDeep,
+                    ),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 8,
@@ -895,6 +970,7 @@ class _ComboResultBubble extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
+                      context: context,
                     ),
                   ),
                 ),
@@ -920,15 +996,18 @@ class ApprovalAssistantAvatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [DunesColors.brandPurple, DunesColors.brandPurpleDeep],
+          colors: [
+            DunesColors.resolve(context, DunesColors.brandPurple),
+            DunesColors.resolve(context, DunesColors.brandPurpleDeep),
+          ],
         ),
       ),
       child: Icon(
         Icons.fact_check_outlined,
-        color: Colors.white,
+        color: DunesColors.resolve(context, Colors.white),
         size: size * 0.42,
       ),
     );
@@ -956,9 +1035,21 @@ class _BottomActions extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(10, 8, 10, bottom > 0 ? bottom + 6 : 10),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -1034,7 +1125,17 @@ class _ActionBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: primary ? DunesColors.brandPurple : DunesColors.brandPurpleSoft,
+      color: primary
+          ? DunesColors.resolve(
+              context,
+              DunesColors.brandPurple,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              DunesColors.brandPurpleSoft,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
@@ -1047,7 +1148,9 @@ class _ActionBtn extends StatelessWidget {
               Icon(
                 icon,
                 size: 15,
-                color: primary ? Colors.white : DunesColors.brandPurpleDeep,
+                color: primary
+                    ? DunesColors.resolve(context, Colors.white)
+                    : DunesColors.resolve(context, DunesColors.brandPurpleDeep),
               ),
               const SizedBox(height: 2),
               FittedBox(
@@ -1058,7 +1161,13 @@ class _ActionBtn extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: primary ? Colors.white : DunesColors.brandPurpleDeep,
+                    color: primary
+                        ? DunesColors.resolve(context, Colors.white)
+                        : DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurpleDeep,
+                          ),
+                    context: context,
                   ),
                 ),
               ),
@@ -1100,10 +1209,18 @@ class _BriefCard extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 260),
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: DunesColors.brandPurpleLine.withValues(alpha: 0.75),
+          color: DunesColors.resolve(
+            context,
+            DunesColors.brandPurpleLine,
+            role: DunesColorRole.border,
+          ).withValues(alpha: 0.75),
         ),
         boxShadow: const [
           BoxShadow(
@@ -1121,8 +1238,9 @@ class _BriefCard extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: DunesColors.brandPurpleDeep,
+              color: DunesColors.resolve(context, DunesColors.brandPurpleDeep),
               letterSpacing: 0.1,
+              context: context,
             ),
           ),
           if (pending <= 0 && initiated <= 0) ...[
@@ -1131,7 +1249,8 @@ class _BriefCard extends StatelessWidget {
               fallback.isEmpty ? '暂无待审' : fallback,
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ] else ...[
@@ -1169,11 +1288,7 @@ class _BriefCard extends StatelessWidget {
                 large: true,
               )
             else
-              _BriefMetric(
-                label: '我发起进行中',
-                value: initiated,
-                large: true,
-              ),
+              _BriefMetric(label: '我发起进行中', value: initiated, large: true),
             if (pendingTypes.isNotEmpty) ...[
               const SizedBox(height: 5),
               _BriefTypeBlock(title: '待我审批', rows: pendingTypes),
@@ -1189,8 +1304,15 @@ class _BriefCard extends StatelessWidget {
             child: TextButton(
               onPressed: onOpenAll,
               style: TextButton.styleFrom(
-                foregroundColor: DunesColors.brandPurpleDeep,
-                backgroundColor: DunesColors.brandPurpleSoft,
+                foregroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurpleDeep,
+                ),
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurpleSoft,
+                  role: DunesColorRole.surface,
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 3),
                 minimumSize: const Size(0, 24),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1204,7 +1326,11 @@ class _BriefCard extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.brandPurpleDeep,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurpleDeep,
+                  ),
+                  context: context,
                 ),
               ),
             ),
@@ -1254,13 +1380,25 @@ class _BriefMetric extends StatelessWidget {
       padding: pad,
       decoration: BoxDecoration(
         color: large
-            ? DunesColors.brandPurpleSoft
-            : const Color(0xFFF7F5FB),
+            ? DunesColors.resolve(
+                context,
+                DunesColors.brandPurpleSoft,
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                const Color(0xFFF7F5FB),
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(6),
         border: large
             ? null
             : Border.all(
-                color: DunesColors.brandPurpleLine.withValues(alpha: 0.45),
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurpleLine,
+                  role: DunesColorRole.border,
+                ).withValues(alpha: 0.45),
               ),
       ),
       child: Column(
@@ -1274,7 +1412,8 @@ class _BriefMetric extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: compact ? 9 : 10,
               height: 1.1,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
             ),
           ),
           SizedBox(height: compact ? 2 : 1),
@@ -1284,7 +1423,8 @@ class _BriefMetric extends StatelessWidget {
               fontSize: valueSize,
               fontWeight: FontWeight.w700,
               height: 1.05,
-              color: DunesColors.brandPurpleDeep,
+              color: DunesColors.resolve(context, DunesColors.brandPurpleDeep),
+              context: context,
             ),
           ),
           if (hint.isNotEmpty) ...[
@@ -1296,7 +1436,8 @@ class _BriefMetric extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 9,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFFB45309),
+                color: DunesColors.resolve(context, const Color(0xFFB45309)),
+                context: context,
               ),
             ),
           ],
@@ -1322,7 +1463,8 @@ class _BriefTypeBlock extends StatelessWidget {
           style: DunesTypography.sans(
             fontSize: 10,
             fontWeight: FontWeight.w600,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
           ),
         ),
         const SizedBox(height: 2),
@@ -1331,7 +1473,11 @@ class _BriefTypeBlock extends StatelessWidget {
             Divider(
               height: 1,
               thickness: 1,
-              color: DunesColors.brandPurpleLine.withValues(alpha: 0.35),
+              color: DunesColors.resolve(
+                context,
+                DunesColors.brandPurpleLine,
+                role: DunesColorRole.border,
+              ).withValues(alpha: 0.35),
             ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
@@ -1344,7 +1490,8 @@ class _BriefTypeBlock extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                   ),
                 ),
@@ -1354,7 +1501,11 @@ class _BriefTypeBlock extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.brandPurpleDeep,
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleDeep,
+                    ),
+                    context: context,
                   ),
                 ),
               ],

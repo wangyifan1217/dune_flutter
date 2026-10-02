@@ -78,7 +78,11 @@ class TaskProgressBar extends StatelessWidget {
         Container(
           height: height,
           decoration: BoxDecoration(
-            color: const Color(0xFFE8EAED),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8EAED),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(999),
           ),
           child: LayoutBuilder(
@@ -111,7 +115,7 @@ class TaskProgressBar extends StatelessWidget {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: tone,
+              color: DunesColors.resolveNullable(context, tone),
             ),
           ),
         ],
@@ -204,11 +208,26 @@ class TaskMemberProgressChart extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE8EAED)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
-        child: const Text('暂无进度数据', style: TextStyle(color: DunesColors.text3)),
+        child: Text(
+          '暂无进度数据',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
 
@@ -216,16 +235,29 @@ class TaskMemberProgressChart extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             bars.length > 1 ? '每个子目标横向展示，同一负责人使用相同颜色。' : '当前这条任务的填报进度',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 12),
           for (var i = 0; i < bars.length; i++) ...[
@@ -262,9 +294,9 @@ class _HorizontalProgressRow extends StatelessWidget {
     final pct = item.progressPct.clamp(0, 100) / 100.0;
     final base = _kBarPalette[item.colorIndex % _kBarPalette.length];
     final color = item.overdue
-        ? const Color(0xFFB45309)
+        ? DunesColors.resolve(context, const Color(0xFFB45309))
         : item.progressPct >= 100
-        ? const Color(0xFF2F8F7E)
+        ? DunesColors.resolve(context, const Color(0xFF2F8F7E))
         : base;
     return InkWell(
       onTap: onTap,
@@ -272,7 +304,11 @@ class _HorizontalProgressRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.045),
+          color: DunesColors.resolveNullable(
+            context,
+            color.withValues(alpha: 0.045),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: color.withValues(alpha: 0.16)),
         ),
@@ -284,17 +320,21 @@ class _HorizontalProgressRow extends StatelessWidget {
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: color,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      color,
+                      role: DunesColorRole.surface,
+                    ),
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 7),
                 Text(
                   item.userName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -306,9 +346,12 @@ class _HorizontalProgressRow extends StatelessWidget {
                         item.taskTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -316,9 +359,12 @@ class _HorizontalProgressRow extends StatelessWidget {
                         _period,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
@@ -330,7 +376,7 @@ class _HorizontalProgressRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: color,
+                    color: DunesColors.resolveNullable(context, color),
                   ),
                 ),
               ],
@@ -339,7 +385,11 @@ class _HorizontalProgressRow extends StatelessWidget {
             Container(
               height: 8,
               decoration: BoxDecoration(
-                color: const Color(0xFFE5E7EB),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE5E7EB),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: LayoutBuilder(
@@ -400,21 +450,21 @@ class TaskSummaryRow extends StatelessWidget {
         title: '进行中',
         value: '$active',
         subtitle: '执行中',
-        valueColor: const Color(0xFFE8A838),
+        valueColor: DunesColors.resolve(context, const Color(0xFFE8A838)),
       ),
       _SummaryCard(
         icon: Icons.hourglass_top_outlined,
         title: '待审核',
         value: '$pending',
         subtitle: '需处理',
-        valueColor: const Color(0xFF5B8DEF),
+        valueColor: DunesColors.resolve(context, const Color(0xFF5B8DEF)),
       ),
       _SummaryCard(
         icon: Icons.check_circle_outline,
         title: '已完成',
         value: '$done',
         subtitle: '已闭环',
-        valueColor: const Color(0xFF3CBFA9),
+        valueColor: DunesColors.resolve(context, const Color(0xFF3CBFA9)),
       ),
     ];
 
@@ -474,9 +524,19 @@ class _SummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -484,16 +544,20 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 14, color: DunesColors.text3),
+              Icon(
+                icon,
+                size: 14,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
               const SizedBox(width: 4),
               Flexible(
                 child: Text(
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ),
@@ -505,14 +569,17 @@ class _SummaryCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w700,
-              color: valueColor,
+              color: DunesColors.resolveNullable(context, valueColor),
               height: 1.05,
             ),
           ),
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -531,14 +598,18 @@ class TaskMetaChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: DunesColors.resolveNullable(
+          context,
+          color.withValues(alpha: 0.1),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         text,
         style: TextStyle(
           fontSize: 11,
-          color: color,
+          color: DunesColors.resolveNullable(context, color),
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -557,7 +628,11 @@ class TaskAiStateChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: kTaskPurple.withValues(alpha: 0.1),
+        color: DunesColors.resolve(
+          context,
+          kTaskPurple,
+          role: DunesColorRole.surface,
+        ).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
@@ -574,9 +649,9 @@ class TaskAiStateChip extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
-              color: kTaskPurple,
+              color: DunesColors.resolveNullable(context, kTaskPurple),
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -645,7 +720,11 @@ class TaskNameCard extends StatelessWidget {
     ].join(' · ');
 
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -653,7 +732,13 @@ class TaskNameCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
           child: Column(
@@ -678,17 +763,20 @@ class TaskNameCard extends StatelessWidget {
                       task.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ),
                   Icon(
                     Icons.chevron_right_rounded,
                     size: 20,
-                    color: DunesColors.text3.withValues(alpha: 0.8),
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.text3,
+                    ).withValues(alpha: 0.8),
                   ),
                 ],
               ),
@@ -697,7 +785,10 @@ class TaskNameCard extends StatelessWidget {
                 subtitle.isEmpty ? '暂无负责人' : subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               const Spacer(),
               Wrap(
@@ -721,7 +812,10 @@ class TaskNameCard extends StatelessWidget {
                   if (task.hasPendingChange)
                     TaskMetaChip(
                       text: taskPendingChangeLabel(task.pendingChangeKind),
-                      color: const Color(0xFFB45309),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFB45309),
+                      ),
                     ),
                   if (task.aiState == 'analyzing')
                     const TaskAiStateChip(text: 'AI 分析中')
@@ -820,7 +914,11 @@ class TaskWorkbenchCard extends StatelessWidget {
     final contextLine = taskCardContextLine(task);
     final statusColor = _statusColor;
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -829,7 +927,13 @@ class TaskWorkbenchCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE3E5EA)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE3E5EA),
+                role: DunesColorRole.border,
+              ),
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.025),
@@ -848,7 +952,11 @@ class TaskWorkbenchCard extends StatelessWidget {
                     width: 4,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: statusColor,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        statusColor,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -872,9 +980,12 @@ class TaskWorkbenchCard extends StatelessWidget {
                             '所属主目标：$belong',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
                         if (statusHint != null && statusHint!.trim().isNotEmpty)
@@ -882,10 +993,13 @@ class TaskWorkbenchCard extends StatelessWidget {
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
                               statusHint!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 height: 1.35,
-                                color: DunesColors.text2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
                               ),
                             ),
                           ),
@@ -905,7 +1019,10 @@ class TaskWorkbenchCard extends StatelessWidget {
                                 text: taskPendingChangeLabel(
                                   task.pendingChangeKind,
                                 ),
-                                color: const Color(0xFFB45309),
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFFB45309),
+                                ),
                               ),
                           ],
                         ),
@@ -922,10 +1039,13 @@ class TaskWorkbenchCard extends StatelessWidget {
                       ),
                       padding: EdgeInsets.zero,
                       onPressed: onShare,
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.ios_share_rounded,
                         size: 19,
-                        color: kTaskPurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          kTaskPurple,
+                        ),
                       ),
                     ),
                 ],
@@ -939,7 +1059,11 @@ class TaskWorkbenchCard extends StatelessWidget {
                     vertical: 9,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF7F6FC),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFF7F6FC),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: Wrap(
@@ -995,9 +1119,12 @@ class TaskWorkbenchCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Text(
+                    Text(
                       '目标进度',
-                      style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
                     const Spacer(),
                     Text(
@@ -1005,7 +1132,10 @@ class TaskWorkbenchCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: statusColor,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          statusColor,
+                        ),
                       ),
                     ),
                   ],
@@ -1074,10 +1204,13 @@ class TaskWorkbenchCard extends StatelessWidget {
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
                           completeHint!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             height: 1.35,
-                            color: Color(0xFFB45309),
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFFB45309),
+                            ),
                           ),
                         ),
                       ),
@@ -1137,11 +1270,18 @@ class _TaskInfoItem extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: DunesColors.text3),
+        Icon(
+          icon,
+          size: 14,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
         const SizedBox(width: 4),
         Text(
           text,
-          style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+          style: TextStyle(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
         ),
       ],
     );
@@ -1165,12 +1305,20 @@ ThemeData taskThemeData(BuildContext context) {
   final palette = base.extension<DunesPalette>() ?? DunesPalette.day;
   final colorScheme = base.colorScheme.copyWith(
     primary: kTaskPurple,
-    onPrimary: Colors.white,
+    onPrimary: DunesColors.resolve(context, Colors.white),
     secondary: kTaskPurple,
-    onSecondary: Colors.white,
-    primaryContainer: kTaskPurple.withValues(alpha: 0.12),
+    onSecondary: DunesColors.resolve(context, Colors.white),
+    primaryContainer: DunesColors.resolve(
+      context,
+      kTaskPurple,
+      role: DunesColorRole.surface,
+    ).withValues(alpha: 0.12),
     onPrimaryContainer: kTaskPurple,
-    secondaryContainer: kTaskPurple.withValues(alpha: 0.12),
+    secondaryContainer: DunesColors.resolve(
+      context,
+      kTaskPurple,
+      role: DunesColorRole.surface,
+    ).withValues(alpha: 0.12),
     onSecondaryContainer: kTaskPurple,
   );
   return base.copyWith(
@@ -1179,7 +1327,7 @@ ThemeData taskThemeData(BuildContext context) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: kTaskPurple,
-        foregroundColor: Colors.white,
+        foregroundColor: DunesColors.resolve(context, Colors.white),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -1193,42 +1341,82 @@ ThemeData taskThemeData(BuildContext context) {
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) return Colors.white;
-        return Colors.white;
+        if (states.contains(WidgetState.selected)) {
+          return DunesColors.resolve(context, Colors.white);
+        }
+        return DunesColors.resolve(context, Colors.white);
       }),
       trackColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) return kTaskPurple;
-        return const Color(0xFFD1D5DB);
+        if (states.contains(WidgetState.selected)) {
+          return DunesColors.resolve(context, kTaskPurple);
+        }
+        return DunesColors.resolve(context, const Color(0xFFD1D5DB));
       }),
       trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) return kTaskPurple;
+        if (states.contains(WidgetState.selected)) {
+          return DunesColors.resolve(
+            context,
+            kTaskPurple,
+            role: DunesColorRole.surface,
+          );
+        }
         return Colors.transparent;
       }),
-      checkColor: const WidgetStatePropertyAll(Colors.white),
-      side: const BorderSide(color: Color(0xFFC4C8CC), width: 1.6),
+      checkColor: WidgetStatePropertyAll(
+        DunesColors.resolve(context, Colors.white),
+      ),
+      side: BorderSide(
+        color: DunesColors.resolve(
+          context,
+          Color(0xFFC4C8CC),
+          role: DunesColorRole.border,
+        ),
+        width: 1.6,
+      ),
     ),
     sliderTheme: SliderThemeData(
       activeTrackColor: kTaskPurple,
       thumbColor: kTaskPurple,
-      overlayColor: kTaskPurple.withValues(alpha: 0.12),
-      inactiveTrackColor: kTaskPurple.withValues(alpha: 0.18),
+      overlayColor: DunesColors.resolve(
+        context,
+        kTaskPurple,
+      ).withValues(alpha: 0.12),
+      inactiveTrackColor: DunesColors.resolve(
+        context,
+        kTaskPurple,
+      ).withValues(alpha: 0.18),
     ),
     chipTheme: base.chipTheme.copyWith(
-      selectedColor: kTaskPurple.withValues(alpha: 0.14),
+      selectedColor: DunesColors.resolve(
+        context,
+        kTaskPurple,
+      ).withValues(alpha: 0.14),
       checkmarkColor: kTaskPurple,
-      labelStyle: TextStyle(color: palette.textSecondary),
-      secondaryLabelStyle: const TextStyle(
-        color: kTaskPurple,
+      labelStyle: TextStyle(
+        color: DunesColors.resolveNullable(context, palette.textSecondary),
+      ),
+      secondaryLabelStyle: TextStyle(
+        color: DunesColors.resolveNullable(context, kTaskPurple),
         fontWeight: FontWeight.w600,
       ),
-      side: BorderSide(color: palette.borderSubtle),
+      side: BorderSide(
+        color: DunesColors.resolve(
+          context,
+          palette.borderSubtle,
+          role: DunesColorRole.border,
+        ),
+      ),
     ),
     listTileTheme: ListTileThemeData(
       selectedColor: kTaskPurple,
-      selectedTileColor: kTaskPurple.withValues(alpha: 0.08),
+      selectedTileColor: DunesColors.resolve(
+        context,
+        kTaskPurple,
+        role: DunesColorRole.surface,
+      ).withValues(alpha: 0.08),
       iconColor: palette.textSecondary,
     ),
     popupMenuTheme: PopupMenuThemeData(
@@ -1240,27 +1428,55 @@ ThemeData taskThemeData(BuildContext context) {
       menuStyle: _taskMenuStyle(palette),
     ),
     datePickerTheme: DatePickerThemeData(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       headerBackgroundColor: kTaskPurple,
-      headerForegroundColor: Colors.white,
-      rangeSelectionBackgroundColor: kTaskPurple.withValues(alpha: 0.14),
+      headerForegroundColor: DunesColors.resolve(context, Colors.white),
+      rangeSelectionBackgroundColor: DunesColors.resolve(
+        context,
+        kTaskPurple,
+        role: DunesColorRole.surface,
+      ).withValues(alpha: 0.14),
       rangeSelectionOverlayColor: WidgetStatePropertyAll(
-        kTaskPurple.withValues(alpha: 0.08),
+        DunesColors.resolve(context, kTaskPurple).withValues(alpha: 0.08),
       ),
       dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) return kTaskPurple;
+        if (states.contains(WidgetState.selected)) {
+          return DunesColors.resolve(
+            context,
+            kTaskPurple,
+            role: DunesColorRole.surface,
+          );
+        }
         return null;
       }),
       dayForegroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) return Colors.white;
+        if (states.contains(WidgetState.selected)) {
+          return DunesColors.resolve(context, Colors.white);
+        }
         if (states.contains(WidgetState.disabled)) return palette.textMuted;
         return palette.text;
       }),
-      todayForegroundColor: const WidgetStatePropertyAll(kTaskPurple),
-      todayBackgroundColor: WidgetStatePropertyAll(
-        kTaskPurple.withValues(alpha: 0.12),
+      todayForegroundColor: WidgetStatePropertyAll(
+        DunesColors.resolve(context, kTaskPurple),
       ),
-      todayBorder: const BorderSide(color: kTaskPurple),
+      todayBackgroundColor: WidgetStatePropertyAll(
+        DunesColors.resolve(
+          context,
+          kTaskPurple,
+          role: DunesColorRole.surface,
+        ).withValues(alpha: 0.12),
+      ),
+      todayBorder: BorderSide(
+        color: DunesColors.resolve(
+          context,
+          kTaskPurple,
+          role: DunesColorRole.border,
+        ),
+      ),
       confirmButtonStyle: TextButton.styleFrom(foregroundColor: kTaskPurple),
       cancelButtonStyle: TextButton.styleFrom(foregroundColor: kTaskPurple),
     ),
@@ -1305,14 +1521,22 @@ class TaskDropdownField<T> extends StatelessWidget {
     final useSheet = forceSheet || MediaQuery.sizeOf(context).width < 700;
     if (useSheet) {
       return Material(
-        color: const Color(0xFFF5F6F8),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF5F6F8),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: () async {
             final picked = await showModalBottomSheet<(T,)>(
               context: context,
-              backgroundColor: Colors.white,
+              backgroundColor: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               shape: const RoundedRectangleBorder(
                 borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
@@ -1337,13 +1561,20 @@ class TaskDropdownField<T> extends StatelessWidget {
                       ListTile(
                         selected: item.$1 == value,
                         selectedColor: kTaskPurple,
-                        selectedTileColor: kTaskPurple.withValues(alpha: 0.08),
+                        selectedTileColor: DunesColors.resolve(
+                          ctx,
+                          kTaskPurple,
+                          role: DunesColorRole.surface,
+                        ).withValues(alpha: 0.08),
                         leading: leadingBuilder?.call(item.$1),
                         title: Text(item.$2),
                         trailing: item.$1 == value
-                            ? const Icon(
+                            ? Icon(
                                 Icons.check_rounded,
-                                color: kTaskPurple,
+                                color: DunesColors.resolveNullable(
+                                  ctx,
+                                  kTaskPurple,
+                                ),
                               )
                             : null,
                         onTap: () => Navigator.pop(ctx, (item.$1,)),
@@ -1367,16 +1598,16 @@ class TaskDropdownField<T> extends StatelessWidget {
                   child: Text(
                     current.$2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                 ),
-                const Icon(
+                Icon(
                   Icons.expand_more,
                   size: 20,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ],
             ),
@@ -1399,7 +1630,11 @@ class TaskDropdownField<T> extends StatelessWidget {
             final open = controller.isOpen;
             return Material(
               color: open
-                  ? kTaskPurple.withValues(alpha: 0.08)
+                  ? DunesColors.resolve(
+                      context,
+                      kTaskPurple,
+                      role: DunesColorRole.surface,
+                    ).withValues(alpha: 0.08)
                   : palette.surfaceRaised,
               borderRadius: BorderRadius.circular(10),
               child: InkWell(
@@ -1422,7 +1657,12 @@ class TaskDropdownField<T> extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 14,
-                            color: open ? kTaskPurple : DunesColors.text,
+                            color: open
+                                ? DunesColors.resolve(context, kTaskPurple)
+                                : DunesColors.resolve(
+                                    context,
+                                    DunesColors.text,
+                                  ),
                             fontWeight: open
                                 ? FontWeight.w600
                                 : FontWeight.w400,
@@ -1432,7 +1672,9 @@ class TaskDropdownField<T> extends StatelessWidget {
                       Icon(
                         Icons.expand_more,
                         size: 20,
-                        color: open ? kTaskPurple : DunesColors.text3,
+                        color: open
+                            ? DunesColors.resolve(context, kTaskPurple)
+                            : DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ],
                   ),
@@ -1447,10 +1689,18 @@ class TaskDropdownField<T> extends StatelessWidget {
                 style: ButtonStyle(
                   backgroundColor: WidgetStateProperty.resolveWith((states) {
                     if (item.$1 == value) {
-                      return kTaskPurple.withValues(alpha: 0.1);
+                      return DunesColors.resolve(
+                        context,
+                        kTaskPurple,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.1);
                     }
                     if (states.contains(WidgetState.hovered)) {
-                      return const Color(0xFFF5F6F8);
+                      return DunesColors.resolve(
+                        context,
+                        const Color(0xFFF5F6F8),
+                        role: DunesColorRole.surface,
+                      );
                     }
                     return Colors.transparent;
                   }),
@@ -1460,10 +1710,13 @@ class TaskDropdownField<T> extends StatelessWidget {
                   minimumSize: WidgetStatePropertyAll(Size(menuWidth, 44)),
                 ),
                 trailingIcon: item.$1 == value
-                    ? const Icon(
+                    ? Icon(
                         Icons.check_rounded,
                         size: 16,
-                        color: kTaskPurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          kTaskPurple,
+                        ),
                       )
                     : null,
                 child: SizedBox(
@@ -1484,8 +1737,11 @@ class TaskDropdownField<T> extends StatelessWidget {
                                 ? FontWeight.w600
                                 : FontWeight.w400,
                             color: item.$1 == value
-                                ? kTaskPurple
-                                : DunesColors.text,
+                                ? DunesColors.resolve(context, kTaskPurple)
+                                : DunesColors.resolve(
+                                    context,
+                                    DunesColors.text,
+                                  ),
                           ),
                         ),
                       ),
@@ -1527,7 +1783,11 @@ class TaskFilterChipDropdown<T> extends StatelessWidget {
         final open = controller.isOpen;
         return Material(
           color: open
-              ? kTaskPurple.withValues(alpha: 0.08)
+              ? DunesColors.resolve(
+                  context,
+                  kTaskPurple,
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.08)
               : palette.surfaceRaised,
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
@@ -1543,14 +1803,18 @@ class TaskFilterChipDropdown<T> extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: open ? kTaskPurple : DunesColors.text2,
+                      color: open
+                          ? DunesColors.resolve(context, kTaskPurple)
+                          : DunesColors.resolve(context, DunesColors.text2),
                     ),
                   ),
                   const SizedBox(width: 4),
                   Icon(
                     Icons.expand_more,
                     size: 18,
-                    color: open ? kTaskPurple : DunesColors.text3,
+                    color: open
+                        ? DunesColors.resolve(context, kTaskPurple)
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ],
               ),
@@ -1564,9 +1828,19 @@ class TaskFilterChipDropdown<T> extends StatelessWidget {
             onPressed: () => onChanged(item.$1),
             style: ButtonStyle(
               backgroundColor: WidgetStateProperty.resolveWith((states) {
-                if (item.$1 == value) return kTaskPurple.withValues(alpha: 0.1);
+                if (item.$1 == value) {
+                  return DunesColors.resolve(
+                    context,
+                    kTaskPurple,
+                    role: DunesColorRole.surface,
+                  ).withValues(alpha: 0.1);
+                }
                 if (states.contains(WidgetState.hovered)) {
-                  return const Color(0xFFF5F6F8);
+                  return DunesColors.resolve(
+                    context,
+                    const Color(0xFFF5F6F8),
+                    role: DunesColorRole.surface,
+                  );
                 }
                 return Colors.transparent;
               }),
@@ -1576,7 +1850,11 @@ class TaskFilterChipDropdown<T> extends StatelessWidget {
               minimumSize: WidgetStatePropertyAll(Size(minMenuWidth, 44)),
             ),
             trailingIcon: item.$1 == value
-                ? const Icon(Icons.check_rounded, size: 16, color: kTaskPurple)
+                ? Icon(
+                    Icons.check_rounded,
+                    size: 16,
+                    color: DunesColors.resolveNullable(context, kTaskPurple),
+                  )
                 : null,
             child: SizedBox(
               width: minMenuWidth - 48,
@@ -1587,7 +1865,9 @@ class TaskFilterChipDropdown<T> extends StatelessWidget {
                   fontWeight: item.$1 == value
                       ? FontWeight.w600
                       : FontWeight.w400,
-                  color: item.$1 == value ? kTaskPurple : DunesColors.text,
+                  color: item.$1 == value
+                      ? DunesColors.resolve(context, kTaskPurple)
+                      : DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
             ),

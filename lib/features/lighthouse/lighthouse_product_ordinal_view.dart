@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import 'lighthouse_product_ordinal.dart';
 import 'lighthouse_theme.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 String _m(double v) {
   final a = v.abs();
@@ -60,6 +61,7 @@ class _LighthouseProductOrdinalSectionState
     final f = widget.fixedDim;
     if (f != null && f != _dim) setState(() => _dim = f);
   }
+
   late String _metric = widget.initialMetric;
   bool _cardOpen = false;
   final Map<String, Future<LighthouseOrdinalBundle?>> _futures = {};
@@ -76,10 +78,22 @@ class _LighthouseProductOrdinalSectionState
           vertical: big ? 6 : 4,
         ),
         decoration: BoxDecoration(
-          color: on ? (big ? widget.accent : widget.accent.withAlpha(22)) : LhColors.mist,
+          color: on
+              ? (big ? widget.accent : widget.accent.withAlpha(22))
+              : DunesColors.resolve(
+                  context,
+                  LhColors.mist,
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(big ? 8 : 14),
           border: Border.all(
-            color: on ? widget.accent : LhColors.line2,
+            color: on
+                ? widget.accent
+                : DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.border,
+                  ),
             width: 0.7,
           ),
         ),
@@ -87,8 +101,13 @@ class _LighthouseProductOrdinalSectionState
           text,
           style: LhTypography.sans(
             size: big ? 12 : 11,
-            color: on ? (big ? Colors.white : widget.accent) : LhColors.ink2,
+            color: on
+                ? (big
+                      ? DunesColors.resolve(context, Colors.white)
+                      : widget.accent)
+                : DunesColors.resolve(context, LhColors.ink2),
             weight: FontWeight.w700,
+            context: context,
           ),
         ),
       ),
@@ -102,16 +121,16 @@ class _LighthouseProductOrdinalSectionState
       children: [
         // 维度 Tab
         if (widget.fixedDim == null)
-        Row(
-          children: [
-            for (final e in lighthouseOrdinalDims.entries) ...[
-              _pill(e.value.label, _dim == e.key, () {
-                setState(() => _dim = e.key);
-              }, big: true),
-              const SizedBox(width: 6),
+          Row(
+            children: [
+              for (final e in lighthouseOrdinalDims.entries) ...[
+                _pill(e.value.label, _dim == e.key, () {
+                  setState(() => _dim = e.key);
+                }, big: true),
+                const SizedBox(width: 6),
+              ],
             ],
-          ],
-        ),
+          ),
         if (widget.fixedDim == null) const SizedBox(height: 10),
         FutureBuilder<LighthouseOrdinalBundle?>(
           future: _future(_dim),
@@ -132,7 +151,11 @@ class _LighthouseProductOrdinalSectionState
                     const SizedBox(width: 8),
                     Text(
                       '正在拉取各${lighthouseOrdinalDims[_dim]!.label}本月 / 上月数据…',
-                      style: LhTypography.mono(size: 9, color: LhColors.mute2),
+                      style: LhTypography.mono(
+                        size: 9,
+                        color: DunesColors.resolve(ctx, LhColors.mute2),
+                        context: ctx,
+                      ),
                     ),
                   ],
                 ),
@@ -142,7 +165,11 @@ class _LighthouseProductOrdinalSectionState
             if (b == null) {
               return Text(
                 '暂时拉不到数据（或今天是 1 号，本月还没有 T+1 数据）。',
-                style: LhTypography.mono(size: 9, color: LhColors.mute2),
+                style: LhTypography.mono(
+                  size: 9,
+                  color: DunesColors.resolve(ctx, LhColors.mute2),
+                  context: ctx,
+                ),
               );
             }
             return _body(b);
@@ -157,7 +184,11 @@ class _LighthouseProductOrdinalSectionState
     if (metrics.isEmpty) {
       return Text(
         '这个维度的样本不足，暂未建模。',
-        style: LhTypography.mono(size: 9, color: LhColors.mute2),
+        style: LhTypography.mono(
+          size: 9,
+          color: DunesColors.resolve(context, LhColors.mute2),
+          context: context,
+        ),
       );
     }
     final metric = metrics.contains(_metric) ? _metric : metrics.first;
@@ -190,22 +221,39 @@ class _LighthouseProductOrdinalSectionState
         // 一句话总览
         Text.rich(
           TextSpan(
-            style: LhTypography.sans(size: 12, color: LhColors.ink, height: 1.5),
+            style: LhTypography.sans(
+              size: 12,
+              color: DunesColors.resolve(context, LhColors.ink),
+              height: 1.5,
+              context: context,
+            ),
             children: [
-              TextSpan(text: '截至 ${b.day} 日，${list.length} ${dimInfo.unit}里，预计$cur全月$label比$prev：'),
+              TextSpan(
+                text:
+                    '截至 ${b.day} 日，${list.length} ${dimInfo.unit}里，预计$cur全月$label比$prev：',
+              ),
               TextSpan(
                 text: '增长 ${counts[2]} 个',
-                style: const TextStyle(color: LhColors.neg, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  color: DunesColors.resolve(context, LhColors.neg),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const TextSpan(text: '、'),
               TextSpan(
                 text: '持平 ${counts[1]} 个',
-                style: const TextStyle(color: LhColors.mute, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  color: DunesColors.resolve(context, LhColors.mute),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const TextSpan(text: '、'),
               TextSpan(
                 text: '下滑 ${counts[0]} 个',
-                style: const TextStyle(color: LhColors.pos, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  color: DunesColors.resolve(context, LhColors.pos),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               TextSpan(
                 text: risk.isEmpty
@@ -221,7 +269,11 @@ class _LighthouseProductOrdinalSectionState
         if (list.isEmpty)
           Text(
             '上月体量达标（≥ ${_m(b.model.minPrevTotal)}）的${dimInfo.label}为 0。',
-            style: LhTypography.mono(size: 9, color: LhColors.mute2),
+            style: LhTypography.mono(
+              size: 9,
+              color: DunesColors.resolve(context, LhColors.mute2),
+              context: context,
+            ),
           )
         else
           for (final r in list) _entityCard(r, b, label, cur, prev),
@@ -230,7 +282,12 @@ class _LighthouseProductOrdinalSectionState
           Text(
             '上月不足 ${_m(b.model.minPrevTotal)}、变化率噪声过大未建模：'
             '${b.skippedSmall[metric]!.join('、')}',
-            style: LhTypography.mono(size: 8.5, color: LhColors.mute2, height: 1.5),
+            style: LhTypography.mono(
+              size: 8.5,
+              color: DunesColors.resolve(context, LhColors.mute2),
+              height: 1.5,
+              context: context,
+            ),
           ),
         ],
         const SizedBox(height: 10),
@@ -242,13 +299,21 @@ class _LighthouseProductOrdinalSectionState
   // 回测可信度一行
   Widget _trust(LighthouseOrdinalBacktest bt) {
     final ok = bt.beatsBaseline;
-    final c = ok ? widget.accent : LhColors.copper;
+    final c = ok
+        ? widget.accent
+        : DunesColors.resolve(context, LhColors.copper);
     String mon(String s) => '${int.tryParse(s.split('-').last) ?? s}月';
-    final span = bt.months.isEmpty ? '' : '${mon(bt.months.first)}–${mon(bt.months.last)}';
+    final span = bt.months.isEmpty
+        ? ''
+        : '${mon(bt.months.first)}–${mon(bt.months.last)}';
     return Container(
       padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
       decoration: BoxDecoration(
-        color: c.withAlpha(14),
+        color: DunesColors.resolveNullable(
+          context,
+          c.withAlpha(14),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: c.withAlpha(50), width: 0.6),
       ),
@@ -259,9 +324,12 @@ class _LighthouseProductOrdinalSectionState
         '${ok ? '' : '该维度 × 指标模型未跑赢基准，结论仅供参考。'}',
         style: LhTypography.mono(
           size: 8.5,
-          color: ok ? LhColors.ink2 : LhColors.copper,
+          color: ok
+              ? DunesColors.resolve(context, LhColors.ink2)
+              : DunesColors.resolve(context, LhColors.copper),
           weight: FontWeight.w600,
           height: 1.5,
+          context: context,
         ),
       ),
     );
@@ -304,12 +372,22 @@ class _LighthouseProductOrdinalSectionState
           Expanded(
             child: Text.rich(
               TextSpan(
-                style: LhTypography.mono(size: 8.5, color: LhColors.mute2, height: 1.35),
+                style: LhTypography.mono(
+                  size: 8.5,
+                  color: DunesColors.resolve(context, LhColors.mute2),
+                  height: 1.35,
+                  context: context,
+                ),
                 children: [
                   TextSpan(text: '$k '),
                   TextSpan(
                     text: val,
-                    style: LhTypography.mono(size: 9, color: LhColors.ink, weight: FontWeight.w700),
+                    style: LhTypography.mono(
+                      size: 9,
+                      color: DunesColors.resolve(context, LhColors.ink),
+                      weight: FontWeight.w700,
+                      context: context,
+                    ),
                   ),
                 ],
               ),
@@ -320,9 +398,12 @@ class _LighthouseProductOrdinalSectionState
             style: LhTypography.mono(
               size: 8.5,
               color: d.startsWith('↑')
-                  ? LhColors.neg
-                  : (d.startsWith('↓') ? LhColors.pos : LhColors.mute2),
+                  ? DunesColors.resolve(context, LhColors.neg)
+                  : (d.startsWith('↓')
+                        ? DunesColors.resolve(context, LhColors.pos)
+                        : DunesColors.resolve(context, LhColors.mute2)),
               weight: FontWeight.w700,
+              context: context,
             ),
           ),
         ],
@@ -332,9 +413,20 @@ class _LighthouseProductOrdinalSectionState
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
       decoration: BoxDecoration(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: LhColors.line2, width: 0.7),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -345,7 +437,11 @@ class _LighthouseProductOrdinalSectionState
                 child: Text(
                   r.name,
                   overflow: TextOverflow.ellipsis,
-                  style: LhTypography.sans(size: 12.5, weight: FontWeight.w700),
+                  style: LhTypography.sans(
+                    size: 12.5,
+                    weight: FontWeight.w700,
+                    context: context,
+                  ),
                 ),
               ),
               if (r.group.isNotEmpty) ...[
@@ -354,7 +450,11 @@ class _LighthouseProductOrdinalSectionState
                   child: Text(
                     r.group,
                     overflow: TextOverflow.ellipsis,
-                    style: LhTypography.mono(size: 8.5, color: LhColors.mute2),
+                    style: LhTypography.mono(
+                      size: 8.5,
+                      color: DunesColors.resolve(context, LhColors.mute2),
+                      context: context,
+                    ),
                   ),
                 ),
               ],
@@ -362,12 +462,21 @@ class _LighthouseProductOrdinalSectionState
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: vc.withAlpha(22),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    vc.withAlpha(22),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(5),
                 ),
                 child: Text(
                   '预计${_kVerdict[v]}',
-                  style: LhTypography.mono(size: 9.5, color: vc, weight: FontWeight.w800),
+                  style: LhTypography.mono(
+                    size: 9.5,
+                    color: vc,
+                    weight: FontWeight.w800,
+                    context: context,
+                  ),
                 ),
               ),
             ],
@@ -376,21 +485,34 @@ class _LighthouseProductOrdinalSectionState
           // 结论句
           Text.rich(
             TextSpan(
-              style: LhTypography.sans(size: 11.5, color: LhColors.ink, height: 1.45),
+              style: LhTypography.sans(
+                size: 11.5,
+                color: DunesColors.resolve(context, LhColors.ink),
+                height: 1.45,
+                context: context,
+              ),
               children: [
                 TextSpan(text: '$cur全月$label比$prev（${_m(f.prevTotal)}）'),
                 TextSpan(
                   text: what,
-                  style: TextStyle(color: vc, fontWeight: FontWeight.w800),
+                  style: TextStyle(
+                    color: DunesColors.resolveNullable(context, vc),
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const TextSpan(text: ' 的概率 '),
                 TextSpan(
                   text: _p(r.confidence),
-                  style: TextStyle(color: vc, fontWeight: FontWeight.w800),
+                  style: TextStyle(
+                    color: DunesColors.resolveNullable(context, vc),
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 TextSpan(
                   text: '；$others。',
-                  style: const TextStyle(color: LhColors.mute),
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, LhColors.mute),
+                  ),
                 ),
               ],
             ),
@@ -416,16 +538,30 @@ class _LighthouseProductOrdinalSectionState
                               _p(probs[i]),
                               style: LhTypography.mono(
                                 size: 8,
-                                color: i == v ? vc : LhColors.mute2,
-                                weight: i == v ? FontWeight.w800 : FontWeight.w500,
+                                color: i == v
+                                    ? vc
+                                    : DunesColors.resolve(
+                                        context,
+                                        LhColors.mute2,
+                                      ),
+                                weight: i == v
+                                    ? FontWeight.w800
+                                    : FontWeight.w500,
+                                context: context,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Container(
                               width: 14,
-                              height: (probs[i] * 28).clamp(1.5, 28.0).toDouble(),
+                              height: (probs[i] * 28)
+                                  .clamp(1.5, 28.0)
+                                  .toDouble(),
                               decoration: BoxDecoration(
-                                color: _vColor(i).withAlpha(i == v ? 220 : 90),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  _vColor(i).withAlpha(i == v ? 220 : 90),
+                                  role: DunesColorRole.surface,
+                                ),
                                 borderRadius: const BorderRadius.vertical(
                                   top: Radius.circular(2.5),
                                 ),
@@ -434,7 +570,14 @@ class _LighthouseProductOrdinalSectionState
                             const SizedBox(height: 2),
                             Text(
                               _kVerdict[i],
-                              style: LhTypography.mono(size: 7.5, color: LhColors.mute2),
+                              style: LhTypography.mono(
+                                size: 7.5,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.mute2,
+                                ),
+                                context: context,
+                              ),
                             ),
                           ],
                         ),
@@ -448,9 +591,21 @@ class _LighthouseProductOrdinalSectionState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    why('1–${b.day} 日已发生', _m(f.mtd), '比$prev同期 ${_chg(f.mtd, f.prevSameDay)}'),
-                    why('日均外推月末', _m(f.linearForecast), '比$prev全月 ${_chg(f.linearForecast, f.prevTotal)}'),
-                    why('近 7 天', _m(f.last7), '比前 7 天 ${_chg(f.last7, f.prev7)}'),
+                    why(
+                      '1–${b.day} 日已发生',
+                      _m(f.mtd),
+                      '比$prev同期 ${_chg(f.mtd, f.prevSameDay)}',
+                    ),
+                    why(
+                      '日均外推月末',
+                      _m(f.linearForecast),
+                      '比$prev全月 ${_chg(f.linearForecast, f.prevTotal)}',
+                    ),
+                    why(
+                      '近 7 天',
+                      _m(f.last7),
+                      '比前 7 天 ${_chg(f.last7, f.prev7)}',
+                    ),
                   ],
                 ),
               ),
@@ -459,7 +614,12 @@ class _LighthouseProductOrdinalSectionState
           const SizedBox(height: 5),
           Text(
             effectText,
-            style: LhTypography.mono(size: 8, color: LhColors.mute2, height: 1.45),
+            style: LhTypography.mono(
+              size: 8,
+              color: DunesColors.resolve(context, LhColors.mute2),
+              height: 1.45,
+              context: context,
+            ),
           ),
         ],
       ),
@@ -527,9 +687,20 @@ class _LighthouseProductOrdinalSectionState
     ];
     return Container(
       decoration: BoxDecoration(
-        color: LhColors.mist,
+        color: DunesColors.resolve(
+          context,
+          LhColors.mist,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: LhColors.line2, width: 0.6),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.6,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -543,20 +714,28 @@ class _LighthouseProductOrdinalSectionState
                 children: [
                   Text(
                     '模型卡',
-                    style: LhTypography.sans(size: 11.5, weight: FontWeight.w700),
+                    style: LhTypography.sans(
+                      size: 11.5,
+                      weight: FontWeight.w700,
+                      context: context,
+                    ),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       '贝叶斯多层有序 logit · ${dimInfo.label} × $label',
                       overflow: TextOverflow.ellipsis,
-                      style: LhTypography.mono(size: 8.5, color: LhColors.mute2),
+                      style: LhTypography.mono(
+                        size: 8.5,
+                        color: DunesColors.resolve(context, LhColors.mute2),
+                        context: context,
+                      ),
                     ),
                   ),
                   Icon(
                     _cardOpen ? Icons.expand_less : Icons.expand_more,
                     size: 16,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                   ),
                 ],
               ),
@@ -582,6 +761,7 @@ class _LighthouseProductOrdinalSectionState
                                 size: 8.5,
                                 color: widget.accent,
                                 weight: FontWeight.w800,
+                                context: context,
                               ),
                             ),
                           ),
@@ -590,8 +770,12 @@ class _LighthouseProductOrdinalSectionState
                               v,
                               style: LhTypography.mono(
                                 size: 8.5,
-                                color: LhColors.ink2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.ink2,
+                                ),
                                 height: 1.5,
+                                context: context,
                               ),
                             ),
                           ),

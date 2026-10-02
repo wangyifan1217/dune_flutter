@@ -99,7 +99,10 @@ class _NativeChatHistoryFilterPageState
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients || _loading || _loadingMore || !_hasMore) {
+    if (!_scrollController.hasClients ||
+        _loading ||
+        _loadingMore ||
+        !_hasMore) {
       return;
     }
     final pos = _scrollController.position;
@@ -223,7 +226,9 @@ class _NativeChatHistoryFilterPageState
     final payload = m.payload;
     if (payload == null) return;
     final images = _items
-        .where((row) => row.kind.toUpperCase() == 'IMAGE' && row.payload != null)
+        .where(
+          (row) => row.kind.toUpperCase() == 'IMAGE' && row.payload != null,
+        )
         .toList(growable: false);
     final items = images
         .map(
@@ -264,11 +269,7 @@ class _NativeChatHistoryFilterPageState
   }
 
   Future<void> _openVideo(NativeChatMessage m) async {
-    await showChatVideoPlayer(
-      context,
-      service: _service,
-      payload: m.payload,
-    );
+    await showChatVideoPlayer(context, service: _service, payload: m.payload);
   }
 
   Future<void> _openFile(NativeChatMessage m) async {
@@ -357,7 +358,11 @@ class _NativeChatHistoryFilterPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -382,7 +387,10 @@ class _NativeChatHistoryFilterPageState
       return Center(
         child: Text(
           _error!,
-          style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       );
     }
@@ -390,7 +398,10 @@ class _NativeChatHistoryFilterPageState
       return Center(
         child: Text(
           widget.filter.emptyHint,
-          style: const TextStyle(fontSize: 13, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       );
     }
@@ -438,7 +449,8 @@ class _NativeChatHistoryFilterPageState
         final m = _items[index];
         final isVideo = m.kind.toUpperCase() == 'VIDEO';
         return GestureDetector(
-          onTap: () => isVideo ? unawaited(_openVideo(m)) : unawaited(_openImage(m)),
+          onTap: () =>
+              isVideo ? unawaited(_openVideo(m)) : unawaited(_openImage(m)),
           onLongPress: () => _locate(m),
           child: _MediaThumb(
             message: m,
@@ -463,13 +475,10 @@ class _NativeChatHistoryFilterPageState
           fallback: m.bodyText.isEmpty ? '文件' : m.bodyText,
         );
         return _FilterListTile(
-          leading: ChatFileTypeIcon(
-            fileName: name,
-            kindHint: m.kind,
-            size: 42,
-          ),
+          leading: ChatFileTypeIcon(fileName: name, kindHint: m.kind, size: 42),
           title: name,
-          subtitle: '${m.senderName} · ${InboxFormat.formatTime(m.createdAt, withClock: true)}',
+          subtitle:
+              '${m.senderName} · ${InboxFormat.formatTime(m.createdAt, withClock: true)}',
           onTap: () => unawaited(_openFile(m)),
           onLocate: () => _locate(m),
         );
@@ -491,13 +500,21 @@ class _NativeChatHistoryFilterPageState
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: DunesColors.accentSoft,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.accentSoft,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.link_rounded, color: DunesColors.accentDeep),
+            child: Icon(
+              Icons.link_rounded,
+              color: DunesColors.resolve(context, DunesColors.accentDeep),
+            ),
           ),
           title: link,
-          subtitle: '${m.senderName} · ${InboxFormat.formatTime(m.createdAt, withClock: true)}',
+          subtitle:
+              '${m.senderName} · ${InboxFormat.formatTime(m.createdAt, withClock: true)}',
           onTap: () => unawaited(_openLink(link)),
           onLocate: () => _locate(m),
         );
@@ -520,10 +537,17 @@ class _NativeChatHistoryFilterPageState
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: DunesColors.amberSoft,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.amberSoft,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.reply_all_rounded, color: DunesColors.amber),
+            child: Icon(
+              Icons.reply_all_rounded,
+              color: DunesColors.resolve(context, DunesColors.amber),
+            ),
           ),
           title: title,
           subtitle:
@@ -553,9 +577,21 @@ class _FilterHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(4, 6, 8, 10),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -572,7 +608,8 @@ class _FilterHeader extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 if (count > 0)
@@ -580,7 +617,8 @@ class _FilterHeader extends StatelessWidget {
                     '$count 项',
                     style: DunesTypography.mono(
                       fontSize: 10,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
               ],
@@ -589,7 +627,7 @@ class _FilterHeader extends StatelessWidget {
           IconButton(
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh_rounded, size: 20),
-            color: DunesColors.text2,
+            color: DunesColors.resolve(context, DunesColors.text2),
             tooltip: '刷新',
           ),
         ],
@@ -618,7 +656,11 @@ class _FilterListTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onTap,
@@ -628,7 +670,13 @@ class _FilterListTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: DunesColors.borderSoft),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Row(
               children: [
@@ -645,7 +693,8 @@ class _FilterListTile extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w500,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -655,7 +704,11 @@ class _FilterListTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 11.5,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -665,7 +718,7 @@ class _FilterListTile extends StatelessWidget {
                   onPressed: onLocate,
                   tooltip: '定位到聊天',
                   icon: const Icon(Icons.my_location_outlined, size: 18),
-                  color: DunesColors.accentDeep,
+                  color: DunesColors.resolve(context, DunesColors.accentDeep),
                 ),
               ],
             ),
@@ -691,10 +744,14 @@ class _MediaThumb extends StatelessWidget {
   Widget build(BuildContext context) {
     final payload = message.payload;
     Widget child = Container(
-      color: DunesColors.bgSoft,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgSoft,
+        role: DunesColorRole.surface,
+      ),
       child: Icon(
         isVideo ? Icons.videocam_outlined : Icons.image_outlined,
-        color: DunesColors.text3,
+        color: DunesColors.resolve(context, DunesColors.text3),
         size: 22,
       ),
     );
@@ -715,7 +772,11 @@ class _MediaThumb extends StatelessWidget {
           builder: (_, snap) {
             if (!snap.hasData) {
               return Container(
-                color: DunesColors.bgSoft,
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.bgSoft,
+                  role: DunesColorRole.surface,
+                ),
                 child: const Center(
                   child: SizedBox(
                     width: 14,
@@ -737,9 +798,17 @@ class _MediaThumb extends StatelessWidget {
       }
     } else if (isVideo) {
       child = Container(
-        color: const Color(0xFF2A2A2A),
-        child: const Center(
-          child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 30),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFF2A2A2A),
+          role: DunesColorRole.surface,
+        ),
+        child: Center(
+          child: Icon(
+            Icons.play_circle_fill,
+            color: DunesColors.resolve(context, Colors.white70),
+            size: 30,
+          ),
         ),
       );
     }
@@ -751,10 +820,14 @@ class _MediaThumb extends StatelessWidget {
         children: [
           child,
           if (isVideo)
-            const Positioned(
+            Positioned(
               right: 4,
               bottom: 4,
-              child: Icon(Icons.videocam, size: 14, color: Colors.white),
+              child: Icon(
+                Icons.videocam,
+                size: 14,
+                color: DunesColors.resolve(context, Colors.white),
+              ),
             ),
         ],
       ),

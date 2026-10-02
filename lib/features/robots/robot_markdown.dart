@@ -4,6 +4,7 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'robot_models.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 MarkdownStyleSheet? _cachedStyle;
 MarkdownStyleSheet? _cachedCompactStyle;
@@ -15,11 +16,7 @@ MarkdownStyleSheet _robotMdStyle({required bool compact}) {
   final baseSize = compact ? 12.0 : 13.0;
   final tableSize = compact ? 11.0 : 12.0;
   final sheet = MarkdownStyleSheet(
-    p: TextStyle(
-      fontSize: baseSize,
-      height: 1.55,
-      color: RobotTheme.text2,
-    ),
+    p: TextStyle(fontSize: baseSize, height: 1.55, color: RobotTheme.text2),
     h1: TextStyle(
       fontSize: compact ? 15 : 17,
       fontWeight: FontWeight.w700,
@@ -63,9 +60,7 @@ MarkdownStyleSheet _robotMdStyle({required bool compact}) {
       height: 1.5,
     ),
     blockquoteDecoration: const BoxDecoration(
-      border: Border(
-        left: BorderSide(color: RobotTheme.purple, width: 3),
-      ),
+      border: Border(left: BorderSide(color: RobotTheme.purple, width: 3)),
     ),
     a: const TextStyle(
       color: RobotTheme.purpleDeep,
@@ -103,6 +98,7 @@ class RobotMarkdown extends StatelessWidget {
     super.key,
     required this.markdown,
     this.compact = false,
+
     /// 会话流里关闭可选中，显著降低重排/手势开销。
     this.selectable = true,
     this.fitToContent = false,
@@ -198,7 +194,10 @@ class _RobotMdImage extends StatelessWidget {
     if (provider == null) {
       return Text(
         alt?.trim().isNotEmpty == true ? alt!.trim() : '[图片]',
-        style: const TextStyle(fontSize: 12, color: RobotTheme.text3),
+        style: TextStyle(
+          fontSize: 12,
+          color: DunesColors.resolve(context, RobotTheme.text3),
+        ),
       );
     }
     return Image(
@@ -208,7 +207,10 @@ class _RobotMdImage extends StatelessWidget {
       fit: BoxFit.contain,
       errorBuilder: (_, _, _) => Text(
         alt?.trim().isNotEmpty == true ? alt!.trim() : '[图片加载失败]',
-        style: const TextStyle(fontSize: 12, color: RobotTheme.text3),
+        style: TextStyle(
+          fontSize: 12,
+          color: DunesColors.resolve(context, RobotTheme.text3),
+        ),
       ),
     );
   }
@@ -248,7 +250,6 @@ class _ColorInlineSyntax extends md.InlineSyntax {
 }
 
 class _ColorBuilder extends MarkdownElementBuilder {
-
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
     return Text.rich(

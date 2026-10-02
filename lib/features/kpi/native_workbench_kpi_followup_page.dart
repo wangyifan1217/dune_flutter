@@ -239,7 +239,9 @@ class _NativeWorkbenchKpiFollowupPageState
     final embedded = widget.embedded;
     final board = _board;
     return ColoredBox(
-      color: embedded ? Colors.transparent : _pageBg,
+      color: embedded
+          ? Colors.transparent
+          : DunesColors.resolve(context, _pageBg, role: DunesColorRole.surface),
       child: ListView(
         padding: embedded
             ? const EdgeInsets.only(bottom: 16)
@@ -296,7 +298,9 @@ class _NativeWorkbenchKpiFollowupPageState
               children: [
                 Text(
                   _appealError!,
-                  style: const TextStyle(color: DunesColors.text2),
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                  ),
                 ),
                 TextButton(onPressed: _load, child: const Text('重试')),
               ],
@@ -338,7 +342,11 @@ class _NativeWorkbenchKpiFollowupPageState
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _line),
       ),
@@ -358,13 +366,16 @@ class _NativeWorkbenchKpiFollowupPageState
                     : null,
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Text(
                   '催打分 / 发布 / 确认，不代替领导打分',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.right,
-                  style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
               ),
             ],
@@ -387,7 +398,11 @@ class _NativeWorkbenchKpiFollowupPageState
       key: const Key('kpi-followup-sector-filter'),
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFFECE7F4),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFECE7F4),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -409,7 +424,11 @@ class _NativeWorkbenchKpiFollowupPageState
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: _sector == option.key
-                        ? Colors.white
+                        ? DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.surface,
+                          )
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -421,8 +440,8 @@ class _NativeWorkbenchKpiFollowupPageState
                           ? FontWeight.w600
                           : FontWeight.w500,
                       color: _sector == option.key
-                          ? DunesColors.text
-                          : DunesColors.text2,
+                          ? DunesColors.resolve(context, DunesColors.text)
+                          : DunesColors.resolve(context, DunesColors.text2),
                     ),
                   ),
                 ),
@@ -441,7 +460,10 @@ class _NativeWorkbenchKpiFollowupPageState
           children: [
             Text(
               _error ?? '加载失败',
-              style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
             const SizedBox(height: 6),
             TextButton(onPressed: _load, child: const Text('重试')),
@@ -478,14 +500,14 @@ class _NativeWorkbenchKpiFollowupPageState
 
   Widget _appealsCard(List<KpiAppeal> rows, {bool showDone = false}) {
     return _Card(
-      tone: DunesColors.coral,
+      tone: DunesColors.resolve(context, DunesColors.coral),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _CardHeader(
             title: showDone ? '已办结申诉' : '待处理申诉',
             count: rows.length,
-            countColor: DunesColors.coral,
+            countColor: DunesColors.resolve(context, DunesColors.coral),
             hint: showDone ? '处理结果可追溯' : '请核验后填写处理结论',
           ),
           for (var i = 0; i < rows.length; i++) ...[
@@ -583,7 +605,9 @@ class _NativeWorkbenchKpiFollowupPageState
           _CardHeader(
             title: '催领导打分',
             count: pending.length,
-            countColor: pending.isEmpty ? DunesColors.green : DunesColors.amber,
+            countColor: pending.isEmpty
+                ? DunesColors.resolve(context, DunesColors.green)
+                : DunesColors.resolve(context, DunesColors.amber),
             hint: pending.isEmpty ? '都评完了' : '${pending.length} 位还没评完',
           ),
           for (final leader in pending) ...[
@@ -599,26 +623,29 @@ class _NativeWorkbenchKpiFollowupPageState
                 runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(right: 2),
                     child: Icon(
                       Icons.check_circle_rounded,
                       size: 15,
-                      color: DunesColors.green,
+                      color: DunesColors.resolve(context, DunesColors.green),
                     ),
                   ),
-                  const Text(
+                  Text(
                     '已评完',
-                    style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                   for (final leader in done)
                     Text(
                       '${leader.userName} ${leader.scored}/${leader.expected}',
                       key: Key('kpi-followup-leader-${leader.userName}'),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
                         fontFeatures: _tabular,
                       ),
                     ),
@@ -668,7 +695,11 @@ class _NativeWorkbenchKpiFollowupPageState
             child: Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F0F8),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF3F0F8),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(9),
               ),
               child: Row(
@@ -713,7 +744,13 @@ class _NativeWorkbenchKpiFollowupPageState
           height: 30,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: selected ? Colors.white : Colors.transparent,
+            color: selected
+                ? DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  )
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(7),
             boxShadow: selected
                 ? const [
@@ -732,7 +769,9 @@ class _NativeWorkbenchKpiFollowupPageState
                 TextSpan(
                   text: ' $count',
                   style: TextStyle(
-                    color: selected ? _accent : DunesColors.text3,
+                    color: selected
+                        ? DunesColors.resolve(context, _accent)
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ],
@@ -740,7 +779,9 @@ class _NativeWorkbenchKpiFollowupPageState
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected ? DunesColors.text : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, DunesColors.text)
+                  : DunesColors.resolve(context, DunesColors.text2),
               fontFeatures: _tabular,
             ),
           ),
@@ -783,13 +824,17 @@ class _NativeWorkbenchKpiFollowupPageState
           if (grouped)
             Container(
               padding: const EdgeInsets.fromLTRB(14, 7, 14, 6),
-              color: const Color(0xFFFAF8FD),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFFAF8FD),
+                role: DunesColorRole.surface,
+              ),
               child: Text(
                 '${entry.key}  ${entry.value.length}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                   fontFeatures: _tabular,
                 ),
               ),
@@ -819,10 +864,16 @@ class _Card extends StatelessWidget {
     final t = tone;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: t == null ? _line : t.withValues(alpha: 0.35),
+          color: t == null
+              ? DunesColors.resolve(context, _line, role: DunesColorRole.border)
+              : t.withValues(alpha: 0.35),
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -847,17 +898,17 @@ class _CardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final n = count;
-    final c = countColor ?? DunesColors.text3;
+    final c = countColor ?? DunesColors.resolve(context, DunesColors.text3);
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 11, 14, 10),
       child: Row(
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13.5,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           if (n != null) ...[
@@ -865,7 +916,11 @@ class _CardHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(
-                color: c.withValues(alpha: 0.1),
+                color: DunesColors.resolveNullable(
+                  context,
+                  c.withValues(alpha: 0.1),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(99),
               ),
               child: Text(
@@ -873,7 +928,7 @@ class _CardHeader extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
-                  color: c,
+                  color: DunesColors.resolveNullable(context, c),
                   fontFeatures: _tabular,
                 ),
               ),
@@ -886,7 +941,10 @@ class _CardHeader extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 11.5, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 11.5,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         ],
@@ -906,7 +964,11 @@ class _Tag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.09),
+        color: DunesColors.resolveNullable(
+          context,
+          color.withValues(alpha: 0.09),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
@@ -916,7 +978,7 @@ class _Tag extends StatelessWidget {
           fontSize: 11,
           height: 1.25,
           fontWeight: FontWeight.w600,
-          color: color,
+          color: DunesColors.resolveNullable(context, color),
           fontFeatures: _tabular,
         ),
       ),
@@ -938,7 +1000,11 @@ class _ProgressBar extends StatelessWidget {
         value: value.clamp(0.0, 1.0),
         minHeight: 4,
         color: color,
-        backgroundColor: const Color(0xFFF0ECF6),
+        backgroundColor: DunesColors.resolve(
+          context,
+          const Color(0xFFF0ECF6),
+          role: DunesColorRole.surface,
+        ),
       ),
     );
   }
@@ -955,7 +1021,9 @@ class _PipelineCard extends StatelessWidget {
     final c = counts;
     final published = c.publishedUnacked + c.acked;
     final allDone = c.expected > 0 && c.acked >= c.expected;
-    final statusColor = allDone ? DunesColors.green : DunesColors.amber;
+    final statusColor = allDone
+        ? DunesColors.resolve(context, DunesColors.green)
+        : DunesColors.resolve(context, DunesColors.amber);
     return _Card(
       child: Padding(
         key: const Key('kpi-followup-pipeline'),
@@ -965,27 +1033,29 @@ class _PipelineCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text(
+                Text(
                   '本月进度',
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   '应评 ${c.expected} 人',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                     fontFeatures: _tabular,
                   ),
                 ),
                 const Spacer(),
                 _Tag(
                   c.expected == 0 ? '暂无' : (allDone ? '全部确认' : '进行中'),
-                  color: c.expected == 0 ? DunesColors.text3 : statusColor,
+                  color: c.expected == 0
+                      ? DunesColors.resolve(context, DunesColors.text3)
+                      : statusColor,
                 ),
               ],
             ),
@@ -1039,12 +1109,12 @@ class _StageArrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.fromLTRB(4, 26, 4, 0),
       child: Icon(
         Icons.chevron_right_rounded,
         size: 16,
-        color: Color(0xFFCFC8DA),
+        color: DunesColors.resolveNullable(context, Color(0xFFCFC8DA)),
       ),
     );
   }
@@ -1072,8 +1142,10 @@ class _Stage extends StatelessWidget {
     final idle = total == 0;
     final complete = !idle && todo == 0;
     final color = idle
-        ? DunesColors.text3
-        : (complete ? DunesColors.green : DunesColors.amber);
+        ? DunesColors.resolve(context, DunesColors.text3)
+        : (complete
+              ? DunesColors.resolve(context, DunesColors.green)
+              : DunesColors.resolve(context, DunesColors.amber));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1084,21 +1156,31 @@ class _Stage extends StatelessWidget {
               height: 16,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: complete ? DunesColors.green : const Color(0xFFEDE9F3),
+                color: complete
+                    ? DunesColors.resolve(
+                        context,
+                        DunesColors.green,
+                        role: DunesColorRole.surface,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFFEDE9F3),
+                        role: DunesColorRole.surface,
+                      ),
                 shape: BoxShape.circle,
               ),
               child: complete
-                  ? const Icon(
+                  ? Icon(
                       Icons.check_rounded,
                       size: 11,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                     )
                   : Text(
                       step,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
                       ),
                     ),
             ),
@@ -1108,10 +1190,10 @@ class _Stage extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
             ),
@@ -1123,15 +1205,18 @@ class _Stage extends StatelessWidget {
             children: [
               TextSpan(
                 text: '$done',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
               TextSpan(
                 text: '/$total',
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ],
           ),
@@ -1140,7 +1225,9 @@ class _Stage extends StatelessWidget {
         const SizedBox(height: 6),
         _ProgressBar(
           value: idle ? 0.0 : done / total,
-          color: complete ? DunesColors.green : _accent,
+          color: complete
+              ? DunesColors.resolve(context, DunesColors.green)
+              : DunesColors.resolve(context, _accent),
         ),
         const SizedBox(height: 5),
         Text(
@@ -1150,7 +1237,7 @@ class _Stage extends StatelessWidget {
           style: TextStyle(
             fontSize: 11.5,
             fontWeight: FontWeight.w500,
-            color: color,
+            color: DunesColors.resolveNullable(context, color),
             fontFeatures: _tabular,
           ),
         ),
@@ -1188,10 +1275,10 @@ class _GroupRow extends StatelessWidget {
                   group.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
               ),
@@ -1199,9 +1286,9 @@ class _GroupRow extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   sectorLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11.5,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ],
@@ -1209,14 +1296,14 @@ class _GroupRow extends StatelessWidget {
               _Tag(
                 lighthouse ? '灯塔自动' : '量表打分',
                 color: lighthouse
-                    ? DunesColors.blue
-                    : DunesColors.brandPurpleDeep,
+                    ? DunesColors.resolve(context, DunesColors.blue)
+                    : DunesColors.resolve(context, DunesColors.brandPurpleDeep),
               ),
               const Spacer(),
               if (group.projectScore > 0)
                 _Tag(
                   '项目绩效系数 ${formatKpiProjectCoefficient(group.projectCoefficient)}',
-                  color: DunesColors.brandPurple,
+                  color: DunesColors.resolve(context, DunesColors.brandPurple),
                 ),
             ],
           ),
@@ -1226,16 +1313,18 @@ class _GroupRow extends StatelessWidget {
               Expanded(
                 child: _ProgressBar(
                   value: expected == 0 ? 0.0 : group.scored / expected,
-                  color: complete ? DunesColors.green : DunesColors.amber,
+                  color: complete
+                      ? DunesColors.resolve(context, DunesColors.green)
+                      : DunesColors.resolve(context, DunesColors.amber),
                 ),
               ),
               const SizedBox(width: 10),
               Text(
                 '${group.scored}/$expected',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                   fontFeatures: _tabular,
                 ),
               ),
@@ -1248,7 +1337,9 @@ class _GroupRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w500,
-                    color: complete ? DunesColors.green : DunesColors.amber,
+                    color: complete
+                        ? DunesColors.resolve(context, DunesColors.green)
+                        : DunesColors.resolve(context, DunesColors.amber),
                     fontFeatures: _tabular,
                   ),
                 ),
@@ -1266,9 +1357,12 @@ class _GroupRow extends StatelessWidget {
             ),
           ] else if (lighthouse) ...[
             const SizedBox(height: 6),
-            const Text(
+            Text(
               '灯塔自动算分，不用催领导打量表',
-              style: TextStyle(fontSize: 11.5, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 11.5,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ],
         ],
@@ -1296,16 +1390,20 @@ class _LeaderRow extends StatelessWidget {
             width: 30,
             height: 30,
             alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: DunesColors.amberSoft,
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.amberSoft,
+                role: DunesColorRole.surface,
+              ),
               shape: BoxShape.circle,
             ),
             child: Text(
               name.isEmpty ? '?' : name.characters.first,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.amber,
+                color: DunesColors.resolve(context, DunesColors.amber),
               ),
             ),
           ),
@@ -1321,19 +1419,19 @@ class _LeaderRow extends StatelessWidget {
                         name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
                         ),
                       ),
                     ),
                     Text(
                       '还差 ${leader.unscored} 人',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.amber,
+                        color: DunesColors.resolve(context, DunesColors.amber),
                         fontFeatures: _tabular,
                       ),
                     ),
@@ -1347,15 +1445,15 @@ class _LeaderRow extends StatelessWidget {
                         value: leader.expected == 0
                             ? 0.0
                             : leader.scored / leader.expected,
-                        color: DunesColors.amber,
+                        color: DunesColors.resolve(context, DunesColors.amber),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       '已评 ${leader.scored}/${leader.expected}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11.5,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                         fontFeatures: _tabular,
                       ),
                     ),
@@ -1403,9 +1501,18 @@ class _MemberRow extends StatelessWidget {
       if (supervisor.isNotEmpty) '直属 $supervisor',
     ].join(' · ');
     final (String label, Color color) = switch (tab) {
-      _MemberTab.unpublished => ('待发布', DunesColors.brandPurple),
-      _MemberTab.publishedUnacked => ('待确认', DunesColors.amber),
-      _MemberTab.acked => ('已确认', DunesColors.green),
+      _MemberTab.unpublished => (
+        '待发布',
+        DunesColors.resolve(context, DunesColors.brandPurple),
+      ),
+      _MemberTab.publishedUnacked => (
+        '待确认',
+        DunesColors.resolve(context, DunesColors.amber),
+      ),
+      _MemberTab.acked => (
+        '已确认',
+        DunesColors.resolve(context, DunesColors.green),
+      ),
     };
     return Padding(
       key: Key('kpi-followup-member-${person.userName}'),
@@ -1420,10 +1527,10 @@ class _MemberRow extends StatelessWidget {
                   person.userName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
                 if (sub.isNotEmpty) ...[
@@ -1432,9 +1539,9 @@ class _MemberRow extends StatelessWidget {
                     sub,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 ],
@@ -1459,15 +1566,19 @@ class _NameChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: DunesColors.amberSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.amberSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(99),
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11.5,
           fontWeight: FontWeight.w500,
-          color: DunesColors.amber,
+          color: DunesColors.resolve(context, DunesColors.amber),
         ),
       ),
     );
@@ -1484,7 +1595,10 @@ class _EmptyHint extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
       child: Text(
         text,
-        style: const TextStyle(fontSize: 12.5, color: DunesColors.text3),
+        style: TextStyle(
+          fontSize: 12.5,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
       ),
     );
   }
@@ -1508,7 +1622,11 @@ class _MonthStepper extends StatelessWidget {
     return Container(
       height: 34,
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F6FB),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF8F6FB),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: _line),
       ),
@@ -1524,10 +1642,10 @@ class _MonthStepper extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                   fontFeatures: _tabular,
                 ),
               ),
@@ -1587,10 +1705,10 @@ class _AppealRow extends StatelessWidget {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
                   ),
                 ),
               ),
@@ -1598,9 +1716,9 @@ class _AppealRow extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   dept,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11.5,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ],
@@ -1608,7 +1726,7 @@ class _AppealRow extends StatelessWidget {
               _Tag(
                 appeal.resolvedKindLabel,
                 key: Key('kpi-followup-appeal-kind-${appeal.id}'),
-                color: DunesColors.coral,
+                color: DunesColors.resolve(context, DunesColors.coral),
               ),
               const Spacer(),
               if (onClaim != null)
@@ -1621,8 +1739,15 @@ class _AppealRow extends StatelessWidget {
                   key: Key('kpi-followup-appeal-done-${appeal.id}'),
                   onPressed: closing ? null : onClose,
                   style: TextButton.styleFrom(
-                    foregroundColor: DunesColors.brandPurpleDeep,
-                    backgroundColor: DunesColors.brandPurpleSoft,
+                    foregroundColor: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleDeep,
+                    ),
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurpleSoft,
+                      role: DunesColorRole.surface,
+                    ),
                     minimumSize: const Size(0, 30),
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     visualDensity: VisualDensity.compact,
@@ -1651,7 +1776,10 @@ class _AppealRow extends StatelessWidget {
                 : (appeal.assignedRole == 'supervisor'
                       ? '待直属领导处理'
                       : '数据负责人待领取'),
-            style: const TextStyle(fontSize: 11.5, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 11.5,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           if (appeal.dueAt.trim().isNotEmpty)
             Text(
@@ -1659,8 +1787,8 @@ class _AppealRow extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11.5,
                 color: _appealIsOverdue(appeal.dueAt)
-                    ? DunesColors.coral
-                    : DunesColors.text3,
+                    ? DunesColors.resolve(context, DunesColors.coral)
+                    : DunesColors.resolve(context, DunesColors.text3),
                 fontWeight: _appealIsOverdue(appeal.dueAt)
                     ? FontWeight.w600
                     : FontWeight.w400,
@@ -1670,39 +1798,46 @@ class _AppealRow extends StatelessWidget {
           if (appeal.subjectName.trim().isNotEmpty) ...[
             Text(
               '申诉指标：${appeal.subjectName}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
               ),
             ),
             if (appeal.snapshot.trim().isNotEmpty)
               Text(
                 '提交时快照：${appeal.snapshot}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11.5,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
             if (appeal.expectedChange.trim().isNotEmpty)
               Text(
                 '期望修正：${appeal.expectedChange}',
-                style: const TextStyle(fontSize: 12, color: DunesColors.coral),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.coral),
+                ),
               ),
             const SizedBox(height: 8),
           ],
           Container(
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFFAF8FD),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFFAF8FD),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               appeal.comment,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 height: 1.45,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
               ),
             ),
           ),
@@ -1718,14 +1853,17 @@ class _AppealRow extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               appeal.resolution,
-              style: const TextStyle(fontSize: 12.5, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 12.5,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
             if (appeal.handledByName.trim().isNotEmpty)
               Text(
                 '处理人：${appeal.handledByName}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11.5,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
           ],
@@ -1785,7 +1923,9 @@ class _AppealResolutionDialogState extends State<_AppealResolutionDialog> {
           children: [
             Text(
               widget.appeal.comment,
-              style: const TextStyle(color: DunesColors.text2),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
@@ -1800,9 +1940,12 @@ class _AppealResolutionDialogState extends State<_AppealResolutionDialog> {
                   setState(() => _decision = value ?? 'approved'),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               '选择“申诉成立/部分成立”前，请先在灯塔修正源数据，或由评分人完成重评。系统会校验指标已变化，然后自动重算、重新发布并通知员工。',
-              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(

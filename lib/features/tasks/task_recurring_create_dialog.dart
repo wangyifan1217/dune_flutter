@@ -103,7 +103,8 @@ class _TaskRecurringCreateDialog extends StatefulWidget {
       _TaskRecurringCreateDialogState();
 }
 
-class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> {
+class _TaskRecurringCreateDialogState
+    extends State<_TaskRecurringCreateDialog> {
   final _titleCtrl = TextEditingController();
   String _kind = 'monthly';
   String _monthDay = '每月10日';
@@ -126,9 +127,7 @@ class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> 
 
   Future<void> _pickDate({required bool isStart}) async {
     final now = DateTime.now();
-    final initial = isStart
-        ? (_startAt ?? now)
-        : (_endAt ?? _startAt ?? now);
+    final initial = isStart ? (_startAt ?? now) : (_endAt ?? _startAt ?? now);
     final first = !isStart && _startAt != null
         ? _startAt!
         : DateTime(now.year - 1);
@@ -186,10 +185,17 @@ class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> 
       hintText: hint,
       hintStyle: TextStyle(
         fontSize: 14,
-        color: DunesColors.text3.withValues(alpha: 0.85),
+        color: DunesColors.resolve(
+          context,
+          DunesColors.text3,
+        ).withValues(alpha: 0.85),
       ),
       filled: true,
-      fillColor: const Color(0xFFF5F6F8),
+      fillColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
@@ -201,7 +207,13 @@ class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> 
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: kTaskPurple.withValues(alpha: 0.4)),
+        borderSide: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            kTaskPurple,
+            role: DunesColorRole.border,
+          ).withValues(alpha: 0.4),
+        ),
       ),
     );
   }
@@ -213,16 +225,19 @@ class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> 
         children: [
           Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
           if (required)
-            const Text(
+            Text(
               ' *',
-              style: TextStyle(fontSize: 12, color: Color(0xFFE35D6A)),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolveNullable(context, Color(0xFFE35D6A)),
+              ),
             ),
         ],
       ),
@@ -242,7 +257,11 @@ class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> 
       children: [
         _label(label, required: required),
         Material(
-          color: const Color(0xFFF5F6F8),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFF5F6F8),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
             key: ValueKey('recurring-$label'),
@@ -261,8 +280,8 @@ class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> 
                             ? FontWeight.w400
                             : FontWeight.w600,
                         color: value == null
-                            ? DunesColors.text3
-                            : DunesColors.text,
+                            ? DunesColors.resolve(context, DunesColors.text3)
+                            : DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ),
@@ -272,19 +291,22 @@ class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> 
                         _endAt = null;
                         _error = null;
                       }),
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.only(right: 8),
                         child: Icon(
                           Icons.close,
                           size: 16,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ),
-                  const Icon(
+                  Icon(
                     Icons.calendar_today_outlined,
                     size: 16,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ],
               ),
@@ -318,157 +340,163 @@ class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> 
         titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
         contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
         actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-      title: const Text(
-        '新建周期任务',
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-      ),
-      content: SizedBox(
-        width: 440,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                '到达周期后会自动生成一条主目标。结束日期可不填，表示长期有效。',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: DunesColors.text2,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 16),
-              _label('任务名称', required: true),
-              TextField(
-                key: const Key('recurring-title'),
-                controller: _titleCtrl,
-                autofocus: true,
-                textInputAction: TextInputAction.next,
-                onChanged: (_) {
-                  if (_error != null) setState(() => _error = null);
-                },
-                decoration: _fieldDecoration(hint: '例如：每月报税、薪酬核算'),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _label('重复周期', required: true),
-                        _dropdown(
-                          key: const Key('recurring-frequency'),
-                          value: _kind,
-                          items: kTaskRecurringKinds,
-                          onChanged: (value) => setState(() {
-                            _kind = value;
-                            _error = null;
-                          }),
-                        ),
-                      ],
-                    ),
+        title: const Text(
+          '新建周期任务',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
+        content: SizedBox(
+          width: 440,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '到达周期后会自动生成一条主目标。结束日期可不填，表示长期有效。',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    height: 1.4,
                   ),
-                  if (_kind != 'daily') ...[
-                    const SizedBox(width: 12),
+                ),
+                const SizedBox(height: 16),
+                _label('任务名称', required: true),
+                TextField(
+                  key: const Key('recurring-title'),
+                  controller: _titleCtrl,
+                  autofocus: true,
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) {
+                    if (_error != null) setState(() => _error = null);
+                  },
+                  decoration: _fieldDecoration(hint: '例如：每月报税、薪酬核算'),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _label(_kind == 'weekly' ? '星期' : '每月哪一天', required: true),
-                          if (_kind == 'weekly')
-                            _dropdown(
-                              key: const Key('recurring-weekday'),
-                              value: _weekday,
-                              items: kTaskRecurringWeekdays,
-                              onChanged: (value) => setState(() {
-                                _weekday = value;
-                                _error = null;
-                              }),
-                            )
-                          else
-                            _dropdown(
-                              key: const Key('recurring-month-day'),
-                              value: _monthDay,
-                              items: kTaskRecurringMonthDays,
-                              onChanged: (value) => setState(() {
-                                _monthDay = value;
-                                _error = null;
-                              }),
-                            ),
+                          _label('重复周期', required: true),
+                          _dropdown(
+                            key: const Key('recurring-frequency'),
+                            value: _kind,
+                            items: kTaskRecurringKinds,
+                            onChanged: (value) => setState(() {
+                              _kind = value;
+                              _error = null;
+                            }),
+                          ),
                         ],
                       ),
                     ),
+                    if (_kind != 'daily') ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _label(
+                              _kind == 'weekly' ? '星期' : '每月哪一天',
+                              required: true,
+                            ),
+                            if (_kind == 'weekly')
+                              _dropdown(
+                                key: const Key('recurring-weekday'),
+                                value: _weekday,
+                                items: kTaskRecurringWeekdays,
+                                onChanged: (value) => setState(() {
+                                  _weekday = value;
+                                  _error = null;
+                                }),
+                              )
+                            else
+                              _dropdown(
+                                key: const Key('recurring-month-day'),
+                                value: _monthDay,
+                                items: kTaskRecurringMonthDays,
+                                onChanged: (value) => setState(() {
+                                  _monthDay = value;
+                                  _error = null;
+                                }),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                taskRecurringFrequencyHint(_frequency),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: DunesColors.text3,
-                  height: 1.35,
                 ),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _dateTile(
-                      label: '开始日期',
-                      value: _startAt,
-                      required: true,
-                      onTap: () => _pickDate(isStart: true),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _dateTile(
-                      label: '结束日期',
-                      value: _endAt,
-                      placeholder: '长期有效',
-                      optional: true,
-                      onTap: () => _pickDate(isStart: false),
-                    ),
-                  ),
-                ],
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 Text(
-                  _error!,
-                  style: const TextStyle(
+                  taskRecurringFrequencyHint(_frequency),
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFFE35D6A),
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    height: 1.35,
                   ),
                 ),
+                const SizedBox(height: 14),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _dateTile(
+                        label: '开始日期',
+                        value: _startAt,
+                        required: true,
+                        onTap: () => _pickDate(isStart: true),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _dateTile(
+                        label: '结束日期',
+                        value: _endAt,
+                        placeholder: '长期有效',
+                        optional: true,
+                        onTap: () => _pickDate(isStart: false),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _error!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFE35D6A),
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          key: const Key('recurring-create-submit'),
-          style: FilledButton.styleFrom(
-            backgroundColor: kTaskPurple,
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
             ),
           ),
-          onPressed: _submit,
-          child: const Text('创建'),
         ),
-      ],
-    ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const Key('recurring-create-submit'),
+            style: FilledButton.styleFrom(
+              backgroundColor: kTaskPurple,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: _submit,
+            child: const Text('创建'),
+          ),
+        ],
+      ),
     );
   }
 }

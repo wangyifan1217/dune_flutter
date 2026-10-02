@@ -68,7 +68,11 @@ class Tag2EntityTable extends StatelessWidget {
       return Center(
         child: Text(
           '这一天没有你负责的主体。',
-          style: DunesTypography.sans(fontSize: 14, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 14,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       );
     }
@@ -800,7 +804,11 @@ class _Tag2CommentDialogState extends State<_Tag2CommentDialog> {
         children: [
           Text(
             widget.title,
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text2),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
+            ),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -855,6 +863,7 @@ Future<void> showTag2EntityDrilldown({
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
+                  context: ctx,
                 ),
               ),
             ),
@@ -865,7 +874,8 @@ Future<void> showTag2EntityDrilldown({
                         '没有明细',
                         style: DunesTypography.sans(
                           fontSize: 14,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(ctx, DunesColors.text3),
+                          context: ctx,
                         ),
                       ),
                     )
@@ -890,13 +900,18 @@ Future<void> showTag2EntityDrilldown({
                                 style: DunesTypography.sans(
                                   fontSize: 13,
                                   height: 1.35,
+                                  context: context,
                                 ),
                               ),
                             ),
                           );
                         }
                         return Material(
-                          color: const Color(0xFFF5F6F8),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFF5F6F8),
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(10),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
@@ -947,7 +962,8 @@ Future<void> showTag2EntityOpinionList({
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(ctx, DunesColors.text),
+                  context: ctx,
                 ),
               ),
               const SizedBox(height: 4),
@@ -955,7 +971,8 @@ Future<void> showTag2EntityOpinionList({
                 '只显示填写了意见的内容，确认记录不在这里。',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(ctx, DunesColors.text3),
+                  context: ctx,
                 ),
               ),
               const SizedBox(height: 12),
@@ -964,7 +981,8 @@ Future<void> showTag2EntityOpinionList({
                   '暂无意见',
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(ctx, DunesColors.text3),
+                    context: ctx,
                   ),
                 )
               else
@@ -991,7 +1009,8 @@ Future<void> showTag2EntityOpinionList({
                             style: DunesTypography.sans(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(ctx, DunesColors.text),
+                              context: ctx,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -999,7 +1018,11 @@ Future<void> showTag2EntityOpinionList({
                             '$name · ${tag3DailyCommentTime(item.createdAt)}',
                             style: DunesTypography.sans(
                               fontSize: 12,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                ctx,
+                                DunesColors.text3,
+                              ),
+                              context: ctx,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -1007,7 +1030,11 @@ Future<void> showTag2EntityOpinionList({
                             item.body.trim(),
                             style: DunesTypography.sans(
                               fontSize: 13,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                ctx,
+                                DunesColors.text2,
+                              ),
+                              context: ctx,
                             ),
                           ),
                         ],
@@ -1044,7 +1071,8 @@ Future<void> showTag2EntityCommentHistory({
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(ctx, DunesColors.text),
+                  context: ctx,
                 ),
               ),
               const SizedBox(height: 4),
@@ -1052,7 +1080,8 @@ Future<void> showTag2EntityCommentHistory({
                 '按提交时间查看，可看到是哪个人提的意见。',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(ctx, DunesColors.text3),
+                  context: ctx,
                 ),
               ),
               const SizedBox(height: 12),
@@ -1061,7 +1090,8 @@ Future<void> showTag2EntityCommentHistory({
                   '暂无意见',
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(ctx, DunesColors.text3),
+                    context: ctx,
                   ),
                 )
               else
@@ -1087,7 +1117,8 @@ Future<void> showTag2EntityCommentHistory({
                             style: DunesTypography.sans(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(ctx, DunesColors.text),
+                              context: ctx,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -1095,7 +1126,11 @@ Future<void> showTag2EntityCommentHistory({
                             item.displayBody,
                             style: DunesTypography.sans(
                               fontSize: 13,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                ctx,
+                                DunesColors.text2,
+                              ),
+                              context: ctx,
                             ),
                           ),
                         ],

@@ -120,7 +120,14 @@ class _NovaMcpServicesViewState extends State<NovaMcpServicesView> {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(color: const Color(0xFFF6F8FC), child: _buildBody());
+    return ColoredBox(
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF6F8FC),
+        role: DunesColorRole.surface,
+      ),
+      child: _buildBody(),
+    );
   }
 
   Widget _buildBody() {
@@ -147,7 +154,8 @@ class _NovaMcpServicesViewState extends State<NovaMcpServicesView> {
           style: DunesTypography.sans(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: const Color(0xFF191D24),
+            color: DunesColors.resolve(context, const Color(0xFF191D24)),
+            context: context,
           ),
         ),
         const SizedBox(height: 4),
@@ -155,7 +163,8 @@ class _NovaMcpServicesViewState extends State<NovaMcpServicesView> {
           '接入沙丘现有 MCP 能力，点进去就是原来的助理对话。',
           style: DunesTypography.sans(
             fontSize: 12.5,
-            color: const Color(0xFF86909C),
+            color: DunesColors.resolve(context, const Color(0xFF86909C)),
+            context: context,
           ),
         ),
         const SizedBox(height: 14),
@@ -182,7 +191,11 @@ class _EmptyHint extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.hub_outlined, size: 36, color: Color(0xFFC2C7D0)),
+            Icon(
+              Icons.hub_outlined,
+              size: 36,
+              color: DunesColors.resolveNullable(context, Color(0xFFC2C7D0)),
+            ),
             const SizedBox(height: 12),
             Text(
               title,
@@ -190,7 +203,8 @@ class _EmptyHint extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: const Color(0xFF4E5969),
+                color: DunesColors.resolve(context, const Color(0xFF4E5969)),
+                context: context,
               ),
             ),
             const SizedBox(height: 6),
@@ -200,7 +214,8 @@ class _EmptyHint extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 13,
                 height: 1.45,
-                color: const Color(0xFF86909C),
+                color: DunesColors.resolve(context, const Color(0xFF86909C)),
+                context: context,
               ),
             ),
           ],
@@ -219,7 +234,11 @@ class _McpEmployeeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
@@ -228,7 +247,13 @@ class _McpEmployeeCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFEEF0F5)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFEEF0F5),
+                role: DunesColorRole.border,
+              ),
+            ),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x0A2B3B60),
@@ -243,13 +268,17 @@ class _McpEmployeeCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1EBFA),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF1EBFA),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(13),
                 ),
                 alignment: Alignment.center,
                 child: Icon(
                   digitalEmployeeIcon(item.iconKey),
-                  color: const Color(0xFF6B3FE2),
+                  color: DunesColors.resolve(context, const Color(0xFF6B3FE2)),
                   size: 22,
                 ),
               ),
@@ -265,7 +294,11 @@ class _McpEmployeeCard extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: const Color(0xFF191D24),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF191D24),
+                        ),
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -275,17 +308,21 @@ class _McpEmployeeCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: DunesTypography.sans(
                         fontSize: 12.5,
-                        color: const Color(0xFF86909C),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF86909C),
+                        ),
+                        context: context,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
+              Icon(
                 Icons.arrow_forward_ios_rounded,
                 size: 13,
-                color: Color(0xFFCFD5DF),
+                color: DunesColors.resolveNullable(context, Color(0xFFCFD5DF)),
               ),
             ],
           ),

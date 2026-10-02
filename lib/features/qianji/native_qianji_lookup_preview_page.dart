@@ -346,7 +346,9 @@ class _NativeQianjiLookupPreviewPageState
   };
 
   List<_LookupLine> get _visible => _source
-      .where((line) => _inRange(line.date) && (_chip == null || line.chip == _chip))
+      .where(
+        (line) => _inRange(line.date) && (_chip == null || line.chip == _chip),
+      )
       .toList(growable: false);
 
   String get _rangeLabel {
@@ -377,7 +379,11 @@ class _NativeQianjiLookupPreviewPageState
   Widget build(BuildContext context) {
     final groups = _groups();
     return Material(
-      color: const Color(0xFFF7F6FA),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF7F6FA),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -393,8 +399,11 @@ class _NativeQianjiLookupPreviewPageState
                         Center(
                           child: Text(
                             _emptyText,
-                            style: const TextStyle(
-                              color: DunesColors.text3,
+                            style: TextStyle(
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                               fontSize: 14,
                             ),
                           ),
@@ -422,7 +431,7 @@ class _NativeQianjiLookupPreviewPageState
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: widget.onBack,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -430,12 +439,15 @@ class _NativeQianjiLookupPreviewPageState
                   Icon(
                     Icons.arrow_back_ios_new,
                     size: 14,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                   SizedBox(width: 2),
                   Text(
                     '饕',
-                    style: TextStyle(fontSize: 13, color: DunesColors.text2),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
                   ),
                 ],
               ),
@@ -445,19 +457,19 @@ class _NativeQianjiLookupPreviewPageState
           Expanded(
             child: Text(
               _title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ),
           Text(
             count == 0 ? '样例' : '$count 组 · 样例',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ],
@@ -473,17 +485,20 @@ class _NativeQianjiLookupPreviewPageState
         children: [
           Text(
             _hint,
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              const Text(
+              Text(
                 '时间',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const SizedBox(width: 8),
@@ -497,10 +512,10 @@ class _NativeQianjiLookupPreviewPageState
           const SizedBox(height: 8),
           Text(
             _chipLabel,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
           const SizedBox(height: 8),
@@ -568,29 +583,39 @@ class _NativeQianjiLookupPreviewPageState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: _warn,
+              color: DunesColors.resolveNullable(context, _warn),
               height: 1.1,
             ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ],
@@ -621,25 +646,38 @@ class _NativeQianjiLookupPreviewPageState
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 2),
           Text(
             meta,
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 10),
           for (var i = 0; i < lines.length; i++) ...[
@@ -653,9 +691,9 @@ class _NativeQianjiLookupPreviewPageState
 
   Widget _line(_LookupLine line) {
     final color = switch (line.tone) {
-      'done' => const Color(0xFF1F9D76),
-      'bad' => const Color(0xFFD4380D),
-      _ => _warn,
+      'done' => DunesColors.resolve(context, const Color(0xFF1F9D76)),
+      'bad' => DunesColors.resolve(context, const Color(0xFFD4380D)),
+      _ => DunesColors.resolve(context, _warn),
     };
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -666,16 +704,19 @@ class _NativeQianjiLookupPreviewPageState
             children: [
               Text(
                 line.title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 line.subtitle,
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ],
           ),
@@ -686,7 +727,7 @@ class _NativeQianjiLookupPreviewPageState
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: color,
+            color: DunesColors.resolveNullable(context, color),
           ),
         ),
       ],
@@ -708,7 +749,17 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFF3EEFF) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF3EEFF),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
@@ -718,7 +769,17 @@ class _FilterChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: selected ? _themePurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -726,7 +787,9 @@ class _FilterChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: selected ? _themePurple : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, _themePurple)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),

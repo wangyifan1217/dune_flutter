@@ -40,16 +40,16 @@ class _NativeRobotConsultCreatePageState
   Future<void> _start() async {
     final q = _controller.text.trim();
     if (q.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先填写要咨询的问题')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先填写要咨询的问题')));
       return;
     }
     final session = widget.session;
     if (session == null || session.token.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('未登录，无法发起咨询')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('未登录，无法发起咨询')));
       return;
     }
 
@@ -57,25 +57,24 @@ class _NativeRobotConsultCreatePageState
     final store = RobotConsultStore.instance;
     store.bindSession(session);
     try {
-      final record = await store.start(
-        question: q,
-        robotKey: widget.robotKey,
-      );
+      final record = await store.start(question: q, robotKey: widget.robotKey);
       if (!mounted) return;
       widget.onStarted(record);
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: RobotTheme.pageBg,
+      color: DunesColors.resolve(
+        context,
+        RobotTheme.pageBg,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         child: Column(
           children: [
@@ -85,7 +84,10 @@ class _NativeRobotConsultCreatePageState
                 children: [
                   IconButton(
                     onPressed: _submitting ? null : widget.onBack,
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 20,
+                    ),
                   ),
                   Expanded(
                     child: Text(
@@ -93,7 +95,8 @@ class _NativeRobotConsultCreatePageState
                       style: DunesTypography.sans(
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
-                        color: RobotTheme.text,
+                        color: DunesColors.resolve(context, RobotTheme.text),
+                        context: context,
                       ),
                     ),
                   ),
@@ -117,7 +120,8 @@ class _NativeRobotConsultCreatePageState
                     style: DunesTypography.sans(
                       fontSize: 12,
                       height: 1.5,
-                      color: RobotTheme.text2,
+                      color: DunesColors.resolve(context, RobotTheme.text2),
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -126,7 +130,8 @@ class _NativeRobotConsultCreatePageState
                     style: DunesTypography.sans(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: RobotTheme.text,
+                      color: DunesColors.resolve(context, RobotTheme.text),
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -138,20 +143,40 @@ class _NativeRobotConsultCreatePageState
                     decoration: InputDecoration(
                       hintText: '例如：本周灯塔经营异常有哪些？帮我整理结论',
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
                       contentPadding: const EdgeInsets.all(14),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: RobotTheme.cardBorder),
+                        borderSide: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            RobotTheme.cardBorder,
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: RobotTheme.cardBorder),
+                        borderSide: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            RobotTheme.cardBorder,
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(
-                          color: RobotTheme.purple,
+                        borderSide: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            RobotTheme.purple,
+                            role: DunesColorRole.border,
+                          ),
                           width: 1.4,
                         ),
                       ),
@@ -167,10 +192,17 @@ class _NativeRobotConsultCreatePageState
                 child: FilledButton(
                   onPressed: _submitting ? null : _start,
                   style: FilledButton.styleFrom(
-                    backgroundColor: RobotTheme.purple,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor:
-                        RobotTheme.purple.withValues(alpha: 0.45),
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      RobotTheme.purple,
+                      role: DunesColorRole.surface,
+                    ),
+                    foregroundColor: DunesColors.resolve(context, Colors.white),
+                    disabledBackgroundColor: DunesColors.resolve(
+                      context,
+                      RobotTheme.purple,
+                      role: DunesColorRole.surface,
+                    ).withValues(alpha: 0.45),
                     minimumSize: const Size.fromHeight(48),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -181,12 +213,12 @@ class _NativeRobotConsultCreatePageState
                     ),
                   ),
                   child: _submitting
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 22,
                           height: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.2,
-                            color: Colors.white,
+                            color: DunesColors.resolve(context, Colors.white),
                           ),
                         )
                       : const Text('开始'),

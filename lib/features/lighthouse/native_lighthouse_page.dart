@@ -176,10 +176,13 @@ class _LhAppBrandMark extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(size * 0.3),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [_LhPlum.deep, _LhPlum.primary],
+          colors: [
+            DunesColors.resolve(context, _LhPlum.deep),
+            DunesColors.resolve(context, _LhPlum.primary),
+          ],
         ),
         boxShadow: [
           BoxShadow(
@@ -1466,7 +1469,14 @@ class _StatDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 1),
-      child: Container(width: 0.5, color: LhColors.line2.withAlpha(180)),
+      child: Container(
+        width: 0.5,
+        color: DunesColors.resolve(
+          context,
+          LhColors.line2,
+          role: DunesColorRole.surface,
+        ).withAlpha(180),
+      ),
     );
   }
 }
@@ -1631,8 +1641,8 @@ class _LhAuroraState extends State<_LhAurora> with TickerProviderStateMixin {
                     center: Alignment(c1x, c1y),
                     radius: r1,
                     colors: [
-                      _LhPlum.primary.withAlpha(a1),
-                      _LhPlum.primary.withAlpha(0),
+                      DunesColors.resolve(ctx, _LhPlum.primary).withAlpha(a1),
+                      DunesColors.resolve(ctx, _LhPlum.primary).withAlpha(0),
                     ],
                     stops: const [0.0, 0.7],
                   ),
@@ -1645,8 +1655,8 @@ class _LhAuroraState extends State<_LhAurora> with TickerProviderStateMixin {
                     center: Alignment(c2x, c2y),
                     radius: r2,
                     colors: [
-                      _LhPlum.deep.withAlpha(a2),
-                      _LhPlum.deep.withAlpha(0),
+                      DunesColors.resolve(ctx, _LhPlum.deep).withAlpha(a2),
+                      DunesColors.resolve(ctx, _LhPlum.deep).withAlpha(0),
                     ],
                     stops: const [0.0, 0.75],
                   ),
@@ -1659,8 +1669,8 @@ class _LhAuroraState extends State<_LhAurora> with TickerProviderStateMixin {
                     center: Alignment(c3x, c3y),
                     radius: 0.55,
                     colors: [
-                      Colors.white.withAlpha(a3),
-                      Colors.white.withAlpha(0),
+                      DunesColors.resolve(ctx, Colors.white).withAlpha(a3),
+                      DunesColors.resolve(ctx, Colors.white).withAlpha(0),
                     ],
                     stops: const [0.0, 0.7],
                   ),
@@ -1807,11 +1817,11 @@ class _LhSheenState extends State<_LhSheen>
               begin: const Alignment(-1.0, -0.3),
               end: const Alignment(1.0, 0.3),
               colors: [
-                Colors.white.withAlpha(0),
-                Colors.white.withAlpha(0),
-                Colors.white.withAlpha(peakAlpha),
-                Colors.white.withAlpha(0),
-                Colors.white.withAlpha(0),
+                DunesColors.resolve(ctx, Colors.white).withAlpha(0),
+                DunesColors.resolve(ctx, Colors.white).withAlpha(0),
+                DunesColors.resolve(ctx, Colors.white).withAlpha(peakAlpha),
+                DunesColors.resolve(ctx, Colors.white).withAlpha(0),
+                DunesColors.resolve(ctx, Colors.white).withAlpha(0),
               ],
               stops: [
                 (band - 0.30).clamp(0.0, 1.0),
@@ -1945,7 +1955,11 @@ class _LhPulseDotState extends State<_LhPulseDot>
                 width: ringSize,
                 height: ringSize,
                 decoration: BoxDecoration(
-                  color: widget.color.withAlpha(ringAlpha),
+                  color: DunesColors.resolveNullable(
+                    ctx,
+                    widget.color.withAlpha(ringAlpha),
+                    role: DunesColorRole.surface,
+                  ),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -1954,7 +1968,11 @@ class _LhPulseDotState extends State<_LhPulseDot>
                 width: widget.size,
                 height: widget.size,
                 decoration: BoxDecoration(
-                  color: widget.color,
+                  color: DunesColors.resolveNullable(
+                    ctx,
+                    widget.color,
+                    role: DunesColorRole.surface,
+                  ),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
@@ -4090,14 +4108,28 @@ class _LhHeroMultiTrendState extends State<_LhHeroMultiTrend>
                       decoration: BoxDecoration(
                         // 极淡的紫底而不是纯白：卡本身是 #FFFDFF，纯白按钮
                         // 只剩一圈描边，在手机上根本注意不到有这么个东西。
-                        color: _LhPlum.primary.withAlpha(20),
+                        color: DunesColors.resolve(
+                          context,
+                          _LhPlum.primary,
+                          role: DunesColorRole.surface,
+                        ).withAlpha(20),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: _LhPlum.heroEdge, width: 0.7),
+                        border: Border.all(
+                          color: DunesColors.resolve(
+                            context,
+                            _LhPlum.heroEdge,
+                            role: DunesColorRole.border,
+                          ),
+                          width: 0.7,
+                        ),
                       ),
                       child: Icon(
                         Icons.open_in_full_rounded,
                         size: 9,
-                        color: _LhPlum.primary.withAlpha(215),
+                        color: DunesColors.resolve(
+                          context,
+                          _LhPlum.primary,
+                        ).withAlpha(215),
                       ),
                     ),
                   ),
@@ -4879,13 +4911,24 @@ class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           // 纵向渐变而不是纯色：全屏一整片 #FFFDFF 会显得空，往下压一点雾紫
           // 让山脊的下缘有个落脚的地。两端色差只有 8 点亮度，不会抢线。
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: <Color>[Color(0xFFFFFDFF), Color(0xFFF4EFFA)],
+            colors: <Color>[
+              DunesColors.resolve(
+                context,
+                Color(0xFFFFFDFF),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFF4EFFA),
+                role: DunesColorRole.surface,
+              ),
+            ],
           ),
         ),
         child: SafeArea(
@@ -4970,8 +5013,17 @@ class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
         : widget.subtitle;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 8, 12),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFE4DCF4), width: 1)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE4DCF4),
+              role: DunesColorRole.border,
+            ),
+            width: 1,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -4979,7 +5031,11 @@ class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
             width: 3,
             height: 26,
             decoration: BoxDecoration(
-              color: _LhPlum.primary,
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.primary,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(1.5),
             ),
           ),
@@ -4995,9 +5051,10 @@ class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
                   overflow: TextOverflow.ellipsis,
                   style: LhTypography.sans(
                     size: 15,
-                    color: LhColors.ink,
+                    color: DunesColors.resolve(context, LhColors.ink),
                     weight: FontWeight.w700,
                     height: 1.1,
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -5008,9 +5065,10 @@ class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
                       right,
                       style: LhTypography.mono(
                         size: 10.5,
-                        color: LhColors.mute,
+                        color: DunesColors.resolve(context, LhColors.mute),
                         weight: FontWeight.w600,
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                     if (widget.partialLast) ...[
@@ -5021,10 +5079,18 @@ class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: LhColors.paper,
+                          color: DunesColors.resolve(
+                            context,
+                            LhColors.paper,
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: _LhPlum.heroEdge,
+                            color: DunesColors.resolve(
+                              context,
+                              _LhPlum.heroEdge,
+                              role: DunesColorRole.border,
+                            ),
                             width: 0.7,
                           ),
                         ),
@@ -5032,9 +5098,10 @@ class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
                           '末期进行中',
                           style: LhTypography.mono(
                             size: 8.5,
-                            color: LhColors.mute2,
+                            color: DunesColors.resolve(context, LhColors.mute2),
                             weight: FontWeight.w700,
                             height: 1.0,
+                            context: context,
                           ),
                         ),
                       ),
@@ -5047,10 +5114,14 @@ class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => Navigator.of(context).maybePop(),
-            child: const SizedBox(
+            child: SizedBox(
               width: 44,
               height: 44,
-              child: Icon(Icons.close_rounded, size: 20, color: LhColors.mute),
+              child: Icon(
+                Icons.close_rounded,
+                size: 20,
+                color: DunesColors.resolve(context, LhColors.mute),
+              ),
             ),
           ),
         ],
@@ -6451,12 +6522,20 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
     final ruleThick = Container(
       height: 1.5,
       width: tableWidth,
-      color: LhColors.ink.withAlpha(215),
+      color: DunesColors.resolve(
+        context,
+        LhColors.ink,
+        role: DunesColorRole.surface,
+      ).withAlpha(215),
     );
     final ruleThin = Container(
       height: 0.5,
       width: tableWidth,
-      color: const Color(0xFFE6E2EE),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFE6E2EE),
+        role: DunesColorRole.surface,
+      ),
     );
 
     return Column(
@@ -6524,25 +6603,31 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                 children: [
                   TextSpan(
                     text: '$n 项',
-                    style: LhTypography.sans(size: 10.5, color: LhColors.mute),
+                    style: LhTypography.sans(
+                      size: 10.5,
+                      color: DunesColors.resolve(context, LhColors.mute),
+                      context: context,
+                    ),
                   ),
                   if (widget.vsLabel.isNotEmpty)
                     TextSpan(
                       text: '  ·  ${widget.vsLabel}',
                       style: LhTypography.mono(
                         size: 9.5,
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(context, LhColors.mute2),
                         weight: FontWeight.w500,
                         letterSpacing: 0.3,
+                        context: context,
                       ),
                     ),
                   TextSpan(
                     text: '  ·  tap 表头切列排序',
                     style: LhTypography.mono(
                       size: 9,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w500,
                       letterSpacing: 0.3,
+                      context: context,
                     ),
                   ),
                 ],
@@ -6552,9 +6637,13 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: widget.onClose,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.all(8),
-              child: Icon(Icons.close_rounded, size: 16, color: LhColors.mute),
+              child: Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: DunesColors.resolve(context, LhColors.mute),
+              ),
             ),
           ),
         ],
@@ -6585,8 +6674,9 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                     style: LhTypography.sans(
                       size: 12,
                       weight: FontWeight.w700,
-                      color: LhColors.ink,
+                      color: DunesColors.resolve(context, LhColors.ink),
                       letterSpacing: -0.1,
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -6594,9 +6684,10 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                     'RANK',
                     style: LhTypography.mono(
                       size: 7.5,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w700,
                       letterSpacing: 1.0,
+                      context: context,
                     ),
                   ),
                 ],
@@ -6617,8 +6708,9 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                     style: LhTypography.sans(
                       size: 12,
                       weight: FontWeight.w700,
-                      color: LhColors.ink,
+                      color: DunesColors.resolve(context, LhColors.ink),
                       letterSpacing: -0.1,
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -6626,9 +6718,10 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                     'NAME',
                     style: LhTypography.mono(
                       size: 7.5,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w700,
                       letterSpacing: 1.0,
+                      context: context,
                     ),
                   ),
                 ],
@@ -6651,7 +6744,13 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
       child: Container(
         width: w,
         height: _headerH,
-        color: isActive ? _LhPlum.mist : Colors.transparent,
+        color: isActive
+            ? DunesColors.resolve(
+                context,
+                _LhPlum.mist,
+                role: DunesColorRole.surface,
+              )
+            : Colors.transparent,
         padding: const EdgeInsets.only(right: 8, left: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -6666,8 +6765,11 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                   style: LhTypography.sans(
                     size: 12,
                     weight: FontWeight.w700,
-                    color: isActive ? _LhPlum.deep : LhColors.ink,
+                    color: isActive
+                        ? DunesColors.resolve(context, _LhPlum.deep)
+                        : DunesColors.resolve(context, LhColors.ink),
                     letterSpacing: -0.1,
+                    context: context,
                   ),
                 ),
                 if (isActive) ...[
@@ -6676,8 +6778,9 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                     _sortDesc ? '▾' : '▴',
                     style: LhTypography.mono(
                       size: 9,
-                      color: _LhPlum.primary,
+                      color: DunesColors.resolve(context, _LhPlum.primary),
                       weight: FontWeight.w700,
+                      context: context,
                     ),
                   ),
                 ],
@@ -6688,9 +6791,12 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
               '${_metricEnKey(m.key)} · ${_metricUnitLabel(m)}',
               style: LhTypography.mono(
                 size: 7.5,
-                color: isActive ? _LhPlum.primary : LhColors.mute2,
+                color: isActive
+                    ? DunesColors.resolve(context, _LhPlum.primary)
+                    : DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w700,
                 letterSpacing: 1.0,
+                context: context,
               ),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
@@ -6714,18 +6820,31 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
     final rankSkin = lighthouseRankSkin(i);
     final isAlt = i.isOdd;
     // 微 zebra: 奇数行 mist, 偶数白, 主副对比不失彩
-    final rowBg = isAlt ? _LhPlum.mist : Colors.white;
+    final rowBg = isAlt
+        ? DunesColors.resolve(context, _LhPlum.mist)
+        : DunesColors.resolve(context, Colors.white);
     final shareOfActive = sumAbs > 0
         ? (e.values[_sortKey] ?? 0).abs() / sumAbs * 100
         : 0.0;
 
     return Container(
       decoration: BoxDecoration(
-        color: rowBg,
+        color: DunesColors.resolveNullable(
+          context,
+          rowBg,
+          role: DunesColorRole.surface,
+        ),
         border: isLast
             ? null
-            : const Border(
-                bottom: BorderSide(color: Color(0xFFE6E2EE), width: 0.5),
+            : Border(
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFE6E2EE),
+                    role: DunesColorRole.border,
+                  ),
+                  width: 0.5,
+                ),
               ),
       ),
       child: Row(
@@ -6736,7 +6855,14 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
             child: Row(
               children: [
                 if (rankSkin.isRanked)
-                  Container(width: 2, color: rankSkin.accent)
+                  Container(
+                    width: 2,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      rankSkin.accent,
+                      role: DunesColorRole.surface,
+                    ),
+                  )
                 else
                   const SizedBox(width: 2),
                 Expanded(
@@ -6749,6 +6875,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                               weight: FontWeight.w700,
                               color: lhRankPlum,
                               letterSpacing: -0.3,
+                              context: context,
                             ),
                           )
                         : Text(
@@ -6760,6 +6887,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                                   ? FontWeight.w700
                                   : FontWeight.w500,
                               letterSpacing: 0.3,
+                              context: context,
                             ),
                           ),
                   ),
@@ -6781,8 +6909,9 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                     style: LhTypography.sans(
                       size: 11.5,
                       weight: FontWeight.w700,
-                      color: LhColors.ink,
+                      color: DunesColors.resolve(context, LhColors.ink),
                       letterSpacing: -0.1,
+                      context: context,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -6792,9 +6921,10 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                     _buildGroupShareText(e.group, shareOfActive),
                     style: LhTypography.mono(
                       size: 8,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w500,
                       letterSpacing: 0.3,
+                      context: context,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -6822,7 +6952,9 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
     final v = e.values[m.key] ?? 0;
     final isNeg = v < 0;
     final w = _metricColWidth(m.key);
-    final valColor = isNeg ? LhColors.pos : LhColors.ink;
+    final valColor = isNeg
+        ? DunesColors.resolve(context, LhColors.pos)
+        : DunesColors.resolve(context, LhColors.ink);
 
     if (!isActive) {
       // ── 非活跃列: mono 单值,右对齐,简洁 ──
@@ -6837,6 +6969,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                   size: 10.5,
                   color: valColor,
                   weight: FontWeight.w600,
+                  context: context,
                 ),
               )
             : RichText(
@@ -6847,8 +6980,9 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                         text: '-',
                         style: LhTypography.mono(
                           size: 10.5,
-                          color: LhColors.pos,
+                          color: DunesColors.resolve(context, LhColors.pos),
                           weight: FontWeight.w600,
+                          context: context,
                         ),
                       ),
                     TextSpan(
@@ -6857,14 +6991,16 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                         size: 10.5,
                         color: valColor,
                         weight: FontWeight.w600,
+                        context: context,
                       ),
                     ),
                     TextSpan(
                       text: _unit(v.abs()),
                       style: LhTypography.mono(
                         size: 8,
-                        color: LhColors.mute,
+                        color: DunesColors.resolve(context, LhColors.mute),
                         weight: FontWeight.w500,
+                        context: context,
                       ),
                     ),
                   ],
@@ -6880,7 +7016,11 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
     return Container(
       width: w,
       // 通用 plum 浅底,叠加在 zebra 上,视觉锁定活跃列
-      color: _LhPlum.deep.withAlpha(10),
+      color: DunesColors.resolve(
+        context,
+        _LhPlum.deep,
+        role: DunesColorRole.surface,
+      ).withAlpha(10),
       padding: const EdgeInsets.only(right: 8, left: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -6896,6 +7036,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                     weight: FontWeight.w700,
                     color: valColor,
                     letterSpacing: -0.2,
+                    context: context,
                   ),
                 )
               : RichText(
@@ -6907,8 +7048,9 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                           style: LhTypography.sans(
                             size: 14,
                             weight: FontWeight.w700,
-                            color: LhColors.pos,
+                            color: DunesColors.resolve(context, LhColors.pos),
                             letterSpacing: -0.2,
+                            context: context,
                           ),
                         ),
                       TextSpan(
@@ -6918,14 +7060,16 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                           weight: FontWeight.w700,
                           color: valColor,
                           letterSpacing: -0.2,
+                          context: context,
                         ),
                       ),
                       TextSpan(
                         text: _unit(absV),
                         style: LhTypography.mono(
                           size: 8.5,
-                          color: LhColors.mute,
+                          color: DunesColors.resolve(context, LhColors.mute),
                           weight: FontWeight.w500,
+                          context: context,
                         ),
                       ),
                     ],
@@ -6938,9 +7082,12 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
               _fmtSignedMomPct(delta, unit: m.isRate ? 'pp' : '%', digits: 1),
               style: LhTypography.mono(
                 size: 8.5,
-                color: delta >= 0 ? LhColors.neg : LhColors.pos,
+                color: delta >= 0
+                    ? DunesColors.resolve(context, LhColors.neg)
+                    : DunesColors.resolve(context, LhColors.pos),
                 weight: FontWeight.w600,
                 letterSpacing: 0.2,
+                context: context,
               ),
             )
           else
@@ -6948,8 +7095,9 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
               '—',
               style: LhTypography.mono(
                 size: 8.5,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
         ],
@@ -6986,9 +7134,10 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                     label,
                     style: LhTypography.sans(
                       size: 11,
-                      color: LhColors.mute,
+                      color: DunesColors.resolve(context, LhColors.mute),
                       weight: FontWeight.w600,
                       letterSpacing: 0.2,
+                      context: context,
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -6996,9 +7145,10 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                     '· $glyph',
                     style: LhTypography.mono(
                       size: 8.5,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w700,
                       letterSpacing: 1.0,
+                      context: context,
                     ),
                   ),
                 ],
@@ -7017,7 +7167,9 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
     final isActive = _sortKey == m.key;
     final w = _metricColWidth(m.key);
     final isNeg = v < 0;
-    final valColor = isNeg ? LhColors.pos : LhColors.ink2;
+    final valColor = isNeg
+        ? DunesColors.resolve(context, LhColors.pos)
+        : DunesColors.resolve(context, LhColors.ink2);
 
     // isRate + isTotal: Σ 无意义,dash
     Widget content;
@@ -7026,8 +7178,9 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
         '—',
         style: LhTypography.mono(
           size: 10,
-          color: LhColors.mute2,
+          color: DunesColors.resolve(context, LhColors.mute2),
           weight: FontWeight.w500,
+          context: context,
         ),
       );
     } else if (m.isRate) {
@@ -7037,6 +7190,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
           size: 10.5,
           color: valColor,
           weight: FontWeight.w600,
+          context: context,
         ),
       );
     } else {
@@ -7048,8 +7202,9 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                 text: '-',
                 style: LhTypography.mono(
                   size: 10.5,
-                  color: LhColors.pos,
+                  color: DunesColors.resolve(context, LhColors.pos),
                   weight: FontWeight.w600,
+                  context: context,
                 ),
               ),
             TextSpan(
@@ -7058,14 +7213,16 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                 size: 10.5,
                 color: valColor,
                 weight: FontWeight.w600,
+                context: context,
               ),
             ),
             TextSpan(
               text: _unit(v.abs()),
               style: LhTypography.mono(
                 size: 8,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
           ],
@@ -7077,7 +7234,13 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
       width: w,
       alignment: Alignment.centerRight,
       padding: const EdgeInsets.only(right: 8, left: 4),
-      color: isActive ? _LhPlum.deep.withAlpha(10) : null,
+      color: isActive
+          ? DunesColors.resolve(
+              context,
+              _LhPlum.deep,
+              role: DunesColorRole.surface,
+            ).withAlpha(10)
+          : null,
       child: content,
     );
   }
@@ -7507,8 +7670,8 @@ class _TrendChartState extends State<_TrendChart>
         ? selected
         : spec.pts.length - 1;
     return lighthouseTrendValueEarns(spec.pts[index])
-        ? LhColors.neg
-        : LhColors.pos;
+        ? DunesColors.resolve(context, LhColors.neg)
+        : DunesColors.resolve(context, LhColors.pos);
   }
 
   int? _selectedIndex;
@@ -7889,7 +8052,9 @@ class _TrendChartState extends State<_TrendChart>
     final profitHero =
         _heroIndexFor(_visibleFlags) == lighthouseTrendProfitIndex;
     final c = profitHero
-        ? (v >= 0 ? LhColors.neg : LhColors.pos)
+        ? (v >= 0
+              ? DunesColors.resolve(context, LhColors.neg)
+              : DunesColors.resolve(context, LhColors.pos))
         : lighthouseTrendEmphasisInk(_emphasisColor);
     final title = forecast ? (profitHero ? '月末预测利润' : '月末预测') : '已发生';
     final String sub;
@@ -7918,7 +8083,11 @@ class _TrendChartState extends State<_TrendChart>
         child: Container(
           padding: const EdgeInsets.fromLTRB(7, 4, 7, 4),
           decoration: BoxDecoration(
-            color: Colors.white.withAlpha(248),
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ).withAlpha(248),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: c.withAlpha(60), width: 0.6),
             boxShadow: [
@@ -7939,9 +8108,10 @@ class _TrendChartState extends State<_TrendChart>
                     title,
                     style: LhTypography.mono(
                       size: 7.5,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w700,
                       letterSpacing: 0.4,
+                      context: context,
                     ),
                   ),
                   const Spacer(),
@@ -7952,6 +8122,7 @@ class _TrendChartState extends State<_TrendChart>
                       color: c,
                       weight: FontWeight.w800,
                       letterSpacing: -0.1,
+                      context: context,
                     ),
                   ),
                 ],
@@ -7963,9 +8134,10 @@ class _TrendChartState extends State<_TrendChart>
                   overflow: TextOverflow.ellipsis,
                   style: LhTypography.mono(
                     size: 7,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     weight: FontWeight.w500,
                     letterSpacing: 0.2,
+                    context: context,
                   ),
                 ),
             ],
@@ -7980,9 +8152,20 @@ class _TrendChartState extends State<_TrendChart>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(245),
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ).withAlpha(245),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: _LhPlum.deep.withAlpha(18), width: 0.5),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _LhPlum.deep,
+            role: DunesColorRole.border,
+          ).withAlpha(18),
+          width: 0.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: _LhPlum.deep.withAlpha(26),
@@ -7999,18 +8182,20 @@ class _TrendChartState extends State<_TrendChart>
               text: '$tag ',
               style: LhTypography.mono(
                 size: 6.8,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w700,
                 letterSpacing: 0.8,
+                context: context,
               ),
             ),
             TextSpan(
               text: _fmtHeroShort(value),
               style: LhTypography.mono(
                 size: 8,
-                color: _LhPlum.deep,
+                color: DunesColors.resolve(context, _LhPlum.deep),
                 weight: FontWeight.w700,
                 letterSpacing: 0.1,
+                context: context,
               ),
             ),
           ],
@@ -8126,9 +8311,20 @@ class _TrendChartState extends State<_TrendChart>
     final pill = Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(240),
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ).withAlpha(240),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _LhPlum.deep.withAlpha(22), width: 0.5),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _LhPlum.deep,
+            role: DunesColorRole.border,
+          ).withAlpha(22),
+          width: 0.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: _LhPlum.deep.withAlpha(22),
@@ -8147,7 +8343,10 @@ class _TrendChartState extends State<_TrendChart>
               height: 7,
               child: CircularProgressIndicator(
                 strokeWidth: 1.1,
-                color: _LhPlum.primary.withAlpha(200),
+                color: DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                ).withAlpha(200),
               ),
             ),
             const SizedBox(width: 4),
@@ -8156,16 +8355,19 @@ class _TrendChartState extends State<_TrendChart>
             text,
             style: LhTypography.mono(
               size: 7.5,
-              color: onTap != null ? _LhPlum.deep : LhColors.mute2,
+              color: onTap != null
+                  ? DunesColors.resolve(context, _LhPlum.deep)
+                  : DunesColors.resolve(context, LhColors.mute2),
               weight: FontWeight.w700,
               letterSpacing: 0.3,
+              context: context,
             ),
           ),
           if (onTap != null)
             Icon(
               Icons.chevron_right_rounded,
               size: 10,
-              color: _LhPlum.deep.withAlpha(200),
+              color: DunesColors.resolve(context, _LhPlum.deep).withAlpha(200),
             ),
         ],
       ),
@@ -8527,9 +8729,13 @@ class _TrendChartState extends State<_TrendChart>
                       _laneLabelFor(laneIndex),
                       style: LhTypography.mono(
                         size: 7,
-                        color: LhColors.mute2.withAlpha(170),
+                        color: DunesColors.resolve(
+                          ctx,
+                          LhColors.mute2,
+                        ).withAlpha(170),
                         weight: FontWeight.w600,
                         letterSpacing: 0.4,
+                        context: ctx,
                       ),
                     ),
                   ),
@@ -8562,7 +8768,9 @@ class _TrendChartState extends State<_TrendChart>
   Widget _legendChip(String label, double value, Color color, bool isSelected) {
     final isNeg = value < 0;
     final absVal = value.abs();
-    final valueColor = isNeg ? LhColors.pos : LhColors.ink2;
+    final valueColor = isNeg
+        ? DunesColors.resolve(context, LhColors.pos)
+        : DunesColors.resolve(context, LhColors.ink2);
     // v2.10 · 数字 count-up;拖动态 (isSelected=true) immediate 直接显示,
     //         避免每帧 tween 追手指。合计态切换时 900ms 滑动到位。
     return Row(
@@ -8573,7 +8781,11 @@ class _TrendChartState extends State<_TrendChart>
           width: 5,
           height: 5,
           decoration: BoxDecoration(
-            color: color,
+            color: DunesColors.resolveNullable(
+              context,
+              color,
+              role: DunesColorRole.surface,
+            ),
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
@@ -8589,9 +8801,10 @@ class _TrendChartState extends State<_TrendChart>
           label,
           style: LhTypography.sans(
             size: 9,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w500,
             letterSpacing: 0.3,
+            context: context,
           ),
         ),
         const SizedBox(width: 3),
@@ -8601,8 +8814,9 @@ class _TrendChartState extends State<_TrendChart>
             style: LhTypography.sans(
               size: 10,
               weight: FontWeight.w600,
-              color: LhColors.pos,
+              color: DunesColors.resolve(context, LhColors.pos),
               letterSpacing: -0.1,
+              context: context,
             ),
           ),
         _LhAnimatedNumber(
@@ -8621,14 +8835,16 @@ class _TrendChartState extends State<_TrendChart>
                   weight: FontWeight.w600,
                   color: valueColor,
                   letterSpacing: -0.1,
+                  context: ctx,
                 ),
               ),
               Text(
                 _unitMoney(v),
                 style: LhTypography.mono(
                   size: 8,
-                  color: LhColors.mute,
+                  color: DunesColors.resolve(ctx, LhColors.mute),
                   weight: FontWeight.w500,
+                  context: ctx,
                 ),
               ),
             ],
@@ -8653,7 +8869,9 @@ class _TrendChartState extends State<_TrendChart>
     money: (v) =>
         '${v < 0 ? '−' : ''}${_fmtMoney(v.abs())}${_unitMoney(v.abs())}',
     accent: profit
-        ? (f.forecast >= 0 ? LhColors.neg : LhColors.pos)
+        ? (f.forecast >= 0
+              ? DunesColors.resolve(context, LhColors.neg)
+              : DunesColors.resolve(context, LhColors.pos))
         : lighthouseTrendEmphasisInk(_emphasisColor),
     onOpenReport: widget.onOpenForecastReport == null
         ? null
@@ -8671,9 +8889,10 @@ class _TrendChartState extends State<_TrendChart>
         text: '≡  ',
         style: LhTypography.mono(
           size: 9.5,
-          color: _LhPlum.primary,
+          color: DunesColors.resolve(context, _LhPlum.primary),
           weight: FontWeight.w800,
           letterSpacing: 0.3,
+          context: context,
         ),
       ),
     ];
@@ -8684,9 +8903,12 @@ class _TrendChartState extends State<_TrendChart>
           text: t,
           style: LhTypography.mono(
             size: 9,
-            color: isOperator(t) ? _LhPlum.primary : LhColors.ink2,
+            color: isOperator(t)
+                ? DunesColors.resolve(context, _LhPlum.primary)
+                : DunesColors.resolve(context, LhColors.ink2),
             weight: isOperator(t) ? FontWeight.w800 : FontWeight.w600,
             letterSpacing: 0.2,
+            context: context,
           ),
         ),
       );
@@ -8722,10 +8944,12 @@ class _TrendChartState extends State<_TrendChart>
     // 和下面那排指标格同一条规矩：只有越过 ±30% 才上红绿，其余走 ink2。
     // （mute2 是暖灰，一排小字叠起来会泛黄，跟这张卡的冷底打架。）
     final momColor = momPct == null
-        ? LhColors.mute2
+        ? DunesColors.resolve(context, LhColors.mute2)
         : (lighthouseDeltaIsLoud(momPct)
-              ? (momUp ? LhColors.neg : LhColors.pos)
-              : LhColors.ink2);
+              ? (momUp
+                    ? DunesColors.resolve(context, LhColors.neg)
+                    : DunesColors.resolve(context, LhColors.pos))
+              : DunesColors.resolve(context, LhColors.ink2));
     const tabular = [FontFeature.tabularFigures()];
     final compact = MediaQuery.sizeOf(context).width < 430;
     final loudMom = momPct != null && lighthouseDeltaIsLoud(momPct);
@@ -8744,7 +8968,11 @@ class _TrendChartState extends State<_TrendChart>
                       width: compact ? 10 : 12,
                       height: 2.5,
                       decoration: BoxDecoration(
-                        color: color,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          color,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(1.5),
                       ),
                     )
@@ -8752,7 +8980,11 @@ class _TrendChartState extends State<_TrendChart>
                       width: 4,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: LhColors.mute2.withAlpha(110),
+                        color: DunesColors.resolve(
+                          context,
+                          LhColors.mute2,
+                          role: DunesColorRole.surface,
+                        ).withAlpha(110),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -8771,12 +9003,15 @@ class _TrendChartState extends State<_TrendChart>
                     // 标签字号 / 字重跟账本摘要格同一档，不自造一套大字。
                     style: LhTypography.sans(
                       size: compact ? 9.5 : lighthouseLedgerMetricLabelFontSize,
-                      color: drawn || active ? LhColors.ink2 : LhColors.mute2,
+                      color: drawn || active
+                          ? DunesColors.resolve(context, LhColors.ink2)
+                          : DunesColors.resolve(context, LhColors.mute2),
                       weight: drawn || active
                           ? FontWeight.w600
                           : FontWeight.w500,
                       height: 1.0,
                       letterSpacing: 0.2,
+                      context: context,
                     ),
                   ),
           ),
@@ -8797,7 +9032,10 @@ class _TrendChartState extends State<_TrendChart>
                 style:
                     LhTypography.number(
                       size: compact ? 11 : lighthouseLedgerValueFontSize,
-                      color: negative ? LhColors.pos : LhColors.ink,
+                      color: negative
+                          ? DunesColors.resolve(context, LhColors.pos)
+                          : DunesColors.resolve(context, LhColors.ink),
+                      context: context,
                     ).copyWith(
                       fontWeight: drawn || active
                           ? FontWeight.w700
@@ -8827,6 +9065,7 @@ class _TrendChartState extends State<_TrendChart>
                   weight: loudMom ? FontWeight.w700 : FontWeight.w600,
                   height: 1.0,
                   letterSpacing: -0.2,
+                  context: context,
                 ).copyWith(fontFeatures: tabular),
               ),
             ),
@@ -8855,11 +9094,21 @@ class _TrendChartState extends State<_TrendChart>
           decoration: BoxDecoration(
             // 面板改白之后，选中态不能再靠「更白」浮起来：翻过来用淡紫面，
             // 边和投影仍是账本那一套。
-            color: active ? _LhPlum.mist : Colors.transparent,
+            color: active
+                ? DunesColors.resolve(
+                    context,
+                    _LhPlum.mist,
+                    role: DunesColorRole.surface,
+                  )
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: active
-                  ? _LhPlum.primary.withAlpha(46)
+                  ? DunesColors.resolve(
+                      context,
+                      _LhPlum.primary,
+                      role: DunesColorRole.border,
+                    ).withAlpha(46)
                   : Colors.transparent,
               width: 0.8,
             ),
@@ -8937,7 +9186,11 @@ class _TrendChartState extends State<_TrendChart>
                 height: 12,
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? _LhPlum.deep
+                      ? DunesColors.resolve(
+                          context,
+                          _LhPlum.deep,
+                          role: DunesColorRole.surface,
+                        )
                       : lighthouseTrendEmphasisInk(_emphasisColor),
                   borderRadius: BorderRadius.circular(1.5),
                 ),
@@ -8947,9 +9200,12 @@ class _TrendChartState extends State<_TrendChart>
                 statusText,
                 style: LhTypography.mono(
                   size: 9.5,
-                  color: isSelected ? _LhPlum.deep : LhColors.ink2,
+                  color: isSelected
+                      ? DunesColors.resolve(context, _LhPlum.deep)
+                      : DunesColors.resolve(context, LhColors.ink2),
                   weight: FontWeight.w700,
                   letterSpacing: 0.5,
+                  context: context,
                 ),
               ),
               if (!compactLegend) ...[
@@ -8958,8 +9214,9 @@ class _TrendChartState extends State<_TrendChart>
                   _soloKey == null ? '点指标切换曲线' : '已聚焦单项',
                   style: LhTypography.sans(
                     size: 9,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     weight: FontWeight.w500,
+                    context: context,
                   ),
                 ),
               ],
@@ -8980,9 +9237,10 @@ class _TrendChartState extends State<_TrendChart>
                       '显示全部',
                       style: LhTypography.mono(
                         size: 9.5,
-                        color: _LhPlum.primary,
+                        color: DunesColors.resolve(context, _LhPlum.primary),
                         weight: FontWeight.w700,
                         letterSpacing: 0.4,
+                        context: context,
                       ),
                     ),
                   ),
@@ -8992,12 +9250,12 @@ class _TrendChartState extends State<_TrendChart>
                   behavior: HitTestBehavior.opaque,
                   onTap: _clearSelection,
 
-                  child: const Padding(
+                  child: Padding(
                     padding: EdgeInsets.all(2),
                     child: Icon(
                       Icons.close_rounded,
                       size: 14,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                     ),
                   ),
                 ),
@@ -9134,7 +9392,11 @@ class _TrendChartState extends State<_TrendChart>
               return Container(
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 decoration: BoxDecoration(
-                  color: LhColors.paper,
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.paper,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(
                     lighthouseLedgerSummaryPanelRadius,
                   ),
@@ -9151,7 +9413,11 @@ class _TrendChartState extends State<_TrendChart>
                           ),
                           // Hero 里的发丝线走紫（全页 hairline 的规矩）：
                           // line2 是暖米色，铺在白面板上会泛黄。
-                          color: _LhPlum.line,
+                          color: DunesColors.resolve(
+                            context,
+                            _LhPlum.line,
+                            role: DunesColorRole.surface,
+                          ),
                         ),
                       Row(
                         children: [
@@ -9161,7 +9427,11 @@ class _TrendChartState extends State<_TrendChart>
                               Container(
                                 width: lighthouseLedgerSummaryRowDividerHeight,
                                 height: 14,
-                                color: _LhPlum.line,
+                                color: DunesColors.resolve(
+                                  context,
+                                  _LhPlum.line,
+                                  role: DunesColorRole.surface,
+                                ),
                               ),
                             Expanded(
                               child: i + c < keys.length
@@ -9193,18 +9463,20 @@ class _TrendChartState extends State<_TrendChart>
                 widget.title,
                 style: LhTypography.mono(
                   size: 9.5,
-                  color: LhColors.mute,
+                  color: DunesColors.resolve(context, LhColors.mute),
                   weight: FontWeight.w600,
                   letterSpacing: 1.2,
+                  context: context,
                 ),
               ),
               Text(
                 widget.rangeLabel,
                 style: LhTypography.mono(
                   size: 9,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w500,
                   letterSpacing: 0.3,
+                  context: context,
                 ),
               ),
             ],
@@ -9264,12 +9536,13 @@ class _TrendChartState extends State<_TrendChart>
                               style: LhTypography.mono(
                                 size: labelSize,
                                 color: widget.partialPeriod && i == n - 1
-                                    ? _LhPlum.deep
-                                    : LhColors.mute2,
+                                    ? DunesColors.resolve(ctx, _LhPlum.deep)
+                                    : DunesColors.resolve(ctx, LhColors.mute2),
                                 weight: widget.partialPeriod && i == n - 1
                                     ? FontWeight.w700
                                     : FontWeight.w500,
                                 letterSpacing: 0.1,
+                                context: ctx,
                               ),
                             ),
                           ),
@@ -9312,12 +9585,13 @@ class _TrendChartState extends State<_TrendChart>
                           style: LhTypography.mono(
                             size: labelSize,
                             color: currentAnchor(i)
-                                ? _LhPlum.deep
-                                : LhColors.mute2,
+                                ? DunesColors.resolve(ctx, _LhPlum.deep)
+                                : DunesColors.resolve(ctx, LhColors.mute2),
                             weight: currentAnchor(i)
                                 ? FontWeight.w700
                                 : FontWeight.w500,
                             letterSpacing: 0.1,
+                            context: ctx,
                           ),
                         ),
                       ),
@@ -9337,9 +9611,10 @@ class _TrendChartState extends State<_TrendChart>
                     _viewportMode ? '拖动翻看历史 · 长按查看每点' : '拖动查看每点',
                     style: LhTypography.sans(
                       size: 9,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w500,
                       letterSpacing: 0.4,
+                      context: context,
                     ),
                   ),
           ),
@@ -9469,6 +9744,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
           color: accent,
           weight: FontWeight.w800,
           letterSpacing: 0.4,
+          context: context,
         ),
       ),
     ];
@@ -9484,7 +9760,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
         color = accent;
         weight = FontWeight.w700;
       } else {
-        color = LhColors.ink2;
+        color = DunesColors.resolve(context, LhColors.ink2);
         weight = FontWeight.w600;
       }
       spans.add(
@@ -9495,6 +9771,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
             color: color,
             weight: weight,
             letterSpacing: 0.3,
+            context: context,
           ),
         ),
       );
@@ -9540,7 +9817,11 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
         child: Center(
           child: Text(
             '暂无趋势数据',
-            style: LhTypography.sans(size: 11, color: LhColors.mute),
+            style: LhTypography.sans(
+              size: 11,
+              color: DunesColors.resolve(context, LhColors.mute),
+              context: context,
+            ),
           ),
         ),
       );
@@ -9656,9 +9937,12 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     final unitFmt = widget.isRate ? '%' : _unitMoney(displayValue.abs());
     final valueStyle = LhTypography.mono(
       size: 9,
-      color: displayValue < 0 ? LhColors.pos : widget.color,
+      color: displayValue < 0
+          ? DunesColors.resolve(context, LhColors.pos)
+          : widget.color,
       weight: FontWeight.w700,
       height: 1.0,
+      context: context,
     );
 
     return Column(
@@ -9671,9 +9955,12 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
               statusText,
               style: LhTypography.mono(
                 size: 8.5,
-                color: isSelected ? widget.color : LhColors.mute2,
+                color: isSelected
+                    ? widget.color
+                    : DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w700,
                 letterSpacing: 0.8,
+                context: context,
               ),
             ),
             const Spacer(),
@@ -9681,12 +9968,12 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: _clearSelection,
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.all(2),
                   child: Icon(
                     Icons.close_rounded,
                     size: 11,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                   ),
                 ),
               ),
@@ -9704,7 +9991,11 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                   width: 10,
                   height: 2.5,
                   decoration: BoxDecoration(
-                    color: widget.color,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      widget.color,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(1),
                   ),
                 ),
@@ -9713,9 +10004,10 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                   widget.metricLabel,
                   style: LhTypography.mono(
                     size: 7.5,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     weight: FontWeight.w600,
                     height: 1.0,
+                    context: context,
                   ),
                 ),
                 const SizedBox(width: 3),
@@ -9740,6 +10032,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                     weight: FontWeight.w700,
                     letterSpacing: 0.1,
                     height: 1.0,
+                    context: context,
                   ),
                 ),
               ),
@@ -9762,6 +10055,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
         color: color,
         weight: FontWeight.w800,
         letterSpacing: letter,
+        context: context,
       ),
     );
   }
@@ -9772,7 +10066,11 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
       width: 2,
       height: 2,
       decoration: BoxDecoration(
-        color: LhColors.line,
+        color: DunesColors.resolve(
+          context,
+          LhColors.line,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(1),
       ),
     ),
@@ -9801,8 +10099,22 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     return Container(
       decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: LhColors.line, width: 0.8),
-          bottom: BorderSide(color: LhColors.line, width: 0.8),
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line,
+              role: DunesColorRole.border,
+            ),
+            width: 0.8,
+          ),
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line,
+              role: DunesColorRole.border,
+            ),
+            width: 0.8,
+          ),
         ),
       ),
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -9812,20 +10124,28 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
             child: _buildStatCol(
               'MIN',
               stats.min,
-              accent: currentIsMin ? widget.color : LhColors.mute2,
+              accent: currentIsMin
+                  ? widget.color
+                  : DunesColors.resolve(context, LhColors.mute2),
               accentValue: currentIsMin,
             ),
           ),
           _statDivider(),
           Expanded(
-            child: _buildStatCol('AVG', stats.avg, accent: LhColors.mute2),
+            child: _buildStatCol(
+              'AVG',
+              stats.avg,
+              accent: DunesColors.resolve(context, LhColors.mute2),
+            ),
           ),
           _statDivider(),
           Expanded(
             child: _buildStatCol(
               'MAX',
               stats.max,
-              accent: currentIsMax ? widget.color : LhColors.mute2,
+              accent: currentIsMax
+                  ? widget.color
+                  : DunesColors.resolve(context, LhColors.mute2),
               accentValue: currentIsMax,
             ),
           ),
@@ -9843,8 +10163,15 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     );
   }
 
-  Widget _statDivider() =>
-      Container(width: 0.8, height: 34, color: LhColors.line);
+  Widget _statDivider() => Container(
+    width: 0.8,
+    height: 34,
+    color: DunesColors.resolve(
+      context,
+      LhColors.line,
+      role: DunesColorRole.surface,
+    ),
+  );
 
   Widget _buildStatCol(
     String label,
@@ -9862,6 +10189,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
             color: accent,
             weight: FontWeight.w800,
             letterSpacing: 1.2,
+            context: context,
           ),
         ),
         const SizedBox(height: 4),
@@ -9880,7 +10208,10 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                   widget.isRate ? v.toStringAsFixed(2) : _fmtMoney(v),
                   style: LhTypography.number(
                     size: 15,
-                    color: accentValue ? accent : LhColors.ink,
+                    color: accentValue
+                        ? accent
+                        : DunesColors.resolve(context, LhColors.ink),
+                    context: context,
                   ),
                 ),
                 const SizedBox(width: 1.5),
@@ -9888,8 +10219,9 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                   widget.isRate ? '%' : _unitMoney(v),
                   style: LhTypography.sans(
                     size: 8.5,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     weight: FontWeight.w500,
+                    context: context,
                   ),
                 ),
               ],
@@ -9914,16 +10246,16 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     Color bandColor;
     if (currentValue >= stats.p75) {
       bandLabel = '高位区间 · P75+';
-      bandColor = LhColors.copper;
+      bandColor = DunesColors.resolve(context, LhColors.copper);
     } else if (currentValue >= avg) {
       bandLabel = '均值以上';
-      bandColor = LhColors.ink2;
+      bandColor = DunesColors.resolve(context, LhColors.ink2);
     } else if (currentValue >= stats.p25) {
       bandLabel = '均值以下';
-      bandColor = LhColors.ink2;
+      bandColor = DunesColors.resolve(context, LhColors.ink2);
     } else {
       bandLabel = '低位区间 · P25-';
-      bandColor = LhColors.mute;
+      bandColor = DunesColors.resolve(context, LhColors.mute);
     }
 
     String vsAvgText;
@@ -9940,7 +10272,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
         Icon(
           Icons.arrow_right_rounded,
           size: 14,
-          color: bandColor.withAlpha(200),
+          color: DunesColors.resolveNullable(context, bandColor.withAlpha(200)),
         ),
         const SizedBox(width: 2),
         Flexible(
@@ -9951,26 +10283,29 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                   text: '本期 · ',
                   style: LhTypography.mono(
                     size: 9.5,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     weight: FontWeight.w600,
                     letterSpacing: 0.4,
+                    context: context,
                   ),
                 ),
                 TextSpan(
                   text: vsAvgText,
                   style: LhTypography.mono(
                     size: 9.5,
-                    color: LhColors.ink2,
+                    color: DunesColors.resolve(context, LhColors.ink2),
                     weight: FontWeight.w700,
                     letterSpacing: 0.2,
+                    context: context,
                   ),
                 ),
                 TextSpan(
                   text: '  ·  ',
                   style: LhTypography.mono(
                     size: 9.5,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     weight: FontWeight.w600,
+                    context: context,
                   ),
                 ),
                 TextSpan(
@@ -9980,6 +10315,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                     color: bandColor,
                     weight: FontWeight.w800,
                     letterSpacing: 0.4,
+                    context: context,
                   ),
                 ),
               ],
@@ -10002,16 +10338,17 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
         Icon(
           isSelected ? Icons.touch_app_outlined : Icons.swipe_rounded,
           size: 11,
-          color: LhColors.mute2,
+          color: DunesColors.resolve(context, LhColors.mute2),
         ),
         const SizedBox(width: 5),
         Text(
           isSelected ? '已锁定该期读数  ·  点 CLEAR 或再点当期回到本期' : '轻触或横向拖动  ·  查看每期读数',
           style: LhTypography.mono(
             size: 8.5,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w600,
             letterSpacing: 0.8,
+            context: context,
           ),
         ),
       ],
@@ -10076,14 +10413,16 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     if (v.abs() < 0.05) {
       return (
         text: '0.0$unit',
-        color: LhColors.mute,
+        color: DunesColors.resolve(context, LhColors.mute),
         icon: Icons.remove_rounded,
       );
     }
     final isUp = v > 0;
     return (
       text: '${v.toStringAsFixed(1)}$unit',
-      color: isUp ? LhColors.neg : LhColors.pos,
+      color: isUp
+          ? DunesColors.resolve(context, LhColors.neg)
+          : DunesColors.resolve(context, LhColors.pos),
       icon: isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
     );
   }
@@ -10123,14 +10462,16 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
       if (pp.abs() < 0.05) {
         return (
           text: '0.0pp',
-          color: LhColors.mute,
+          color: DunesColors.resolve(context, LhColors.mute),
           icon: Icons.remove_rounded,
         );
       }
       final isUp = pp > 0;
       return (
         text: '${pp.toStringAsFixed(1)}pp',
-        color: isUp ? LhColors.neg : LhColors.pos,
+        color: isUp
+            ? DunesColors.resolve(context, LhColors.neg)
+            : DunesColors.resolve(context, LhColors.pos),
         icon: isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
       );
     }
@@ -10138,13 +10479,19 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     if (absBase < 1e-9) return null;
     final pct = (displayValue - base) / absBase * 100;
     if (pct.abs() < 0.05) {
-      return (text: '0.0%', color: LhColors.mute, icon: Icons.remove_rounded);
+      return (
+        text: '0.0%',
+        color: DunesColors.resolve(context, LhColors.mute),
+        icon: Icons.remove_rounded,
+      );
     }
     // 中文财报语义: 涨 = 红, 跌 = 绿；数值保留正负号（图标另示方向）
     final isUp = pct > 0;
     return (
       text: '${pct.toStringAsFixed(1)}%',
-      color: isUp ? LhColors.neg : LhColors.pos,
+      color: isUp
+          ? DunesColors.resolve(context, LhColors.neg)
+          : DunesColors.resolve(context, LhColors.pos),
       icon: isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
     );
   }
@@ -10228,10 +10575,24 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
     final total = rows.fold<double>(0, (s, r) => s + _rowValue(r).abs());
 
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: LhColors.line, width: 0.8),
-          bottom: BorderSide(color: LhColors.line2, width: 0.6),
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line,
+              role: DunesColorRole.border,
+            ),
+            width: 0.8,
+          ),
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 0.6,
+          ),
         ),
       ),
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -10245,9 +10606,10 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
                 'DETAIL',
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: LhColors.copper,
+                  color: DunesColors.resolve(context, LhColors.copper),
                   weight: FontWeight.w800,
                   letterSpacing: 1.4,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 6),
@@ -10255,21 +10617,32 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
                 '明细 · ${widget.metric.label}',
                 style: LhTypography.mono(
                   size: 9,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w700,
                   letterSpacing: 0.6,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(child: Container(height: 0.6, color: LhColors.line)),
+              Expanded(
+                child: Container(
+                  height: 0.6,
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line,
+                    role: DunesColorRole.surface,
+                  ),
+                ),
+              ),
               const SizedBox(width: 10),
               Text(
                 '共 ${rows.length} 行',
                 style: LhTypography.mono(
                   size: 9,
-                  color: LhColors.ink2,
+                  color: DunesColors.resolve(context, LhColors.ink2),
                   weight: FontWeight.w700,
                   letterSpacing: 0.2,
+                  context: context,
                 ),
               ),
             ],
@@ -10293,7 +10666,14 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
             ),
           ),
           const SizedBox(height: 4),
-          Container(height: 0.6, color: LhColors.line2),
+          Container(
+            height: 0.6,
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.surface,
+            ),
+          ),
           // ── 表头 ───────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 7),
@@ -10305,9 +10685,10 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
                     '维度',
                     style: LhTypography.mono(
                       size: 8.4,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w700,
                       letterSpacing: 0.5,
+                      context: context,
                     ),
                   ),
                 ),
@@ -10318,9 +10699,10 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
                     textAlign: TextAlign.right,
                     style: LhTypography.mono(
                       size: 8.4,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w700,
                       letterSpacing: 0.5,
+                      context: context,
                     ),
                   ),
                 ),
@@ -10331,16 +10713,24 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
                     textAlign: TextAlign.right,
                     style: LhTypography.mono(
                       size: 8.4,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w700,
                       letterSpacing: 0.5,
+                      context: context,
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          Container(height: 0.6, color: LhColors.line2),
+          Container(
+            height: 0.6,
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.surface,
+            ),
+          ),
           // ── 行 ─────────────────────────────────────────────────────────
           if (visible.isEmpty)
             Padding(
@@ -10348,7 +10738,11 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
               child: Center(
                 child: Text(
                   '暂无数据',
-                  style: LhTypography.sans(size: 11, color: LhColors.mute),
+                  style: LhTypography.sans(
+                    size: 11,
+                    color: DunesColors.resolve(context, LhColors.mute),
+                    context: context,
+                  ),
                 ),
               ),
             )
@@ -10386,13 +10780,24 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
               d.label,
               style: LhTypography.sans(
                 size: 12,
-                color: isOn ? LhColors.ink : LhColors.mute,
+                color: isOn
+                    ? DunesColors.resolve(context, LhColors.ink)
+                    : DunesColors.resolve(context, LhColors.mute),
                 weight: isOn ? FontWeight.w700 : FontWeight.w500,
                 letterSpacing: 0.3,
+                context: context,
               ),
             ),
           ),
-          Container(height: 2, width: isOn ? 20 : 0, color: _LhPlum.primary),
+          Container(
+            height: 2,
+            width: isOn ? 20 : 0,
+            color: DunesColors.resolve(
+              context,
+              _LhPlum.primary,
+              role: DunesColorRole.surface,
+            ),
+          ),
         ],
       ),
     );
@@ -10408,7 +10813,17 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
     final isAlt = idx.isOdd;
 
     return Container(
-      color: isAlt ? _LhPlum.mist : Colors.white,
+      color: isAlt
+          ? DunesColors.resolve(
+              context,
+              _LhPlum.mist,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -10424,8 +10839,9 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
                   style: LhTypography.sans(
                     size: 11,
                     weight: FontWeight.w600,
-                    color: LhColors.ink,
+                    color: DunesColors.resolve(context, LhColors.ink),
                     letterSpacing: -0.1,
+                    context: context,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -10436,9 +10852,10 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
                     group,
                     style: LhTypography.mono(
                       size: 8.4,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w500,
                       letterSpacing: 0.2,
+                      context: context,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -10455,8 +10872,11 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
               style: LhTypography.sans(
                 size: 12,
                 weight: FontWeight.w700,
-                color: isNeg ? LhColors.pos : LhColors.ink,
+                color: isNeg
+                    ? DunesColors.resolve(context, LhColors.pos)
+                    : DunesColors.resolve(context, LhColors.ink),
                 letterSpacing: -0.2,
+                context: context,
               ),
             ),
           ),
@@ -10467,9 +10887,10 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
               textAlign: TextAlign.right,
               style: LhTypography.mono(
                 size: 9.2,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w600,
                 letterSpacing: 0.2,
+                context: context,
               ),
             ),
           ),
@@ -10492,9 +10913,10 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
           '$page / $totalPages',
           style: LhTypography.mono(
             size: 10,
-            color: LhColors.ink2,
+            color: DunesColors.resolve(context, LhColors.ink2),
             weight: FontWeight.w700,
             letterSpacing: 0.4,
+            context: context,
           ),
         ),
         const SizedBox(width: 12),
@@ -10519,7 +10941,17 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
         decoration: BoxDecoration(
           border: Border.all(
-            color: enabled ? LhColors.line : LhColors.line2,
+            color: enabled
+                ? DunesColors.resolve(
+                    context,
+                    LhColors.line,
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.border,
+                  ),
             width: 0.8,
           ),
           borderRadius: BorderRadius.circular(4),
@@ -10528,8 +10960,11 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
           label,
           style: LhTypography.mono(
             size: 12,
-            color: enabled ? LhColors.ink2 : LhColors.mute2,
+            color: enabled
+                ? DunesColors.resolve(context, LhColors.ink2)
+                : DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w700,
+            context: context,
           ),
         ),
       ),
@@ -11918,9 +12353,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   /// 小喇叭表达的是全局运行提醒，不属于当前账本页签。只要接口返回 OPEN
   /// 通知就必须高亮；不能因为用户恰好停在净 TA 等页签把通知过滤成灰色。
-  List<LighthouseDelayNotice> get _activeDelayNotices => _delayNotices
-      .where((n) => !n.isEmpty)
-      .toList(growable: false);
+  List<LighthouseDelayNotice> get _activeDelayNotices =>
+      _delayNotices.where((n) => !n.isEmpty).toList(growable: false);
 
   @override
   void didUpdateWidget(covariant NativeLighthousePage oldWidget) {
@@ -12326,7 +12760,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       SnackBar(
         content: Text(
           message,
-          style: LhTypography.sans(size: 12.5, color: Colors.white),
+          style: LhTypography.sans(
+            size: 12.5,
+            color: DunesColors.resolve(context, Colors.white),
+            context: context,
+          ),
         ),
         duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
@@ -12462,9 +12900,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
         decoration: BoxDecoration(
-          color: LhColors.paper,
+          color: DunesColors.resolve(
+            context,
+            LhColors.paper,
+            role: DunesColorRole.surface,
+          ),
           border: Border.all(
-            color: active ? LhColors.ink2 : LhColors.line,
+            color: active
+                ? DunesColors.resolve(
+                    context,
+                    LhColors.ink2,
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    LhColors.line,
+                    role: DunesColorRole.border,
+                  ),
             width: 1,
           ),
           borderRadius: BorderRadius.circular(5),
@@ -12474,7 +12926,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             Icon(
               Icons.search_rounded,
               size: 15,
-              color: active ? LhColors.ink : LhColors.mute,
+              color: active
+                  ? DunesColors.resolve(context, LhColors.ink)
+                  : DunesColors.resolve(context, LhColors.mute),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -12482,16 +12936,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 controller: _detailSkuSearchCtrl,
                 style: LhTypography.sans(
                   size: 12,
-                  color: LhColors.ink,
+                  color: DunesColors.resolve(context, LhColors.ink),
                   weight: FontWeight.w500,
+                  context: context,
                 ),
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: '搜索 SKU 名称…',
                   hintStyle: LhTypography.sans(
                     size: 12,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     weight: FontWeight.w400,
+                    context: context,
                   ),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -12515,7 +12971,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   child: Icon(
                     Icons.close_rounded,
                     size: 14,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                   ),
                 ),
               ),
@@ -13674,9 +14130,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     };
     return Container(
       decoration: BoxDecoration(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: LhColors.line2, width: 0.7),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
       ),
       padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
       child: Column(
@@ -13687,16 +14154,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: LhBiPlum.lavender,
+                  color: DunesColors.resolve(
+                    context,
+                    LhBiPlum.lavender,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
                   '量化报告',
                   style: LhTypography.mono(
                     size: 9,
-                    color: LhBiPlum.primary,
+                    color: DunesColors.resolve(context, LhBiPlum.primary),
                     weight: FontWeight.w800,
                     letterSpacing: 0.6,
+                    context: context,
                   ),
                 ),
               ),
@@ -13704,7 +14176,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Expanded(
                 child: Text(
                   '本月月末预测 · $dimName',
-                  style: LhTypography.sans(size: 13, weight: FontWeight.w700),
+                  style: LhTypography.sans(
+                    size: 13,
+                    weight: FontWeight.w700,
+                    context: context,
+                  ),
                 ),
               ),
               GestureDetector(
@@ -13718,15 +14194,28 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: canOpen ? LhBiPlum.primary : LhColors.mist,
+                    color: canOpen
+                        ? DunesColors.resolve(
+                            context,
+                            LhBiPlum.primary,
+                            role: DunesColorRole.surface,
+                          )
+                        : DunesColors.resolve(
+                            context,
+                            LhColors.mist,
+                            role: DunesColorRole.surface,
+                          ),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     '完整报告 ›',
                     style: LhTypography.mono(
                       size: 9,
-                      color: canOpen ? Colors.white : LhColors.mute2,
+                      color: canOpen
+                          ? DunesColors.resolve(context, Colors.white)
+                          : DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w800,
+                      context: context,
                     ),
                   ),
                 ),
@@ -13742,14 +14231,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               children: [
                 Text(
                   '$scaleName ${money(pace.forecast)}',
-                  style: LhTypography.number(size: 20, color: LhBiPlum.heroNum),
+                  style: LhTypography.number(
+                    size: 20,
+                    color: DunesColors.resolve(context, LhBiPlum.heroNum),
+                    context: context,
+                  ),
                 ),
                 if (pace.lo != null && pace.hi != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 3),
                     child: Text(
                       '80% 近似区间 ${money(pace.lo!)} – ${money(pace.hi!)}',
-                      style: LhTypography.mono(size: 9, color: LhColors.ink2),
+                      style: LhTypography.mono(
+                        size: 9,
+                        color: DunesColors.resolve(context, LhColors.ink2),
+                        context: context,
+                      ),
                     ),
                   ),
                 if (pace.beatPrevProb != null)
@@ -13760,9 +14257,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       style: LhTypography.mono(
                         size: 9,
                         color: pace.beatPrevProb! >= 0.5
-                            ? LhColors.neg
-                            : LhColors.pos,
+                            ? DunesColors.resolve(context, LhColors.neg)
+                            : DunesColors.resolve(context, LhColors.pos),
                         weight: FontWeight.w800,
+                        context: context,
                       ),
                     ),
                   ),
@@ -13775,18 +14273,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   : '整体月末预测只在「月 · 本月」下计算；下面的$dimName结构预测始终按本月截至昨天。',
               style: LhTypography.mono(
                 size: 9,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 height: 1.5,
+                context: context,
               ),
             ),
           const SizedBox(height: 10),
-          const ColoredBox(color: LhColors.line2, child: SizedBox(height: 0.5)),
+          ColoredBox(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.surface,
+            ),
+            child: SizedBox(height: 0.5),
+          ),
           const SizedBox(height: 10),
           LighthouseProductOrdinalSection(
             loader: _loadOrdinalCached,
             fixedDim: dim,
             initialMetric: preferVerified ? 'verify' : 'sales',
-            accent: LhBiPlum.primary,
+            accent: DunesColors.resolve(context, LhBiPlum.primary),
           ),
         ],
       ),
@@ -13819,7 +14325,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final h = MediaQuery.sizeOf(context).height;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: LhColors.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
@@ -14273,21 +14783,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Color _composeColor(String key, String name) {
     switch (key) {
       case 'cnpc':
-        return LhColors.cnpc;
+        return DunesColors.resolve(context, LhColors.cnpc);
       case 'sinopec':
-        return LhColors.sinopec;
+        return DunesColors.resolve(context, LhColors.sinopec);
       case 'private':
-        return LhColors.private;
+        return DunesColors.resolve(context, LhColors.private);
       case 'carrier':
-        return LhColors.carrier;
+        return DunesColors.resolve(context, LhColors.carrier);
       case 'pingan':
-        return LhColors.pingan;
+        return DunesColors.resolve(context, LhColors.pingan);
       case 'dict':
-        return LhColors.dict;
+        return DunesColors.resolve(context, LhColors.dict);
       case 'multi':
-        return LhColors.multi;
+        return DunesColors.resolve(context, LhColors.multi);
       case 'unk':
-        return LhColors.unk;
+        return DunesColors.resolve(context, LhColors.unk);
     }
     return lhGroupColor(name);
   }
@@ -14514,7 +15024,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               child: Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (_) => _closeDropdown(),
-                child: ColoredBox(color: Colors.black.withAlpha(18)),
+                child: ColoredBox(
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.black,
+                    role: DunesColorRole.surface,
+                  ).withAlpha(18),
+                ),
               ),
             ),
             Positioned(
@@ -14606,7 +15122,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 final isOn = g == _groupFilter;
                 // 单选：每个分类有自己的颜色 (lhGroupColor) 做 accent,
                 // 用户在这里选出的分类, 在主列表 tag 上就是同色, 视觉闭环.
-                final accent = g == '全部' ? _LhPlum.primary : lhGroupColor(g);
+                final accent = g == '全部'
+                    ? DunesColors.resolve(ctx, _LhPlum.primary)
+                    : lhGroupColor(g);
                 return _ddChip(
                   label: g,
                   isOn: isOn,
@@ -14728,15 +15246,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
                 decoration: BoxDecoration(
-                  color: _LhPlum.mist,
+                  color: DunesColors.resolve(
+                    ctx,
+                    _LhPlum.mist,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.reorder_rounded,
                       size: 15,
-                      color: _LhPlum.primary,
+                      color: DunesColors.resolve(ctx, _LhPlum.primary),
                     ),
                     const SizedBox(width: 7),
                     Expanded(
@@ -14744,8 +15266,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         '列排列',
                         style: LhTypography.sans(
                           size: 12,
-                          color: LhColors.ink,
+                          color: DunesColors.resolve(ctx, LhColors.ink),
                           weight: FontWeight.w600,
+                          context: ctx,
                         ),
                       ),
                     ),
@@ -14755,15 +15278,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           : _kColOrderPresets[_activeColPreset(tab)]!.$1,
                       style: LhTypography.mono(
                         size: 9.5,
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(ctx, LhColors.mute2),
                         weight: FontWeight.w600,
                         letterSpacing: 0.4,
+                        context: ctx,
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.chevron_right_rounded,
                       size: 15,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(ctx, LhColors.mute2),
                     ),
                   ],
                 ),
@@ -14821,7 +15345,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         duration: const Duration(milliseconds: 140),
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
         decoration: BoxDecoration(
-          color: isOn ? _LhPlum.primary.withAlpha(24) : Colors.transparent,
+          color: isOn
+              ? DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                  role: DunesColorRole.surface,
+                ).withAlpha(24)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(4),
         ),
         child: Center(
@@ -14829,9 +15359,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             label,
             style: LhTypography.mono(
               size: 9.5,
-              color: isOn ? _LhPlum.primary : LhColors.mute2,
+              color: isOn
+                  ? DunesColors.resolve(context, _LhPlum.primary)
+                  : DunesColors.resolve(context, LhColors.mute2),
               weight: isOn ? FontWeight.w700 : FontWeight.w500,
               letterSpacing: 0.1,
+              context: context,
             ),
           ),
         ),
@@ -14871,9 +15404,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               zhLabel,
               style: LhTypography.sans(
                 size: 11.5,
-                color: LhColors.ink,
+                color: DunesColors.resolve(context, LhColors.ink),
                 weight: FontWeight.w700,
                 letterSpacing: -0.1,
+                context: context,
               ),
             ),
             const SizedBox(width: 6),
@@ -14881,9 +15415,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               enKicker,
               style: LhTypography.mono(
                 size: 7.5,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w600,
                 letterSpacing: 0.5,
+                context: context,
               ),
             ),
           ],
@@ -14898,9 +15433,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 resetLabel,
                 style: LhTypography.mono(
                   size: 7.5,
-                  color: _LhPlum.primary,
+                  color: DunesColors.resolve(context, _LhPlum.primary),
                   weight: FontWeight.w600,
                   letterSpacing: 0.5,
+                  context: context,
                 ),
               ),
             ),
@@ -14920,8 +15456,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           zhLabel,
           style: LhTypography.sans(
             size: 9.5,
-            color: LhColors.mute,
+            color: DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w600,
+            context: context,
           ),
         ),
         const SizedBox(width: 5),
@@ -14929,9 +15466,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           enKicker,
           style: LhTypography.mono(
             size: 7,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w600,
             letterSpacing: 0.5,
+            context: context,
           ),
         ),
       ],
@@ -14941,7 +15479,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 极细 hairline 分隔条 (跟主列表 meta 上方那条同款)
   Widget _ddHairline({double margin = 8}) => Container(
     height: 1,
-    color: LhColors.line2,
+    color: DunesColors.resolve(
+      context,
+      LhColors.line2,
+      role: DunesColorRole.surface,
+    ),
     margin: EdgeInsets.symmetric(vertical: margin),
   );
 
@@ -14956,8 +15498,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Color? accent,
     Color? offColor,
   }) {
-    final acc = accent ?? _LhPlum.primary;
-    final off = offColor ?? LhColors.ink2;
+    final acc = accent ?? DunesColors.resolve(context, _LhPlum.primary);
+    final off = offColor ?? DunesColors.resolve(context, LhColors.ink2);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -14965,7 +15507,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         duration: const Duration(milliseconds: 140),
         padding: EdgeInsets.fromLTRB(isMulti ? 7 : 9, 4, 9, 4),
         decoration: BoxDecoration(
-          color: isOn ? acc.withAlpha(24) : Colors.transparent,
+          color: DunesColors.resolveNullable(
+            context,
+            isOn ? acc.withAlpha(24) : Colors.transparent,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Row(
@@ -14977,7 +15523,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 height: 4.5,
                 margin: const EdgeInsets.only(right: 6),
                 decoration: BoxDecoration(
-                  color: isOn ? acc : off.withAlpha(60),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    isOn ? acc : off.withAlpha(60),
+                    role: DunesColorRole.surface,
+                  ),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -14989,6 +15539,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 color: isOn ? acc : off,
                 weight: isOn ? FontWeight.w700 : FontWeight.w500,
                 letterSpacing: isOn ? -0.15 : 0,
+                context: context,
               ),
             ),
           ],
@@ -15039,14 +15590,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: LhColors.line2,
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.line2,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: LhColors.line),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line,
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.lock_outline_rounded,
                 size: 28,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
               ),
             ),
             const SizedBox(height: 18),
@@ -15055,7 +15616,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: LhTypography.sans(
                 size: 16,
                 weight: FontWeight.w600,
-                color: LhColors.ink,
+                color: DunesColors.resolve(context, LhColors.ink),
+                context: context,
               ),
             ),
             const SizedBox(height: 8),
@@ -15064,8 +15626,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               textAlign: TextAlign.center,
               style: LhTypography.sans(
                 size: 12,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 height: 1.5,
+                context: context,
               ),
             ),
           ],
@@ -15091,7 +15654,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Theme(
         data: DunesTheme.light(),
         child: Scaffold(
-          backgroundColor: DunesColors.bgApp,
+          backgroundColor: DunesColors.resolve(
+            context,
+            DunesColors.bgApp,
+            role: DunesColorRole.surface,
+          ),
           // 键盘弹出时不顶起底部 Column —— SKU 搜索时
           // 通讯/千机/灯塔/我的 这条主 tab bar 保持在屏幕底部，
           // 不会被怼到键盘正上方。搜索框本身在页面中上部，
@@ -15165,7 +15732,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               if (_biViewOpen)
                                 Positioned.fill(
                                   child: Material(
-                                    color: LhColors.mist,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      LhColors.mist,
+                                      role: DunesColorRole.surface,
+                                    ),
                                     child: LhBiViewPage(
                                       initialDim: _biInitialDim(),
                                       dims: _biDims(),
@@ -15250,17 +15821,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     style: LhTypography.sans(
                       size: lighthouseAppBarTitleFontSize,
                       weight: FontWeight.w600,
-                      color: Color(lighthouseAppBarTitleColorValue),
+                      color: DunesColors.resolve(
+                        context,
+                        Color(lighthouseAppBarTitleColorValue),
+                      ),
                       letterSpacing: -0.3,
+                      context: context,
                     ),
                   ),
                   TextSpan(
                     text: ' LIGHTHOUSE',
                     style: LhTypography.mono(
                       size: lighthouseAppBarEnglishFontSize,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w600,
                       letterSpacing: 1.6,
+                      context: context,
                     ),
                   ),
                 ],
@@ -15288,9 +15864,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           label,
           style: LhTypography.mono(
             size: 10,
-            color: LhColors.mute,
+            color: DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w600,
             letterSpacing: 1.6,
+            context: context,
           ),
         ),
       ],
@@ -15301,7 +15878,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final label = _cubeLoading && !_loading ? '分析加载中' : '数据同步中';
     return Positioned.fill(
       child: ColoredBox(
-        color: Colors.white.withAlpha(210),
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ).withAlpha(210),
         child: Center(child: _buildBrandBusyContent(label: label)),
       ),
     );
@@ -15438,10 +16019,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           tooltip: '触感与声音',
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           padding: EdgeInsets.zero,
-          icon: const Icon(
+          icon: Icon(
             Icons.volume_up_outlined,
             size: 17,
-            color: _LhPlum.primary,
+            color: DunesColors.resolve(context, _LhPlum.primary),
           ),
           onPressed: () => LighthouseFeedback.instance.showSettings(context),
         ),
@@ -15452,9 +16033,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 顶栏工具的共用壳：期间条同款凹槽（v24 跟着期间条换成淡紫底 + Hero 卡紫发丝边）。
   BoxDecoration _appBarToolShell({required double radius}) {
     return BoxDecoration(
-      color: const Color(0xFFF3EFFA),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF3EFFA),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: _LhPlum.line, width: 0.8),
+      border: Border.all(
+        color: DunesColors.resolve(
+          context,
+          _LhPlum.line,
+          role: DunesColorRole.border,
+        ),
+        width: 0.8,
+      ),
     );
   }
 
@@ -15492,7 +16084,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             child: Icon(
               icon,
               size: 15,
-              color: enabled ? _LhPlum.ink : _LhPlum.soft.withAlpha(150),
+              color: enabled
+                  ? DunesColors.resolve(context, _LhPlum.ink)
+                  : DunesColors.resolve(context, _LhPlum.soft).withAlpha(150),
             ),
           ),
         ),
@@ -15507,10 +16101,30 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       padding: const EdgeInsets.symmetric(horizontal: 6),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: atDefault ? _LhPlum.heroFill.withAlpha(0) : Colors.white,
+        color: atDefault
+            ? DunesColors.resolve(
+                context,
+                _LhPlum.heroFill,
+                role: DunesColorRole.surface,
+              ).withAlpha(0)
+            : DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(r - 4),
         border: Border.all(
-          color: atDefault ? _LhPlum.line.withAlpha(0) : _LhPlum.line,
+          color: atDefault
+              ? DunesColors.resolve(
+                  context,
+                  _LhPlum.line,
+                  role: DunesColorRole.border,
+                ).withAlpha(0)
+              : DunesColors.resolve(
+                  context,
+                  _LhPlum.line,
+                  role: DunesColorRole.border,
+                ),
           width: 0.8,
         ),
         boxShadow: atDefault
@@ -15528,10 +16142,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         '$pct%',
         style: LhTypography.mono(
           size: 10.5,
-          color: atDefault ? LhColors.mute2 : _LhPlum.heroNum,
+          color: atDefault
+              ? DunesColors.resolve(context, LhColors.mute2)
+              : DunesColors.resolve(context, _LhPlum.heroNum),
           weight: atDefault ? FontWeight.w600 : FontWeight.w700,
           letterSpacing: 0.2,
           height: 1.0,
+          context: context,
         ),
       ),
     );
@@ -15599,10 +16216,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: Center(
             child: busy
                 ? const _LhBrandLoader(size: 14)
-                : const Icon(
+                : Icon(
                     Icons.refresh_rounded,
                     size: 16,
-                    color: _LhPlum.ink,
+                    color: DunesColors.resolve(context, _LhPlum.ink),
                   ),
           ),
         ),
@@ -15623,9 +16240,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             _formatDateLabel(),
             style: LhTypography.mono(
               size: 10.5,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w500,
               letterSpacing: 0.6,
+              context: context,
             ),
           ),
           const Spacer(),
@@ -15653,9 +16271,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       height: 22,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: LhColors.line2, width: 0.7),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withAlpha(6),
@@ -15670,30 +16299,43 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           if (busy)
             const _LhBrandLoader(size: 9)
           else
-            const _LhPulseDot(color: LhColors.pos, size: 5),
+            _LhPulseDot(
+              color: DunesColors.resolve(context, LhColors.pos),
+              size: 5,
+            ),
           const SizedBox(width: 6),
           Text(
             busy ? '同步中' : '已同步',
             style: LhTypography.sans(
               size: 9.5,
-              color: LhColors.ink2,
+              color: DunesColors.resolve(context, LhColors.ink2),
               weight: FontWeight.w600,
               letterSpacing: 0.2,
               height: 1.0,
+              context: context,
             ),
           ),
           if (!busy) ...[
             const SizedBox(width: 6),
-            Container(width: 0.7, height: 9, color: LhColors.line2),
+            Container(
+              width: 0.7,
+              height: 9,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ),
+            ),
             const SizedBox(width: 6),
             Text(
               _syncedAtLabelCompact(),
               style: LhTypography.mono(
                 size: 9.5,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w600,
                 letterSpacing: 0.3,
                 height: 1.0,
+                context: context,
               ),
             ),
           ],
@@ -15931,7 +16573,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final key = m.group(1) ?? '';
       final label = _aiMetricLabel(key);
       final accent = _LhPnl.accentFor(key);
-      out.add((text: label, color: accent?.bar ?? LhColors.copper));
+      out.add((
+        text: label,
+        color: accent?.bar ?? DunesColors.resolve(context, LhColors.copper),
+      ));
       start = m.end;
     }
     if (start < text.length) {
@@ -16079,13 +16724,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             tone: _LhAiTone.watch,
             spans: [
               (text: '净利润$deltaWord ', color: null),
-              (text: '↓${pct(dNet.pct)}%', color: _LhPnl.netNum),
+              (
+                text: '↓${pct(dNet.pct)}%',
+                color: DunesColors.resolve(context, _LhPnl.netNum),
+              ),
               (text: '（$vs），但 ', color: null),
-              (text: '收入', color: _LhPnl.revenueBar),
+              (
+                text: '收入',
+                color: DunesColors.resolve(context, _LhPnl.revenueBar),
+              ),
               (text: ' 是涨的 —— 缺口在 ', color: null),
-              (text: '成本合计', color: _LhPnl.costBar),
+              (
+                text: '成本合计',
+                color: DunesColors.resolve(context, _LhPnl.costBar),
+              ),
               (text: '，$deltaWord ', color: null),
-              (text: '+${pct(dCost.pct)}%', color: _LhPnl.costNum),
+              (
+                text: '+${pct(dCost.pct)}%',
+                color: DunesColors.resolve(context, _LhPnl.costNum),
+              ),
               (text: '，跑赢收入 ${pct(outpace)}pp。', color: null),
             ],
             evidence: [
@@ -16128,7 +16785,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               (text: '${row['name'] ?? '未命名'} ', color: null),
               (
                 text: 'ROI ${worstRoi.toStringAsFixed(1)}%',
-                color: LhColors.copper,
+                color: DunesColors.resolve(context, LhColors.copper),
               ),
               (
                 text:
@@ -16137,7 +16794,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
               (
                 text: '${(worstShare * 100).toStringAsFixed(1)}%',
-                color: _LhPnl.costNum,
+                color: DunesColors.resolve(context, _LhPnl.costNum),
               ),
               (text: ' 的成本合计。', color: null),
             ],
@@ -16173,9 +16830,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             tone: _LhAiTone.opportunity,
             spans: [
               (text: '${row['name'] ?? '未命名'} 贡献了 ', color: null),
-              (text: '净利润', color: _LhPnl.netBar),
+              (text: '净利润', color: DunesColors.resolve(context, _LhPnl.netBar)),
               (text: ' 的 ', color: null),
-              (text: '${share.toStringAsFixed(0)}%', color: _LhPnl.netNum),
+              (
+                text: '${share.toStringAsFixed(0)}%',
+                color: DunesColors.resolve(context, _LhPnl.netNum),
+              ),
               (text: '，集中度偏高 —— 这一家波动会直接决定大盘。', color: null),
             ],
             evidence: [
@@ -16198,11 +16858,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           tone: _LhAiTone.neutral,
           spans: [
             (text: '$thisWord无显著异动。', color: null),
-            (text: '收入', color: _LhPnl.revenueBar),
+            (
+              text: '收入',
+              color: DunesColors.resolve(context, _LhPnl.revenueBar),
+            ),
             (text: ' ${_fmtAmountWithUnit(revenue)} · ', color: null),
-            (text: '成本合计', color: _LhPnl.costBar),
+            (text: '成本合计', color: DunesColors.resolve(context, _LhPnl.costBar)),
             (text: ' ${_fmtAmountWithUnit(totalCost)} · ', color: null),
-            (text: '净利润', color: _LhPnl.netBar),
+            (text: '净利润', color: DunesColors.resolve(context, _LhPnl.netBar)),
             (text: ' ${_fmtAmountWithUnit(netProfit)}。', color: null),
           ],
         ),
@@ -16231,8 +16894,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       margin: const EdgeInsets.fromLTRB(22, 0, 22, 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: _LhPlum.line, width: 0.5),
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _LhPlum.line,
+            role: DunesColorRole.border,
+          ),
+          width: 0.5,
+        ),
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
@@ -16248,7 +16922,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildAiHeader(s),
-          Container(height: 0.5, color: _LhPlum.line),
+          Container(
+            height: 0.5,
+            color: DunesColors.resolve(
+              context,
+              _LhPlum.line,
+              role: DunesColorRole.surface,
+            ),
+          ),
           if (showSkeleton)
             _buildAiSkeleton()
           else if (_aiFailed && s == null)
@@ -16282,16 +16963,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 Icon(
                   Icons.auto_awesome_outlined,
                   size: 15,
-                  color: _LhPlum.primary,
+                  color: DunesColors.resolve(context, _LhPlum.primary),
                 ),
                 const SizedBox(width: 7),
                 Text(
                   title,
                   style: LhTypography.mono(
                     size: 12,
-                    color: _LhPlum.ink,
+                    color: DunesColors.resolve(context, _LhPlum.ink),
                     weight: FontWeight.w700,
                     letterSpacing: 0.4,
+                    context: context,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -16304,8 +16986,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     overflow: TextOverflow.ellipsis,
                     style: LhTypography.mono(
                       size: 11,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w500,
+                      context: context,
                     ),
                   ),
                 ),
@@ -16318,8 +17001,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: _tabular(
                 LhTypography.mono(
                   size: 11,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w500,
+                  context: context,
                 ),
               ),
             ),
@@ -16330,7 +17014,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             child: Icon(
               Icons.refresh_rounded,
               size: 15,
-              color: _aiLoading ? LhColors.mute2 : LhColors.mute,
+              color: _aiLoading
+                  ? DunesColors.resolve(context, LhColors.mute2)
+                  : DunesColors.resolve(context, LhColors.mute),
             ),
           ),
         ],
@@ -16343,7 +17029,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       height: 10,
       width: w,
       margin: const EdgeInsets.only(bottom: 8),
-      color: LhColors.line2,
+      color: DunesColors.resolve(
+        context,
+        LhColors.line2,
+        role: DunesColorRole.surface,
+      ),
     );
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
@@ -16364,8 +17054,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '解读没生成出来。',
               style: LhTypography.sans(
                 size: 13,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
           ),
@@ -16376,8 +17067,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '重试',
               style: LhTypography.mono(
                 size: 12,
-                color: _LhPlum.primary,
+                color: DunesColors.resolve(context, _LhPlum.primary),
                 weight: FontWeight.w700,
+                context: context,
               ),
             ),
           ),
@@ -16389,9 +17081,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Widget _buildAiInsightRow(_LhAiInsight it, {required bool last}) {
     final body = LhTypography.sans(
       size: 13,
-      color: LhColors.ink,
+      color: DunesColors.resolve(context, LhColors.ink),
       weight: FontWeight.w500,
       height: 1.65,
+      context: context,
     );
 
     TextStyle spanStyle(Color? color, TextStyle bodyStyle) {
@@ -16401,6 +17094,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         color: color,
         weight: FontWeight.w700,
         height: 1.65,
+        context: context,
       );
     }
 
@@ -16411,14 +17105,30 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         decoration: BoxDecoration(
           border: last
               ? null
-              : Border(bottom: BorderSide(color: LhColors.line2, width: 0.5)),
+              : Border(
+                  bottom: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      LhColors.line2,
+                      role: DunesColorRole.border,
+                    ),
+                    width: 0.5,
+                  ),
+                ),
         ),
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(width: 2, color: _lhAiToneBar(it.tone)),
+              Container(
+                width: 2,
+                color: DunesColors.resolveNullable(
+                  context,
+                  _lhAiToneBar(it.tone),
+                  role: DunesColorRole.surface,
+                ),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -16448,14 +17158,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 horizontal: 7,
                                 vertical: 3,
                               ),
-                              color: LhColors.line2,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.line2,
+                                role: DunesColorRole.surface,
+                              ),
                               child: Text(
                                 '${e.label} ${e.value}',
                                 style: _tabular(
                                   LhTypography.mono(
                                     size: 11,
-                                    color: LhColors.ink2,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      LhColors.ink2,
+                                    ),
                                     weight: FontWeight.w600,
+                                    context: context,
                                   ),
                                 ),
                               ),
@@ -16472,7 +17190,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   child: Icon(
                     Icons.chevron_right_rounded,
                     size: 16,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                   ),
                 ),
               ],
@@ -16493,7 +17211,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Icon(
         icon,
         size: 14,
-        color: _aiVote == v ? _LhPlum.primary : LhColors.mute2,
+        color: _aiVote == v
+            ? DunesColors.resolve(context, _LhPlum.primary)
+            : DunesColors.resolve(context, LhColors.mute2),
       ),
     );
 
@@ -16509,8 +17229,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 _aiExpanded ? '收起' : '展开其余 $hidden 条',
                 style: LhTypography.mono(
                   size: 12,
-                  color: _LhPlum.ink,
+                  color: DunesColors.resolve(context, _LhPlum.ink),
                   weight: FontWeight.w600,
+                  context: context,
                 ),
               ),
             ),
@@ -16553,7 +17274,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         // 收口落在内容上而不是落在一行小字上。
         if (lighthouseHeroUsesFlatLayout) ...[
           const SizedBox(height: 12),
-          Container(height: 0.7, color: LhColors.line),
+          Container(
+            height: 0.7,
+            color: DunesColors.resolve(
+              context,
+              LhColors.line,
+              role: DunesColorRole.surface,
+            ),
+          ),
           const SizedBox(height: 10),
         ] else
           const SizedBox(height: 16),
@@ -16561,11 +17289,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Container(
             margin: const EdgeInsets.fromLTRB(22, 0, 22, 18),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               border: Border.all(
                 color: lighthouseLedgerUsesLavenderPanelFrame
-                    ? _LhPlum.line
-                    : LhColors.line2,
+                    ? DunesColors.resolve(
+                        context,
+                        _LhPlum.line,
+                        role: DunesColorRole.border,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.border,
+                      ),
                 width: lighthouseLedgerPanelBorderWidth,
               ),
               borderRadius: BorderRadius.circular(lighthouseLedgerPanelRadius),
@@ -16587,7 +17327,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   if (_tab == 'netTa') _buildNetTAListMeta(),
                   if (_tab != 'netTa') ...[
                     _buildSortbar(),
-                    Container(height: 0.7, color: LhColors.line2),
+                    Container(
+                      height: 0.7,
+                      color: DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   ],
                   _buildList(embedded: true),
                 ],
@@ -16615,12 +17362,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               child: SizedBox(
                 height: 2,
                 child: on
-                    ? const LinearProgressIndicator(
+                    ? LinearProgressIndicator(
                         key: ValueKey('lighthouse-soft-reload-progress'),
                         minHeight: 2,
-                        backgroundColor: _LhPlum.heroEdge,
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          _LhPlum.heroEdge,
+                          role: DunesColorRole.surface,
+                        ),
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          _LhPlum.primary,
+                          DunesColors.resolve(context, _LhPlum.primary),
                         ),
                       )
                     : null,
@@ -16694,16 +17445,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),
         decoration: BoxDecoration(
-          color: LhColors.copperSoft,
-          border: Border.all(color: const Color(0xFFEEDFC2)),
+          color: DunesColors.resolve(
+            context,
+            LhColors.copperSoft,
+            role: DunesColorRole.surface,
+          ),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFEEDFC2),
+              role: DunesColorRole.border,
+            ),
+          ),
           borderRadius: BorderRadius.circular(9),
         ),
         child: Text.rich(
           TextSpan(
             style: LhTypography.sans(
               size: 11,
-              color: const Color(0xFF7A5514),
+              color: DunesColors.resolve(context, const Color(0xFF7A5514)),
               height: 1.55,
+              context: context,
             ),
             children: [
               const TextSpan(text: '本期 '),
@@ -16747,8 +17509,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   overflow: TextOverflow.ellipsis,
                   style: LhTypography.sans(
                     size: 10,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                     weight: FontWeight.w500,
+                    context: context,
                   ),
                 ),
               ),
@@ -16760,15 +17523,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     vertical: 0,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEDF3EA),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFEDF3EA),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(3),
                   ),
                   child: Text(
                     '流入',
                     style: LhTypography.sans(
                       size: 8,
-                      color: LhColors.pos,
+                      color: DunesColors.resolve(context, LhColors.pos),
                       weight: FontWeight.w700,
+                      context: context,
                     ),
                   ),
                 ),
@@ -16783,15 +17551,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   text: _fmtMoney(v),
                   style: LhTypography.number(
                     size: lighthouseLedgerValueFontSize,
-                    color: LhColors.ink,
+                    color: DunesColors.resolve(context, LhColors.ink),
+                    context: context,
                   ),
                 ),
                 TextSpan(
                   text: _unitMoney(v),
                   style: LhTypography.sans(
                     size: lighthouseLedgerUnitFontSize,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                     weight: FontWeight.w500,
+                    context: context,
                   ),
                 ),
               ],
@@ -16806,9 +17576,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             style: LhTypography.mono(
               size: 8.5,
               color: delta == null
-                  ? LhColors.mute2
-                  : (delta.isUp ? LhColors.neg : LhColors.pos),
+                  ? DunesColors.resolve(context, LhColors.mute2)
+                  : (delta.isUp
+                        ? DunesColors.resolve(context, LhColors.neg)
+                        : DunesColors.resolve(context, LhColors.pos)),
               weight: FontWeight.w600,
+              context: context,
             ),
           ),
         ],
@@ -17207,11 +17980,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           horizontal: lighthouseHeroShellMarginH,
         ),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           border: Border.all(
             color: lighthouseLedgerUsesLavenderPanelFrame
-                ? _LhPlum.line
-                : LhColors.line2,
+                ? DunesColors.resolve(
+                    context,
+                    _LhPlum.line,
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.border,
+                  ),
             width: lighthouseLedgerPanelBorderWidth,
           ),
           borderRadius: BorderRadius.circular(lighthouseLedgerPanelRadius),
@@ -17239,8 +18024,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       decoration: BoxDecoration(
-        color: whiteBackground ? Colors.white : _LhPlum.heroFill,
-        border: Border.all(color: _LhPlum.heroEdge, width: 0.7),
+        color: whiteBackground
+            ? DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                _LhPlum.heroFill,
+                role: DunesColorRole.surface,
+              ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _LhPlum.heroEdge,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
         borderRadius: BorderRadius.circular(18),
         boxShadow: whiteBackground
             ? const []
@@ -17303,7 +18105,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ?line(
           key: 'netTa',
           name: '累计净TA',
-          color: _LhPlum.primary,
+          color: DunesColors.resolve(context, _LhPlum.primary),
           series: _seriesForMetric('netTa'),
           total: totals['netTa'],
           hero: true,
@@ -17311,45 +18113,69 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ?line(
           key: 'netTaOperating',
           name: '经营活动',
-          color: Color(lighthouseRevenueAccentValue),
+          color: DunesColors.resolve(
+            context,
+            Color(lighthouseRevenueAccentValue),
+          ),
           series: _seriesForMetric('netTaOperating'),
           total: totals['netTaOperating'],
         ),
         ?line(
           key: 'netTaFinancing',
           name: '筹资活动',
-          color: Color(lighthouseScaleAccentValue),
+          color: DunesColors.resolve(
+            context,
+            Color(lighthouseScaleAccentValue),
+          ),
           series: _seriesForMetric('netTaFinancing'),
           total: totals['netTaFinancing'],
         ),
         ?line(
           key: 'netTaOpCost',
           name: '经营成本',
-          color: Color(lighthouseCostAccentValue),
+          color: DunesColors.resolve(context, Color(lighthouseCostAccentValue)),
           series: _seriesForMetric('netTaOpCost'),
           total: totals['netTaOpCost'],
         ),
         ?line(
           key: 'netTaProjectCost',
           name: '项目成本',
-          color: Color(lighthouseProfitAccentValue),
+          color: DunesColors.resolve(
+            context,
+            Color(lighthouseProfitAccentValue),
+          ),
           series: _seriesForMetric('netTaProjectCost'),
           total: totals['netTaProjectCost'],
         ),
         ?line(
           key: 'netTaBizCost',
           name: '业务成本',
-          color: Color(lighthouseNetTABizCostAccentValue),
+          color: DunesColors.resolve(
+            context,
+            Color(lighthouseNetTABizCostAccentValue),
+          ),
           series: _seriesForMetric('netTaBizCost'),
           total: totals['netTaBizCost'],
         ),
       ].whereType<_HeroTrendLine>().toList(growable: false);
     }
 
-    const scaleColor = Color(lighthouseScaleAccentValue);
-    const revenueColor = Color(lighthouseRevenueAccentValue);
-    const costColor = Color(lighthouseCostAccentValue);
-    const profitColor = Color(lighthouseProfitAccentValue);
+    final scaleColor = DunesColors.resolve(
+      context,
+      Color(lighthouseScaleAccentValue),
+    );
+    final revenueColor = DunesColors.resolve(
+      context,
+      Color(lighthouseRevenueAccentValue),
+    );
+    final costColor = DunesColors.resolve(
+      context,
+      Color(lighthouseCostAccentValue),
+    );
+    final profitColor = DunesColors.resolve(
+      context,
+      Color(lighthouseProfitAccentValue),
+    );
 
     final verified = _seriesForMetric('verifiedSales');
     final sales = _seriesForMetric('sales');
@@ -18284,7 +19110,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final title = summaryTitle ?? _l1SummaryTitle;
     final rangeLabel = _selectedRangeLabel;
     // 产品 / 供给 / 渠道的汇总 Hero 共用同一视觉身份；只替换标题和数据。
-    const summaryAccent = _LhPlum.primary;
+    final summaryAccent = DunesColors.resolve(context, _LhPlum.primary);
     const summaryIcon = Icons.dashboard_outlined;
 
     // v14 · 版式压缩 441 → ~300pt (首屏占比 53% → 36%, 列表可见 2 行 → 4 行)：
@@ -18315,8 +19141,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 Container(
                   width: 5,
                   height: 5,
-                  decoration: const BoxDecoration(
-                    color: _LhPlum.primary,
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolve(
+                      context,
+                      _LhPlum.primary,
+                      role: DunesColorRole.surface,
+                    ),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -18325,9 +19155,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   'LIVE',
                   style: LhTypography.mono(
                     size: 10,
-                    color: _LhPlum.primary,
+                    color: DunesColors.resolve(context, _LhPlum.primary),
                     weight: FontWeight.w700,
                     letterSpacing: 1.6,
+                    context: context,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -18338,12 +19169,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 // 卡标题是这一屏层级最高的字：图标片走实心 + 白图标，
                 // 不能比下面「规模 / 成本 / 利润」的实心小片还淡。
                 decoration: BoxDecoration(
-                  color: summaryAccent,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    summaryAccent,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(
                     lighthouseHeroSummaryIconRadius,
                   ),
                 ),
-                child: Icon(summaryIcon, size: 12, color: LhColors.paper),
+                child: Icon(
+                  summaryIcon,
+                  size: 12,
+                  color: DunesColors.resolve(context, LhColors.paper),
+                ),
               ),
               const SizedBox(width: 8),
               // 左组：标题 + 真实区间 + 分类筛选；右端挂同步落款。
@@ -18357,10 +19196,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         overflow: TextOverflow.ellipsis,
                         style: LhTypography.sans(
                           size: lighthouseHeroSummaryTitleFontSize,
-                          color: LhColors.ink,
+                          color: DunesColors.resolve(context, LhColors.ink),
                           weight: FontWeight.w700,
                           letterSpacing: 0,
                           height: 1.1,
+                          context: context,
                         ),
                       ),
                     ),
@@ -18375,10 +19215,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             LhTypography.mono(
                               size: lighthouseHeroSummaryRangeFontSize,
                               // 日期是标题的注脚：退到灰、减一档字重，别跟标题抢。
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                               weight: FontWeight.w500,
                               letterSpacing: 0.2,
                               height: 1.1,
+                              context: context,
                             ),
                           ),
                         ),
@@ -18405,7 +19249,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           // 比其它分隔线重一档，它是这一屏里层级最高的一条。
           if (lighthouseHeroUsesFlatLayout && totalsOverride == null) ...[
             const SizedBox(height: 9),
-            Container(height: 1, color: LhColors.line),
+            Container(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line,
+                role: DunesColorRole.surface,
+              ),
+            ),
           ],
           // 有记录时标题下不直接铺横幅。小喇叭点开后，这里才是 message 原文。
           if (totalsOverride == null &&
@@ -18467,23 +19318,39 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       : (lighthouseHeroMatchesLedgerCard
                             ? BoxDecoration(
                                 color: profitPanel
-                                    ? const Color(
-                                        lighthouseLedgerResultBlockAccentValue,
+                                    ? DunesColors.resolve(
+                                        context,
+                                        const Color(
+                                          lighthouseLedgerResultBlockAccentValue,
+                                        ),
+                                        role: DunesColorRole.surface,
                                       ).withAlpha(
                                         lighthouseLedgerSummaryResultPanelAlpha,
                                       )
-                                    : const Color(
-                                        lighthouseLedgerSummaryNeutralPanelValue,
+                                    : DunesColors.resolve(
+                                        context,
+                                        const Color(
+                                          lighthouseLedgerSummaryNeutralPanelValue,
+                                        ),
+                                        role: DunesColorRole.surface,
                                       ),
                                 border: Border.all(
                                   color: profitPanel
-                                      ? const Color(
-                                          lighthouseLedgerResultBlockAccentValue,
+                                      ? DunesColors.resolve(
+                                          context,
+                                          const Color(
+                                            lighthouseLedgerResultBlockAccentValue,
+                                          ),
+                                          role: DunesColorRole.border,
                                         ).withAlpha(
                                           lighthouseHeroPanelResultEdgeAlpha,
                                         )
-                                      : const Color(
-                                          lighthouseHeroPanelNeutralEdgeValue,
+                                      : DunesColors.resolve(
+                                          context,
+                                          const Color(
+                                            lighthouseHeroPanelNeutralEdgeValue,
+                                          ),
+                                          role: DunesColorRole.border,
                                         ),
                                   width: lighthouseHeroPanelEdgeWidth,
                                 ),
@@ -18492,9 +19359,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 ),
                               )
                             : BoxDecoration(
-                                color: const Color(0xFFFFFDFF),
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFFFFFDFF),
+                                  role: DunesColorRole.surface,
+                                ),
                                 border: Border.all(
-                                  color: _LhPlum.heroEdge,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    _LhPlum.heroEdge,
+                                    role: DunesColorRole.border,
+                                  ),
                                   width: 0.7,
                                 ),
                                 borderRadius: BorderRadius.circular(
@@ -18539,10 +19414,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                           ),
                                           decoration: BoxDecoration(
                                             color: profitPanel
-                                                ? const Color(
-                                                    lighthouseHeroResultSectionChipValue,
+                                                ? DunesColors.resolve(
+                                                    context,
+                                                    const Color(
+                                                      lighthouseHeroResultSectionChipValue,
+                                                    ),
+                                                    role:
+                                                        DunesColorRole.surface,
                                                   )
-                                                : _LhPlum.primary.withAlpha(12),
+                                                : DunesColors.resolve(
+                                                    context,
+                                                    _LhPlum.primary,
+                                                    role:
+                                                        DunesColorRole.surface,
+                                                  ).withAlpha(12),
                                             borderRadius: BorderRadius.circular(
                                               lighthouseHeroMastheadLabelRadius,
                                             ),
@@ -18556,11 +19441,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                     lighthouseHeroMastheadLabelIconSize,
                                                 decoration: BoxDecoration(
                                                   color: profitPanel
-                                                      ? const Color(
-                                                          lighthouseLedgerResultBlockAccentValue,
+                                                      ? DunesColors.resolve(
+                                                          context,
+                                                          const Color(
+                                                            lighthouseLedgerResultBlockAccentValue,
+                                                          ),
+                                                          role: DunesColorRole
+                                                              .surface,
                                                         ).withAlpha(34)
-                                                      : _LhPlum.primary
-                                                            .withAlpha(24),
+                                                      : DunesColors.resolve(
+                                                          context,
+                                                          _LhPlum.primary,
+                                                          role: DunesColorRole
+                                                              .surface,
+                                                        ).withAlpha(24),
                                                   borderRadius:
                                                       BorderRadius.circular(5),
                                                 ),
@@ -18568,10 +19462,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                   Icons.trending_up_rounded,
                                                   size: 11,
                                                   color: profitPanel
-                                                      ? const Color(
-                                                          lighthouseHeroResultSectionTitleValue,
+                                                      ? DunesColors.resolve(
+                                                          context,
+                                                          const Color(
+                                                            lighthouseHeroResultSectionTitleValue,
+                                                          ),
                                                         )
-                                                      : _LhPlum.primary,
+                                                      : DunesColors.resolve(
+                                                          context,
+                                                          _LhPlum.primary,
+                                                        ),
                                                 ),
                                               ),
                                               const SizedBox(width: 5),
@@ -18585,10 +19485,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                     LhTypography.mono(
                                                       size:
                                                           lighthouseHeroMastheadLabelFontSize,
-                                                      color: _LhPlum.primary,
+                                                      color:
+                                                          DunesColors.resolve(
+                                                            context,
+                                                            _LhPlum.primary,
+                                                          ),
                                                       weight: FontWeight.w700,
                                                       letterSpacing: 0.2,
                                                       height: 1.0,
+                                                      context: context,
                                                     ),
                                                   ),
                                                 ),
@@ -18604,10 +19509,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                     style: LhTypography.sans(
                                                       size:
                                                           lighthouseHeroMastheadLabelFontSize,
-                                                      color: LhColors.ink2,
+                                                      color:
+                                                          DunesColors.resolve(
+                                                            context,
+                                                            LhColors.ink2,
+                                                          ),
                                                       weight: FontWeight.w600,
                                                       letterSpacing: 0.1,
                                                       height: 1.0,
+                                                      context: context,
                                                     ),
                                                   ),
                                                 ),
@@ -18617,7 +19527,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                       HitTestBehavior.opaque,
                                                   onTap:
                                                       _clearHeroPointSelection,
-                                                  child: const Padding(
+                                                  child: Padding(
                                                     padding:
                                                         EdgeInsets.symmetric(
                                                           horizontal: 2,
@@ -18626,7 +19536,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                     child: Icon(
                                                       Icons.refresh_rounded,
                                                       size: 11,
-                                                      color: _LhPlum.primary,
+                                                      color:
+                                                          DunesColors.resolve(
+                                                            context,
+                                                            _LhPlum.primary,
+                                                          ),
                                                     ),
                                                   ),
                                                 ),
@@ -18643,10 +19557,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                     style: LhTypography.sans(
                                                       size:
                                                           lighthouseHeroMastheadLabelFontSize,
-                                                      color: LhColors.ink,
+                                                      color:
+                                                          DunesColors.resolve(
+                                                            context,
+                                                            LhColors.ink,
+                                                          ),
                                                       weight: FontWeight.w600,
                                                       letterSpacing: 0.1,
                                                       height: 1.0,
+                                                      context: context,
                                                     ),
                                                   ),
                                                 ),
@@ -18673,7 +19592,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                         _heroTraceKey = null;
                                                       });
                                                     },
-                                                    child: const Padding(
+                                                    child: Padding(
                                                       padding:
                                                           EdgeInsets.symmetric(
                                                             horizontal: 4,
@@ -18682,7 +19601,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                       child: Icon(
                                                         Icons.close_rounded,
                                                         size: 12,
-                                                        color: _LhPlum.primary,
+                                                        color:
+                                                            DunesColors.resolve(
+                                                              context,
+                                                              _LhPlum.primary,
+                                                            ),
                                                       ),
                                                     ),
                                                   ),
@@ -18699,8 +19622,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                         _grossMarginFormula(),
                                         style: LhTypography.sans(
                                           size: 9,
-                                          color: LhColors.ink2,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            LhColors.ink2,
+                                          ),
                                           height: 1.2,
+                                          context: context,
                                         ),
                                       ),
                                       const SizedBox(height: 5),
@@ -18724,7 +19651,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                 style: LhTypography.number(
                                                   size:
                                                       lighthouseHeroMastheadFontSize,
-                                                  color: LhColors.pos,
+                                                  color: DunesColors.resolve(
+                                                    context,
+                                                    LhColors.pos,
+                                                  ),
+                                                  context: context,
                                                 ),
                                               ),
                                             TextSpan(
@@ -18742,9 +19673,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                   mastheadKey,
                                                   heroMastheadValue,
                                                   mastheadIsNeg
-                                                      ? LhColors.pos
-                                                      : _LhPlum.heroNum,
+                                                      ? DunesColors.resolve(
+                                                          context,
+                                                          LhColors.pos,
+                                                        )
+                                                      : DunesColors.resolve(
+                                                          context,
+                                                          _LhPlum.heroNum,
+                                                        ),
                                                 ),
+                                                context: context,
                                               ),
                                             ),
                                             TextSpan(
@@ -18758,8 +19696,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                         : ' ${_unitMoney(v)}'),
                                               style: LhTypography.sans(
                                                 size: 10.5,
-                                                color: LhColors.mute,
+                                                color: DunesColors.resolve(
+                                                  context,
+                                                  LhColors.mute,
+                                                ),
                                                 weight: FontWeight.w500,
+                                                context: context,
                                               ),
                                             ),
                                           ],
@@ -18787,10 +19729,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   height: 0.7,
                                   margin: const EdgeInsets.fromLTRB(2, 0, 2, 5),
                                   color: profitPanel
-                                      ? const Color(
-                                          lighthouseLedgerResultBlockAccentValue,
+                                      ? DunesColors.resolve(
+                                          context,
+                                          const Color(
+                                            lighthouseLedgerResultBlockAccentValue,
+                                          ),
+                                          role: DunesColorRole.surface,
                                         ).withAlpha(42)
-                                      : LhColors.line2,
+                                      : DunesColors.resolve(
+                                          context,
+                                          LhColors.line2,
+                                          role: DunesColorRole.surface,
+                                        ),
                                 ),
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 3),
@@ -18799,8 +19749,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                       Icon(
                                         Icons.account_balance_wallet_outlined,
                                         size: 11,
-                                        color: const Color(
-                                          lighthouseLedgerResultBlockAccentValue,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          const Color(
+                                            lighthouseLedgerResultBlockAccentValue,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(width: 4),
@@ -18811,8 +19764,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                           overflow: TextOverflow.ellipsis,
                                           style: LhTypography.sans(
                                             size: 10,
-                                            color: LhColors.ink2,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              LhColors.ink2,
+                                            ),
                                             weight: FontWeight.w600,
+                                            context: context,
                                           ),
                                         ),
                                       ),
@@ -18849,12 +19806,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ? null
                       : lighthouseHeroMatchesLedgerCard
                       ? BoxDecoration(
-                          color: const Color(
-                            lighthouseLedgerSummaryNeutralPanelValue,
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(
+                              lighthouseLedgerSummaryNeutralPanelValue,
+                            ),
+                            role: DunesColorRole.surface,
                           ),
                           border: Border.all(
-                            color: const Color(
-                              lighthouseHeroPanelNeutralEdgeValue,
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(lighthouseHeroPanelNeutralEdgeValue),
+                              role: DunesColorRole.border,
                             ),
                             width: lighthouseHeroPanelEdgeWidth,
                           ),
@@ -18863,9 +19826,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           ),
                         )
                       : BoxDecoration(
-                          color: const Color(0xFFFFFDFF),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFFFFDFF),
+                            role: DunesColorRole.surface,
+                          ),
                           border: Border.all(
-                            color: _LhPlum.heroEdge,
+                            color: DunesColors.resolve(
+                              context,
+                              _LhPlum.heroEdge,
+                              role: DunesColorRole.border,
+                            ),
                             width: 0.7,
                           ),
                           borderRadius: BorderRadius.circular(
@@ -18909,7 +19880,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ),
                       if (flatHero) ...[
                         const SizedBox(width: 12),
-                        Container(width: 0.7, color: LhColors.line2),
+                        Container(
+                          width: 0.7,
+                          color: DunesColors.resolve(
+                            context,
+                            LhColors.line2,
+                            role: DunesColorRole.surface,
+                          ),
+                        ),
                         const SizedBox(width: 12),
                       ] else
                         const SizedBox(width: 10),
@@ -18945,10 +19923,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       overflow: TextOverflow.ellipsis,
       style: LhTypography.sans(
         size: 8.5,
-        color: LhColors.mute,
+        color: DunesColors.resolve(context, LhColors.mute),
         weight: FontWeight.w600,
         letterSpacing: 0.2,
         height: 1.0,
+        context: context,
       ),
     );
   }
@@ -18958,9 +19937,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final noticeCount = _activeDelayNotices.length;
     final hasNotices = noticeCount > 0;
     final open = _delayNoticeOpen && hasNotices;
-    var color = LhColors.mute2;
+    var color = DunesColors.resolve(context, LhColors.mute2);
     if (hasNotices) {
-      color = LhColors.copper;
+      color = DunesColors.resolve(context, LhColors.copper);
     }
     return Semantics(
       button: hasNotices,
@@ -18984,7 +19963,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 child: Icon(
                   Icons.campaign_rounded,
                   size: 13,
-                  color: color,
+                  color: DunesColors.resolveNullable(context, color),
                 ),
               ),
               if (hasNotices)
@@ -18995,9 +19974,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     width: 5,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: open ? _LhPlum.primary : LhColors.copper,
+                      color: open
+                          ? DunesColors.resolve(
+                              context,
+                              _LhPlum.primary,
+                              role: DunesColorRole.surface,
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              LhColors.copper,
+                              role: DunesColorRole.surface,
+                            ),
                       shape: BoxShape.circle,
-                      border: Border.all(color: LhColors.paper, width: 0.8),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          LhColors.paper,
+                          role: DunesColorRole.border,
+                        ),
+                        width: 0.8,
+                      ),
                     ),
                   ),
                 ),
@@ -19018,12 +20014,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            LhColors.paper,
-            LhColors.copperSoft.withAlpha(92),
+            DunesColors.resolve(context, LhColors.paper),
+            DunesColors.resolve(context, LhColors.copperSoft).withAlpha(92),
           ],
         ),
         borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: LhColors.copper.withAlpha(42), width: 0.7),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.copper,
+            role: DunesColorRole.border,
+          ).withAlpha(42),
+          width: 0.7,
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0A2F2418),
@@ -19043,13 +20046,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   width: 22,
                   height: 22,
                   decoration: BoxDecoration(
-                    color: LhColors.copper.withAlpha(18),
+                    color: DunesColors.resolve(
+                      context,
+                      LhColors.copper,
+                      role: DunesColorRole.surface,
+                    ).withAlpha(18),
                     borderRadius: BorderRadius.circular(7),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.notifications_none_rounded,
                     size: 13,
-                    color: LhColors.copper,
+                    color: DunesColors.resolve(context, LhColors.copper),
                   ),
                 ),
                 const SizedBox(width: 7),
@@ -19057,9 +20064,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   '运行提醒',
                   style: LhTypography.sans(
                     size: 10.5,
-                    color: LhColors.ink,
+                    color: DunesColors.resolve(context, LhColors.ink),
                     weight: FontWeight.w700,
                     letterSpacing: 0.1,
+                    context: context,
                   ),
                 ),
                 const Spacer(),
@@ -19069,10 +20077,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: LhColors.paper.withAlpha(190),
+                    color: DunesColors.resolve(
+                      context,
+                      LhColors.paper,
+                      role: DunesColorRole.surface,
+                    ).withAlpha(190),
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
-                      color: LhColors.copper.withAlpha(30),
+                      color: DunesColors.resolve(
+                        context,
+                        LhColors.copper,
+                        role: DunesColorRole.border,
+                      ).withAlpha(30),
                       width: 0.6,
                     ),
                   ),
@@ -19080,15 +20096,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     '${notices.length} 条待关注',
                     style: LhTypography.sans(
                       size: 8.5,
-                      color: LhColors.copper,
+                      color: DunesColors.resolve(context, LhColors.copper),
                       weight: FontWeight.w700,
+                      context: context,
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          Container(height: 0.7, color: LhColors.copper.withAlpha(24)),
+          Container(
+            height: 0.7,
+            color: DunesColors.resolve(
+              context,
+              LhColors.copper,
+              role: DunesColorRole.surface,
+            ).withAlpha(24),
+          ),
           ...List<Widget>.generate(notices.length, (index) {
             final notice = notices[index];
             return Column(
@@ -19097,7 +20121,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 if (index < notices.length - 1)
                   Padding(
                     padding: const EdgeInsets.only(left: 40, right: 11),
-                    child: Container(height: 0.6, color: LhColors.line2),
+                    child: Container(
+                      height: 0.6,
+                      color: DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   ),
               ],
             );
@@ -19123,14 +20154,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             width: 21,
             height: 21,
             decoration: BoxDecoration(
-              color: LhColors.paper.withAlpha(205),
+              color: DunesColors.resolve(
+                context,
+                LhColors.paper,
+                role: DunesColorRole.surface,
+              ).withAlpha(205),
               borderRadius: BorderRadius.circular(7),
               border: Border.all(
-                color: LhColors.copper.withAlpha(32),
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.copper,
+                  role: DunesColorRole.border,
+                ).withAlpha(32),
                 width: 0.6,
               ),
             ),
-            child: Icon(icon, size: 12, color: LhColors.copper),
+            child: Icon(
+              icon,
+              size: 12,
+              color: DunesColors.resolve(context, LhColors.copper),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -19141,10 +20184,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   label,
                   style: LhTypography.sans(
                     size: 8.5,
-                    color: LhColors.copper,
+                    color: DunesColors.resolve(context, LhColors.copper),
                     weight: FontWeight.w700,
                     letterSpacing: 0.15,
                     height: 1.15,
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -19152,9 +20196,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   notice.message,
                   style: LhTypography.sans(
                     size: 10.5,
-                    color: LhColors.ink2,
+                    color: DunesColors.resolve(context, LhColors.ink2),
                     weight: FontWeight.w500,
                     height: 1.35,
+                    context: context,
                   ),
                 ),
               ],
@@ -19184,8 +20229,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       decoration: lighthouseHeroUsesFlatLayout
           // 拍平版：Hero 没有卡边，落款靠一条顶线跟上面的分区表断开 ——
           // 表格的表尾就是这么收的。
-          ? const BoxDecoration(
-              border: Border(top: BorderSide(color: LhColors.line, width: 0.7)),
+          ? BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 0.7,
+                ),
+              ),
             )
           : null,
       margin: EdgeInsets.only(top: lighthouseHeroUsesFlatLayout ? 10 : 1),
@@ -19198,7 +20252,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 绿点带呼吸环会比字高：必须和半句待在同一行里居中，不能先组完印章
     // 再和外面包一层 Flexible —— 两段各算各的中线，字就对不齐。
     final missNote = busy ? null : _delayNoticeMissNote;
-    Widget sep() => Container(width: 0.7, height: 8, color: LhColors.line2);
+    Widget sep() => Container(
+      width: 0.7,
+      height: 8,
+      color: DunesColors.resolve(
+        context,
+        LhColors.line2,
+        role: DunesColorRole.surface,
+      ),
+    );
     Text stampWord(
       String text, {
       required Color color,
@@ -19226,13 +20288,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             height: 8.5,
             child: Center(child: _LhBrandLoader(size: 8)),
           )
-        : const SizedBox(
+        : SizedBox(
             width: 8.5,
             height: 8.5,
             child: OverflowBox(
               maxWidth: 11,
               maxHeight: 11,
-              child: _LhPulseDot(color: LhColors.pos, size: 4.5),
+              child: _LhPulseDot(
+                color: DunesColors.resolve(context, LhColors.pos),
+                size: 4.5,
+              ),
             ),
           );
 
@@ -19254,14 +20319,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               children: [
                 marker,
                 const SizedBox(width: 5),
-                stampWord(busy ? '同步中' : '已同步', color: LhColors.mute),
+                stampWord(
+                  busy ? '同步中' : '已同步',
+                  color: DunesColors.resolve(context, LhColors.mute),
+                ),
                 if (!busy) ...[
                   const SizedBox(width: 5),
                   sep(),
                   const SizedBox(width: 5),
                   stampWord(
                     _syncedAtLabelCompact(),
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     mono: true,
                   ),
                 ],
@@ -19321,9 +20389,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     style: _tabular(
                       LhTypography.mono(
                         size: 11,
-                        color: LhColors.ink2,
+                        color: DunesColors.resolve(context, LhColors.ink2),
                         weight: FontWeight.w600,
                         letterSpacing: 0.2,
+                        context: context,
                       ),
                     ),
                   ),
@@ -19333,16 +20402,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   action,
                   style: LhTypography.sans(
                     size: 11,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                     weight: FontWeight.w500,
                     letterSpacing: 0.1,
+                    context: context,
                   ),
                 ),
                 const SizedBox(width: 1),
                 Icon(
                   Icons.chevron_right_rounded,
                   size: 14,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                 ),
               ],
             ),
@@ -19358,9 +20428,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 '清除',
                 style: LhTypography.mono(
                   size: 10,
-                  color: LhColors.mute,
+                  color: DunesColors.resolve(context, LhColors.mute),
                   weight: FontWeight.w600,
                   letterSpacing: 0.3,
+                  context: context,
                 ),
               ),
             ),
@@ -19375,9 +20446,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 '回到当前',
                 style: LhTypography.mono(
                   size: 10,
-                  color: LhColors.mute,
+                  color: DunesColors.resolve(context, LhColors.mute),
                   weight: FontWeight.w600,
                   letterSpacing: 0.3,
+                  context: context,
                 ),
               ),
             ),
@@ -19475,8 +20547,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }) {
     final vs = (vsLabel == null || vsLabel.isEmpty) ? _periodVsLabel : vsLabel;
     final color = d == null
-        ? LhColors.mute2
-        : (d.isUp ? LhColors.neg : LhColors.pos);
+        ? DunesColors.resolve(context, LhColors.mute2)
+        : (d.isUp
+              ? DunesColors.resolve(context, LhColors.neg)
+              : DunesColors.resolve(context, LhColors.pos));
     final a = d == null ? 0.0 : d.pct.abs();
     final unit = isRate ? 'pp' : '%';
     final pctText = Text(
@@ -19491,6 +20565,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           color: color,
           weight: FontWeight.w600,
           letterSpacing: 0.2,
+          context: context,
         ),
       ),
     );
@@ -19500,9 +20575,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       overflow: TextOverflow.ellipsis,
       style: LhTypography.mono(
         size: 9.5,
-        color: LhColors.mute,
+        color: DunesColors.resolve(context, LhColors.mute),
         weight: FontWeight.w500,
         letterSpacing: 0.3,
+        context: context,
       ),
     );
     if (!pointMode) {
@@ -19524,14 +20600,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
         decoration: BoxDecoration(
-          color: _LhPlum.primary.withAlpha(20),
+          color: DunesColors.resolve(
+            context,
+            _LhPlum.primary,
+            role: DunesColorRole.surface,
+          ).withAlpha(20),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _LhPlum.primary.withAlpha(60), width: 0.6),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              _LhPlum.primary,
+              role: DunesColorRole.border,
+            ).withAlpha(60),
+            width: 0.6,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.refresh_rounded, size: 10, color: _LhPlum.primary),
+            Icon(
+              Icons.refresh_rounded,
+              size: 10,
+              color: DunesColors.resolve(context, _LhPlum.primary),
+            ),
             const SizedBox(width: 3),
             Text(
               '回本期',
@@ -19539,10 +20630,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               softWrap: false,
               style: LhTypography.mono(
                 size: 9.5,
-                color: _LhPlum.primary,
+                color: DunesColors.resolve(context, _LhPlum.primary),
                 weight: FontWeight.w700,
                 letterSpacing: 0.3,
                 height: 1.0,
+                context: context,
               ),
             ),
           ],
@@ -19585,25 +20677,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         key: 'profit',
         label: '利润',
         isRate: false,
-        cellColor: LhColors.neg,
+        cellColor: DunesColors.resolve(context, LhColors.neg),
       ),
       _HeroMetric(
         key: 'revenue',
         label: '收入（已核销利差）',
         isRate: false,
-        cellColor: LhColors.cnpc,
+        cellColor: DunesColors.resolve(context, LhColors.cnpc),
       ),
       _HeroMetric(
         key: 'rate',
         label: 'ROI',
         isRate: true,
-        cellColor: _LhPlum.primary,
+        cellColor: DunesColors.resolve(context, _LhPlum.primary),
       ),
       _HeroMetric(
         key: 'totalCost',
         label: '成本合计',
         isRate: false,
-        cellColor: LhColors.pos,
+        cellColor: DunesColors.resolve(context, LhColors.pos),
       ),
     ];
   }
@@ -19613,16 +20705,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 3.5, vertical: 0.5),
       decoration: BoxDecoration(
-        border: Border.all(color: LhColors.mute2, width: 0.6),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.mute2,
+            role: DunesColorRole.border,
+          ),
+          width: 0.6,
+        ),
         borderRadius: BorderRadius.circular(2),
       ),
       child: Text(
         '估',
         style: LhTypography.mono(
           size: 7,
-          color: LhColors.mute2,
+          color: DunesColors.resolve(context, LhColors.mute2),
           weight: FontWeight.w700,
           letterSpacing: 0,
+          context: context,
         ),
       ),
     );
@@ -19662,10 +20762,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     filters[i].value,
                     style: LhTypography.sans(
                       size: 13,
-                      color: LhColors.ink,
+                      color: DunesColors.resolve(context, LhColors.ink),
                       weight: FontWeight.w700,
                       letterSpacing: 0.2,
                       height: 1.15,
+                      context: context,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -19695,10 +20796,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       width: lighthouseHeroSummaryIconSize,
       height: lighthouseHeroSummaryIconSize,
       decoration: BoxDecoration(
-        color: accent.withAlpha(24),
+        color: DunesColors.resolveNullable(
+          context,
+          accent.withAlpha(24),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(lighthouseHeroSummaryIconRadius),
       ),
-      child: Icon(_categoryFallbackIcon(group), size: 12, color: accent),
+      child: Icon(
+        _categoryFallbackIcon(group),
+        size: 12,
+        color: DunesColors.resolveNullable(context, accent),
+      ),
     );
   }
 
@@ -19718,7 +20827,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Container(
             width: 2,
             height: 12,
-            color: _LhPlum.primary.withAlpha(220),
+            color: DunesColors.resolve(
+              context,
+              _LhPlum.primary,
+              role: DunesColorRole.surface,
+            ).withAlpha(220),
           ),
           const SizedBox(width: 7),
           // 中间: 汉字面包屑 (values 用中点分隔, 每个 value 深色, 分隔浅色)
@@ -19734,17 +20847,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         text: '  ·  ',
                         style: LhTypography.mono(
                           size: 10,
-                          color: LhColors.mute2,
+                          color: DunesColors.resolve(context, LhColors.mute2),
                           weight: FontWeight.w600,
+                          context: context,
                         ),
                       ),
                     TextSpan(
                       text: filters[i].value,
                       style: LhTypography.sans(
                         size: 12,
-                        color: LhColors.ink,
+                        color: DunesColors.resolve(context, LhColors.ink),
                         weight: FontWeight.w700,
                         letterSpacing: 0.3,
+                        context: context,
                       ),
                     ),
                   ],
@@ -19787,8 +20902,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: Container(
             constraints: const BoxConstraints(minWidth: 78, maxWidth: 130),
             decoration: BoxDecoration(
-              color: _LhPlum.soft,
-              border: Border.all(color: _LhPlum.primary, width: 1.5),
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.soft,
+                role: DunesColorRole.surface,
+              ),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                  role: DunesColorRole.border,
+                ),
+                width: 1.5,
+              ),
               borderRadius: BorderRadius.circular(3),
             ),
             child: Column(
@@ -19797,7 +20923,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               children: [
                 // 顶部 copper 实色 stripe
                 Container(
-                  color: _LhPlum.primary,
+                  color: DunesColors.resolve(
+                    context,
+                    _LhPlum.primary,
+                    role: DunesColorRole.surface,
+                  ),
                   padding: const EdgeInsets.fromLTRB(7, 3, 7, 3),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -19806,9 +20936,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         '筛选',
                         style: LhTypography.sans(
                           size: 9,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
                           weight: FontWeight.w700,
                           letterSpacing: 1.5,
+                          context: context,
                         ),
                       ),
                       const Spacer(),
@@ -19817,9 +20948,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           '×${filters.length}',
                           style: LhTypography.mono(
                             size: 9,
-                            color: Colors.white.withAlpha(220),
+                            color: DunesColors.resolve(
+                              context,
+                              Colors.white,
+                            ).withAlpha(220),
                             weight: FontWeight.w700,
                             letterSpacing: 0.3,
+                            context: context,
                           ),
                         ),
                     ],
@@ -19844,9 +20979,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               filters[i].label,
                               style: LhTypography.sans(
                                 size: 8,
-                                color: _LhPlum.primary.withAlpha(180),
+                                color: DunesColors.resolve(
+                                  context,
+                                  _LhPlum.primary,
+                                ).withAlpha(180),
                                 weight: FontWeight.w600,
                                 letterSpacing: 0.4,
+                                context: context,
                               ),
                             ),
                             const SizedBox(width: 4),
@@ -19856,9 +20995,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 filters[i].value,
                                 style: LhTypography.sans(
                                   size: 14,
-                                  color: LhColors.ink,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.ink,
+                                  ),
                                   weight: FontWeight.w700,
                                   letterSpacing: 0.1,
+                                  context: context,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                                 maxLines: 1,
@@ -19874,16 +21017,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           Icon(
                             Icons.close_rounded,
                             size: 9,
-                            color: _LhPlum.primary.withAlpha(160),
+                            color: DunesColors.resolve(
+                              context,
+                              _LhPlum.primary,
+                            ).withAlpha(160),
                           ),
                           const SizedBox(width: 2),
                           Text(
                             '点击清除',
                             style: LhTypography.mono(
                               size: 8,
-                              color: _LhPlum.primary.withAlpha(160),
+                              color: DunesColors.resolve(
+                                context,
+                                _LhPlum.primary,
+                              ).withAlpha(160),
                               weight: FontWeight.w500,
                               letterSpacing: 0.4,
+                              context: context,
                             ),
                           ),
                         ],
@@ -20184,14 +21334,33 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   height: 28,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: enabled ? LhColors.paper : _LhPlum.mist,
-                    border: Border.all(color: LhColors.line, width: 1),
+                    color: enabled
+                        ? DunesColors.resolve(
+                            ctx,
+                            LhColors.paper,
+                            role: DunesColorRole.surface,
+                          )
+                        : DunesColors.resolve(
+                            ctx,
+                            _LhPlum.mist,
+                            role: DunesColorRole.surface,
+                          ),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        ctx,
+                        LhColors.line,
+                        role: DunesColorRole.border,
+                      ),
+                      width: 1,
+                    ),
                     borderRadius: BorderRadius.circular(7),
                   ),
                   child: Icon(
                     icon,
                     size: 15,
-                    color: enabled ? LhColors.ink2 : LhColors.mute2,
+                    color: enabled
+                        ? DunesColors.resolve(ctx, LhColors.ink2)
+                        : DunesColors.resolve(ctx, LhColors.mute2),
                   ),
                 ),
               );
@@ -20212,9 +21381,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
                   decoration: BoxDecoration(
-                    color: active ? _LhPlum.mist : LhColors.paper,
+                    color: active
+                        ? DunesColors.resolve(
+                            ctx,
+                            _LhPlum.mist,
+                            role: DunesColorRole.surface,
+                          )
+                        : DunesColors.resolve(
+                            ctx,
+                            LhColors.paper,
+                            role: DunesColorRole.surface,
+                          ),
                     border: Border.all(
-                      color: active ? _LhPlum.primary : LhColors.line2,
+                      color: active
+                          ? DunesColors.resolve(
+                              ctx,
+                              _LhPlum.primary,
+                              role: DunesColorRole.border,
+                            )
+                          : DunesColors.resolve(
+                              ctx,
+                              LhColors.line2,
+                              role: DunesColorRole.border,
+                            ),
                       width: active ? 1.4 : 1,
                     ),
                     borderRadius: BorderRadius.circular(8),
@@ -20227,9 +21416,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         label,
                         style: LhTypography.mono(
                           size: 8.5,
-                          color: active ? _LhPlum.primary : LhColors.mute2,
+                          color: active
+                              ? DunesColors.resolve(ctx, _LhPlum.primary)
+                              : DunesColors.resolve(ctx, LhColors.mute2),
                           weight: FontWeight.w700,
                           letterSpacing: 0.6,
+                          context: ctx,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -20237,9 +21429,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         txt,
                         style: LhTypography.sans(
                           size: 12.5,
-                          color: d == null ? LhColors.mute2 : LhColors.ink,
+                          color: d == null
+                              ? DunesColors.resolve(ctx, LhColors.mute2)
+                              : DunesColors.resolve(ctx, LhColors.ink),
                           weight: FontWeight.w700,
                           letterSpacing: -0.1,
+                          context: ctx,
                         ),
                       ),
                     ],
@@ -20266,8 +21461,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
                       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                       decoration: BoxDecoration(
-                        color: LhColors.paper,
-                        border: Border.all(color: LhColors.line2, width: 1),
+                        color: DunesColors.resolve(
+                          ctx,
+                          LhColors.paper,
+                          role: DunesColorRole.surface,
+                        ),
+                        border: Border.all(
+                          color: DunesColors.resolve(
+                            ctx,
+                            LhColors.line2,
+                            role: DunesColorRole.border,
+                          ),
+                          width: 1,
+                        ),
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
@@ -20288,9 +21494,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               '选择时间段',
                               style: LhTypography.sans(
                                 size: 13,
-                                color: LhColors.ink,
+                                color: DunesColors.resolve(ctx, LhColors.ink),
                                 weight: FontWeight.w700,
                                 letterSpacing: 0.2,
+                                context: ctx,
                               ),
                             ),
                           ),
@@ -20310,7 +21517,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               Icon(
                                 Icons.arrow_forward_rounded,
                                 size: 14,
-                                color: LhColors.mute2,
+                                color: DunesColors.resolve(ctx, LhColors.mute2),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
@@ -20343,8 +21550,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   textAlign: TextAlign.center,
                                   style: LhTypography.sans(
                                     size: 13,
-                                    color: LhColors.ink2,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      LhColors.ink2,
+                                    ),
                                     weight: FontWeight.w700,
+                                    context: ctx,
                                   ),
                                 ),
                               ),
@@ -20371,7 +21582,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                         style: TextStyle(
                                           fontFamily: 'Geist Mono',
                                           fontSize: 9,
-                                          color: LhColors.mute2,
+                                          color: DunesColors.resolve(
+                                            ctx,
+                                            LhColors.mute2,
+                                          ),
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -20443,22 +21657,46 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     Color borderColor;
                                     FontWeight weight;
                                     if (isStart || isEnd) {
-                                      cellBg = _LhPlum.primary;
-                                      textColor = Colors.white;
-                                      borderColor = _LhPlum.primary;
+                                      cellBg = DunesColors.resolve(
+                                        ctx,
+                                        _LhPlum.primary,
+                                      );
+                                      textColor = DunesColors.resolve(
+                                        ctx,
+                                        Colors.white,
+                                      );
+                                      borderColor = DunesColors.resolve(
+                                        ctx,
+                                        _LhPlum.primary,
+                                      );
                                       weight = FontWeight.w700;
                                     } else if (inBetween) {
-                                      cellBg = _LhPlum.mist;
-                                      textColor = _LhPlum.deep;
+                                      cellBg = DunesColors.resolve(
+                                        ctx,
+                                        _LhPlum.mist,
+                                      );
+                                      textColor = DunesColors.resolve(
+                                        ctx,
+                                        _LhPlum.deep,
+                                      );
                                       borderColor = Colors.transparent;
                                       weight = FontWeight.w600;
                                     } else {
                                       cellBg = Colors.transparent;
                                       textColor = disabled
-                                          ? LhColors.mute2.withAlpha(120)
-                                          : LhColors.ink2;
+                                          ? DunesColors.resolve(
+                                              ctx,
+                                              LhColors.mute2,
+                                            ).withAlpha(120)
+                                          : DunesColors.resolve(
+                                              ctx,
+                                              LhColors.ink2,
+                                            );
                                       borderColor = isToday
-                                          ? _LhPlum.primary.withAlpha(120)
+                                          ? DunesColors.resolve(
+                                              ctx,
+                                              _LhPlum.primary,
+                                            ).withAlpha(120)
                                           : Colors.transparent;
                                       weight = isToday
                                           ? FontWeight.w700
@@ -20473,7 +21711,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                       child: Container(
                                         alignment: Alignment.center,
                                         decoration: BoxDecoration(
-                                          color: cellBg,
+                                          color: DunesColors.resolveNullable(
+                                            ctx,
+                                            cellBg,
+                                            role: DunesColorRole.surface,
+                                          ),
                                           border: Border.all(
                                             color: borderColor,
                                             width: 1,
@@ -20488,6 +21730,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                             size: 10.5,
                                             color: textColor,
                                             weight: weight,
+                                            context: ctx,
                                           ),
                                         ),
                                       ),
@@ -20507,10 +21750,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   style: LhTypography.mono(
                                     size: 9.2,
                                     color: canConfirm
-                                        ? _LhPlum.primary
-                                        : LhColors.mute,
+                                        ? DunesColors.resolve(
+                                            ctx,
+                                            _LhPlum.primary,
+                                          )
+                                        : DunesColors.resolve(
+                                            ctx,
+                                            LhColors.mute,
+                                          ),
                                     weight: FontWeight.w600,
                                     letterSpacing: 0.3,
+                                    context: ctx,
                                   ),
                                 ),
                               ),
@@ -20526,8 +21776,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     '取消',
                                     style: LhTypography.sans(
                                       size: 11.5,
-                                      color: LhColors.mute,
+                                      color: DunesColors.resolve(
+                                        ctx,
+                                        LhColors.mute,
+                                      ),
                                       weight: FontWeight.w600,
+                                      context: ctx,
                                     ),
                                   ),
                                 ),
@@ -20547,8 +21801,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: canConfirm
-                                        ? _LhPlum.primary
-                                        : _LhPlum.mist,
+                                        ? DunesColors.resolve(
+                                            ctx,
+                                            _LhPlum.primary,
+                                            role: DunesColorRole.surface,
+                                          )
+                                        : DunesColors.resolve(
+                                            ctx,
+                                            _LhPlum.mist,
+                                            role: DunesColorRole.surface,
+                                          ),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
@@ -20556,9 +21818,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     style: LhTypography.sans(
                                       size: 11.5,
                                       color: canConfirm
-                                          ? Colors.white
-                                          : LhColors.mute2,
+                                          ? DunesColors.resolve(
+                                              ctx,
+                                              Colors.white,
+                                            )
+                                          : DunesColors.resolve(
+                                              ctx,
+                                              LhColors.mute2,
+                                            ),
                                       weight: FontWeight.w700,
+                                      context: ctx,
                                     ),
                                   ),
                                 ),
@@ -20650,32 +21919,54 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           pillRadius: lighthousePeriodSelectedRadius,
           dotSize: lighthousePeriodStatusDotSize,
           trackPadding: lighthousePeriodTrackPadding,
-          primary: _LhPlum.primary,
-          deep: _LhPlum.deep,
+          primary: DunesColors.resolve(
+            context,
+            _LhPlum.primary,
+            role: DunesColorRole.surface,
+          ),
+          deep: DunesColors.resolve(context, _LhPlum.deep),
           // v24 · 轨道 = 凹槽（淡紫底、Hero 卡同款紫发丝边、不投影），
           // 胶囊 = 缩小的 Hero 白卡（白纸 + 同色边 + 轻投影）。
           trackColor: lighthousePeriodUsesHeroSurface
-              ? const Color(0xFFF3EFFA)
-              : LhColors.paper,
+              ? DunesColors.resolve(context, const Color(0xFFF3EFFA))
+              : DunesColors.resolve(context, LhColors.paper),
           trackBorder: lighthousePeriodUsesHeroSurface
-              ? _LhPlum.line
-              : LhColors.line2,
+              ? DunesColors.resolve(
+                  context,
+                  _LhPlum.line,
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  LhColors.line2,
+                  role: DunesColorRole.border,
+                ),
           trackShadowColor: lighthousePeriodUsesHeroSurface
               ? Colors.transparent
-              : Colors.black.withAlpha(8),
+              : DunesColors.resolve(context, Colors.black).withAlpha(8),
           pillGradient: lighthousePeriodUsesHeroSurface
-              ? const [Color(0xFFFFFFFF), Color(0xFFFFFFFF), Color(0xFFFCFAFF)]
-              : const [Color(0xFFF6F1FD), Color(0xFFE3D9F7), Color(0xFFEFE9FB)],
-          pillEdgeColor: lighthousePeriodUsesHeroSurface ? _LhPlum.line : null,
+              ? [
+                  DunesColors.resolve(context, Color(0xFFFFFFFF)),
+                  DunesColors.resolve(context, Color(0xFFFFFFFF)),
+                  DunesColors.resolve(context, Color(0xFFFCFAFF)),
+                ]
+              : [
+                  DunesColors.resolve(context, Color(0xFFF6F1FD)),
+                  DunesColors.resolve(context, Color(0xFFE3D9F7)),
+                  DunesColors.resolve(context, Color(0xFFEFE9FB)),
+                ],
+          pillEdgeColor: lighthousePeriodUsesHeroSurface
+              ? DunesColors.resolve(context, _LhPlum.line)
+              : null,
           pillShadowColor: lighthousePeriodUsesHeroSurface
-              ? _LhPlum.deep.withAlpha(30)
+              ? DunesColors.resolve(context, _LhPlum.deep).withAlpha(30)
               : null,
           shimmerColor: lighthousePeriodUsesHeroSurface
-              ? _LhPlum.lavender
-              : Colors.white,
-          idleTextColor: LhColors.ink2,
+              ? DunesColors.resolve(context, _LhPlum.lavender)
+              : DunesColors.resolve(context, Colors.white),
+          idleTextColor: DunesColors.resolve(context, LhColors.ink2),
           selectedTextColor: lighthousePeriodUsesHeroSurface
-              ? _LhPlum.heroNum
+              ? DunesColors.resolve(context, _LhPlum.heroNum)
               : null,
           selectedLabel: (_isCustomRange || !lighthousePeriodPillShowsInstance)
               ? null
@@ -20683,10 +21974,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ambientMotion: lighthousePeriodAmbientMotion,
           baseTextStyle: LhTypography.sans(
             size: lighthousePeriodLabelFontSize,
-            color: LhColors.ink2,
+            color: DunesColors.resolve(context, LhColors.ink2),
             weight: FontWeight.w500,
             letterSpacing: 0,
             height: 1.0,
+            context: context,
           ),
           onTap: (i) {
             LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
@@ -20741,7 +22033,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: on ? _LhPlum.primary : Colors.transparent,
+                color: on
+                    ? DunesColors.resolve(
+                        context,
+                        _LhPlum.primary,
+                        role: DunesColorRole.border,
+                      )
+                    : Colors.transparent,
                 width: 1.2,
               ),
             ),
@@ -20754,20 +22052,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 _periodInstanceLabel(_period, off),
                 style: LhTypography.sans(
                   size: 11,
-                  color: on ? LhColors.ink : LhColors.mute,
+                  color: on
+                      ? DunesColors.resolve(context, LhColors.ink)
+                      : DunesColors.resolve(context, LhColors.mute),
                   weight: on ? FontWeight.w700 : FontWeight.w500,
                   height: 1.2,
                   letterSpacing: 0.2,
+                  context: context,
                 ),
               ),
               Text(
                 _periodInstanceDetail(_period, off),
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: on ? _LhPlum.primary : LhColors.mute2,
+                  color: on
+                      ? DunesColors.resolve(context, _LhPlum.primary)
+                      : DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w500,
                   height: 1.2,
                   letterSpacing: 0.2,
+                  context: context,
                 ),
               ),
             ],
@@ -20792,9 +22096,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           '渠道构成',
           style: LhTypography.sans(
             size: 8.8,
-            color: LhColors.ink2,
+            color: DunesColors.resolve(context, LhColors.ink2),
             weight: FontWeight.w700,
             letterSpacing: 0.4,
+            context: context,
           ),
         ),
         const SizedBox(width: 7),
@@ -20808,7 +22113,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     .map(
                       (c) => Expanded(
                         flex: c.pct.round().clamp(1, 100),
-                        child: Container(color: c.color),
+                        child: Container(
+                          color: DunesColors.resolveNullable(
+                            context,
+                            c.color,
+                            role: DunesColorRole.surface,
+                          ),
+                        ),
                       ),
                     )
                     .toList(),
@@ -20821,9 +22132,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           label,
           style: LhTypography.mono(
             size: 8,
-            color: LhColors.mute,
+            color: DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w600,
             letterSpacing: 0.1,
+            context: context,
           ),
         ),
       ],
@@ -20880,9 +22192,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           '${_hunBarTitle()} 占比',
           style: LhTypography.sans(
             size: 8.8,
-            color: LhColors.mute,
+            color: DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w600,
             letterSpacing: 0.4,
+            context: context,
           ),
         ),
         const SizedBox(width: 7),
@@ -20896,20 +22209,46 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   if (uPct > 0.5)
                     Expanded(
                       flex: uPct.round().clamp(1, 100),
-                      child: Container(color: _hunColorFor('U')),
+                      child: Container(
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _hunColorFor('U'),
+                          role: DunesColorRole.surface,
+                        ),
+                      ),
                     ),
                   if (nPct > 0.5)
                     Expanded(
                       flex: nPct.round().clamp(1, 100),
-                      child: Container(color: _hunColorFor('N')),
+                      child: Container(
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _hunColorFor('N'),
+                          role: DunesColorRole.surface,
+                        ),
+                      ),
                     ),
                   if (hPct > 0.5)
                     Expanded(
                       flex: hPct.round().clamp(1, 100),
-                      child: Container(color: _hunColorFor('H')),
+                      child: Container(
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _hunColorFor('H'),
+                          role: DunesColorRole.surface,
+                        ),
+                      ),
                     ),
                   if (uPct < 0.5 && nPct < 0.5 && hPct < 0.5)
-                    Expanded(child: Container(color: LhColors.line2)),
+                    Expanded(
+                      child: Container(
+                        color: DunesColors.resolve(
+                          context,
+                          LhColors.line2,
+                          role: DunesColorRole.surface,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -20920,9 +22259,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           label.isEmpty ? '—' : label,
           style: LhTypography.mono(
             size: 8,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w500,
             letterSpacing: 0.1,
+            context: context,
           ),
         ),
       ],
@@ -21141,7 +22481,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 height: 0.6,
                 margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                color: divider,
+                color: DunesColors.resolveNullable(
+                  context,
+                  divider,
+                  role: DunesColorRole.surface,
+                ),
               ),
             );
           }
@@ -21159,14 +22503,32 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     bool blueSection(String key) =>
         lighthouseHeroMatchesLedgerCard && (key == 'profit' || key == 'cash');
     Color sectionAccent(String key) => blueSection(key)
-        ? const Color(lighthouseLedgerResultBlockAccentValue)
-        : Color(lighthouseHeroSectionAccentValues[key]!);
+        ? DunesColors.resolve(
+            context,
+            const Color(lighthouseLedgerResultBlockAccentValue),
+          )
+        : DunesColors.resolve(
+            context,
+            Color(lighthouseHeroSectionAccentValues[key]!),
+          );
     Color sectionChip(String key) => blueSection(key)
-        ? const Color(lighthouseHeroResultSectionChipValue)
-        : Color(lighthouseHeroSectionChipValues[key]!);
+        ? DunesColors.resolve(
+            context,
+            const Color(lighthouseHeroResultSectionChipValue),
+          )
+        : DunesColors.resolve(
+            context,
+            Color(lighthouseHeroSectionChipValues[key]!),
+          );
     Color sectionTitleColor(String key) => blueSection(key)
-        ? const Color(lighthouseHeroResultSectionTitleValue)
-        : Color(lighthouseHeroSectionTitleValues[key]!);
+        ? DunesColors.resolve(
+            context,
+            const Color(lighthouseHeroResultSectionTitleValue),
+          )
+        : DunesColors.resolve(
+            context,
+            Color(lighthouseHeroSectionTitleValues[key]!),
+          );
 
     IconData sectionIcon(String key) {
       return switch (lighthouseHeroSectionIconKeys[key]) {
@@ -21187,8 +22549,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       if (lighthouseHeroMatchesLedgerCard &&
           lighthouseHeroSectionUsesQuietTitle) {
         final iconColor = blueSection(key)
-            ? const Color(lighthouseLedgerResultBlockAccentValue)
-            : const Color(lighthouseHeroQuietSectionIconValue);
+            ? DunesColors.resolve(
+                context,
+                const Color(lighthouseLedgerResultBlockAccentValue),
+              )
+            : DunesColors.resolve(
+                context,
+                const Color(lighthouseHeroQuietSectionIconValue),
+              );
         final icon = switch (lighthouseHeroSectionIconKeys[key]) {
           'monitoring' => Icons.show_chart_rounded,
           'receipt' => Icons.receipt_long_outlined,
@@ -21200,7 +22568,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           height: lighthouseHeroSectionIconSize + 6,
           child: Row(
             children: [
-              Icon(icon, size: 14, color: iconColor),
+              Icon(
+                icon,
+                size: 14,
+                color: DunesColors.resolveNullable(context, iconColor),
+              ),
               const SizedBox(width: 5),
               Flexible(
                 child: LhScrollText(
@@ -21209,10 +22581,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   overflow: TextOverflow.ellipsis,
                   style: LhTypography.sans(
                     size: lighthouseHeroGroupTitleFontSize + 1.5,
-                    color: LhColors.ink2,
+                    color: DunesColors.resolve(context, LhColors.ink2),
                     weight: FontWeight.w600,
                     letterSpacing: 0.2,
                     height: 1.3,
+                    context: context,
                   ),
                 ),
               ),
@@ -21229,7 +22602,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: Container(
             padding: const EdgeInsets.fromLTRB(3, 3, 7, 3),
             decoration: BoxDecoration(
-              color: sectionChip(key),
+              color: DunesColors.resolveNullable(
+                context,
+                sectionChip(key),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(
                 lighthouseHeroMastheadLabelRadius,
               ),
@@ -21241,13 +22618,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   width: lighthouseHeroSectionIconSize,
                   height: lighthouseHeroSectionIconSize,
                   decoration: BoxDecoration(
-                    color: accent,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      accent,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: Icon(
                     sectionIcon(key),
                     size: 11,
-                    color: LhColors.paper,
+                    color: DunesColors.resolve(context, LhColors.paper),
                   ),
                 ),
                 const SizedBox(width: 5),
@@ -21262,6 +22643,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       weight: FontWeight.w600,
                       letterSpacing: 0.1,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ),
@@ -21277,10 +22659,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             height: lighthouseHeroSectionIconSize,
             decoration: BoxDecoration(
               // chip 底已经带色，图标片走实心 + 白图标，chip 里才有个焦点。
-              color: accent,
+              color: DunesColors.resolveNullable(
+                context,
+                accent,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(5),
             ),
-            child: Icon(sectionIcon(key), size: 10.5, color: LhColors.paper),
+            child: Icon(
+              sectionIcon(key),
+              size: 10.5,
+              color: DunesColors.resolve(context, LhColors.paper),
+            ),
           ),
           const SizedBox(width: 5),
           Flexible(
@@ -21293,6 +22683,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 color: sectionTitleColor(key),
                 weight: FontWeight.w700,
                 height: 1.1,
+                context: context,
               ),
             ),
           ),
@@ -21302,7 +22693,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               width: 12,
               height: 2,
               decoration: BoxDecoration(
-                color: accent.withAlpha(155),
+                color: DunesColors.resolveNullable(
+                  context,
+                  accent.withAlpha(155),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -21322,28 +22717,45 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     bool isResultSection(String key) => key == 'profit' || key == 'cash';
     Color sectionTint(String key) => ledgerPanels
         ? (isResultSection(key)
-              ? const Color(
-                  lighthouseLedgerResultBlockAccentValue,
+              ? DunesColors.resolve(
+                  context,
+                  const Color(lighthouseLedgerResultBlockAccentValue),
                 ).withAlpha(lighthouseLedgerSummaryResultPanelAlpha)
-              : const Color(lighthouseLedgerSummaryNeutralPanelValue))
+              : DunesColors.resolve(
+                  context,
+                  const Color(lighthouseLedgerSummaryNeutralPanelValue),
+                ))
         : heroSurface
-        ? const Color(0xFFFFFDFF)
-        : Color(lighthouseHeroSectionTintValues[key]!);
+        ? DunesColors.resolve(context, const Color(0xFFFFFDFF))
+        : DunesColors.resolve(
+            context,
+            Color(lighthouseHeroSectionTintValues[key]!),
+          );
     Color sectionEdge(String key) => ledgerPanels
         ? (isResultSection(key)
-              ? const Color(
-                  lighthouseLedgerResultBlockAccentValue,
+              ? DunesColors.resolve(
+                  context,
+                  const Color(lighthouseLedgerResultBlockAccentValue),
                 ).withAlpha(lighthouseHeroPanelResultEdgeAlpha)
-              : const Color(lighthouseHeroPanelNeutralEdgeValue))
+              : DunesColors.resolve(
+                  context,
+                  const Color(lighthouseHeroPanelNeutralEdgeValue),
+                ))
         : heroSurface
-        ? _LhPlum.heroEdge
-        : Color(lighthouseHeroSectionEdgeValues[key]!);
+        ? DunesColors.resolve(context, _LhPlum.heroEdge)
+        : DunesColors.resolve(
+            context,
+            Color(lighthouseHeroSectionEdgeValues[key]!),
+          );
     final sectionEdgeWidth = ledgerPanels
         ? lighthouseHeroPanelEdgeWidth
         : (heroSurface ? 0.7 : 0.8);
     Color sectionDivider(String key) => isResultSection(key)
-        ? const Color(lighthouseLedgerResultBlockAccentValue).withAlpha(46)
-        : LhColors.line2;
+        ? DunesColors.resolve(
+            context,
+            const Color(lighthouseLedgerResultBlockAccentValue),
+          ).withAlpha(46)
+        : DunesColors.resolve(context, LhColors.line2);
 
     Widget strip({
       required String sectionKey,
@@ -21370,7 +22782,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         builder: (shareIcon) => Container(
           padding: const EdgeInsets.all(lighthouseHeroCardPadding),
           decoration: BoxDecoration(
-            color: sectionTint(sectionKey),
+            color: DunesColors.resolveNullable(
+              context,
+              sectionTint(sectionKey),
+              role: DunesColorRole.surface,
+            ),
             border: Border.all(
               color: sectionEdge(sectionKey),
               width: sectionEdgeWidth,
@@ -21439,7 +22855,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             7,
           ),
           decoration: BoxDecoration(
-            color: sectionTint('cash'),
+            color: DunesColors.resolveNullable(
+              context,
+              sectionTint('cash'),
+              role: DunesColorRole.surface,
+            ),
             border: Border.all(
               color: sectionEdge('cash'),
               width: sectionEdgeWidth,
@@ -21517,9 +22937,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(flex: lighthouseHeroScaleColumnFlex, child: a),
-          Container(width: 0.7, color: sep),
+          Container(
+            width: 0.7,
+            color: DunesColors.resolveNullable(
+              context,
+              sep,
+              role: DunesColorRole.surface,
+            ),
+          ),
           Expanded(flex: lighthouseHeroCostColumnFlex, child: b),
-          Container(width: 0.7, color: sep),
+          Container(
+            width: 0.7,
+            color: DunesColors.resolveNullable(
+              context,
+              sep,
+              role: DunesColorRole.surface,
+            ),
+          ),
           Expanded(flex: lighthouseHeroResultColumnFlex, child: c),
         ],
       );
@@ -21533,10 +22967,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             overflow: TextOverflow.ellipsis,
             style: LhTypography.sans(
               size: lighthouseHeroGroupTitleFontSize,
-              color: LhColors.ink2,
+              color: DunesColors.resolve(context, LhColors.ink2),
               weight: FontWeight.w700,
               letterSpacing: 0.2,
               height: 1.1,
+              context: context,
             ),
           ),
         ),
@@ -21546,16 +22981,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       Widget band(String a, String b, String c) => Container(
         height: lighthouseHeroFlatBandHeight,
         decoration: BoxDecoration(
-          color: LhColors.ink.withAlpha(lighthouseHeroFlatBandAlpha),
-          border: const Border(
-            bottom: BorderSide(color: LhColors.line, width: 0.7),
+          color: DunesColors.resolve(
+            context,
+            LhColors.ink,
+            role: DunesColorRole.surface,
+          ).withAlpha(lighthouseHeroFlatBandAlpha),
+          border: Border(
+            bottom: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                LhColors.line,
+                role: DunesColorRole.border,
+              ),
+              width: 0.7,
+            ),
           ),
         ),
         child: tri(
           bandCell(a, first: true),
           bandCell(b, first: false),
           bandCell(c, first: false),
-          sep: LhColors.line,
+          sep: DunesColors.resolve(context, LhColors.line),
         ),
       );
 
@@ -21575,7 +23021,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               col(a, first: true),
               col(b, first: false),
               col(c, first: false),
-              sep: LhColors.line2,
+              sep: DunesColors.resolve(context, LhColors.line2),
             ),
           );
 
@@ -21930,18 +23376,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         text: formula.result,
         style: LhTypography.mono(
           size: 9.5,
-          color: _LhPlum.deep,
+          color: DunesColors.resolve(context, _LhPlum.deep),
           weight: FontWeight.w700,
           height: 1.0,
+          context: context,
         ),
       ),
       TextSpan(
         text: ' = ',
         style: LhTypography.mono(
           size: 9.5,
-          color: _LhPlum.primary,
+          color: DunesColors.resolve(context, _LhPlum.primary),
           weight: FontWeight.w700,
           height: 1.0,
+          context: context,
         ),
       ),
     ];
@@ -21955,9 +23403,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           text: t,
           style: LhTypography.mono(
             size: 9.5,
-            color: op ? _LhPlum.primary : LhColors.ink2,
+            color: op
+                ? DunesColors.resolve(context, _LhPlum.primary)
+                : DunesColors.resolve(context, LhColors.ink2),
             weight: op ? FontWeight.w700 : FontWeight.w500,
             height: 1.0,
+            context: context,
           ),
         ),
       );
@@ -21969,8 +23420,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
         decoration: BoxDecoration(
-          color: _LhPlum.mist,
-          border: Border.all(color: _LhPlum.soft.withAlpha(120), width: 0.8),
+          color: DunesColors.resolve(
+            context,
+            _LhPlum.mist,
+            role: DunesColorRole.surface,
+          ),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              _LhPlum.soft,
+              role: DunesColorRole.border,
+            ).withAlpha(120),
+            width: 0.8,
+          ),
           borderRadius: BorderRadius.circular(lighthouseHeroCardRadius - 3),
         ),
         child: Row(
@@ -21990,9 +23452,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: _tabular(
                 LhTypography.mono(
                   size: 9.5,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w500,
                   height: 1.0,
+                  context: context,
                 ),
               ),
             ),
@@ -22008,8 +23471,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 满屏空白小图正是「看着不清晰」的来源之一。
   Color _grossProfitValueColor(String key, double value, Color fallback) {
     if (key != 'profit') return fallback;
-    if (value > 0) return LhColors.neg;
-    if (value < 0) return LhColors.pos;
+    if (value > 0) return DunesColors.resolve(context, LhColors.neg);
+    if (value < 0) return DunesColors.resolve(context, LhColors.pos);
     return fallback;
   }
 
@@ -22084,21 +23547,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         interactive && activeKey != null && !isActive && !isTraceSource;
     // 底板是浅的（玻璃压在雾紫星空上），字色一律走墨色那套 ——
     // 白字在这里没有底可压。
-    final numberColor = _grossProfitValueColor(keyId, value, LhColors.ink);
+    final numberColor = _grossProfitValueColor(
+      keyId,
+      value,
+      DunesColors.resolve(context, LhColors.ink),
+    );
     final labelColor = isTraceOpen || isTraceSource
-        ? _LhPlum.deep
-        : (isActive ? LhColors.ink2 : LhColors.mute);
-    final unitColor = LhColors.mute;
+        ? DunesColors.resolve(context, _LhPlum.deep)
+        : (isActive
+              ? DunesColors.resolve(context, LhColors.ink2)
+              : DunesColors.resolve(context, LhColors.mute));
+    final unitColor = DunesColors.resolve(context, LhColors.mute);
     // 涨红跌绿只留给越过门槛的那几个，其余走灰 —— 见
     // lighthouseDeltaLoudThreshold：满屏都上色等于谁都没上色。
     // 预收净增的涨跌没有天然的好坏方向；避免负现金流扩大时用绿色暗示改善。
     final deltaColor = keyId == 'prepaid'
-        ? LhColors.mute
+        ? DunesColors.resolve(context, LhColors.mute)
         : delta == null
-        ? LhColors.mute2
+        ? DunesColors.resolve(context, LhColors.mute2)
         : (lighthouseDeltaIsLoud(delta.pct)
-              ? (delta.isUp ? LhColors.neg : LhColors.pos)
-              : LhColors.mute);
+              ? (delta.isUp
+                    ? DunesColors.resolve(context, LhColors.neg)
+                    : DunesColors.resolve(context, LhColors.pos))
+              : DunesColors.resolve(context, LhColors.mute));
     final displayValue = isRate
         ? value
         : lighthouseHeroMetricDisplayAmount(keyId, value);
@@ -22110,6 +23581,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               size: lighthouseHeroCellLabelFontSize,
               color: labelColor,
               weight: FontWeight.w500,
+              context: context,
             ),
           )
         : LhScrollText(
@@ -22123,6 +23595,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     weight: FontWeight.w500,
                     letterSpacing: 0,
                     height: 1.1,
+                    context: context,
                   )
                 : LhTypography.mono(
                     size: lighthouseHeroCellLabelFontSize,
@@ -22130,6 +23603,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     weight: FontWeight.w600,
                     letterSpacing: 0.2,
                     height: 1.0,
+                    context: context,
                   ),
           );
 
@@ -22149,10 +23623,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             Icons.arrow_forward_rounded,
             size: lighthouseHeroCellLabelFontSize + 1,
             color: isTraceOpen
-                ? _LhPlum.primary
+                ? DunesColors.resolve(context, _LhPlum.primary)
                 : (formula != null
-                      ? LhColors.mute2
-                      : LhColors.mute2.withAlpha(120)),
+                      ? DunesColors.resolve(context, LhColors.mute2)
+                      : DunesColors.resolve(
+                          context,
+                          LhColors.mute2,
+                        ).withAlpha(120)),
           ),
         ],
         if (traceRole != null) ...[
@@ -22160,16 +23637,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
             decoration: BoxDecoration(
-              color: _LhPlum.primary,
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.primary,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(3),
             ),
             child: Text(
               lighthouseHeroFormulaRoleBadge(traceRole),
               style: LhTypography.mono(
                 size: 7,
-                color: LhColors.paper,
+                color: DunesColors.resolve(context, LhColors.paper),
                 weight: FontWeight.w700,
                 height: 1.0,
+                context: context,
               ),
             ),
           ),
@@ -22195,6 +23677,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: LhTypography.number(
                 size: lighthouseHeroMetricValueFontSize,
                 color: numberColor,
+                context: context,
               ),
             ),
             TextSpan(
@@ -22206,6 +23689,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 size: lighthouseLedgerSummaryUnitFontSize,
                 color: unitColor,
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
           ],
@@ -22226,6 +23710,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           weight: FontWeight.w600,
           height: 1.0,
           letterSpacing: 0.2,
+          context: context,
         ),
       ),
     );
@@ -22272,11 +23757,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             padding: const EdgeInsets.fromLTRB(0, 7, 4, 7),
             decoration: BoxDecoration(
               color: isTraceOpen || isActive
-                  ? _LhPlum.mist
+                  ? DunesColors.resolve(
+                      context,
+                      _LhPlum.mist,
+                      role: DunesColorRole.surface,
+                    )
                   : Colors.transparent,
               border: Border(
                 bottom: BorderSide(
-                  color: flatLast ? Colors.transparent : LhColors.line2,
+                  color: flatLast
+                      ? Colors.transparent
+                      : DunesColors.resolve(
+                          context,
+                          LhColors.line2,
+                          role: DunesColorRole.border,
+                        ),
                   width: 0.7,
                 ),
               ),
@@ -22295,12 +23790,32 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             padding: const EdgeInsets.fromLTRB(4, 3, 2, 3),
             decoration: BoxDecoration(
               color: isTraceOpen || isActive
-                  ? Colors.white
-                  : (isTraceSource ? LhColors.paper : Colors.transparent),
+                  ? DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    )
+                  : (isTraceSource
+                        ? DunesColors.resolve(
+                            context,
+                            LhColors.paper,
+                            role: DunesColorRole.surface,
+                          )
+                        : Colors.transparent),
               border: Border.all(
                 color: isTraceOpen || isActive
-                    ? _LhPlum.primary.withAlpha(46)
-                    : (isTraceSource ? _LhPlum.primary : Colors.transparent),
+                    ? DunesColors.resolve(
+                        context,
+                        _LhPlum.primary,
+                        role: DunesColorRole.border,
+                      ).withAlpha(46)
+                    : (isTraceSource
+                          ? DunesColors.resolve(
+                              context,
+                              _LhPlum.primary,
+                              role: DunesColorRole.border,
+                            )
+                          : Colors.transparent),
                 // 宽度常驻 1：边框会挤内容，切粗细格子会跳半像素。
                 width: 1,
               ),
@@ -22385,7 +23900,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '收入 ÷ $anchorLabel',
                   value: spreadRate,
                   isRate: true,
-                  accent: _LhPlum.primary,
+                  accent: DunesColors.resolve(context, _LhPlum.primary),
                 ),
               ),
               Expanded(
@@ -22395,7 +23910,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '已核销利差',
                   value: revenue,
                   isRate: false,
-                  accent: _LhPlum.primary,
+                  accent: DunesColors.resolve(context, _LhPlum.primary),
                 ),
               ),
               Expanded(
@@ -22405,7 +23920,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '销售规模',
                   value: totals['sales'] ?? 0,
                   isRate: false,
-                  accent: _LhPlum.primary,
+                  accent: DunesColors.resolve(context, _LhPlum.primary),
                 ),
               ),
             ],
@@ -22425,7 +23940,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '业务成本',
                   value: cost,
                   isRate: false,
-                  accent: LhColors.pos,
+                  accent: DunesColors.resolve(context, LhColors.pos),
                 ),
               ),
               Expanded(
@@ -22435,7 +23950,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '成本合计',
                   value: totalCost,
                   isRate: false,
-                  accent: LhColors.pos,
+                  accent: DunesColors.resolve(context, LhColors.pos),
                 ),
               ),
               Expanded(
@@ -22445,7 +23960,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '利润 ÷ 成本合计',
                   value: rate,
                   isRate: true,
-                  accent: _LhPlum.primary,
+                  accent: DunesColors.resolve(context, _LhPlum.primary),
                 ),
               ),
             ],
@@ -22554,7 +24069,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: Container(
             padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
             decoration: BoxDecoration(
-              color: fill,
+              color: DunesColors.resolveNullable(
+                context,
+                fill,
+                role: DunesColorRole.surface,
+              ),
               border: Border.all(
                 color: isActive ? accent.bar : edge,
                 width: isActive ? 1.2 : 0.8,
@@ -22564,7 +24083,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(height: 2, width: 14, color: accent.bar),
+                Container(
+                  height: 2,
+                  width: 14,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    accent.bar,
+                    role: DunesColorRole.surface,
+                  ),
+                ),
                 const SizedBox(height: 6),
                 LhScrollText(
                   label,
@@ -22575,6 +24102,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     color: accent.label,
                     weight: FontWeight.w600,
                     height: 1.0,
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 5),
@@ -22588,6 +24116,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         style: LhTypography.number(
                           size: 15,
                           color: accent.number,
+                          context: context,
                         ),
                       ),
                       TextSpan(
@@ -22596,6 +24125,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           size: 10,
                           color: accent.label,
                           weight: FontWeight.w500,
+                          context: context,
                         ),
                       ),
                     ],
@@ -22617,8 +24147,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           s,
           style: LhTypography.mono(
             size: 15,
-            color: LhColors.mute,
+            color: DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w700,
+            context: context,
           ),
         ),
       ),
@@ -22627,8 +24158,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: LhColors.paper,
-        border: Border.all(color: LhColors.line, width: 0.8),
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line,
+            role: DunesColorRole.border,
+          ),
+          width: 0.8,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -22637,9 +24179,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             '利润恒等式',
             style: LhTypography.mono(
               size: 10,
-              color: LhColors.mute2,
+              color: DunesColors.resolve(context, LhColors.mute2),
               weight: FontWeight.w700,
               letterSpacing: 0.6,
+              context: context,
             ),
           ),
           const SizedBox(height: 10),
@@ -22652,8 +24195,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   label: '收入',
                   value: revenueV,
                   accent: _LhPnl.revenue,
-                  fill: _LhPnl.revenueFill,
-                  edge: _LhPnl.revenueEdge,
+                  fill: DunesColors.resolve(context, _LhPnl.revenueFill),
+                  edge: DunesColors.resolve(context, _LhPnl.revenueEdge),
                 ),
                 op('='),
                 cell(
@@ -22661,8 +24204,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   label: '成本合计',
                   value: costV,
                   accent: _LhPnl.cost,
-                  fill: _LhPnl.costFill,
-                  edge: _LhPnl.costEdge,
+                  fill: DunesColors.resolve(context, _LhPnl.costFill),
+                  edge: DunesColors.resolve(context, _LhPnl.costEdge),
                 ),
                 op('+'),
                 cell(
@@ -22670,8 +24213,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   label: '净利润',
                   value: netV,
                   accent: _LhPnl.net,
-                  fill: _LhPnl.netFill,
-                  edge: _LhPnl.netEdge,
+                  fill: DunesColors.resolve(context, _LhPnl.netFill),
+                  edge: DunesColors.resolve(context, _LhPnl.netEdge),
                 ),
               ],
             ),
@@ -22681,9 +24224,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             '点任一格切换走势 · 等价形式：净利润 = 收入 − 成本合计',
             style: LhTypography.mono(
               size: 10,
-              color: LhColors.mute2,
+              color: DunesColors.resolve(context, LhColors.mute2),
               weight: FontWeight.w500,
               height: 1.5,
+              context: context,
             ),
           ),
         ],
@@ -22743,13 +24287,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style:
                   LhTypography.mono(
                     size: 11.5,
-                    color: isMetric ? _LhPlum.primary : LhColors.ink2,
+                    color: isMetric
+                        ? DunesColors.resolve(context, _LhPlum.primary)
+                        : DunesColors.resolve(context, LhColors.ink2),
                     weight: FontWeight.w600,
+                    context: context,
                   ).copyWith(
                     // 虚线下划线 = 可再点进去；纯文本项没有下钻
                     decoration: isMetric ? TextDecoration.underline : null,
                     decorationStyle: TextDecorationStyle.dashed,
-                    decorationColor: _LhPlum.primary.withAlpha(110),
+                    decorationColor: DunesColors.resolve(
+                      context,
+                      _LhPlum.primary,
+                    ).withAlpha(110),
                   ),
             ),
             const Spacer(),
@@ -22757,8 +24307,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               v == null ? '待接入' : _fmtFormulaValue(t, v),
               style: LhTypography.mono(
                 size: 11.5,
-                color: v == null ? LhColors.mute2 : LhColors.ink,
+                color: v == null
+                    ? DunesColors.resolve(context, LhColors.mute2)
+                    : DunesColors.resolve(context, LhColors.ink),
                 weight: FontWeight.w600,
+                context: context,
               ),
             ),
           ],
@@ -22777,8 +24330,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: LhColors.paper,
-        border: Border.all(color: LhColors.line, width: 0.8),
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line,
+            role: DunesColorRole.border,
+          ),
+          width: 0.8,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -22789,9 +24353,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 'FORMULA',
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: LhColors.copper,
+                  color: DunesColors.resolve(context, LhColors.copper),
                   weight: FontWeight.w800,
                   letterSpacing: 1.4,
+                  context: context,
                 ),
               ),
               const Spacer(),
@@ -22799,9 +24364,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 label,
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w700,
                   letterSpacing: 0.6,
+                  context: context,
                 ),
               ),
             ],
@@ -22812,8 +24378,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '后端直接传，没有推导公式。',
               style: LhTypography.mono(
                 size: 11.5,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w600,
+                context: context,
               ),
             )
           else ...[
@@ -22824,16 +24391,31 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   .join('  ${def.op}  '),
               style: LhTypography.mono(
                 size: 12,
-                color: LhColors.ink2,
+                color: DunesColors.resolve(context, LhColors.ink2),
                 weight: FontWeight.w700,
                 letterSpacing: 0.3,
+                context: context,
               ),
             ),
             const SizedBox(height: 8),
-            Container(height: 0.8, color: LhColors.line),
+            Container(
+              height: 0.8,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line,
+                role: DunesColorRole.surface,
+              ),
+            ),
             for (final t in def.terms) termRow(t),
             if (mismatch) ...[
-              Container(height: 0.8, color: LhColors.line),
+              Container(
+                height: 0.8,
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.line,
+                  role: DunesColorRole.surface,
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.only(top: 9),
                 child: Row(
@@ -22842,7 +24424,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     Icon(
                       Icons.error_outline_rounded,
                       size: 13,
-                      color: LhColors.copper,
+                      color: DunesColors.resolve(context, LhColors.copper),
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -22851,9 +24433,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         '当前显示 ${_fmtFormulaValue(keyId, shown!)}，对不上。',
                         style: LhTypography.mono(
                           size: 10.5,
-                          color: LhColors.copper,
+                          color: DunesColors.resolve(context, LhColors.copper),
                           weight: FontWeight.w600,
                           height: 1.5,
+                          context: context,
                         ),
                       ),
                     ),
@@ -22864,7 +24447,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ],
           if (usedBy.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Container(height: 0.8, color: LhColors.line),
+            Container(
+              height: 0.8,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line,
+                role: DunesColorRole.surface,
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.only(top: 9),
               child: Row(
@@ -22873,9 +24463,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     '谁在用它',
                     style: LhTypography.mono(
                       size: 10,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w700,
                       letterSpacing: 0.6,
+                      context: context,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -22890,14 +24481,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          border: Border.all(color: LhColors.line, width: 0.8),
+                          border: Border.all(
+                            color: DunesColors.resolve(
+                              context,
+                              LhColors.line,
+                              role: DunesColorRole.border,
+                            ),
+                            width: 0.8,
+                          ),
                         ),
                         child: Text(
                           _kHeroMetricLabel[u] ?? u,
                           style: LhTypography.mono(
                             size: 10.5,
-                            color: _LhPlum.primary,
+                            color: DunesColors.resolve(
+                              context,
+                              _LhPlum.primary,
+                            ),
                             weight: FontWeight.w600,
+                            context: context,
                           ),
                         ),
                       ),
@@ -22926,9 +24528,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         border: Border.all(
-          color: highlighted ? _LhPlum.primary.withAlpha(90) : _LhPlum.line,
+          color: highlighted
+              ? DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                  role: DunesColorRole.border,
+                ).withAlpha(90)
+              : DunesColors.resolve(
+                  context,
+                  _LhPlum.line,
+                  role: DunesColorRole.border,
+                ),
           width: highlighted ? 1.0 : 0.5,
         ),
       ),
@@ -22937,20 +24553,38 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         children: [
           Row(
             children: [
-              Container(width: 2, height: 9, color: _LhPlum.primary),
+              Container(
+                width: 2,
+                height: 9,
+                color: DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                  role: DunesColorRole.surface,
+                ),
+              ),
               const SizedBox(width: 6),
               Text(
                 '走势',
                 style: LhTypography.mono(
                   size: 9,
-                  color: LhColors.mute,
+                  color: DunesColors.resolve(context, LhColors.mute),
                   weight: FontWeight.w700,
                   letterSpacing: 1.0,
                   height: 1.0,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(child: Container(height: 0.5, color: _LhPlum.line)),
+              Expanded(
+                child: Container(
+                  height: 0.5,
+                  color: DunesColors.resolve(
+                    context,
+                    _LhPlum.line,
+                    role: DunesColorRole.surface,
+                  ),
+                ),
+              ),
               if (trendMeta.isNotEmpty) ...[
                 const SizedBox(width: 10),
                 Flexible(
@@ -22961,10 +24595,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     style: _tabular(
                       LhTypography.mono(
                         size: 8.5,
-                        color: LhColors.ink2,
+                        color: DunesColors.resolve(context, LhColors.ink2),
                         weight: FontWeight.w600,
                         letterSpacing: 0.3,
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                   ),
@@ -22986,8 +24621,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     '走势暂不可用，点击重新加载',
                     style: LhTypography.sans(
                       size: 10,
-                      color: _LhPlum.primary,
+                      color: DunesColors.resolve(context, _LhPlum.primary),
                       weight: FontWeight.w600,
+                      context: context,
                     ),
                   ),
                 ),
@@ -23002,7 +24638,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Center(
       child: Text(
         '${_heroTrendMetricLabel(metricKey)}暂无走势',
-        style: LhTypography.sans(size: 11, color: LhColors.mute),
+        style: LhTypography.sans(
+          size: 11,
+          color: DunesColors.resolve(context, LhColors.mute),
+          context: context,
+        ),
       ),
     );
   }
@@ -23281,10 +24921,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Color? valueColor,
     String? badge,
   }) {
-    final fg = valueColor ?? LhColors.ink;
+    final fg = valueColor ?? DunesColors.resolve(context, LhColors.ink);
     final unitColor = isRate && valueColor != null
         ? valueColor!
-        : LhColors.ink2;
+        : DunesColors.resolve(context, LhColors.ink2);
     final delta = _deltaForMetric(keyId);
     final deltaUnit = lighthouseHeroMetricIsRate(keyId) ? 'pp' : '%';
     final isExpanded = _expandedTrendKey == keyId;
@@ -23292,11 +24932,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ? '—'
         : _fmtSignedMomPct(delta.pct, unit: deltaUnit, digits: 1);
     final momColor = delta == null
-        ? LhColors.mute2
-        : (delta.isUp ? LhColors.neg : LhColors.pos);
+        ? DunesColors.resolve(context, LhColors.mute2)
+        : (delta.isUp
+              ? DunesColors.resolve(context, LhColors.neg)
+              : DunesColors.resolve(context, LhColors.pos));
 
     // v9: label 颜色承担 expanded state 提示 (mute2 → primary)
-    final labelColor = isExpanded ? _LhPlum.primary : LhColors.ink2;
+    final labelColor = isExpanded
+        ? DunesColors.resolve(context, _LhPlum.primary)
+        : DunesColors.resolve(context, LhColors.ink2);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -23339,7 +24983,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       vertical: 1,
                     ),
                     decoration: BoxDecoration(
-                      color: accent.withAlpha(30),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        accent.withAlpha(30),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                     child: Text(
@@ -23349,6 +24997,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         color: accent,
                         weight: FontWeight.w700,
                         letterSpacing: 0.4,
+                        context: context,
                       ),
                     ),
                   ),
@@ -23367,7 +25016,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 children: [
                   Text(
                     isRate ? v.toStringAsFixed(2) : _fmtMoney(v),
-                    style: LhTypography.number(size: 15, color: fg),
+                    style: LhTypography.number(
+                      size: 15,
+                      color: fg,
+                      context: ctx,
+                    ),
                     maxLines: 1,
                   ),
                   const SizedBox(width: 2),
@@ -23377,6 +25030,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       size: 9,
                       color: unitColor,
                       weight: FontWeight.w500,
+                      context: ctx,
                     ),
                   ),
                 ],
@@ -23392,6 +25046,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 color: momColor,
                 weight: FontWeight.w600,
                 letterSpacing: 0.15,
+                context: context,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -23410,20 +25065,31 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           'LOSS-PROFIT FLOW',
           style: LhTypography.mono(
             size: 8.5,
-            color: LhColors.mute,
+            color: DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w600,
             letterSpacing: 1.4,
+            context: context,
           ),
         ),
         const SizedBox(width: 8),
-        Expanded(child: Container(height: 1, color: LhColors.line2)),
+        Expanded(
+          child: Container(
+            height: 1,
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.surface,
+            ),
+          ),
+        ),
         const SizedBox(width: 8),
         Text(
           '损益推演',
           style: LhTypography.sans(
             size: 9.5,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w500,
+            context: context,
           ),
         ),
       ],
@@ -23455,19 +25121,31 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 width: 2,
                 height: 5,
-                color: _LhPlum.primary.withAlpha(160),
+                color: DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                  role: DunesColorRole.surface,
+                ).withAlpha(160),
               ),
               const SizedBox(height: 1),
               Container(
                 width: 2,
                 height: 4,
-                color: _LhPlum.primary.withAlpha(96),
+                color: DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                  role: DunesColorRole.surface,
+                ).withAlpha(96),
               ),
               const SizedBox(height: 1),
               Container(
                 width: 2,
                 height: 3,
-                color: _LhPlum.primary.withAlpha(40),
+                color: DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                  role: DunesColorRole.surface,
+                ).withAlpha(40),
               ),
             ],
           ),
@@ -23480,9 +25158,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 vertical: 0.5,
               ),
               decoration: BoxDecoration(
-                color: _LhPlum.soft,
+                color: DunesColors.resolve(
+                  context,
+                  _LhPlum.soft,
+                  role: DunesColorRole.surface,
+                ),
                 border: Border.all(
-                  color: _LhPlum.primary.withAlpha(90),
+                  color: DunesColors.resolve(
+                    context,
+                    _LhPlum.primary,
+                    role: DunesColorRole.border,
+                  ).withAlpha(90),
                   width: 0.6,
                 ),
                 borderRadius: BorderRadius.circular(2.5),
@@ -23491,8 +25177,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 op,
                 style: LhTypography.mono(
                   size: 10.5,
-                  color: _LhPlum.primary,
+                  color: DunesColors.resolve(context, _LhPlum.primary),
                   weight: FontWeight.w800,
+                  context: context,
                 ),
               ),
             ),
@@ -23503,9 +25190,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               rest,
               style: LhTypography.mono(
                 size: 10,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w500,
                 letterSpacing: 0.3,
+                context: context,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -23533,19 +25221,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     switch (role) {
       case _FlowRole.anchor:
         // 起点: 极淡纸色底 + ink 深色 2px 左边框 —— 沉稳、"这是源头"
-        leftAccent = LhColors.ink;
-        bg = LhColors.paper.withAlpha(140);
+        leftAccent = DunesColors.resolve(context, LhColors.ink);
+        bg = DunesColors.resolve(context, LhColors.paper).withAlpha(140);
         leftWidth = 2;
         break;
       case _FlowRole.intermediate:
         // 中间态: copperSoft 底 + copper 2px 左边框 —— 温暖、"派生态"
-        leftAccent = _LhPlum.primary.withAlpha(160);
-        bg = _LhPlum.soft.withAlpha(80);
+        leftAccent = DunesColors.resolve(
+          context,
+          _LhPlum.primary,
+        ).withAlpha(160);
+        bg = DunesColors.resolve(context, _LhPlum.soft).withAlpha(80);
         leftWidth = 2;
         break;
       case _FlowRole.result:
-        leftAccent = LhColors.ink;
-        bg = Colors.white;
+        leftAccent = DunesColors.resolve(context, LhColors.ink);
+        bg = DunesColors.resolve(context, Colors.white);
         leftWidth = 3;
         break;
     }
@@ -23561,12 +25252,44 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         margin: const EdgeInsets.symmetric(vertical: 1),
         padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
         decoration: BoxDecoration(
-          color: bg,
+          color: DunesColors.resolveNullable(
+            context,
+            bg,
+            role: DunesColorRole.surface,
+          ),
           border: Border(
-            left: BorderSide(color: leftAccent, width: leftWidth),
-            top: BorderSide(color: LhColors.line2, width: 0.5),
-            right: BorderSide(color: LhColors.line2, width: 0.5),
-            bottom: BorderSide(color: LhColors.line2, width: 0.5),
+            left: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                leftAccent,
+                role: DunesColorRole.border,
+              ),
+              width: leftWidth,
+            ),
+            top: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.border,
+              ),
+              width: 0.5,
+            ),
+            right: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.border,
+              ),
+              width: 0.5,
+            ),
+            bottom: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.border,
+              ),
+              width: 0.5,
+            ),
           ),
         ),
         child: Row(
@@ -23586,8 +25309,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         label,
                         style: LhTypography.sans(
                           size: role == _FlowRole.result ? 12 : 11.5,
-                          color: LhColors.ink,
+                          color: DunesColors.resolve(context, LhColors.ink),
                           weight: FontWeight.w700,
+                          context: context,
                         ),
                       ),
                       if (subLabel != null) ...[
@@ -23596,8 +25320,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           '· $subLabel',
                           style: LhTypography.sans(
                             size: 9,
-                            color: LhColors.mute2,
+                            color: DunesColors.resolve(context, LhColors.mute2),
                             weight: FontWeight.w500,
+                            context: context,
                           ),
                         ),
                       ],
@@ -23616,7 +25341,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   numText,
                   style: LhTypography.number(
                     size: role == _FlowRole.result ? 22 : 20,
-                    color: LhColors.ink,
+                    color: DunesColors.resolve(context, LhColors.ink),
+                    context: context,
                   ),
                 ),
                 if (unitText.isNotEmpty) ...[
@@ -23625,8 +25351,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     unitText,
                     style: LhTypography.sans(
                       size: 10,
-                      color: LhColors.mute,
+                      color: DunesColors.resolve(context, LhColors.mute),
                       weight: FontWeight.w500,
+                      context: context,
                     ),
                   ),
                 ],
@@ -23637,7 +25364,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               _estimatedBadge(),
             ],
             const SizedBox(width: 4),
-            Icon(Icons.chevron_right_rounded, size: 13, color: LhColors.mute2),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 13,
+              color: DunesColors.resolve(context, LhColors.mute2),
+            ),
           ],
         ),
       ),
@@ -23792,7 +25523,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       key: key,
       label: label,
       isRate: isRate,
-      cellColor: _LhPlum.primary,
+      cellColor: DunesColors.resolve(context, _LhPlum.primary),
     );
     _showMetricTrendSheet(metric, totals);
   }
@@ -23845,7 +25576,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 height: 1,
                 margin: const EdgeInsets.symmetric(vertical: 8),
-                color: LhColors.line2,
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.line2,
+                  role: DunesColorRole.surface,
+                ),
               ),
             );
           }
@@ -23877,7 +25612,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: LhTypography.sans(
                 size: 16,
                 weight: FontWeight.w700,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
+                context: context,
               ),
             )
           : _heroRateText(rate);
@@ -23894,7 +25630,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 style: LhTypography.sans(
                   size: 16,
                   weight: FontWeight.w700,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
+                  context: context,
                 ),
               )
             : _heroRateText(raw);
@@ -23904,7 +25641,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           style: LhTypography.sans(
             size: 16,
             weight: FontWeight.w700,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
+            context: context,
           ),
         );
       } else {
@@ -23929,9 +25667,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               m.label.toUpperCase(),
               style: LhTypography.mono(
                 size: 7.8,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w600,
                 letterSpacing: 0.5,
+                context: context,
               ),
             ),
             const SizedBox(height: 4),
@@ -23946,7 +25685,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     width: 3.5,
                     height: 3.5,
                     decoration: BoxDecoration(
-                      color: m.cellColor,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        m.cellColor,
+                        role: DunesColorRole.surface,
+                      ),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -23961,17 +25704,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   style: LhTypography.mono(
                     size: 8.6,
                     color: d == null
-                        ? LhColors.mute2
-                        : (d.isUp ? LhColors.neg : LhColors.pos),
+                        ? DunesColors.resolve(context, LhColors.mute2)
+                        : (d.isUp
+                              ? DunesColors.resolve(context, LhColors.neg)
+                              : DunesColors.resolve(context, LhColors.pos)),
                     weight: FontWeight.w600,
                     letterSpacing: 0.2,
+                    context: context,
                   ),
                 ),
                 const Spacer(),
                 Icon(
                   Icons.chevron_right_rounded,
                   size: 11,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                 ),
               ],
             ),
@@ -24068,7 +25814,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         m.key == 'spreadRate' ||
         m.key == 'grossMargin';
     final periodValue = totals[m.key] ?? 0.0;
-    final chartColor = _LhPlum.primary;
+    final chartColor = DunesColors.resolve(context, _LhPlum.primary);
     final paceForecast = isRateLike || series.isEmpty
         ? null
         : _monthPaceForecast(m.key, series.last);
@@ -24076,7 +25822,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: LhColors.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       isScrollControlled: true,
       // v3 · 编辑体化: 圆角 16 → 6, 更克制的顶角
       shape: const RoundedRectangleBorder(
@@ -24109,7 +25859,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             height: 2,
                             margin: const EdgeInsets.only(top: 6, bottom: 14),
                             decoration: BoxDecoration(
-                              color: LhColors.mute2.withAlpha(120),
+                              color: DunesColors.resolve(
+                                ctx,
+                                LhColors.mute2,
+                                role: DunesColorRole.surface,
+                              ).withAlpha(120),
                               borderRadius: BorderRadius.circular(1),
                             ),
                           ),
@@ -24122,9 +25876,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               'TREND',
                               style: LhTypography.mono(
                                 size: 8.5,
-                                color: _LhPlum.primary,
+                                color: DunesColors.resolve(
+                                  ctx,
+                                  _LhPlum.primary,
+                                ),
                                 weight: FontWeight.w800,
                                 letterSpacing: 1.4,
+                                context: ctx,
                               ),
                             ),
                             Padding(
@@ -24135,7 +25893,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 width: 2,
                                 height: 2,
                                 decoration: BoxDecoration(
-                                  color: LhColors.line,
+                                  color: DunesColors.resolve(
+                                    ctx,
+                                    LhColors.line,
+                                    role: DunesColorRole.surface,
+                                  ),
                                   borderRadius: BorderRadius.circular(1),
                                 ),
                               ),
@@ -24144,9 +25906,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               trendTitle,
                               style: LhTypography.mono(
                                 size: 9,
-                                color: LhColors.mute2,
+                                color: DunesColors.resolve(ctx, LhColors.mute2),
                                 weight: FontWeight.w700,
                                 letterSpacing: 0.6,
+                                context: ctx,
                               ),
                             ),
                             const Spacer(),
@@ -24155,9 +25918,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 rangeLabel,
                                 style: LhTypography.mono(
                                   size: 9,
-                                  color: LhColors.ink2,
+                                  color: DunesColors.resolve(
+                                    ctx,
+                                    LhColors.ink2,
+                                  ),
                                   weight: FontWeight.w700,
                                   letterSpacing: 0.2,
+                                  context: ctx,
                                 ),
                               ),
                           ],
@@ -24169,10 +25936,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             Container(
                               width: 24,
                               height: 1,
-                              color: _LhPlum.primary,
+                              color: DunesColors.resolve(
+                                ctx,
+                                _LhPlum.primary,
+                                role: DunesColorRole.surface,
+                              ),
                             ),
                             Expanded(
-                              child: Container(height: 1, color: LhColors.line),
+                              child: Container(
+                                height: 1,
+                                color: DunesColors.resolve(
+                                  ctx,
+                                  LhColors.line,
+                                  role: DunesColorRole.surface,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -24332,10 +26110,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     // v3 · 编辑体化: 去 border/shadow/圆角, 改用上下 hairline 划板, copper 顶部标签
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: LhColors.line, width: 0.8),
-          bottom: BorderSide(color: LhColors.line2, width: 0.6),
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line,
+              role: DunesColorRole.border,
+            ),
+            width: 0.8,
+          ),
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 0.6,
+          ),
         ),
       ),
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -24349,9 +26141,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 'FORMULA',
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: LhColors.copper,
+                  color: DunesColors.resolve(context, LhColors.copper),
                   weight: FontWeight.w800,
                   letterSpacing: 1.4,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 6),
@@ -24359,13 +26152,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 '计算公式',
                 style: LhTypography.mono(
                   size: 9,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w700,
                   letterSpacing: 0.6,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(child: Container(height: 0.6, color: LhColors.line)),
+              Expanded(
+                child: Container(
+                  height: 0.6,
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line,
+                    role: DunesColorRole.surface,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -24393,8 +26196,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             constraints: const BoxConstraints(minHeight: 16),
             margin: const EdgeInsets.only(right: 8),
             color: highlighted
-                ? LhColors.copper
-                : LhColors.line2.withAlpha(120),
+                ? DunesColors.resolve(
+                    context,
+                    LhColors.copper,
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.surface,
+                  ).withAlpha(120),
           ),
           Expanded(
             child: Padding(
@@ -24403,7 +26214,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 TextSpan(
                   children: _heroSemanticSpans(
                     text,
-                    baseColor: highlighted ? LhColors.ink : LhColors.mute,
+                    baseColor: highlighted
+                        ? DunesColors.resolve(context, LhColors.ink)
+                        : DunesColors.resolve(context, LhColors.mute),
                     size: 9.3,
                     baseWeight: highlighted ? FontWeight.w800 : FontWeight.w500,
                     termWeight: highlighted ? FontWeight.w800 : FontWeight.w700,
@@ -24429,9 +26242,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           label,
           style: LhTypography.mono(
             size: 7.5,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w700,
             letterSpacing: 0.7,
+            context: context,
           ),
         ),
         const SizedBox(height: 3),
@@ -24442,14 +26256,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           children: [
             Text(
               isRateLike ? v.toStringAsFixed(2) : _fmt(v),
-              style: LhTypography.number(size: 12, color: LhColors.ink2),
+              style: LhTypography.number(
+                size: 12,
+                color: DunesColors.resolve(context, LhColors.ink2),
+                context: context,
+              ),
             ),
             Text(
               isRateLike ? '%' : _unit(v),
               style: LhTypography.sans(
                 size: 8,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
           ],
@@ -24478,9 +26297,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             label,
             style: LhTypography.mono(
               size: 7.5,
-              color: LhColors.mute2,
+              color: DunesColors.resolve(context, LhColors.mute2),
               weight: FontWeight.w600,
               letterSpacing: 0.7,
+              context: context,
             ),
           ),
         ),
@@ -24495,7 +26315,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 txt,
                 style: LhTypography.number(
                   size: highlight ? 14 : 12,
-                  color: highlight ? _LhPlum.primary : LhColors.ink,
+                  color: highlight
+                      ? DunesColors.resolve(context, _LhPlum.primary)
+                      : DunesColors.resolve(context, LhColors.ink),
+                  context: context,
                 ),
               ),
               if (unit.isNotEmpty) ...[
@@ -24504,8 +26327,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   unit.endsWith('元') ? unit : '${unit}元',
                   style: LhTypography.sans(
                     size: 8,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     weight: FontWeight.w500,
+                    context: context,
                   ),
                 ),
               ],
@@ -24698,23 +26522,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Color _metricPageAccent(String key) {
     switch (key) {
       case 'sales':
-        return LhColors.ink2;
+        return DunesColors.resolve(context, LhColors.ink2);
       case 'profit':
       case 'netProfit':
-        return LhColors.neg;
+        return DunesColors.resolve(context, LhColors.neg);
       case 'rate':
-        return _LhPlum.primary;
+        return DunesColors.resolve(context, _LhPlum.primary);
       case 'gmv':
-        return LhColors.product;
+        return DunesColors.resolve(context, LhColors.product);
       case 'revenue':
-        return LhColors.cnpc;
+        return DunesColors.resolve(context, LhColors.cnpc);
       case 'cost':
       case 'projectCost':
       case 'totalCost':
       case 'tax':
-        return LhColors.pos;
+        return DunesColors.resolve(context, LhColors.pos);
       default:
-        return LhColors.ink;
+        return DunesColors.resolve(context, LhColors.ink);
     }
   }
 
@@ -24729,7 +26553,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       if (rate == null) {
         return Text(
           '—',
-          style: LhTypography.number(size: numSize, color: LhColors.mute2),
+          style: LhTypography.number(
+            size: numSize,
+            color: DunesColors.resolve(context, LhColors.mute2),
+            context: context,
+          ),
         );
       }
       final isNeg = rate < 0;
@@ -24739,21 +26567,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             if (isNeg)
               TextSpan(
                 text: '-',
-                style: LhTypography.number(size: numSize, color: LhColors.pos),
+                style: LhTypography.number(
+                  size: numSize,
+                  color: DunesColors.resolve(context, LhColors.pos),
+                  context: context,
+                ),
               ),
             TextSpan(
               text: rate.abs().toStringAsFixed(2),
               style: LhTypography.number(
                 size: numSize,
-                color: isNeg ? LhColors.pos : LhColors.ink,
+                color: isNeg
+                    ? DunesColors.resolve(context, LhColors.pos)
+                    : DunesColors.resolve(context, LhColors.ink),
+                context: context,
               ),
             ),
             TextSpan(
               text: ' %',
               style: LhTypography.sans(
                 size: unitSize,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
           ],
@@ -24771,7 +26607,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             if (isNeg)
               TextSpan(
                 text: '-',
-                style: LhTypography.number(size: numSize, color: LhColors.pos),
+                style: LhTypography.number(
+                  size: numSize,
+                  color: DunesColors.resolve(context, LhColors.pos),
+                  context: context,
+                ),
               ),
             TextSpan(
               text: v,
@@ -24780,8 +26620,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 color: _grossProfitValueColor(
                   key,
                   raw,
-                  isNeg ? LhColors.pos : LhColors.ink,
+                  isNeg
+                      ? DunesColors.resolve(context, LhColors.pos)
+                      : DunesColors.resolve(context, LhColors.ink),
                 ),
+                context: context,
               ),
             ),
             if (unit.isNotEmpty)
@@ -24789,8 +26632,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 text: ' $unit',
                 style: LhTypography.sans(
                   size: unitSize,
-                  color: LhColors.mute,
+                  color: DunesColors.resolve(context, LhColors.mute),
                   weight: FontWeight.w500,
+                  context: context,
                 ),
               ),
           ],
@@ -24809,7 +26653,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           if (isNeg)
             TextSpan(
               text: '-',
-              style: LhTypography.number(size: numSize, color: LhColors.pos),
+              style: LhTypography.number(
+                size: numSize,
+                color: DunesColors.resolve(context, LhColors.pos),
+                context: context,
+              ),
             ),
           TextSpan(
             text: _fmt(sum.abs()),
@@ -24818,16 +26666,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               color: _grossProfitValueColor(
                 key,
                 sum,
-                isNeg ? LhColors.pos : LhColors.ink,
+                isNeg
+                    ? DunesColors.resolve(context, LhColors.pos)
+                    : DunesColors.resolve(context, LhColors.ink),
               ),
+              context: context,
             ),
           ),
           TextSpan(
             text: ' ${_unit(sum.abs())}元',
             style: LhTypography.sans(
               size: unitSize,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w500,
+              context: context,
             ),
           ),
         ],
@@ -24957,14 +26809,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Color _dimAccent(String dim) {
     switch (dim) {
       case 'supply':
-        return LhColors.sinopec;
+        return DunesColors.resolve(context, LhColors.sinopec);
       case 'channel':
-        return LhColors.carrier;
+        return DunesColors.resolve(context, LhColors.carrier);
       case 'people':
-        return _LhPlum.primary;
+        return DunesColors.resolve(context, _LhPlum.primary);
       case 'product':
       default:
-        return LhColors.product;
+        return DunesColors.resolve(context, LhColors.product);
     }
   }
 
@@ -25015,7 +26867,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       length: pagerKeys.length,
       initialIndex: initialIdx,
       child: ColoredBox(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         child: SafeArea(
           bottom: false,
           child: Column(
@@ -25043,22 +26899,44 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 14, 10),
       decoration: BoxDecoration(
-        color: LhColors.paper,
-        border: Border(bottom: BorderSide(color: LhColors.line2, width: 1)),
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 1,
+          ),
+        ),
       ),
       child: Row(
         children: [
           _buildEditorialBackButton(onTap: () => setState(_popMetricPage)),
           const SizedBox(width: 8),
-          Container(width: 3, height: 14, color: dimAccent),
+          Container(
+            width: 3,
+            height: 14,
+            color: DunesColors.resolveNullable(
+              context,
+              dimAccent,
+              role: DunesColorRole.surface,
+            ),
+          ),
           const SizedBox(width: 8),
           Text(
             dimLabel,
             style: LhTypography.sans(
               size: 16,
-              color: LhColors.ink,
+              color: DunesColors.resolve(context, LhColors.ink),
               weight: FontWeight.w700,
               letterSpacing: 0.3,
+              context: context,
             ),
           ),
           const SizedBox(width: 8),
@@ -25066,9 +26944,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             _periodInstanceLabel(_period, _periodOffset),
             style: LhTypography.mono(
               size: 10,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w600,
               letterSpacing: 0.4,
+              context: context,
             ),
           ),
           const Spacer(),
@@ -25083,18 +26962,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 不再用"灰色文字 vs 黑色文字"表达选中——避免整条看起来像"底下一排灰指标名"。
   Widget _metricPageStrip(List<String> pagerKeys) {
     return Container(
-      color: LhColors.paper,
+      color: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       child: TabBar(
         isScrollable: true,
         tabAlignment: TabAlignment.start,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         labelPadding: const EdgeInsets.symmetric(horizontal: 12),
         indicator: UnderlineTabIndicator(
-          borderSide: BorderSide(color: _LhPlum.primary, width: 2),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _LhPlum.primary,
+              role: DunesColorRole.border,
+            ),
+            width: 2,
+          ),
           insets: const EdgeInsets.symmetric(horizontal: 8),
         ),
         indicatorSize: TabBarIndicatorSize.label,
-        dividerColor: LhColors.line2,
+        dividerColor: DunesColors.resolve(context, LhColors.line2),
         dividerHeight: 1,
         splashFactory: NoSplash.splashFactory,
         overlayColor: WidgetStateProperty.all(Colors.transparent),
@@ -25124,9 +27014,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           style: LhTypography.sans(
             size: 10,
             height: 1.0,
-            color: LhColors.ink2, // 不再用 mute2；ink2 = 主文字副色，够黑
+            color: DunesColors.resolve(
+              context,
+              LhColors.ink2,
+            ), // 不再用 mute2；ink2 = 主文字副色，够黑
             weight: FontWeight.w600,
             letterSpacing: 0.2,
+            context: context,
           ),
         ),
         const SizedBox(height: 3),
@@ -25140,10 +27034,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             size: 8.8,
             height: 1.0,
             color: delta == null
-                ? LhColors.mute2
-                : (delta.isUp ? LhColors.neg : LhColors.pos),
+                ? DunesColors.resolve(context, LhColors.mute2)
+                : (delta.isUp
+                      ? DunesColors.resolve(context, LhColors.neg)
+                      : DunesColors.resolve(context, LhColors.pos)),
             weight: FontWeight.w700,
             letterSpacing: 0.2,
+            context: context,
           ),
         ),
       ],
@@ -25156,12 +27053,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final mtr = _bundle?.metrics ?? const <String, dynamic>{};
     const numSize = 14.0;
     const unitSize = 8.5;
-    TextStyle numStyle(Color color) =>
-        LhTypography.number(size: numSize, color: color).copyWith(height: 1.0);
+    TextStyle numStyle(Color color) => LhTypography.number(
+      size: numSize,
+      color: color,
+      context: context,
+    ).copyWith(height: 1.0);
     TextStyle unitStyle() => LhTypography.sans(
       size: unitSize,
-      color: LhColors.mute,
+      color: DunesColors.resolve(context, LhColors.mute),
       weight: FontWeight.w500,
+      context: context,
     ).copyWith(height: 1.0);
     Widget stripRich(List<InlineSpan> spans) => SizedBox(
       height: numSize,
@@ -25178,14 +27079,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (key == 'rate') {
       final rate = (mtr['rate'] as num?)?.toDouble();
       if (rate == null) {
-        return Text('—', style: numStyle(LhColors.mute2));
+        return Text(
+          '—',
+          style: numStyle(DunesColors.resolve(context, LhColors.mute2)),
+        );
       }
       final isNeg = rate < 0;
       return stripRich([
-        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.pos)),
+        if (isNeg)
+          TextSpan(
+            text: '-',
+            style: numStyle(DunesColors.resolve(context, LhColors.pos)),
+          ),
         TextSpan(
           text: rate.abs().toStringAsFixed(2),
-          style: numStyle(isNeg ? LhColors.pos : LhColors.ink),
+          style: numStyle(
+            isNeg
+                ? DunesColors.resolve(context, LhColors.pos)
+                : DunesColors.resolve(context, LhColors.ink),
+          ),
         ),
         TextSpan(text: ' %', style: unitStyle()),
       ]);
@@ -25196,14 +27108,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final isNeg = raw < 0;
       final v = raw.abs().toString().replaceAll(RegExp(r'\.0$'), '');
       return stripRich([
-        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.pos)),
+        if (isNeg)
+          TextSpan(
+            text: '-',
+            style: numStyle(DunesColors.resolve(context, LhColors.pos)),
+          ),
         TextSpan(
           text: v,
           style: numStyle(
             _grossProfitValueColor(
               key,
               raw,
-              isNeg ? LhColors.pos : LhColors.ink,
+              isNeg
+                  ? DunesColors.resolve(context, LhColors.pos)
+                  : DunesColors.resolve(context, LhColors.ink),
             ),
           ),
         ),
@@ -25218,11 +27136,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
     final isNeg = sum < 0;
     return stripRich([
-      if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.pos)),
+      if (isNeg)
+        TextSpan(
+          text: '-',
+          style: numStyle(DunesColors.resolve(context, LhColors.pos)),
+        ),
       TextSpan(
         text: _fmt(sum.abs()),
         style: numStyle(
-          _grossProfitValueColor(key, sum, isNeg ? LhColors.pos : LhColors.ink),
+          _grossProfitValueColor(
+            key,
+            sum,
+            isNeg
+                ? DunesColors.resolve(context, LhColors.pos)
+                : DunesColors.resolve(context, LhColors.ink),
+          ),
         ),
       ),
       TextSpan(text: ' ${_unit(sum.abs())}元', style: unitStyle()),
@@ -25246,8 +27174,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         Container(
           margin: const EdgeInsets.fromLTRB(14, 0, 14, 18),
           decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: LhColors.line2, width: 0.5),
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.border,
+              ),
+              width: 0.5,
+            ),
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
@@ -25286,8 +27225,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       margin: const EdgeInsets.fromLTRB(14, 14, 14, 10),
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
       decoration: BoxDecoration(
-        color: LhColors.paper,
-        border: Border.all(color: LhColors.line2, width: 1),
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 1,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -25296,19 +27246,38 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(child: Container(height: 1, color: LhColors.line2)),
+              Expanded(
+                child: Container(
+                  height: 1,
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.surface,
+                  ),
+                ),
+              ),
               const SizedBox(width: 10),
               Text(
                 title,
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: LhColors.mute,
+                  color: DunesColors.resolve(context, LhColors.mute),
                   weight: FontWeight.w600,
                   letterSpacing: 1.4,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(child: Container(height: 1, color: LhColors.line2)),
+              Expanded(
+                child: Container(
+                  height: 1,
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.surface,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -25319,16 +27288,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             style: LhTypography.mono(
               size: 9.5,
               color: delta == null
-                  ? LhColors.mute2
-                  : (delta.isUp ? LhColors.neg : LhColors.pos),
+                  ? DunesColors.resolve(context, LhColors.mute2)
+                  : (delta.isUp
+                        ? DunesColors.resolve(context, LhColors.neg)
+                        : DunesColors.resolve(context, LhColors.pos)),
               weight: FontWeight.w600,
               letterSpacing: 0.2,
+              context: context,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             '$_periodVsLabel · ${_heroInfo.label}',
-            style: LhTypography.sans(size: 9.5, color: LhColors.mute),
+            style: LhTypography.sans(
+              size: 9.5,
+              color: DunesColors.resolve(context, LhColors.mute),
+              context: context,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -25349,9 +27325,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             '$dimLabelEn · 全部 $rowsCount 项',
             style: LhTypography.mono(
               size: 9,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w700,
               letterSpacing: 1.6,
+              context: context,
             ),
           ),
           const Spacer(),
@@ -25359,9 +27336,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             '$label ↓',
             style: LhTypography.mono(
               size: 9,
-              color: LhColors.ink2,
+              color: DunesColors.resolve(context, LhColors.ink2),
               weight: FontWeight.w600,
               letterSpacing: 0.3,
+              context: context,
             ),
           ),
         ],
@@ -25377,7 +27355,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
         child: Text(
           '无数据',
-          style: LhTypography.sans(size: 11, color: LhColors.mute2),
+          style: LhTypography.sans(
+            size: 11,
+            color: DunesColors.resolve(context, LhColors.mute2),
+            context: context,
+          ),
         ),
       );
     }
@@ -25405,7 +27387,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 padding: const EdgeInsets.only(left: 30),
                 child: Container(
                   height: 1,
-                  color: LhColors.line2.withAlpha(90),
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.surface,
+                  ).withAlpha(90),
                 ),
               ),
             _metricPageRow(sorted[i], key, i + 1, sumWeight, accent),
@@ -25435,7 +27421,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       0.0,
       1.0,
     );
-    final groupColor = group.isEmpty ? LhColors.mute2 : lhGroupColor(group);
+    final groupColor = group.isEmpty
+        ? DunesColors.resolve(context, LhColors.mute2)
+        : lhGroupColor(group);
     final relatedKeys = _metricPageRelatedKeys(key);
     final sharePct = (ratio * 100).round();
     final shareLabel = isRate ? '权重 $sharePct%' : '占 $sharePct%';
@@ -25459,6 +27447,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     color: accent,
                     weight: FontWeight.w500,
                     letterSpacing: 0.2,
+                    context: context,
                   ),
                 ),
               ),
@@ -25468,9 +27457,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   name,
                   style: LhTypography.sans(
                     size: 14,
-                    color: LhColors.ink,
+                    color: DunesColors.resolve(context, LhColors.ink),
                     weight: FontWeight.w500,
                     letterSpacing: 0.1,
+                    context: context,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -25481,7 +27471,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   width: 4,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: groupColor,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      groupColor,
+                      role: DunesColorRole.surface,
+                    ),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -25490,9 +27484,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   group,
                   style: LhTypography.mono(
                     size: 11,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                     weight: FontWeight.w500,
                     letterSpacing: 0.4,
+                    context: context,
                   ),
                 ),
               ],
@@ -25514,9 +27509,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   shareLabel,
                   style: LhTypography.mono(
                     size: 11,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                     weight: FontWeight.w500,
                     letterSpacing: 0.2,
+                    context: context,
                   ),
                 ),
               ],
@@ -25531,12 +27527,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   flex: (ratio * 1000).round().clamp(1, 1000),
                   child: Container(
                     height: 3,
-                    color: isNeg ? LhColors.pos : accent,
+                    color: isNeg
+                        ? DunesColors.resolve(
+                            context,
+                            LhColors.pos,
+                            role: DunesColorRole.surface,
+                          )
+                        : accent,
                   ),
                 ),
                 Expanded(
                   flex: (1000 - (ratio * 1000).round()).clamp(0, 1000),
-                  child: Container(height: 3, color: LhColors.line2),
+                  child: Container(
+                    height: 3,
+                    color: DunesColors.resolve(
+                      context,
+                      LhColors.line2,
+                      role: DunesColorRole.surface,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -25555,7 +27564,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             if (isNeg)
               TextSpan(
                 text: '-',
-                style: LhTypography.number(size: 20, color: LhColors.pos),
+                style: LhTypography.number(
+                  size: 20,
+                  color: DunesColors.resolve(context, LhColors.pos),
+                  context: context,
+                ),
               ),
             TextSpan(
               text: v.abs().toStringAsFixed(2),
@@ -25564,16 +27577,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 color: _grossProfitValueColor(
                   key,
                   v,
-                  isNeg ? LhColors.pos : LhColors.ink,
+                  isNeg
+                      ? DunesColors.resolve(context, LhColors.pos)
+                      : DunesColors.resolve(context, LhColors.ink),
                 ),
+                context: context,
               ),
             ),
             TextSpan(
               text: ' %',
               style: LhTypography.sans(
                 size: 11,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
           ],
@@ -25586,7 +27603,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           if (isNeg)
             TextSpan(
               text: '-',
-              style: LhTypography.number(size: 20, color: LhColors.pos),
+              style: LhTypography.number(
+                size: 20,
+                color: DunesColors.resolve(context, LhColors.pos),
+                context: context,
+              ),
             ),
           TextSpan(
             text: _fmt(v.abs()),
@@ -25595,16 +27616,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               color: _grossProfitValueColor(
                 key,
                 v,
-                isNeg ? LhColors.pos : LhColors.ink,
+                isNeg
+                    ? DunesColors.resolve(context, LhColors.pos)
+                    : DunesColors.resolve(context, LhColors.ink),
               ),
+              context: context,
             ),
           ),
           TextSpan(
             text: _unit(v.abs()),
             style: LhTypography.sans(
               size: 11,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w500,
+              context: context,
             ),
           ),
         ],
@@ -25625,8 +27650,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             text: '  ·  ',
             style: LhTypography.mono(
               size: 11,
-              color: LhColors.line,
+              color: DunesColors.resolve(context, LhColors.line),
               weight: FontWeight.w500,
+              context: context,
             ),
           ),
         );
@@ -25640,9 +27666,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           text: '$label ',
           style: LhTypography.mono(
             size: 11,
-            color: LhColors.mute,
+            color: DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w500,
             letterSpacing: 0.2,
+            context: context,
           ),
         ),
       );
@@ -25651,7 +27678,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           spans.add(
             TextSpan(
               text: '-',
-              style: LhTypography.number(size: 11, color: LhColors.pos),
+              style: LhTypography.number(
+                size: 11,
+                color: DunesColors.resolve(context, LhColors.pos),
+                context: context,
+              ),
             ),
           );
         }
@@ -25660,7 +27691,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             text: '${val.abs().toStringAsFixed(1)}%',
             style: LhTypography.number(
               size: 11,
-              color: isNeg ? LhColors.pos : LhColors.ink,
+              color: isNeg
+                  ? DunesColors.resolve(context, LhColors.pos)
+                  : DunesColors.resolve(context, LhColors.ink),
+              context: context,
             ),
           ),
         );
@@ -25671,7 +27705,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             text: _fmtAmountWithUnit(val),
             style: LhTypography.number(
               size: 11,
-              color: isNeg ? LhColors.pos : LhColors.ink,
+              color: isNeg
+                  ? DunesColors.resolve(context, LhColors.pos)
+                  : DunesColors.resolve(context, LhColors.ink),
+              context: context,
             ),
           ),
         );
@@ -25697,16 +27734,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             style: LhTypography.sans(
               size: 16,
               weight: FontWeight.w700,
-              color: LhColors.ink,
+              color: DunesColors.resolve(context, LhColors.ink),
               letterSpacing: -0.3,
+              context: context,
             ),
           ),
           TextSpan(
             text: '%',
             style: LhTypography.mono(
               size: 9,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w500,
+              context: context,
             ),
           ),
         ],
@@ -25727,8 +27766,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: LhTypography.sans(
                 size: 16,
                 weight: FontWeight.w700,
-                color: LhColors.pos,
+                color: DunesColors.resolve(context, LhColors.pos),
                 letterSpacing: -0.3,
+                context: context,
               ),
             ),
           TextSpan(
@@ -25739,9 +27779,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               color: _grossProfitValueColor(
                 key,
                 raw,
-                isNeg ? LhColors.pos : LhColors.ink,
+                isNeg
+                    ? DunesColors.resolve(context, LhColors.pos)
+                    : DunesColors.resolve(context, LhColors.ink),
               ),
               letterSpacing: -0.3,
+              context: context,
             ),
           ),
           if (unit.isNotEmpty)
@@ -25749,8 +27792,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               text: unit,
               style: LhTypography.mono(
                 size: 9,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
         ],
@@ -25772,8 +27816,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: LhTypography.sans(
                 size: 16,
                 weight: FontWeight.w700,
-                color: LhColors.pos,
+                color: DunesColors.resolve(context, LhColors.pos),
                 letterSpacing: -0.3,
+                context: context,
               ),
             ),
           TextSpan(
@@ -25784,9 +27829,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               color: _grossProfitValueColor(
                 key,
                 raw,
-                isNeg ? LhColors.pos : LhColors.ink,
+                isNeg
+                    ? DunesColors.resolve(context, LhColors.pos)
+                    : DunesColors.resolve(context, LhColors.ink),
               ),
               letterSpacing: -0.3,
+              context: context,
             ),
           ),
           if (u.isNotEmpty)
@@ -25794,8 +27842,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               text: u,
               style: LhTypography.mono(
                 size: 9,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
         ],
@@ -26104,8 +28153,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         height: lighthouseLedgerFilterRowHeight,
         decoration: BoxDecoration(
           border: divider
-              ? const Border(
-                  bottom: BorderSide(color: LhColors.line2, width: 0.5),
+              ? Border(
+                  bottom: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      LhColors.line2,
+                      role: DunesColorRole.border,
+                    ),
+                    width: 0.5,
+                  ),
                 )
               : null,
         ),
@@ -26119,9 +28175,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 textAlign: TextAlign.left,
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w600,
                   letterSpacing: 0.4,
+                  context: context,
                 ),
               ),
             ),
@@ -26148,14 +28205,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     //
     //   四个主入口等分，分类 / HUN 共用固定宽度的左侧标签栏。
     return Container(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               border: Border(
-                bottom: BorderSide(color: LhColors.line2, width: 0.5),
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 0.5,
+                ),
               ),
             ),
             height: lighthouseLedgerPrimaryTabHeight,
@@ -26165,7 +28233,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 for (int i = 0; i < dimCells.length; i++) ...[
                   if (i == dimCells.length - 1 &&
                       lighthouseLedgerSeparatesAnalysisTab)
-                    Container(width: 0.5, height: 18, color: LhColors.line2),
+                    Container(
+                      width: 0.5,
+                      height: 18,
+                      color: DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   Expanded(child: dimCells[i]),
                 ],
               ],
@@ -26233,33 +28309,33 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Color _panelGroupAccent(String group) {
     switch (group) {
       case '能源':
-        return const Color(0xFF3D7A5A);
+        return DunesColors.resolve(context, const Color(0xFF3D7A5A));
       case '能源积分返费':
-        return const Color(0xFF2F6B4F);
+        return DunesColors.resolve(context, const Color(0xFF2F6B4F));
       case '公共出行':
       case '出行':
-        return LhColors.product;
+        return DunesColors.resolve(context, LhColors.product);
       case '运营商':
-        return _LhPlum.primary;
+        return DunesColors.resolve(context, _LhPlum.primary);
       case '民营':
-        return LhColors.private;
+        return DunesColors.resolve(context, LhColors.private);
       case '多渠道':
-        return LhColors.multi;
+        return DunesColors.resolve(context, LhColors.multi);
       case '平安':
-        return LhColors.pingan;
+        return DunesColors.resolve(context, LhColors.pingan);
       case '移动':
       case '电信':
       case '广电':
       case '运营商':
-        return LhColors.carrier;
+        return DunesColors.resolve(context, LhColors.carrier);
       case '银联':
-        return LhColors.copper;
+        return DunesColors.resolve(context, LhColors.copper);
       case '星和动力':
-        return _LhPlum.primary;
+        return DunesColors.resolve(context, _LhPlum.primary);
       case 'Fintech':
-        return LhColors.copper;
+        return DunesColors.resolve(context, LhColors.copper);
       default:
-        return _LhPlum.primary;
+        return DunesColors.resolve(context, _LhPlum.primary);
     }
   }
 
@@ -26289,7 +28365,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Icon(
       _categoryFallbackIcon(label),
       size: size,
-      color: selected ? _LhPlum.primary : LhColors.mute2,
+      color: selected
+          ? DunesColors.resolve(context, _LhPlum.primary)
+          : DunesColors.resolve(context, LhColors.mute2),
     );
   }
 
@@ -26330,10 +28408,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       textAlign: TextAlign.center,
                       style: LhTypography.sans(
                         size: 13.5,
-                        color: isOn ? _LhPlum.deep : LhColors.mute,
+                        color: isOn
+                            ? DunesColors.resolve(context, _LhPlum.deep)
+                            : DunesColors.resolve(context, LhColors.mute),
                         weight: isOn ? FontWeight.w700 : FontWeight.w500,
                         letterSpacing: 0.2,
                         height: 1.3,
+                        context: context,
                       ),
                     ),
                   ),
@@ -26342,7 +28423,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     Icon(
                       trailing,
                       size: 13,
-                      color: _LhPlum.primary.withAlpha(160),
+                      color: DunesColors.resolve(
+                        context,
+                        _LhPlum.primary,
+                      ).withAlpha(160),
                     ),
                   ],
                 ],
@@ -26356,7 +28440,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             width: isOn ? 22 : 0,
             height: 3,
             decoration: BoxDecoration(
-              color: _LhPlum.primary,
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.primary,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(1.5),
             ),
           ),
@@ -26378,11 +28466,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final asset = lighthouseCategoryBrandAsset(label);
     final height = strong ? 28.0 : 26.0;
     final bg = strong
-        ? (isOn ? _LhPlum.deep : const Color(0xFFF2F0F6))
-        : (isOn ? _LhPlum.primary.withAlpha(22) : Colors.transparent);
+        ? (isOn
+              ? DunesColors.resolve(context, _LhPlum.deep)
+              : DunesColors.resolve(context, const Color(0xFFF2F0F6)))
+        : (isOn
+              ? DunesColors.resolve(context, _LhPlum.primary).withAlpha(22)
+              : Colors.transparent);
     final fg = strong
-        ? (isOn ? Colors.white : LhColors.ink2)
-        : (isOn ? _LhPlum.deep : LhColors.mute);
+        ? (isOn
+              ? DunesColors.resolve(context, Colors.white)
+              : DunesColors.resolve(context, LhColors.ink2))
+        : (isOn
+              ? DunesColors.resolve(context, _LhPlum.deep)
+              : DunesColors.resolve(context, LhColors.mute));
     return Semantics(
       button: true,
       selected: isOn,
@@ -26402,14 +28498,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               height: height,
               padding: EdgeInsets.only(left: asset != null ? 5 : 12, right: 12),
               decoration: BoxDecoration(
-                color: bg,
+                color: DunesColors.resolveNullable(
+                  context,
+                  bg,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(height / 2),
                 border: strong
                     ? null
                     : Border.all(
                         color: isOn
-                            ? _LhPlum.primary.withAlpha(120)
-                            : LhColors.line2,
+                            ? DunesColors.resolve(
+                                context,
+                                _LhPlum.primary,
+                                role: DunesColorRole.border,
+                              ).withAlpha(120)
+                            : DunesColors.resolve(
+                                context,
+                                LhColors.line2,
+                                role: DunesColorRole.border,
+                              ),
                         width: 0.8,
                       ),
               ),
@@ -26422,8 +28530,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       width: height - 8,
                       height: height - 8,
                       padding: const EdgeInsets.all(2.5),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
+                      decoration: BoxDecoration(
+                        color: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
                         shape: BoxShape.circle,
                       ),
                       child: SvgPicture.asset(asset, fit: BoxFit.contain),
@@ -26440,6 +28552,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       weight: isOn ? FontWeight.w600 : FontWeight.w500,
                       letterSpacing: 0.1,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ],
@@ -26462,7 +28575,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     IconData? trailing,
     Widget? leading,
   }) {
-    final a = accent ?? _LhPlum.primary;
+    final a = accent ?? DunesColors.resolve(context, _LhPlum.primary);
     final isLarge = size == _SegmentSize.large;
     final isPrimary = tone == _SegmentTone.dim && isLarge;
     final isSubgroup = tone == _SegmentTone.subgroup;
@@ -26481,13 +28594,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ),
                 curve: Curves.easeOutCubic,
                 decoration: BoxDecoration(
-                  color: isOn ? LhColors.purpleSoft : Colors.transparent,
+                  color: isOn
+                      ? DunesColors.resolve(
+                          context,
+                          LhColors.purpleSoft,
+                          role: DunesColorRole.surface,
+                        )
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(
                     lighthousePeriodSelectedRadius,
                   ),
                   border: Border.all(
                     color: isOn
-                        ? _LhPlum.primary.withAlpha(55)
+                        ? DunesColors.resolve(
+                            context,
+                            _LhPlum.primary,
+                            role: DunesColorRole.border,
+                          ).withAlpha(55)
                         : Colors.transparent,
                     width: 0.7,
                   ),
@@ -26499,8 +28622,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       Container(
                         width: lighthousePeriodStatusDotSize,
                         height: lighthousePeriodStatusDotSize,
-                        decoration: const BoxDecoration(
-                          color: _LhPlum.primary,
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolve(
+                            context,
+                            _LhPlum.primary,
+                            role: DunesColorRole.surface,
+                          ),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -26514,10 +28641,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         overflow: TextOverflow.ellipsis,
                         style: LhTypography.sans(
                           size: 12,
-                          color: isOn ? _LhPlum.deep : LhColors.ink2,
+                          color: isOn
+                              ? DunesColors.resolve(context, _LhPlum.deep)
+                              : DunesColors.resolve(context, LhColors.ink2),
                           weight: isOn ? FontWeight.w600 : FontWeight.w500,
                           letterSpacing: 0.3,
                           height: 1.0,
+                          context: context,
                         ),
                       ),
                     ),
@@ -26526,7 +28656,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       Icon(
                         trailing,
                         size: 13,
-                        color: isOn ? _LhPlum.primary : LhColors.mute2,
+                        color: isOn
+                            ? DunesColors.resolve(context, _LhPlum.primary)
+                            : DunesColors.resolve(context, LhColors.mute2),
                       ),
                     ],
                   ],
@@ -26540,17 +28672,55 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
                 color: isSubgroup
-                    ? (isOn ? LhColors.paper : LhColors.mist)
-                    : (isOn ? LhColors.purpleSoft : const Color(0xFFFFFDFF)),
+                    ? (isOn
+                          ? DunesColors.resolve(
+                              context,
+                              LhColors.paper,
+                              role: DunesColorRole.surface,
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              LhColors.mist,
+                              role: DunesColorRole.surface,
+                            ))
+                    : (isOn
+                          ? DunesColors.resolve(
+                              context,
+                              LhColors.purpleSoft,
+                              role: DunesColorRole.surface,
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFFFFFDFF),
+                              role: DunesColorRole.surface,
+                            )),
                 borderRadius: BorderRadius.circular(
                   lighthouseLedgerFilterChipRadius,
                 ),
                 border: Border.all(
                   color: isSubgroup
-                      ? (isOn ? LhColors.line : LhColors.line2.withAlpha(150))
+                      ? (isOn
+                            ? DunesColors.resolve(
+                                context,
+                                LhColors.line,
+                                role: DunesColorRole.border,
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                LhColors.line2,
+                                role: DunesColorRole.border,
+                              ).withAlpha(150))
                       : (isOn
-                            ? _LhPlum.primary.withAlpha(70)
-                            : LhColors.line2.withAlpha(150)),
+                            ? DunesColors.resolve(
+                                context,
+                                _LhPlum.primary,
+                                role: DunesColorRole.border,
+                              ).withAlpha(70)
+                            : DunesColors.resolve(
+                                context,
+                                LhColors.line2,
+                                role: DunesColorRole.border,
+                              ).withAlpha(150)),
                   width: 0.7,
                 ),
               ),
@@ -26566,16 +28736,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     style: LhTypography.sans(
                       size: isSubgroup ? 11 : 11.5,
                       color: isOn
-                          ? (isSubgroup ? LhColors.ink : _LhPlum.deep)
-                          : LhColors.mute,
+                          ? (isSubgroup
+                                ? DunesColors.resolve(context, LhColors.ink)
+                                : DunesColors.resolve(context, _LhPlum.deep))
+                          : DunesColors.resolve(context, LhColors.mute),
                       weight: isOn ? FontWeight.w600 : FontWeight.w500,
                       letterSpacing: 0.1,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                   if (trailing != null) ...[
                     const SizedBox(width: 2),
-                    Icon(trailing, size: 12, color: isOn ? a : LhColors.mute2),
+                    Icon(
+                      trailing,
+                      size: 12,
+                      color: isOn
+                          ? a
+                          : DunesColors.resolve(context, LhColors.mute2),
+                    ),
                   ],
                 ],
               ),
@@ -26594,7 +28773,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       // 「09.14 选区间 · 指标 12」是账本的表头行，不是又一块白面板 ——
       // 给它一层极浅的底，上面的维度条和下面的表体就各自站住了，
       // 三条白面孔连在一起时那种「不知道哪块管哪块」也就没了。
-      color: LhColors.mist,
+      color: DunesColors.resolve(
+        context,
+        LhColors.mist,
+        role: DunesColorRole.surface,
+      ),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: _buildViewControlsBar(anchorScope: anchorScope),
     );
@@ -26660,11 +28843,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
 
     final labelColor = muted
-        ? LhColors.mute2
-        : (active ? LhColors.ink : LhColors.ink2);
+        ? DunesColors.resolve(context, LhColors.mute2)
+        : (active
+              ? DunesColors.resolve(context, LhColors.ink)
+              : DunesColors.resolve(context, LhColors.ink2));
     final countColor = muted
-        ? LhColors.mute2
-        : LhColors.pos.withAlpha(active ? 255 : 210);
+        ? DunesColors.resolve(context, LhColors.mute2)
+        : DunesColors.resolve(
+            context,
+            LhColors.pos,
+          ).withAlpha(active ? 255 : 210);
 
     return Opacity(
       opacity: muted ? 0.42 : 1.0,
@@ -26683,15 +28871,56 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           duration: const Duration(milliseconds: 140),
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 7),
           decoration: BoxDecoration(
-            color: active ? LhColors.paper.withAlpha(180) : Colors.white,
+            color: active
+                ? DunesColors.resolve(
+                    context,
+                    LhColors.paper,
+                    role: DunesColorRole.surface,
+                  ).withAlpha(180)
+                : DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
             border: Border(
               left: BorderSide(
-                color: active ? LhColors.ink : LhColors.line2,
+                color: active
+                    ? DunesColors.resolve(
+                        context,
+                        LhColors.ink,
+                        role: DunesColorRole.border,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.border,
+                      ),
                 width: active ? 2 : 0.5,
               ),
-              top: BorderSide(color: LhColors.line2, width: 0.5),
-              right: BorderSide(color: LhColors.line2, width: 0.5),
-              bottom: BorderSide(color: LhColors.line2, width: 0.5),
+              top: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.line2,
+                  role: DunesColorRole.border,
+                ),
+                width: 0.5,
+              ),
+              right: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.line2,
+                  role: DunesColorRole.border,
+                ),
+                width: 0.5,
+              ),
+              bottom: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.line2,
+                  role: DunesColorRole.border,
+                ),
+                width: 0.5,
+              ),
             ),
           ),
           child: Row(
@@ -26707,6 +28936,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   color: labelColor,
                   weight: active ? FontWeight.w700 : FontWeight.w600,
                   letterSpacing: 0.2,
+                  context: context,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -26719,6 +28949,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   color: countColor,
                   weight: FontWeight.w800,
                   letterSpacing: 0.1,
+                  context: context,
                 ),
               ),
             ],
@@ -27038,7 +29269,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   Widget _buildBiErrorBanner() {
     return Material(
-      color: const Color(0xFFFFF1F0),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFFFF1F0),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Container(
@@ -27051,13 +29286,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               children: [
                 Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'BI 渲染异常（临时诊断）',
                         style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFFB3261E),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Color(0xFFB3261E),
+                          ),
                         ),
                       ),
                     ),
@@ -27071,10 +29309,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 const SizedBox(height: 8),
                 SelectableText(
                   _biError ?? '',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 9.5,
                     height: 1.4,
-                    color: Color(0xFF3A2A2A),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF3A2A2A),
+                    ),
                   ),
                 ),
               ],
@@ -27224,8 +29465,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             style: LhTypography.sans(
               size: 19,
               weight: FontWeight.w500,
-              color: const Color(0xFF7C5CE6),
+              color: DunesColors.resolve(context, const Color(0xFF7C5CE6)),
               letterSpacing: -0.2,
+              context: context,
             ),
           ),
           const Spacer(),
@@ -27259,27 +29501,28 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.insights_rounded,
                 size: 13,
-                color: _LhPlum.primary,
+                color: DunesColors.resolve(context, _LhPlum.primary),
               ),
               const SizedBox(width: 5),
               Text(
                 'BI 视图',
                 style: LhTypography.sans(
                   size: 11,
-                  color: _LhPlum.primary,
+                  color: DunesColors.resolve(context, _LhPlum.primary),
                   weight: FontWeight.w700,
                   letterSpacing: 0.1,
                   height: 1.0,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 3),
-              const Icon(
+              Icon(
                 Icons.arrow_forward_rounded,
                 size: 12,
-                color: _LhPlum.primary,
+                color: DunesColors.resolve(context, _LhPlum.primary),
               ),
             ],
           ),
@@ -27293,11 +29536,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Container(
         height: lighthouseHeroBiButtonHeight,
         padding: const EdgeInsets.symmetric(horizontal: 9),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
-            colors: [_LhPlum.deep, _LhPlum.primary],
+            colors: [
+              DunesColors.resolve(
+                context,
+                _LhPlum.deep,
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                _LhPlum.primary,
+                role: DunesColorRole.surface,
+              ),
+            ],
           ),
           borderRadius: BorderRadius.only(
             bottomLeft: radius,
@@ -27306,7 +29560,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.insights_rounded, size: 13, color: Colors.white),
+            Icon(
+              Icons.insights_rounded,
+              size: 13,
+              color: DunesColors.resolve(context, Colors.white),
+            ),
             const SizedBox(width: 6),
             Expanded(
               child: LhScrollText(
@@ -27315,10 +29573,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 overflow: TextOverflow.ellipsis,
                 style: LhTypography.sans(
                   size: 11.5,
-                  color: Colors.white,
+                  color: DunesColors.resolve(context, Colors.white),
                   weight: FontWeight.w700,
                   letterSpacing: 0.3,
                   height: 1.0,
+                  context: context,
                 ),
               ),
             ),
@@ -27328,13 +29587,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               height: 17,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(46),
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ).withAlpha(46),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.arrow_forward_rounded,
                 size: 10.5,
-                color: Colors.white,
+                color: DunesColors.resolve(context, Colors.white),
               ),
             ),
           ],
@@ -27371,17 +29634,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 height: 26,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: _LhPlum.primary.withAlpha(16),
+                  color: DunesColors.resolve(
+                    context,
+                    _LhPlum.primary,
+                    role: DunesColorRole.surface,
+                  ).withAlpha(16),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: _LhPlum.primary.withAlpha(30),
+                    color: DunesColors.resolve(
+                      context,
+                      _LhPlum.primary,
+                      role: DunesColorRole.border,
+                    ).withAlpha(30),
                     width: 0.7,
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.search_rounded,
                   size: 15,
-                  color: _LhPlum.primary,
+                  color: DunesColors.resolve(context, _LhPlum.primary),
                 ),
               ),
             ),
@@ -27404,7 +29675,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Icon(Icons.search_rounded, size: 15, color: _LhPlum.primary),
+        Icon(
+          Icons.search_rounded,
+          size: 15,
+          color: DunesColors.resolve(context, _LhPlum.primary),
+        ),
         const SizedBox(width: 7),
         Expanded(
           child: TextField(
@@ -27412,12 +29687,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             focusNode: _ledgerSearchFocus,
             autofocus: true,
             textInputAction: TextInputAction.search,
-            cursorColor: _LhPlum.primary,
+            cursorColor: DunesColors.resolve(context, _LhPlum.primary),
             cursorWidth: 1.4,
             style: LhTypography.sans(
               size: 12.5,
-              color: LhColors.ink,
+              color: DunesColors.resolve(context, LhColors.ink),
               weight: FontWeight.w600,
+              context: context,
             ),
             decoration: InputDecoration(
               isDense: true,
@@ -27428,8 +29704,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               hintText: _ledgerSearchHint,
               hintStyle: LhTypography.sans(
                 size: 12.5,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
             onChanged: (v) => setState(() {
@@ -27446,9 +29723,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             style: _tabular(
               LhTypography.mono(
                 size: 10,
-                color: matched == 0 ? LhColors.neg : LhColors.mute2,
+                color: matched == 0
+                    ? DunesColors.resolve(context, LhColors.neg)
+                    : DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w700,
                 letterSpacing: 0.2,
+                context: context,
               ),
             ),
           ),
@@ -27457,9 +29737,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _closeLedgerSearch,
-          child: const Padding(
+          child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-            child: Icon(Icons.close_rounded, size: 15, color: LhColors.mute2),
+            child: Icon(
+              Icons.close_rounded,
+              size: 15,
+              color: DunesColors.resolve(context, LhColors.mute2),
+            ),
           ),
         ),
       ],
@@ -27474,8 +29758,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     required List<Map<String, dynamic>> activeSubRows,
   }) {
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: LhColors.line2, width: 0.5)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
+        ),
       ),
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
       child: SingleChildScrollView(
@@ -27504,7 +29797,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         : Icon(
                             t.icon,
                             size: 13,
-                            color: isOn ? t.color : LhColors.mute2,
+                            color: isOn
+                                ? t.color
+                                : DunesColors.resolve(context, LhColors.mute2),
                           ),
                     onTap: () => setState(() {
                       _clearEquityFocus();
@@ -27560,9 +29855,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final active = _anomalyFilter == label;
     final muted = label != '全部' && count == 0;
     final color = label == '亏损' || label == '成本异常' || label == '利差倒挂'
-        ? LhColors.pos
-        : _LhPlum.primary;
-    final fg = active ? color : (muted ? LhColors.mute2 : LhColors.mute);
+        ? DunesColors.resolve(context, LhColors.pos)
+        : DunesColors.resolve(context, _LhPlum.primary);
+    final fg = active
+        ? color
+        : (muted
+              ? DunesColors.resolve(context, LhColors.mute2)
+              : DunesColors.resolve(context, LhColors.mute));
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: muted
@@ -27577,9 +29876,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         duration: const Duration(milliseconds: 140),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: active ? color.withAlpha(18) : Colors.transparent,
+          color: DunesColors.resolveNullable(
+            context,
+            active ? color.withAlpha(18) : Colors.transparent,
+            role: DunesColorRole.surface,
+          ),
           border: Border.all(
-            color: active ? color.withAlpha(110) : LhColors.line2,
+            color: active
+                ? color.withAlpha(110)
+                : DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.border,
+                  ),
             width: 0.7,
           ),
           borderRadius: BorderRadius.circular(999),
@@ -27594,6 +29903,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 color: fg,
                 weight: active ? FontWeight.w700 : FontWeight.w600,
                 letterSpacing: 0.1,
+                context: context,
               ),
             ),
             const SizedBox(width: 4),
@@ -27601,9 +29911,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '$count',
               style: LhTypography.mono(
                 size: 9,
-                color: active ? color : LhColors.mute2,
+                color: active
+                    ? color
+                    : DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w700,
                 letterSpacing: 0.2,
+                context: context,
               ),
             ),
           ],
@@ -27677,7 +29990,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     //   现在: 无 border 无 fill, icon+label 直接, active = copper 全线;
     //   badge = 中点分隔的 inline mono 数字 (指标 · 3), 无 pill 无填。
     //   跟 _CubeChipButton v3.7 完全同款。
-    final fg = active ? _LhPlum.primary : LhColors.mute;
+    final fg = active
+        ? DunesColors.resolve(context, _LhPlum.primary)
+        : DunesColors.resolve(context, LhColors.mute);
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -27687,7 +30002,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(icon, size: 13, color: fg),
+            Icon(
+              icon,
+              size: 13,
+              color: DunesColors.resolveNullable(context, fg),
+            ),
             const SizedBox(width: 4),
             Text(
               label,
@@ -27696,6 +30015,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 color: fg,
                 weight: active ? FontWeight.w700 : FontWeight.w600,
                 letterSpacing: 0.2,
+                context: context,
               ),
             ),
             if (badge != null) ...[
@@ -27704,8 +30024,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 '·',
                 style: LhTypography.mono(
                   size: 9,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w600,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 3),
@@ -27713,9 +30034,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 badge,
                 style: LhTypography.mono(
                   size: 9.5,
-                  color: _LhPlum.primary,
+                  color: DunesColors.resolve(context, _LhPlum.primary),
                   weight: FontWeight.w700,
                   letterSpacing: 0.2,
+                  context: context,
                 ),
               ),
             ],
@@ -27747,8 +30069,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       margin: const EdgeInsets.fromLTRB(22, 12, 22, 4),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
       decoration: BoxDecoration(
-        color: LhColors.paper,
-        border: Border.all(color: LhColors.line2, width: 1),
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 1,
+        ),
         borderRadius: BorderRadius.circular(12),
         boxShadow: const [
           BoxShadow(
@@ -27778,9 +30111,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     '折扣与返点',
                     style: LhTypography.mono(
                       size: 9.5,
-                      color: LhColors.mute,
+                      color: DunesColors.resolve(context, LhColors.mute),
                       weight: FontWeight.w600,
                       letterSpacing: 1.2,
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -27790,9 +30124,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         : 'TOP $_discountPreviewCount · 共 ${sorted.length} 家',
                     style: LhTypography.mono(
                       size: 9,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w500,
                       letterSpacing: 0.3,
+                      context: context,
                     ),
                   ),
                 ],
@@ -27809,17 +30144,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         _discountExpanded ? '收起' : '展开全部',
                         style: LhTypography.sans(
                           size: 10,
-                          color: _LhPlum.primary,
+                          color: DunesColors.resolve(context, _LhPlum.primary),
                           weight: FontWeight.w500,
+                          context: context,
                         ),
                       ),
                       AnimatedRotation(
                         turns: _discountExpanded ? 0.5 : 0,
                         duration: const Duration(milliseconds: 200),
-                        child: const Icon(
+                        child: Icon(
                           Icons.keyboard_arrow_down_rounded,
                           size: 16,
-                          color: _LhPlum.primary,
+                          color: DunesColors.resolve(context, _LhPlum.primary),
                         ),
                       ),
                     ],
@@ -27832,8 +30168,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             'calc_record · stat_amount × discount_rate = rebate_amount',
             style: LhTypography.sans(
               size: 9,
-              color: LhColors.mute2,
+              color: DunesColors.resolve(context, LhColors.mute2),
               letterSpacing: 0.2,
+              context: context,
             ),
           ),
           const SizedBox(height: 6),
@@ -27841,10 +30178,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             spacing: 8,
             runSpacing: 4,
             children: [
-              _buildDiscountLegendChip('全额累进', _LhPlum.primary, fullCount),
-              _buildDiscountLegendChip('超额累进', LhColors.cnpc, excessCount),
+              _buildDiscountLegendChip(
+                '全额累进',
+                DunesColors.resolve(context, _LhPlum.primary),
+                fullCount,
+              ),
+              _buildDiscountLegendChip(
+                '超额累进',
+                DunesColors.resolve(context, LhColors.cnpc),
+                excessCount,
+              ),
               if (otherCount > 0)
-                _buildDiscountLegendChip('其他', LhColors.mute, otherCount),
+                _buildDiscountLegendChip(
+                  '其他',
+                  DunesColors.resolve(context, LhColors.mute),
+                  otherCount,
+                ),
             ],
           ),
           const SizedBox(height: 10),
@@ -27855,7 +30204,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 border: Border(
                   top: i == 0
                       ? BorderSide.none
-                      : const BorderSide(color: LhColors.line2, width: 0.5),
+                      : BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            LhColors.line2,
+                            role: DunesColorRole.border,
+                          ),
+                          width: 0.5,
+                        ),
                 ),
               ),
               child: _buildDiscountRow(visible[i]),
@@ -27868,9 +30224,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 margin: const EdgeInsets.only(top: 4),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: LhColors.line2, width: 0.5),
+                    top: BorderSide(
+                      color: DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.border,
+                      ),
+                      width: 0.5,
+                    ),
                   ),
                 ),
                 alignment: Alignment.center,
@@ -27882,9 +30245,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       _discountExpanded ? '收起' : '展开剩余 $remaining 家',
                       style: LhTypography.sans(
                         size: 10.5,
-                        color: _LhPlum.primary,
+                        color: DunesColors.resolve(context, _LhPlum.primary),
                         weight: FontWeight.w500,
                         letterSpacing: 0.3,
+                        context: context,
                       ),
                     ),
                     if (_discountExpanded) ...[
@@ -27892,10 +30256,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       AnimatedRotation(
                         turns: 0.5,
                         duration: const Duration(milliseconds: 200),
-                        child: const Icon(
+                        child: Icon(
                           Icons.keyboard_arrow_down_rounded,
                           size: 14,
-                          color: _LhPlum.primary,
+                          color: DunesColors.resolve(context, _LhPlum.primary),
                         ),
                       ),
                     ],
@@ -27912,7 +30276,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withAlpha(20),
+        color: DunesColors.resolveNullable(
+          context,
+          color.withAlpha(20),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color.withAlpha(80), width: 0.5),
       ),
@@ -27923,6 +30291,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           color: color,
           weight: FontWeight.w600,
           letterSpacing: 0.2,
+          context: context,
         ),
       ),
     );
@@ -27955,9 +30324,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 r.province,
                 style: LhTypography.sans(
                   size: 13,
-                  color: LhColors.ink2,
+                  color: DunesColors.resolve(context, LhColors.ink2),
                   weight: FontWeight.w600,
                   letterSpacing: 0.1,
+                  context: context,
                 ),
               ),
             ),
@@ -27973,7 +30343,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       vertical: 1,
                     ),
                     decoration: BoxDecoration(
-                      color: typeColor.withAlpha(18),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        typeColor.withAlpha(18),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(3),
                       border: Border.all(
                         color: typeColor.withAlpha(100),
@@ -27987,6 +30361,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         color: typeColor,
                         weight: FontWeight.w600,
                         letterSpacing: 0.2,
+                        context: context,
                       ),
                     ),
                   ),
@@ -27995,8 +30370,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       r.tierLabel!,
                       style: LhTypography.mono(
                         size: 10,
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(context, LhColors.mute2),
                         weight: FontWeight.w500,
+                        context: context,
                       ),
                     ),
                   if (r.tierCount != null && r.tierCount! > 1)
@@ -28004,7 +30380,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       '共${r.tierCount}档',
                       style: LhTypography.mono(
                         size: 9.5,
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(context, LhColors.mute2),
+                        context: context,
                       ),
                     ),
                 ],
@@ -28017,8 +30394,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   '累计 ${(r.cur / 10000).toStringAsFixed(1)} 万$baseHint',
                   style: LhTypography.sans(
                     size: 11,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                     letterSpacing: 0.1,
+                    context: context,
                   ),
                 ),
                 RichText(
@@ -28028,7 +30406,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         text: '返 ',
                         style: LhTypography.sans(
                           size: 10.5,
-                          color: LhColors.mute2,
+                          color: DunesColors.resolve(context, LhColors.mute2),
+                          context: context,
                         ),
                       ),
                       TextSpan(
@@ -28037,15 +30416,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         ),
                         style: LhTypography.sans(
                           size: 10,
-                          color: LhColors.neg,
+                          color: DunesColors.resolve(context, LhColors.neg),
                           weight: FontWeight.w700,
+                          context: context,
                         ),
                       ),
                       TextSpan(
                         text: ' 万',
                         style: LhTypography.mono(
                           size: 10,
-                          color: LhColors.mute,
+                          color: DunesColors.resolve(context, LhColors.mute),
+                          context: context,
                         ),
                       ),
                     ],
@@ -28066,9 +30447,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 _discountRateLine(r),
                 style: LhTypography.mono(
                   size: 10,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w600,
                   letterSpacing: 0.2,
+                  context: context,
                 ),
               ),
               if (r.dateRange != null) ...[
@@ -28077,8 +30459,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   '账期 ${r.dateRange} · 业务侧透传',
                   style: LhTypography.mono(
                     size: 9,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     letterSpacing: 0.2,
+                    context: context,
                   ),
                 ),
               ],
@@ -28089,7 +30472,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   child: LinearProgressIndicator(
                     value: (r.progress ?? 0).clamp(0.0, 1.0),
                     minHeight: 5,
-                    backgroundColor: const Color(0x0B140A00),
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      const Color(0x0B140A00),
+                      role: DunesColorRole.surface,
+                    ),
                     color: typeColor.withAlpha(180),
                   ),
                 ),
@@ -28098,8 +30485,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   '→ ${_fmtPermille(r.nextRate)} · 差 ${(r.gapToNext! / 10000).toStringAsFixed(1)} 万 · ${((r.progress ?? 0) * 100).round()}%',
                   style: LhTypography.mono(
                     size: 9.5,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     letterSpacing: 0.2,
+                    context: context,
                   ),
                 ),
                 // 过档多赚 —— 差多少是「要做什么」，多赚多少是「为什么值得做」。
@@ -28113,6 +30501,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       color: typeColor,
                       weight: FontWeight.w700,
                       letterSpacing: 0.2,
+                      context: context,
                     ),
                   ),
                 ],
@@ -28120,7 +30509,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 const SizedBox(height: 2),
                 Text(
                   '封顶 · 无下一档',
-                  style: LhTypography.mono(size: 9.5, color: LhColors.mute2),
+                  style: LhTypography.mono(
+                    size: 9.5,
+                    color: DunesColors.resolve(context, LhColors.mute2),
+                    context: context,
+                  ),
                 ),
               ],
             ],
@@ -28152,15 +30545,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '数据加载失败',
               style: LhTypography.sans(
                 size: 14,
-                color: LhColors.ink,
+                color: DunesColors.resolve(context, LhColors.ink),
                 weight: FontWeight.w600,
+                context: context,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               _loadError!,
               textAlign: TextAlign.center,
-              style: LhTypography.sans(size: 11, color: LhColors.mute),
+              style: LhTypography.sans(
+                size: 11,
+                color: DunesColors.resolve(context, LhColors.mute),
+                context: context,
+              ),
             ),
             const SizedBox(height: 16),
             GestureDetector(
@@ -28177,16 +30575,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: _LhPlum.soft,
-                  border: Border.all(color: _LhPlum.primary),
+                  color: DunesColors.resolve(
+                    context,
+                    _LhPlum.soft,
+                    role: DunesColorRole.surface,
+                  ),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      _LhPlum.primary,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   '重试',
                   style: LhTypography.sans(
                     size: 12,
-                    color: _LhPlum.primary,
+                    color: DunesColors.resolve(context, _LhPlum.primary),
                     weight: FontWeight.w600,
+                    context: context,
                   ),
                 ),
               ),
@@ -28211,15 +30620,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '当前列表加载失败',
               style: LhTypography.sans(
                 size: 14,
-                color: LhColors.ink,
+                color: DunesColors.resolve(context, LhColors.ink),
                 weight: FontWeight.w600,
+                context: context,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               tabError,
               textAlign: TextAlign.center,
-              style: LhTypography.sans(size: 11, color: LhColors.mute),
+              style: LhTypography.sans(
+                size: 11,
+                color: DunesColors.resolve(context, LhColors.mute),
+                context: context,
+              ),
             ),
             const SizedBox(height: 16),
             GestureDetector(
@@ -28230,16 +30644,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: _LhPlum.soft,
-                  border: Border.all(color: _LhPlum.primary),
+                  color: DunesColors.resolve(
+                    context,
+                    _LhPlum.soft,
+                    role: DunesColorRole.surface,
+                  ),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      _LhPlum.primary,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   '重试当前分类',
                   style: LhTypography.sans(
                     size: 12,
-                    color: _LhPlum.primary,
+                    color: DunesColors.resolve(context, _LhPlum.primary),
                     weight: FontWeight.w600,
+                    context: context,
                   ),
                 ),
               ),
@@ -28260,7 +30685,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   children: [
                     Text(
                       '没有匹配「${_ledgerSearch.trim()}」的行',
-                      style: LhTypography.sans(size: 12, color: LhColors.mute),
+                      style: LhTypography.sans(
+                        size: 12,
+                        color: DunesColors.resolve(context, LhColors.mute),
+                        context: context,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     GestureDetector(
@@ -28270,8 +30699,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         '清除查找',
                         style: LhTypography.sans(
                           size: 12,
-                          color: _LhPlum.primary,
+                          color: DunesColors.resolve(context, _LhPlum.primary),
                           weight: FontWeight.w600,
+                          context: context,
                         ),
                       ),
                     ),
@@ -28279,7 +30709,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 )
               : Text(
                   '暂无数据',
-                  style: LhTypography.sans(size: 12, color: LhColors.mute),
+                  style: LhTypography.sans(
+                    size: 12,
+                    color: DunesColors.resolve(context, LhColors.mute),
+                    context: context,
+                  ),
                 ),
         ),
       );
@@ -28306,8 +30740,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               textAlign: TextAlign.center,
               style: LhTypography.mono(
                 size: 10,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
           )
@@ -28319,8 +30754,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               textAlign: TextAlign.center,
               style: LhTypography.mono(
                 size: 10,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
           ),
@@ -28337,9 +30773,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         children: [
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _LhPlum.lavender, width: 1),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  _LhPlum.lavender,
+                  role: DunesColorRole.border,
+                ),
+                width: 1,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: _LhPlum.deep.withAlpha(12),
@@ -28384,7 +30831,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         child: Center(
           child: Text(
             '分析数据加载失败',
-            style: LhTypography.sans(size: 12, color: LhColors.mute),
+            style: LhTypography.sans(
+              size: 12,
+              color: DunesColors.resolve(context, LhColors.mute),
+              context: context,
+            ),
           ),
         ),
       );
@@ -28435,19 +30886,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               _projectDecisionPill(
                 '目标ROI',
                 targetROI == null ? '—' : '${targetROI.toStringAsFixed(1)}%',
-                _LhPlum.primary,
+                DunesColors.resolve(context, _LhPlum.primary),
               ),
               const SizedBox(width: 6),
               _projectDecisionPill(
                 '临界值',
                 criticalDays == null ? '—' : '$criticalDays天',
-                LhColors.ink2,
+                DunesColors.resolve(context, LhColors.ink2),
               ),
               const SizedBox(width: 6),
               _projectDecisionPill(
                 '甩包袱',
                 '${burden.length}项',
-                burden.isEmpty ? LhColors.neg : LhColors.pos,
+                burden.isEmpty
+                    ? DunesColors.resolve(context, LhColors.neg)
+                    : DunesColors.resolve(context, LhColors.pos),
               ),
             ],
           ),
@@ -28455,7 +30908,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           if (source.isEmpty)
             Text(
               '暂无项目数据；后端按 project_name 聚合后会在这里展示 ROI 状态。',
-              style: LhTypography.sans(size: 10.5, color: LhColors.mute),
+              style: LhTypography.sans(
+                size: 10.5,
+                color: DunesColors.resolve(context, LhColors.mute),
+                context: context,
+              ),
             )
           else
             Column(
@@ -28466,9 +30923,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             '口径：毛利率 = 利润 ÷ 核销额；ROI = 利润 ÷ 成本合计；临界值由后端环境变量配置，未新增数据表。',
             style: LhTypography.mono(
               size: 7.4,
-              color: LhColors.mute2,
+              color: DunesColors.resolve(context, LhColors.mute2),
               height: 1.35,
               letterSpacing: 0.1,
+              context: context,
             ),
           ),
         ],
@@ -28481,7 +30939,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color: color.withAlpha(20),
+          color: DunesColors.resolveNullable(
+            context,
+            color.withAlpha(20),
+            role: DunesColorRole.surface,
+          ),
           border: Border.all(color: color.withAlpha(70), width: 0.8),
           borderRadius: BorderRadius.circular(6),
         ),
@@ -28492,9 +30954,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               label,
               style: LhTypography.mono(
                 size: 7.2,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w700,
                 letterSpacing: 0.5,
+                context: context,
               ),
             ),
             const SizedBox(height: 2),
@@ -28505,6 +30968,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 color: color,
                 weight: FontWeight.w800,
                 letterSpacing: -0.1,
+                context: context,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -28529,12 +30993,44 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       margin: const EdgeInsets.only(bottom: 7),
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         border: Border(
-          left: BorderSide(color: color, width: 2),
-          top: BorderSide(color: LhColors.line2, width: 0.7),
-          right: BorderSide(color: LhColors.line2, width: 0.7),
-          bottom: BorderSide(color: LhColors.line2, width: 0.7),
+          left: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              color,
+              role: DunesColorRole.border,
+            ),
+            width: 2,
+          ),
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 0.7,
+          ),
+          right: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 0.7,
+          ),
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 0.7,
+          ),
         ),
       ),
       child: Row(
@@ -28547,9 +31043,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   name,
                   style: LhTypography.sans(
                     size: 11,
-                    color: LhColors.ink,
+                    color: DunesColors.resolve(context, LhColors.ink),
                     weight: FontWeight.w700,
                     letterSpacing: -0.1,
+                    context: context,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -28559,8 +31056,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   'ROI ${roi.toStringAsFixed(2)}% · 利润 ${profitV == null ? '—' : '${profitV.toStringAsFixed(2)}$profitU'}',
                   style: LhTypography.mono(
                     size: 8,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                     weight: FontWeight.w500,
+                    context: context,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -28575,7 +31073,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: color.withAlpha(24),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    color.withAlpha(24),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(3),
                 ),
                 child: Text(
@@ -28585,6 +31087,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     color: color,
                     weight: FontWeight.w800,
                     letterSpacing: 0.4,
+                    context: context,
                   ),
                 ),
               ),
@@ -28598,9 +31101,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 style: LhTypography.mono(
                   size: 7.5,
                   color: days != null && days < 0
-                      ? LhColors.pos
-                      : LhColors.mute2,
+                      ? DunesColors.resolve(context, LhColors.pos)
+                      : DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w600,
+                  context: context,
                 ),
               ),
             ],
@@ -28626,13 +31130,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Color _projectStatusColor(String status) {
     switch (status) {
       case 'healthy':
-        return LhColors.neg;
+        return DunesColors.resolve(context, LhColors.neg);
       case 'watch':
-        return _LhPlum.primary;
+        return DunesColors.resolve(context, _LhPlum.primary);
       case 'burden':
-        return LhColors.pos;
+        return DunesColors.resolve(context, LhColors.pos);
       default:
-        return LhColors.mute;
+        return DunesColors.resolve(context, LhColors.mute);
     }
   }
 
@@ -28648,9 +31152,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 '数据分析',
                 style: LhTypography.sans(
                   size: 18,
-                  color: LhColors.ink,
+                  color: DunesColors.resolve(context, LhColors.ink),
                   weight: FontWeight.w600,
                   letterSpacing: 0.2,
+                  context: context,
                 ),
               ),
               const SizedBox(height: 3),
@@ -28662,9 +31167,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ].join('  ·  '),
                 style: LhTypography.mono(
                   size: 10.5,
-                  color: LhColors.mute,
+                  color: DunesColors.resolve(context, LhColors.mute),
                   weight: FontWeight.w500,
                   letterSpacing: 0.5,
+                  context: context,
                 ),
               ),
             ],
@@ -28680,7 +31186,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   width: 5,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: LhColors.neg.withAlpha(220),
+                    color: DunesColors.resolve(
+                      context,
+                      LhColors.neg,
+                      role: DunesColorRole.surface,
+                    ).withAlpha(220),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -28689,9 +31199,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   '同步',
                   style: LhTypography.mono(
                     size: 9,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     weight: FontWeight.w700,
                     letterSpacing: 1.8,
+                    context: context,
                   ),
                 ),
               ],
@@ -28701,9 +31212,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               _syncedAtLabel(),
               style: LhTypography.mono(
                 size: 10.5,
-                color: LhColors.ink2,
+                color: DunesColors.resolve(context, LhColors.ink2),
                 weight: FontWeight.w600,
                 letterSpacing: 0.4,
+                context: context,
               ),
             ),
           ],
@@ -28765,7 +31277,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         padding: const EdgeInsets.all(20),
         child: Text(
           '数据不足，无法生成 3D 坐标',
-          style: LhTypography.mono(size: 11, color: LhColors.mute),
+          style: LhTypography.mono(
+            size: 11,
+            color: DunesColors.resolve(context, LhColors.mute),
+            context: context,
+          ),
         ),
       );
     }
@@ -28867,9 +31383,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         child: Container(
           padding: const EdgeInsets.fromLTRB(4, 3, 7, 3),
           decoration: BoxDecoration(
-            color: selected ? accent.withAlpha(18) : LhColors.paper,
+            color: selected
+                ? accent.withAlpha(18)
+                : DunesColors.resolve(
+                    context,
+                    LhColors.paper,
+                    role: DunesColorRole.surface,
+                  ),
             border: Border.all(
-              color: selected ? accent : LhColors.line,
+              color: selected
+                  ? accent
+                  : DunesColors.resolve(
+                      context,
+                      LhColors.line,
+                      role: DunesColorRole.border,
+                    ),
               width: 1,
             ),
             borderRadius: BorderRadius.circular(5),
@@ -28883,17 +31411,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 height: 18,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: selected ? accent : accent.withAlpha(22),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    selected ? accent : accent.withAlpha(22),
+                    role: DunesColorRole.surface,
+                  ),
                   shape: BoxShape.circle,
                 ),
                 child: Text(
                   initial,
                   style: LhTypography.sans(
                     size: 9,
-                    color: selected ? Colors.white : accent,
+                    color: selected
+                        ? DunesColors.resolve(context, Colors.white)
+                        : accent,
                     weight: FontWeight.w700,
                     letterSpacing: -0.2,
                     height: 1.0,
+                    context: context,
                   ),
                 ),
               ),
@@ -28902,10 +31437,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 owner,
                 style: LhTypography.sans(
                   size: 10,
-                  color: selected ? accent : LhColors.ink,
+                  color: selected
+                      ? accent
+                      : DunesColors.resolve(context, LhColors.ink),
                   weight: FontWeight.w600,
                   letterSpacing: -0.1,
                   height: 1.1,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 3),
@@ -28913,8 +31451,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 '${stat.count}',
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: selected ? accent.withAlpha(220) : LhColors.mute,
+                  color: selected
+                      ? accent.withAlpha(220)
+                      : DunesColors.resolve(context, LhColors.mute),
                   weight: FontWeight.w700,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 4),
@@ -28922,7 +31463,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 width: 18,
                 height: 1.5,
                 decoration: BoxDecoration(
-                  color: LhColors.line2,
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(1),
                 ),
                 child: FractionallySizedBox(
@@ -28930,7 +31475,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   widthFactor: ratio.clamp(0.0, 1.0),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: selected ? accent : accent.withAlpha(160),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        selected ? accent : accent.withAlpha(160),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(1),
                     ),
                   ),
@@ -28941,9 +31490,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 fmtValue(stat.totalValue),
                 style: LhTypography.mono(
                   size: 8,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w600,
                   letterSpacing: 0.1,
+                  context: context,
                 ),
               ),
             ],
@@ -29142,7 +31692,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return _CubeChipButton(
       icon: Icons.zoom_out_map_rounded,
       label: '放大',
-      color: LhColors.ink,
+      color: DunesColors.resolve(context, LhColors.ink),
       onTap: () => _openCubeFullscreen(cube),
     );
   }
@@ -29166,7 +31716,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Icon(
                 icon,
                 size: 12,
-                color: value ? _LhPlum.primary : LhColors.mute2,
+                color: value
+                    ? DunesColors.resolve(context, _LhPlum.primary)
+                    : DunesColors.resolve(context, LhColors.mute2),
               ),
               const SizedBox(width: 7),
               Column(
@@ -29177,18 +31729,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     label,
                     style: LhTypography.sans(
                       size: 11,
-                      color: value ? LhColors.ink : LhColors.mute,
+                      color: value
+                          ? DunesColors.resolve(context, LhColors.ink)
+                          : DunesColors.resolve(context, LhColors.mute),
                       weight: FontWeight.w700,
                       letterSpacing: -0.1,
+                      context: context,
                     ),
                   ),
                   Text(
                     hint,
                     style: LhTypography.mono(
                       size: 8.5,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w500,
                       letterSpacing: 0.2,
+                      context: context,
                     ),
                   ),
                 ],
@@ -29201,8 +31757,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 padding: const EdgeInsets.all(1.5),
                 decoration: BoxDecoration(
                   color: value
-                      ? _LhPlum.primary.withAlpha(200)
-                      : LhColors.line2,
+                      ? DunesColors.resolve(
+                          context,
+                          _LhPlum.primary,
+                          role: DunesColorRole.surface,
+                        ).withAlpha(200)
+                      : DunesColors.resolve(
+                          context,
+                          LhColors.line2,
+                          role: DunesColorRole.surface,
+                        ),
                   borderRadius: BorderRadius.circular(7),
                 ),
                 child: AnimatedAlign(
@@ -29214,8 +31778,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   child: Container(
                     width: 11,
                     height: 11,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
+                    decoration: BoxDecoration(
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
@@ -29236,8 +31804,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     return Container(
       decoration: BoxDecoration(
-        color: LhColors.paper,
-        border: Border.all(color: _LhPlum.primary.withAlpha(110), width: 0.8),
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _LhPlum.primary,
+            role: DunesColorRole.border,
+          ).withAlpha(110),
+          width: 0.8,
+        ),
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
@@ -29259,13 +31838,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 'LABELS · 文字显示',
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: _LhPlum.primary,
+                  color: DunesColors.resolve(context, _LhPlum.primary),
                   weight: FontWeight.w800,
                   letterSpacing: 1.4,
+                  context: context,
                 ),
               ),
             ),
-            Container(height: 0.6, color: LhColors.line2),
+            Container(
+              height: 0.6,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ),
+            ),
             toggleRow(
               icon: Icons.straighten_rounded,
               label: '产品轴',
@@ -29273,7 +31860,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               value: _cubeShowAxisNames,
               onChanged: (v) => setState(() => _cubeShowAxisNames = v),
             ),
-            Container(height: 0.6, color: LhColors.line2.withAlpha(120)),
+            Container(
+              height: 0.6,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ).withAlpha(120),
+            ),
             toggleRow(
               icon: Icons.label_outline_rounded,
               label: '产品名',
@@ -29281,7 +31875,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               value: _cubeShowProductTicks,
               onChanged: (v) => setState(() => _cubeShowProductTicks = v),
             ),
-            Container(height: 0.6, color: LhColors.line2.withAlpha(120)),
+            Container(
+              height: 0.6,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ).withAlpha(120),
+            ),
             toggleRow(
               icon: Icons.apartment_rounded,
               label: '供给',
@@ -29289,7 +31890,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               value: _cubeShowSupplyLabels,
               onChanged: (v) => setState(() => _cubeShowSupplyLabels = v),
             ),
-            Container(height: 0.6, color: LhColors.line2.withAlpha(120)),
+            Container(
+              height: 0.6,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ).withAlpha(120),
+            ),
             toggleRow(
               icon: Icons.hub_outlined,
               label: '渠道',
@@ -29297,7 +31905,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               value: _cubeShowChannelLabels,
               onChanged: (v) => setState(() => _cubeShowChannelLabels = v),
             ),
-            Container(height: 0.6, color: LhColors.line2.withAlpha(120)),
+            Container(
+              height: 0.6,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ).withAlpha(120),
+            ),
             toggleRow(
               icon: Icons.person_outline_rounded,
               label: '负责人',
@@ -29360,7 +31975,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
             return Dialog(
               insetPadding: EdgeInsets.zero,
-              backgroundColor: LhColors.paper,
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                LhColors.paper,
+                role: DunesColorRole.surface,
+              ),
               shape: const RoundedRectangleBorder(
                 borderRadius: BorderRadius.zero,
               ),
@@ -29374,9 +31993,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     //   close × 从 ink → mute, size 18 → 15, 跟 Meta compare drawer 同款
                     Container(
                       padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         border: Border(
-                          bottom: BorderSide(color: _LhPlum.lavender, width: 1),
+                          bottom: BorderSide(
+                            color: DunesColors.resolve(
+                              ctx,
+                              _LhPlum.lavender,
+                              role: DunesColorRole.border,
+                            ),
+                            width: 1,
+                          ),
                         ),
                       ),
                       child: Row(
@@ -29384,12 +32010,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: () => Navigator.of(dialogCtx).pop(),
-                            child: const Padding(
+                            child: Padding(
                               padding: EdgeInsets.all(8),
                               child: Icon(
                                 Icons.close_rounded,
                                 size: 15,
-                                color: LhColors.mute,
+                                color: DunesColors.resolve(ctx, LhColors.mute),
                               ),
                             ),
                           ),
@@ -29398,9 +32024,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             '${matchedPoints.length} 坐标',
                             style: LhTypography.mono(
                               size: 9.5,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(ctx, LhColors.mute),
                               weight: FontWeight.w700,
                               letterSpacing: 0.6,
+                              context: ctx,
                             ),
                           ),
                           const Spacer(),
@@ -29411,11 +32038,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 : Icons.tune_rounded,
                             label: '筛选',
                             color: filterOpen
-                                ? _LhPlum.primary
+                                ? DunesColors.resolve(ctx, _LhPlum.primary)
                                 : (_cubeHasActiveFilter ||
                                           _cubeSelectedOwner != null
-                                      ? _LhPlum.primary
-                                      : LhColors.ink),
+                                      ? DunesColors.resolve(
+                                          ctx,
+                                          _LhPlum.primary,
+                                        )
+                                      : DunesColors.resolve(ctx, LhColors.ink)),
                             onTap: () => setDlg(() {
                               filterOpen = !filterOpen;
                             }),
@@ -29428,7 +32058,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             child: _CubeChipButton(
                               icon: Icons.refresh_rounded,
                               label: '重置',
-                              color: LhColors.ink,
+                              color: DunesColors.resolve(ctx, LhColors.ink),
                               onTap: _cubeViewIsDefault
                                   ? null
                                   : () => _resetCubeView(
@@ -29450,12 +32080,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           constraints: BoxConstraints(
                             maxHeight: MediaQuery.sizeOf(context).height * 0.48,
                           ),
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             // v3.7: paper → 极浅 cream, 跟 top bar hairline (#DDD5C0) 呼应
-                            color: Color(0xFFFDF9EC),
+                            color: DunesColors.resolveNullable(
+                              ctx,
+                              Color(0xFFFDF9EC),
+                              role: DunesColorRole.surface,
+                            ),
                             border: Border(
                               bottom: BorderSide(
-                                color: _LhPlum.lavender,
+                                color: DunesColors.resolve(
+                                  ctx,
+                                  _LhPlum.lavender,
+                                  role: DunesColorRole.border,
+                                ),
                                 width: 1,
                               ),
                             ),
@@ -29473,9 +32111,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                         '负责人',
                                         style: LhTypography.mono(
                                           size: 9,
-                                          color: LhColors.mute2,
+                                          color: DunesColors.resolve(
+                                            ctx,
+                                            LhColors.mute2,
+                                          ),
                                           weight: FontWeight.w700,
                                           letterSpacing: 1.6,
+                                          context: ctx,
                                         ),
                                       ),
                                       const SizedBox(width: 8),
@@ -29483,9 +32125,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                         '${sortedOwners.length} 人 · ${matchedPoints.length} 坐标',
                                         style: LhTypography.mono(
                                           size: 9,
-                                          color: LhColors.mute,
+                                          color: DunesColors.resolve(
+                                            ctx,
+                                            LhColors.mute,
+                                          ),
                                           weight: FontWeight.w600,
                                           letterSpacing: 0.3,
+                                          context: ctx,
                                         ),
                                       ),
                                       const Spacer(),
@@ -29508,7 +32154,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                             final e = sortedOwners[i];
                                             final col =
                                                 ownerColors[e.key] ??
-                                                LhColors.mute;
+                                                DunesColors.resolve(
+                                                  ctx,
+                                                  LhColors.mute,
+                                                );
                                             return _buildOwnerChip(
                                               e.key,
                                               e.value,
@@ -29527,9 +32176,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   '维度',
                                   style: LhTypography.mono(
                                     size: 9,
-                                    color: LhColors.mute2,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      LhColors.mute2,
+                                    ),
                                     weight: FontWeight.w700,
                                     letterSpacing: 1.6,
+                                    context: ctx,
                                   ),
                                 ),
                                 const SizedBox(height: 6),
@@ -29540,9 +32193,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   '文字',
                                   style: LhTypography.mono(
                                     size: 9,
-                                    color: LhColors.mute2,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      LhColors.mute2,
+                                    ),
                                     weight: FontWeight.w700,
                                     letterSpacing: 1.6,
+                                    context: ctx,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -29588,9 +32245,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                       width: 36,
                                       height: 36,
                                       decoration: BoxDecoration(
-                                        color: LhColors.paper,
+                                        color: DunesColors.resolve(
+                                          ctx,
+                                          LhColors.paper,
+                                          role: DunesColorRole.surface,
+                                        ),
                                         border: Border.all(
-                                          color: LhColors.line,
+                                          color: DunesColors.resolve(
+                                            ctx,
+                                            LhColors.line,
+                                            role: DunesColorRole.border,
+                                          ),
                                           width: 1,
                                         ),
                                         borderRadius: BorderRadius.circular(18),
@@ -29608,7 +32273,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                             ? Icons.zoom_out_rounded
                                             : Icons.zoom_in_rounded,
                                         size: 18,
-                                        color: LhColors.ink,
+                                        color: DunesColors.resolve(
+                                          ctx,
+                                          LhColors.ink,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -29627,7 +32295,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         decoration: BoxDecoration(
                           border: Border(
                             top: BorderSide(
-                              color: LhColors.line2.withAlpha(140),
+                              color: DunesColors.resolve(
+                                ctx,
+                                LhColors.line2,
+                                role: DunesColorRole.border,
+                              ).withAlpha(140),
                               width: 0.5,
                             ),
                           ),
@@ -29671,7 +32343,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final ownerColors = _CubePainter.ownerColorMap(cube.lit);
     final accent =
         ownerColors[p.owner] ??
-        (p.owner.isEmpty ? LhColors.mute : _LhPlum.primary);
+        (p.owner.isEmpty
+            ? DunesColors.resolve(context, LhColors.mute)
+            : DunesColors.resolve(context, _LhPlum.primary));
 
     String fmtValue(double v) {
       // v12.5 · 强制万口径 (与全局 _fmt / _fmtVal 对齐)
@@ -29687,7 +32361,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 5, 14, 0),
       decoration: BoxDecoration(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         border: Border.all(color: accent.withAlpha(70), width: 1),
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
@@ -29715,7 +32393,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: accent.withAlpha(18),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        accent.withAlpha(18),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -29725,6 +32407,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         color: accent,
                         weight: FontWeight.w600,
                         letterSpacing: 0.4,
+                        context: context,
                       ),
                     ),
                   ),
@@ -29735,16 +32418,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       height: 13,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: accent,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          accent,
+                          role: DunesColorRole.surface,
+                        ),
                         shape: BoxShape.circle,
                       ),
                       child: Text(
                         p.owner.substring(0, 1),
                         style: LhTypography.sans(
                           size: 8,
-                          color: Colors.white,
+                          color: DunesColors.resolve(context, Colors.white),
                           weight: FontWeight.w600,
                           height: 1.0,
+                          context: context,
                         ),
                       ),
                     ),
@@ -29753,8 +32441,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       p.owner,
                       style: LhTypography.sans(
                         size: 10,
-                        color: LhColors.ink2,
+                        color: DunesColors.resolve(context, LhColors.ink2),
                         weight: FontWeight.w500,
+                        context: context,
                       ),
                     ),
                   ],
@@ -29767,7 +32456,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       child: Icon(
                         Icons.close_rounded,
                         size: 13,
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(context, LhColors.mute2),
                       ),
                     ),
                   ),
@@ -29786,9 +32475,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     '利润',
                     style: LhTypography.mono(
                       size: 8.5,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w500,
                       letterSpacing: 0.6,
+                      context: context,
                     ),
                   ),
                   const SizedBox(width: 7),
@@ -29799,8 +32489,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           text: '¥',
                           style: LhTypography.mono(
                             size: 11,
-                            color: LhColors.mute,
+                            color: DunesColors.resolve(context, LhColors.mute),
                             weight: FontWeight.w500,
+                            context: context,
                           ),
                         ),
                         const WidgetSpan(child: SizedBox(width: 2)),
@@ -29808,7 +32499,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           text: fmtValue(p.value),
                           style: LhTypography.number(
                             size: 16,
-                            color: LhColors.ink,
+                            color: DunesColors.resolve(context, LhColors.ink),
+                            context: context,
                           ),
                         ),
                         if (fmtUnit(p.value).isNotEmpty)
@@ -29816,8 +32508,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             text: ' ${fmtUnit(p.value)}',
                             style: LhTypography.mono(
                               size: 9,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                               weight: FontWeight.w500,
+                              context: context,
                             ),
                           ),
                       ],
@@ -29831,7 +32527,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             Container(
               height: 1,
               margin: const EdgeInsets.symmetric(horizontal: 10),
-              color: LhColors.line2.withAlpha(160),
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ).withAlpha(160),
             ),
 
             // ── 三维度信息 ──
@@ -29855,11 +32555,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   Widget _cubeDetailRow(String dim, String name, String group, String? hun) {
-    final groupColor = group.isEmpty ? LhColors.mute2 : lhGroupColor(group);
+    final groupColor = group.isEmpty
+        ? DunesColors.resolve(context, LhColors.mute2)
+        : lhGroupColor(group);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(width: 2, height: 12, color: groupColor.withAlpha(120)),
+        Container(
+          width: 2,
+          height: 12,
+          color: DunesColors.resolveNullable(
+            context,
+            groupColor.withAlpha(120),
+            role: DunesColorRole.surface,
+          ),
+        ),
         const SizedBox(width: 6),
         SizedBox(
           width: 24,
@@ -29867,9 +32577,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             dim,
             style: LhTypography.mono(
               size: 9,
-              color: LhColors.mute2,
+              color: DunesColors.resolve(context, LhColors.mute2),
               weight: FontWeight.w500,
               letterSpacing: 0.4,
+              context: context,
             ),
           ),
         ),
@@ -29879,8 +32590,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             name,
             style: LhTypography.sans(
               size: 11.5,
-              color: LhColors.ink,
+              color: DunesColors.resolve(context, LhColors.ink),
               weight: FontWeight.w500,
+              context: context,
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -29890,7 +32602,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
             decoration: BoxDecoration(
-              color: groupColor.withAlpha(20),
+              color: DunesColors.resolveNullable(
+                context,
+                groupColor.withAlpha(20),
+                role: DunesColorRole.surface,
+              ),
               border: Border.all(color: groupColor.withAlpha(80), width: 0.8),
               borderRadius: BorderRadius.circular(3),
             ),
@@ -29900,6 +32616,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 size: 9,
                 color: groupColor,
                 weight: FontWeight.w600,
+                context: context,
               ),
             ),
           ),
@@ -29914,15 +32631,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
-                  color: hunColor,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    hunColor,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(3),
                 ),
                 child: Text(
                   hunLabel,
                   style: LhTypography.mono(
                     size: hunLabel.length > 2 ? 8.5 : 10,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
                     weight: FontWeight.w600,
+                    context: context,
                   ),
                 ),
               );
@@ -29950,8 +32672,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Container(
             width: 6,
             height: 6,
-            decoration: const BoxDecoration(
-              color: _LhPlum.primary,
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.primary,
+                role: DunesColorRole.surface,
+              ),
               shape: BoxShape.circle,
             ),
           ),
@@ -29960,9 +32686,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             '$matchedShown 匹配 · 其余淡化',
             style: LhTypography.mono(
               size: 9.5,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w600,
               letterSpacing: 0.3,
+              context: context,
             ),
           ),
         ] else ...[
@@ -29970,7 +32697,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             width: 7,
             height: 7,
             decoration: BoxDecoration(
-              color: _LhPlum.primary,
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.primary,
+                role: DunesColorRole.surface,
+              ),
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(color: _LhPlum.primary.withAlpha(80), blurRadius: 5),
@@ -29982,9 +32713,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             '正利润',
             style: LhTypography.mono(
               size: 9.5,
-              color: LhColors.ink2,
+              color: DunesColors.resolve(context, LhColors.ink2),
               weight: FontWeight.w600,
               letterSpacing: 0.3,
+              context: context,
             ),
           ),
           const SizedBox(width: 4),
@@ -29992,21 +32724,31 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             '$litTotal',
             style: LhTypography.mono(
               size: 11,
-              color: _LhPlum.primary,
+              color: DunesColors.resolve(context, _LhPlum.primary),
               weight: FontWeight.w700,
               letterSpacing: 0.2,
+              context: context,
             ),
           ),
           const SizedBox(width: 10),
-          Container(width: 1, height: 10, color: LhColors.line2),
+          Container(
+            width: 1,
+            height: 10,
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.surface,
+            ),
+          ),
           const SizedBox(width: 10),
           Text(
             '未点亮',
             style: LhTypography.mono(
               size: 9.5,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w600,
               letterSpacing: 0.3,
+              context: context,
             ),
           ),
           const SizedBox(width: 4),
@@ -30014,9 +32756,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             '$unlit',
             style: LhTypography.mono(
               size: 11,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w700,
               letterSpacing: 0.2,
+              context: context,
             ),
           ),
         ],
@@ -30029,7 +32772,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 height: 3,
                 decoration: BoxDecoration(
-                  color: LhColors.line2,
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -30038,7 +32785,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 child: Container(
                   height: 3,
                   decoration: BoxDecoration(
-                    color: _LhPlum.primary,
+                    color: DunesColors.resolve(
+                      context,
+                      _LhPlum.primary,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -30052,9 +32803,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           '${cube.products.length}P·${cube.supplies.length}S·${cube.channels.length}C',
           style: LhTypography.mono(
             size: 9,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w600,
             letterSpacing: 0.5,
+            context: context,
           ),
         ),
       ],
@@ -30091,14 +32843,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }) {
       final isOpen = _cubeFilterOpen == dim;
       final isActive = current != '全部';
-      final accent = isActive ? _LhPlum.primary : LhColors.ink2;
+      final accent = isActive
+          ? DunesColors.resolve(context, _LhPlum.primary)
+          : DunesColors.resolve(context, LhColors.ink2);
       // v3.7: 收敛跟 dropdown / hero 系统同一门语言 ——
       //   off 态无 border 无 bg (silent), open 态用极浅 bg 提示"打开中",
       //   active 态用 copper.withAlpha(24) fill (跟 _ddChip 完全对齐).
       //   prefix label 换 mono UPPER letterSpacing 0.5, 跟 hero kicker 同族.
       final bg = isActive
-          ? _LhPlum.primary.withAlpha(24)
-          : (isOpen ? const Color(0x080A0A0F) : Colors.transparent);
+          ? DunesColors.resolve(context, _LhPlum.primary).withAlpha(24)
+          : (isOpen
+                ? DunesColors.resolve(context, const Color(0x080A0A0F))
+                : Colors.transparent);
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => setState(() => _cubeFilterOpen = isOpen ? null : dim),
@@ -30106,7 +32862,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           duration: const Duration(milliseconds: 140),
           padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
           decoration: BoxDecoration(
-            color: bg,
+            color: DunesColors.resolveNullable(
+              context,
+              bg,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -30118,9 +32878,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 label,
                 style: LhTypography.mono(
                   size: 7.8,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w600,
                   letterSpacing: 0.5,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 5),
@@ -30131,6 +32892,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   color: accent,
                   weight: isActive ? FontWeight.w700 : FontWeight.w600,
                   letterSpacing: isActive ? -0.15 : 0,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 2),
@@ -30139,7 +32901,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ? Icons.keyboard_arrow_up_rounded
                     : Icons.keyboard_arrow_down_rounded,
                 size: 12,
-                color: isActive || isOpen ? _LhPlum.primary : LhColors.mute2,
+                color: isActive || isOpen
+                    ? DunesColors.resolve(context, _LhPlum.primary)
+                    : DunesColors.resolve(context, LhColors.mute2),
               ),
             ],
           ),
@@ -30206,10 +32970,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         padding: const EdgeInsets.fromLTRB(9, 3, 9, 3),
                         decoration: BoxDecoration(
                           color: on
-                              ? _LhPlum.primary.withAlpha(13)
+                              ? DunesColors.resolve(
+                                  ctx,
+                                  _LhPlum.primary,
+                                  role: DunesColorRole.surface,
+                                ).withAlpha(13)
                               : Colors.transparent,
                           border: Border.all(
-                            color: on ? _LhPlum.primary : LhColors.line,
+                            color: on
+                                ? DunesColors.resolve(
+                                    ctx,
+                                    _LhPlum.primary,
+                                    role: DunesColorRole.border,
+                                  )
+                                : DunesColors.resolve(
+                                    ctx,
+                                    LhColors.line,
+                                    role: DunesColorRole.border,
+                                  ),
                             width: 1,
                           ),
                           borderRadius: BorderRadius.circular(5),
@@ -30220,9 +32998,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               : opt,
                           style: LhTypography.sans(
                             size: 9.3,
-                            color: on ? _LhPlum.primary : LhColors.ink2,
+                            color: on
+                                ? DunesColors.resolve(ctx, _LhPlum.primary)
+                                : DunesColors.resolve(ctx, LhColors.ink2),
                             weight: on ? FontWeight.w600 : FontWeight.w500,
                             letterSpacing: 0.1,
+                            context: ctx,
                           ),
                         ),
                       ),
@@ -30285,9 +33066,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       '重置',
                       style: LhTypography.sans(
                         size: 9.2,
-                        color: _LhPlum.primary,
+                        color: DunesColors.resolve(context, _LhPlum.primary),
                         weight: FontWeight.w500,
                         letterSpacing: 0.2,
+                        context: context,
                       ),
                     ),
                   ),
@@ -30313,8 +33095,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     required VoidCallback onTap,
     bool iconAfter = false,
   }) {
-    final color = enabled ? LhColors.ink : LhColors.mute2;
-    final iconWidget = Icon(icon, size: 16, color: color);
+    final color = enabled
+        ? DunesColors.resolve(context, LhColors.ink)
+        : DunesColors.resolve(context, LhColors.mute2);
+    final iconWidget = Icon(
+      icon,
+      size: 16,
+      color: DunesColors.resolveNullable(context, color),
+    );
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: enabled ? onTap : null,
@@ -30323,9 +33111,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            color: enabled ? LhColors.paper : Colors.transparent,
+            color: enabled
+                ? DunesColors.resolve(
+                    context,
+                    LhColors.paper,
+                    role: DunesColorRole.surface,
+                  )
+                : Colors.transparent,
             border: Border.all(
-              color: enabled ? LhColors.line2 : LhColors.line,
+              color: enabled
+                  ? DunesColors.resolve(
+                      context,
+                      LhColors.line2,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      LhColors.line,
+                      role: DunesColorRole.border,
+                    ),
               width: 0.5,
             ),
             borderRadius: BorderRadius.circular(8),
@@ -30341,6 +33145,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         size: 12,
                         color: color,
                         weight: FontWeight.w600,
+                        context: context,
                       ),
                     ),
                     const SizedBox(width: 2),
@@ -30355,6 +33160,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         size: 12,
                         color: color,
                         weight: FontWeight.w600,
+                        context: context,
                       ),
                     ),
                   ],
@@ -30376,8 +33182,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: LhColors.line2, width: 0.5)),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -30393,9 +33208,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               textAlign: TextAlign.center,
               style: LhTypography.mono(
                 size: 11,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w600,
                 letterSpacing: 0.2,
+                context: context,
               ),
             ),
           ),
@@ -30449,6 +33265,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               weight: skin.bold ? FontWeight.w700 : FontWeight.w500,
               letterSpacing: 0.2,
               height: 1.0,
+              context: context,
             ),
           ),
         ),
@@ -30739,7 +33556,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     final picked = await showMenu<String>(
       context: context,
-      color: LhColors.paper,
+      color: DunesColors.resolve(context, LhColors.paper),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       position: RelativeRect.fromLTRB(
         globalPos.dx,
@@ -30755,9 +33572,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             _metricLabel(key, tab: tab),
             style: LhTypography.mono(
               size: 9.5,
-              color: LhColors.mute2,
+              color: DunesColors.resolve(context, LhColors.mute2),
               weight: FontWeight.w700,
               letterSpacing: 0.6,
+              context: context,
             ),
           ),
         ),
@@ -30808,14 +33626,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     String label, {
     bool on = true,
   }) {
-    final color = on ? LhColors.ink : LhColors.mute2;
+    final color = on
+        ? DunesColors.resolve(context, LhColors.ink)
+        : DunesColors.resolve(context, LhColors.mute2);
     return PopupMenuItem<String>(
       value: value,
       enabled: on,
       height: 40,
       child: Row(
         children: [
-          Icon(icon, size: 17, color: color),
+          Icon(
+            icon,
+            size: 17,
+            color: DunesColors.resolveNullable(context, color),
+          ),
           const SizedBox(width: 10),
           Text(
             label,
@@ -30823,6 +33647,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               size: 13,
               color: color,
               weight: FontWeight.w500,
+              context: context,
             ),
           ),
         ],
@@ -30835,7 +33660,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: LhColors.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -30865,7 +33694,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     height: 3,
                     margin: const EdgeInsets.only(top: 8, bottom: 12),
                     decoration: BoxDecoration(
-                      color: LhColors.line,
+                      color: DunesColors.resolve(
+                        ctx,
+                        LhColors.line,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -30883,9 +33716,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 '列排列',
                                 style: LhTypography.sans(
                                   size: 15,
-                                  color: LhColors.ink,
+                                  color: DunesColors.resolve(ctx, LhColors.ink),
                                   weight: FontWeight.w700,
                                   letterSpacing: -0.2,
+                                  context: ctx,
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -30893,9 +33727,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 'COLUMN ORDER · ${_detailRootLabel(tab)}',
                                 style: LhTypography.mono(
                                   size: 9.5,
-                                  color: LhColors.mute2,
+                                  color: DunesColors.resolve(
+                                    ctx,
+                                    LhColors.mute2,
+                                  ),
                                   weight: FontWeight.w600,
                                   letterSpacing: 0.6,
+                                  context: ctx,
                                 ),
                               ),
                             ],
@@ -30905,9 +33743,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           '$shownCount / ${order.length}',
                           style: LhTypography.mono(
                             size: 10.5,
-                            color: _LhPlum.primary,
+                            color: DunesColors.resolve(ctx, _LhPlum.primary),
                             weight: FontWeight.w700,
                             letterSpacing: 0.4,
+                            context: ctx,
                           ),
                         ),
                       ],
@@ -30941,7 +33780,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   // ── 固定区提示 ──
                   Container(
                     width: double.infinity,
-                    color: _LhPlum.mist,
+                    color: DunesColors.resolve(
+                      ctx,
+                      _LhPlum.mist,
+                      role: DunesColorRole.surface,
+                    ),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 18,
                       vertical: 9,
@@ -30950,9 +33793,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       '名称（冻结首列）· 走势 · 占比  固定在最左，不参与排列',
                       style: LhTypography.mono(
                         size: 9.5,
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(ctx, LhColors.mute2),
                         weight: FontWeight.w600,
                         letterSpacing: 0.3,
+                        context: ctx,
                       ),
                     ),
                   ),
@@ -30970,10 +33814,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         return Container(
                           key: ValueKey('colorder-$tab-$k'),
                           height: 46,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             border: Border(
                               bottom: BorderSide(
-                                color: LhColors.line2,
+                                color: DunesColors.resolve(
+                                  ctx,
+                                  LhColors.line2,
+                                  role: DunesColorRole.border,
+                                ),
                                 width: 0.5,
                               ),
                             ),
@@ -30988,7 +33836,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   child: Icon(
                                     Icons.drag_indicator_rounded,
                                     size: 18,
-                                    color: LhColors.mute2,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      LhColors.mute2,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -30998,8 +33849,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   (i + 1).toString().padLeft(2, '0'),
                                   style: LhTypography.mono(
                                     size: 10.5,
-                                    color: LhColors.mute2,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      LhColors.mute2,
+                                    ),
                                     weight: FontWeight.w600,
+                                    context: ctx,
                                   ),
                                 ),
                               ),
@@ -31008,8 +33863,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   _metricLabel(k, tab: tab),
                                   style: LhTypography.sans(
                                     size: 13,
-                                    color: on ? LhColors.ink : LhColors.mute2,
+                                    color: on
+                                        ? DunesColors.resolve(ctx, LhColors.ink)
+                                        : DunesColors.resolve(
+                                            ctx,
+                                            LhColors.mute2,
+                                          ),
                                     weight: FontWeight.w500,
+                                    context: ctx,
                                   ),
                                 ),
                               ),
@@ -31020,9 +33881,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     '排序中',
                                     style: LhTypography.mono(
                                       size: 9,
-                                      color: _LhPlum.primary,
+                                      color: DunesColors.resolve(
+                                        ctx,
+                                        _LhPlum.primary,
+                                      ),
                                       weight: FontWeight.w700,
                                       letterSpacing: 0.4,
+                                      context: ctx,
                                     ),
                                   ),
                                 ),
@@ -31054,8 +33919,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                         : Icons.visibility_off_rounded,
                                     size: 18,
                                     color: on
-                                        ? _LhPlum.primary
-                                        : LhColors.mute2,
+                                        ? DunesColors.resolve(
+                                            ctx,
+                                            _LhPlum.primary,
+                                          )
+                                        : DunesColors.resolve(
+                                            ctx,
+                                            LhColors.mute2,
+                                          ),
                                   ),
                                 ),
                               ),
@@ -31082,7 +33953,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
                                   border: Border.all(
-                                    color: LhColors.line,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      LhColors.line,
+                                      role: DunesColorRole.border,
+                                    ),
                                     width: 0.5,
                                   ),
                                   borderRadius: BorderRadius.circular(4),
@@ -31091,9 +33966,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   '恢复默认',
                                   style: LhTypography.mono(
                                     size: 11,
-                                    color: LhColors.ink2,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      LhColors.ink2,
+                                    ),
                                     weight: FontWeight.w600,
                                     letterSpacing: 0.3,
+                                    context: ctx,
                                   ),
                                 ),
                               ),
@@ -31108,16 +33987,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 height: 40,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: _LhPlum.primary,
+                                  color: DunesColors.resolve(
+                                    ctx,
+                                    _LhPlum.primary,
+                                    role: DunesColorRole.surface,
+                                  ),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
                                   '完成',
                                   style: LhTypography.mono(
                                     size: 11,
-                                    color: Colors.white,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      Colors.white,
+                                    ),
                                     weight: FontWeight.w700,
                                     letterSpacing: 0.3,
+                                    context: ctx,
                                   ),
                                 ),
                               ),
@@ -31344,13 +34231,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 用半透明黑而不是实色灰：底下压着占比绿带时不会把它切断，两层叠出来仍干净。
   Color? _ledgerGroupTint(String key) {
     if (_kLedgerCostKeys.contains(key)) {
-      return _LhPnl.costBar.withAlpha(9);
+      return DunesColors.resolve(context, _LhPnl.costBar).withAlpha(9);
     }
     if (_kLedgerScaleKeys.contains(key)) {
-      return _LhPlum.primary.withAlpha(7);
+      return DunesColors.resolve(context, _LhPlum.primary).withAlpha(7);
     }
-    if (key == 'prepaid' || key == 'netTa') return LhColors.pos.withAlpha(8);
-    if (key == 'profit') return _LhPlum.deep.withAlpha(8);
+    if (key == 'prepaid' || key == 'netTa') {
+      return DunesColors.resolve(context, LhColors.pos).withAlpha(8);
+    }
+    if (key == 'profit') {
+      return DunesColors.resolve(context, _LhPlum.deep).withAlpha(8);
+    }
     return null;
   }
 
@@ -31375,8 +34266,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       !lighthouseLedgerResultBlockKeepsMetricTint
       ? null
       : switch (lighthouseLedgerSummaryMetricTone(key)) {
-          'cash' => const Color(0xFF7B5CD8),
-          'profit' => const Color(0xFF5C6FB5),
+          'cash' => DunesColors.resolve(context, const Color(0xFF7B5CD8)),
+          'profit' => DunesColors.resolve(context, const Color(0xFF5C6FB5)),
           _ => null,
         };
 
@@ -31406,7 +34297,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       // 点 = 排序（既有），长按 = 排列（既有）。横滚没了，长按不再与拖动冲突。
       onLongPressStart: (d) => _openColHeaderMenu(c.key, d.globalPosition),
       child: Container(
-        color: _ledgerGroupTint(c.key),
+        color: DunesColors.resolveNullable(
+          context,
+          _ledgerGroupTint(c.key),
+          role: DunesColorRole.surface,
+        ),
         padding: const EdgeInsets.only(left: 3, right: _kLedgerColGutter),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -31424,11 +34319,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     style: LhTypography.mono(
                       size: _fs(9.5),
                       color: _metaHighlightKey == c.key
-                          ? _LhPlum.primary
-                          : (sorted ? LhColors.ink : LhColors.mute2),
+                          ? DunesColors.resolve(context, _LhPlum.primary)
+                          : (sorted
+                                ? DunesColors.resolve(context, LhColors.ink)
+                                : DunesColors.resolve(context, LhColors.mute2)),
                       weight: sorted ? FontWeight.w700 : FontWeight.w600,
                       letterSpacing: 0.3,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ),
@@ -31440,7 +34338,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           ? Icons.arrow_downward_rounded
                           : Icons.arrow_upward_rounded,
                       size: _fs(9),
-                      color: LhColors.ink,
+                      color: DunesColors.resolve(context, LhColors.ink),
                     ),
                   ),
               ],
@@ -31453,10 +34351,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               textAlign: TextAlign.right,
               style: LhTypography.mono(
                 size: _fs(8),
-                color: LhColors.mute2.withAlpha(170),
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.mute2,
+                ).withAlpha(170),
                 weight: FontWeight.w500,
                 letterSpacing: 0.1,
                 height: 1.0,
+                context: context,
               ),
             ),
           ],
@@ -31517,18 +34419,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 环比颜色统一表达方向：中国金融色，上涨红、下跌绿；不因成本类反转。
     final deltaIsUp = lighthouseLedgerDeltaIsUp(delta);
     final dColor = deltaIsUp == null
-        ? LhColors.mute2.withAlpha(110)
-        : (deltaIsUp ? LhColors.neg : LhColors.pos);
+        ? DunesColors.resolve(context, LhColors.mute2).withAlpha(110)
+        : (deltaIsUp
+              ? DunesColors.resolve(context, LhColors.neg)
+              : DunesColors.resolve(context, LhColors.pos));
     final negative = !missing && v < 0;
     final semanticColor = showCategory ? _ledgerSummaryToneColor(c.key) : null;
     final amountColor = missing
-        ? LhColors.mute2
+        ? DunesColors.resolve(context, LhColors.mute2)
         : _grossProfitValueColor(
             c.key,
             v,
             negative
-                ? LhColors.pos
-                : (semanticColor ?? (isSorted ? LhColors.ink : LhColors.ink2)),
+                ? DunesColors.resolve(context, LhColors.pos)
+                : (semanticColor ??
+                      (isSorted
+                          ? DunesColors.resolve(context, LhColors.ink)
+                          : DunesColors.resolve(context, LhColors.ink2))),
           );
     // 收起态四项核心数字用黑体；展开网格里排序列加粗，其余略轻一档。
     final numWeight = switch (lighthouseLedgerValueWeightValue(
@@ -31557,6 +34464,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       color: amountColor,
                       weight: numWeight,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ),
@@ -31566,11 +34474,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     style: LhTypography.mono(
                       size: _fs(lighthouseLedgerUnitFontSize),
                       color: c.key == 'profit'
-                          ? LhColors.mute
-                          : (semanticColor?.withAlpha(185) ?? LhColors.mute),
+                          ? DunesColors.resolve(context, LhColors.mute)
+                          : (semanticColor?.withAlpha(185) ??
+                                DunesColors.resolve(context, LhColors.mute)),
                       weight: FontWeight.w500,
                       height: 1.0,
                       letterSpacing: 0.2,
+                      context: context,
                     ),
                   ),
               ],
@@ -31595,6 +34505,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   weight: FontWeight.w600,
                   height: 1.0,
                   letterSpacing: -0.2,
+                  context: context,
                 ),
               ),
             ),
@@ -31619,14 +34530,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               lighthouseLedgerSummaryResultPanelAlpha,
             )
           : (tab == 'product' || tab == 'supply' || tab == 'channel'
-                ? const Color(0xFFF1F5FA)
-                : const Color(lighthouseLedgerSummaryNeutralPanelValue));
+                ? DunesColors.resolve(context, const Color(0xFFF1F5FA))
+                : DunesColors.resolve(
+                    context,
+                    const Color(lighthouseLedgerSummaryNeutralPanelValue),
+                  ));
       final isActive = isSoloTrendActive || _metaHighlightKey == c.key;
       // 环比：只有越过 ±30% 才上红绿，其余走灰 —— 与主 Hero 同一条门槛。
       final loud = delta != null && lighthouseDeltaIsLoud(delta);
       final summaryDeltaColor = (deltaIsUp == null || !loud)
-          ? LhColors.ink2
-          : (deltaIsUp ? LhColors.neg : LhColors.pos);
+          ? DunesColors.resolve(context, LhColors.ink2)
+          : (deltaIsUp
+                ? DunesColors.resolve(context, LhColors.neg)
+                : DunesColors.resolve(context, LhColors.pos));
 
       final labelRow = Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -31643,13 +34559,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     style: LhTypography.sans(
                       size: _fs(lighthouseLedgerMetricLabelFontSize),
                       color: isActive
-                          ? _LhPlum.deep
+                          ? DunesColors.resolve(context, _LhPlum.deep)
                           : (isSorted ||
                                     tab == 'product' ||
                                     tab == 'supply' ||
                                     tab == 'channel'
-                                ? LhColors.ink2
-                                : LhColors.mute),
+                                ? DunesColors.resolve(context, LhColors.ink2)
+                                : DunesColors.resolve(context, LhColors.mute)),
                       weight:
                           isSorted ||
                               isActive ||
@@ -31660,6 +34576,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           : FontWeight.w500,
                       letterSpacing: 0.2,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ),
@@ -31671,7 +34588,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     child: Icon(
                       Icons.keyboard_arrow_down_rounded,
                       size: _fs(lighthouseLedgerSummaryActiveCaretSize),
-                      color: _LhPlum.primary,
+                      color: DunesColors.resolve(context, _LhPlum.primary),
                     ),
                   ),
                 // 排序箭头贴着标签，不再孤零零挂在格子最右边。
@@ -31683,7 +34600,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           ? Icons.arrow_downward_rounded
                           : Icons.arrow_upward_rounded,
                       size: _fs(9.5),
-                      color: LhColors.ink2,
+                      color: DunesColors.resolve(context, LhColors.ink2),
                     ),
                   ),
               ],
@@ -31703,6 +34620,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   weight: loud ? FontWeight.w700 : FontWeight.w600,
                   height: 1.0,
                   letterSpacing: -0.2,
+                  context: context,
                 ),
               ),
             ),
@@ -31728,6 +34646,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             : lighthouseLedgerSummaryValueFontSize,
                       ),
                       color: amountColor,
+                      context: context,
                     ).copyWith(fontWeight: numWeight, height: 1.0),
                   ),
                   if (unit.isNotEmpty)
@@ -31736,10 +34655,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       style: LhTypography.sans(
                         size: _fs(lighthouseLedgerSummaryUnitFontSize),
                         color: c.key == 'profit'
-                            ? LhColors.mute
-                            : (semanticColor?.withAlpha(185) ?? LhColors.mute),
+                            ? DunesColors.resolve(context, LhColors.mute)
+                            : (semanticColor?.withAlpha(185) ??
+                                  DunesColors.resolve(context, LhColors.mute)),
                         weight: FontWeight.w500,
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                 ],
@@ -31761,11 +34682,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           horizontal: isActive ? _fs(lighthouseLedgerSummaryActiveInsetH) : 0.0,
         ),
         decoration: BoxDecoration(
-          color: isActive ? Colors.white : Colors.transparent,
+          color: isActive
+              ? DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                )
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(_fs(9)),
           border: Border.all(
             color: isActive
-                ? _LhPlum.primary.withAlpha(46)
+                ? DunesColors.resolve(
+                    context,
+                    _LhPlum.primary,
+                    role: DunesColorRole.border,
+                  ).withAlpha(46)
                 : Colors.transparent,
             width: 0.8,
           ),
@@ -31799,7 +34730,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final panelCell = Container(
         margin: EdgeInsets.symmetric(horizontal: _fs(3)),
         decoration: BoxDecoration(
-          color: panelColor,
+          color: DunesColors.resolveNullable(
+            context,
+            panelColor,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.vertical(
             top: isFirstRow ? panelRadius : Radius.zero,
             bottom: isLastRow ? panelRadius : Radius.zero,
@@ -31817,7 +34752,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ),
                 color: inResultBlock
                     ? _kLedgerResultAccent.withAlpha(46)
-                    : LhColors.line2,
+                    : DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.surface,
+                      ),
               ),
             Expanded(child: content),
           ],
@@ -31835,10 +34774,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       duration: const Duration(milliseconds: 140),
       decoration: BoxDecoration(
         color: isSoloTrendActive || _metaHighlightKey == c.key
-            ? _LhPlum.primary.withAlpha(22)
+            ? DunesColors.resolve(
+                context,
+                _LhPlum.primary,
+                role: DunesColorRole.surface,
+              ).withAlpha(22)
             : _ledgerGroupTint(c.key),
         border: isSoloTrendActive
-            ? Border.all(color: _LhPlum.primary.withAlpha(150), width: 1.1)
+            ? Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                  role: DunesColorRole.border,
+                ).withAlpha(150),
+                width: 1.1,
+              )
             : null,
       ),
       padding: const EdgeInsets.only(left: 2, right: _kLedgerColGutter),
@@ -31872,7 +34822,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final rawName = r['name']?.toString().trim() ?? '';
     final name = rawName.isEmpty ? '未命名' : rawName;
     final group = r['group']?.toString() ?? '';
-    final groupColor = group.isEmpty ? LhColors.mute2 : lhGroupColor(group);
+    final groupColor = group.isEmpty
+        ? DunesColors.resolve(context, LhColors.mute2)
+        : lhGroupColor(group);
     // 账本维都不挂对账 chip。渠道日清月结确认、已确认 / 有驳回一并关掉。
     final reconStatus = lighthouseReconStatusForRow(
       tab,
@@ -31910,10 +34862,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final nameStyle = LhTypography.sans(
       size: _fs(nameFontSize),
       weight: FontWeight.w600,
-      color: LhColors.ink,
+      color: DunesColors.resolve(context, LhColors.ink),
       // 净TA 用过 1.0，汉字底部横笔（业 / 本 / 资）会被 LhScrollText 裁掉。
       height: tab == 'netTa' ? 1.3 : 1.15,
       letterSpacing: -0.1,
+      context: context,
     );
     final canOpenDetail = canDetail && onOpenDetail != null;
 
@@ -31943,8 +34896,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: LhTypography.sans(
                 size: _fs(nameFontSize),
                 weight: FontWeight.w600,
-                color: LhEquityLinkedLabel.color,
+                color: DunesColors.resolve(context, LhEquityLinkedLabel.color),
                 height: tab == 'netTa' ? 1.3 : 1.15,
+                context: context,
               ),
             ),
         ],
@@ -32001,8 +34955,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   style: LhTypography.sans(
                     size: _fs(nameFontSize) + 1,
                     weight: FontWeight.w600,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     height: tab == 'netTa' ? 1.3 : 1.15,
+                    context: context,
                   ),
                 ),
               ),
@@ -32024,8 +34979,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     : Icons.keyboard_arrow_down_rounded,
                 size: _fs(18),
                 color: isExpanded
-                    ? _LhPlum.deep
-                    : _LhPlum.primary.withAlpha(185),
+                    ? DunesColors.resolve(context, _LhPlum.deep)
+                    : DunesColors.resolve(
+                        context,
+                        _LhPlum.primary,
+                      ).withAlpha(185),
               ),
             )
           : AnimatedContainer(
@@ -32034,8 +34992,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               height: _fs(27),
               decoration: BoxDecoration(
                 color: isExpanded
-                    ? _LhPlum.primary.withAlpha(24)
-                    : const Color(0xFFF4F1FA),
+                    ? DunesColors.resolve(
+                        context,
+                        _LhPlum.primary,
+                        role: DunesColorRole.surface,
+                      ).withAlpha(24)
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFFF4F1FA),
+                        role: DunesColorRole.surface,
+                      ),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -32044,8 +35010,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     : Icons.keyboard_arrow_down_rounded,
                 size: _fs(18),
                 color: isExpanded
-                    ? _LhPlum.deep
-                    : _LhPlum.primary.withAlpha(185),
+                    ? DunesColors.resolve(context, _LhPlum.deep)
+                    : DunesColors.resolve(
+                        context,
+                        _LhPlum.primary,
+                      ).withAlpha(185),
               ),
             ),
     );
@@ -32074,9 +35043,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final pinnedNameStyle = LhTypography.sans(
         size: _fs(pinnedNameSize),
         weight: FontWeight.w600,
-        color: LhColors.ink,
+        color: DunesColors.resolve(context, LhColors.ink),
         height: 1.26,
         letterSpacing: 0,
+        context: context,
       );
 
       // 排位牌。上一版把序号缩成第二行一个 9pt 的灰数字 —— 它确实不再跟毛利率
@@ -32091,7 +35061,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         alignment: Alignment.center,
         padding: EdgeInsets.symmetric(horizontal: _fs(3.5)),
         decoration: BoxDecoration(
-          color: rankSkin.fill,
+          color: DunesColors.resolveNullable(
+            context,
+            rankSkin.fill,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(_fs(4.5)),
         ),
         child: Text(
@@ -32103,6 +35077,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               weight: rankSkin.bold ? FontWeight.w700 : FontWeight.w600,
               height: 1.0,
               letterSpacing: 0.3,
+              context: context,
             ),
           ),
         ),
@@ -32148,7 +35123,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   TextSpan(
                     text: ' \u2197',
                     style: pinnedNameStyle.copyWith(
-                      color: LhEquityLinkedLabel.color,
+                      color: DunesColors.resolve(
+                        context,
+                        LhEquityLinkedLabel.color,
+                      ),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -32216,17 +35194,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       height: _fs(24),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: _LhPlum.primary.withAlpha(26),
+                        color: DunesColors.resolve(
+                          context,
+                          _LhPlum.primary,
+                          role: DunesColorRole.surface,
+                        ).withAlpha(26),
                         borderRadius: BorderRadius.circular(_fs(7)),
                         border: Border.all(
-                          color: _LhPlum.primary.withAlpha(64),
+                          color: DunesColors.resolve(
+                            context,
+                            _LhPlum.primary,
+                            role: DunesColorRole.border,
+                          ).withAlpha(64),
                           width: 0.7,
                         ),
                       ),
                       child: Icon(
                         Icons.chevron_right_rounded,
                         size: _fs(17),
-                        color: _LhPlum.primary,
+                        color: DunesColors.resolve(context, _LhPlum.primary),
                       ),
                     ),
                   ),
@@ -32294,10 +35280,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 formula: _grossMarginFormula(r),
                                 labelStyle: LhTypography.sans(
                                   size: _fs(9),
-                                  color: LhColors.mute2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.mute2,
+                                  ),
                                   weight: FontWeight.w500,
                                   letterSpacing: 0.4,
                                   height: 1.0,
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -32333,11 +35323,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                               color:
                                                   grossMargin != null &&
                                                       grossMargin < 0
-                                                  ? LhColors.pos
-                                                  : LhColors.ink,
+                                                  ? DunesColors.resolve(
+                                                      context,
+                                                      LhColors.pos,
+                                                    )
+                                                  : DunesColors.resolve(
+                                                      context,
+                                                      LhColors.ink,
+                                                    ),
                                               weight: FontWeight.w700,
                                               height: 1.0,
                                               letterSpacing: -0.2,
+                                              context: context,
                                             ),
                                           ),
                                         ),
@@ -32356,13 +35353,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                             LhTypography.mono(
                                               size: _fs(9.5),
                                               color: gmUp == null
-                                                  ? LhColors.mute
+                                                  ? DunesColors.resolve(
+                                                      context,
+                                                      LhColors.mute,
+                                                    )
                                                   : (gmUp
-                                                        ? LhColors.neg
-                                                        : LhColors.pos),
+                                                        ? DunesColors.resolve(
+                                                            context,
+                                                            LhColors.neg,
+                                                          )
+                                                        : DunesColors.resolve(
+                                                            context,
+                                                            LhColors.pos,
+                                                          )),
                                               weight: FontWeight.w600,
                                               height: 1.0,
                                               letterSpacing: -0.2,
+                                              context: context,
                                             ),
                                           ),
                                         ),
@@ -32379,7 +35386,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 vertical: _fs(2.5),
                               ),
                               decoration: BoxDecoration(
-                                color: _LhPlum.primary.withAlpha(22),
+                                color: DunesColors.resolve(
+                                  context,
+                                  _LhPlum.primary,
+                                  role: DunesColorRole.surface,
+                                ).withAlpha(22),
                                 borderRadius: BorderRadius.circular(_fs(5)),
                               ),
                               child: Text(
@@ -32388,9 +35399,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     : '单项',
                                 style: LhTypography.sans(
                                   size: _fs(8.5),
-                                  color: _LhPlum.deep,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    _LhPlum.deep,
+                                  ),
                                   weight: FontWeight.w700,
                                   height: 1,
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -32423,7 +35438,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 height: _fs(28),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: skin.softFill,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    skin.softFill,
+                    role: DunesColorRole.surface,
+                  ),
                   shape: BoxShape.circle,
                   border: Border.all(color: skin.line, width: 0.7),
                 ),
@@ -32438,6 +35457,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           : skin.accent.withAlpha(170),
                       weight: skin.bold ? FontWeight.w700 : FontWeight.w500,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ),
@@ -32447,7 +35467,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           // v19: 分组文字关掉后这条彩条没有图例可以解码 —— 见常量处说明。
           if (lighthouseLedgerCollapsedShowsGroupColorBar) ...[
             const SizedBox(width: 3),
-            Container(width: 3, height: _fs(42), color: groupColor),
+            Container(
+              width: 3,
+              height: _fs(42),
+              color: DunesColors.resolveNullable(
+                context,
+                groupColor,
+                role: DunesColorRole.surface,
+              ),
+            ),
             const SizedBox(width: 6),
           ] else
             const SizedBox(width: 6),
@@ -32500,14 +35528,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   weight: FontWeight.w700,
                                   height: 1.0,
                                   letterSpacing: 0.3,
+                                  context: context,
                                 ),
                               ),
                               Text(
                                 ' · ',
                                 style: LhTypography.mono(
                                   size: _fs(9.5),
-                                  color: LhColors.mute2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.mute2,
+                                  ),
                                   height: 1.0,
+                                  context: context,
                                 ),
                               ),
                             ],
@@ -32518,10 +35551,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 overflow: TextOverflow.ellipsis,
                                 style: LhTypography.mono(
                                   size: _fs(10),
-                                  color: LhColors.mute,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.mute,
+                                  ),
                                   weight: FontWeight.w500,
                                   height: 1.0,
                                   letterSpacing: 0.2,
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -32547,10 +35584,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 lighthouseLedgerPinnedGrossMarginValueSize,
                               ),
                               color: grossMargin != null && grossMargin < 0
-                                  ? LhColors.pos
-                                  : LhColors.ink,
+                                  ? DunesColors.resolve(context, LhColors.pos)
+                                  : DunesColors.resolve(context, LhColors.ink),
                               weight: FontWeight.w700,
                               height: 1.0,
+                              context: context,
                             ),
                           ),
                         ),
@@ -32633,10 +35671,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         duration: const Duration(milliseconds: 400),
         padding: const EdgeInsets.fromLTRB(13, 12, 13, 11),
         decoration: BoxDecoration(
-          color: LhColors.paper,
+          color: DunesColors.resolve(
+            context,
+            LhColors.paper,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: focused ? _LhPlum.primary.withAlpha(120) : LhColors.line2,
+            color: focused
+                ? DunesColors.resolve(
+                    context,
+                    _LhPlum.primary,
+                    role: DunesColorRole.border,
+                  ).withAlpha(120)
+                : DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.border,
+                  ),
             width: focused ? 1.2 : 1,
           ),
           boxShadow: focused
@@ -32659,8 +35711,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           '固定折扣，没有档位阶梯',
           style: LhTypography.sans(
             size: 12.5,
-            color: LhColors.ink2,
+            color: DunesColors.resolve(context, LhColors.ink2),
             height: 1.4,
+            context: context,
           ),
         ),
       );
@@ -32682,8 +35735,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           '暂无档位阶梯',
           style: LhTypography.sans(
             size: 12.5,
-            color: LhColors.ink2,
+            color: DunesColors.resolve(context, LhColors.ink2),
             height: 1.4,
+            context: context,
           ),
         ),
       );
@@ -32716,9 +35770,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     TextStyle metaStyle() => LhTypography.mono(
       size: 9,
-      color: LhColors.mute,
+      color: DunesColors.resolve(context, LhColors.mute),
       weight: FontWeight.w500,
       height: 1.3,
+      context: context,
     );
 
     // ── 阶梯：N 个等宽格 ────────────────────────────────────────────
@@ -32728,8 +35783,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         child: Container(
           padding: const EdgeInsets.fromLTRB(4, 6, 4, 7),
           color: isCur
-              ? LhColors.purpleSoft
-              : (t.reached ? LhColors.pos.withAlpha(16) : LhColors.paper),
+              ? DunesColors.resolve(
+                  context,
+                  LhColors.purpleSoft,
+                  role: DunesColorRole.surface,
+                )
+              : (t.reached
+                    ? DunesColors.resolve(
+                        context,
+                        LhColors.pos,
+                        role: DunesColorRole.surface,
+                      ).withAlpha(16)
+                    : DunesColors.resolve(
+                        context,
+                        LhColors.paper,
+                        role: DunesColorRole.surface,
+                      )),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -32737,14 +35806,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (t.reached && !isCur) ...[
-                    Icon(Icons.check_rounded, size: 8, color: LhColors.pos),
+                    Icon(
+                      Icons.check_rounded,
+                      size: 8,
+                      color: DunesColors.resolve(context, LhColors.pos),
+                    ),
                     const SizedBox(width: 2),
                   ] else if (isCur) ...[
                     Container(
                       width: 4,
                       height: 4,
-                      decoration: const BoxDecoration(
-                        color: _LhPlum.primary,
+                      decoration: BoxDecoration(
+                        color: DunesColors.resolve(
+                          context,
+                          _LhPlum.primary,
+                          role: DunesColorRole.surface,
+                        ),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -32756,11 +35833,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       style: LhTypography.mono(
                         size: 9,
                         color: isCur
-                            ? _LhPlum.deep
-                            : (t.reached ? LhColors.pos : LhColors.mute),
+                            ? DunesColors.resolve(context, _LhPlum.deep)
+                            : (t.reached
+                                  ? DunesColors.resolve(context, LhColors.pos)
+                                  : DunesColors.resolve(
+                                      context,
+                                      LhColors.mute,
+                                    )),
                         weight: isCur ? FontWeight.w700 : FontWeight.w500,
                         letterSpacing: 0.3,
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                   ),
@@ -32777,9 +35860,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             text: '—',
                             style: LhTypography.mono(
                               size: 13,
-                              color: LhColors.mute2,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute2,
+                              ),
                               weight: FontWeight.w500,
                               height: 1.0,
+                              context: context,
                             ),
                           ),
                         ]
@@ -32789,9 +35876,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             style: _tabular(
                               LhTypography.mono(
                                 size: 13,
-                                color: isCur ? _LhPlum.deep : LhColors.ink2,
+                                color: isCur
+                                    ? DunesColors.resolve(context, _LhPlum.deep)
+                                    : DunesColors.resolve(
+                                        context,
+                                        LhColors.ink2,
+                                      ),
                                 weight: FontWeight.w700,
                                 height: 1.0,
+                                context: context,
                               ),
                             ),
                           ),
@@ -32799,8 +35892,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             text: '‰',
                             style: LhTypography.mono(
                               size: 8.5,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                               height: 1.0,
+                              context: context,
                             ),
                           ),
                         ],
@@ -32817,8 +35914,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 style: _tabular(
                   LhTypography.mono(
                     size: 8.5,
-                    color: LhColors.mute2,
+                    color: DunesColors.resolve(context, LhColors.mute2),
                     height: 1.0,
+                    context: context,
                   ),
                 ),
               ),
@@ -32852,9 +35950,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         style: _tabular(
                           LhTypography.mono(
                             size: 8.5,
-                            color: LhColors.ink,
+                            color: DunesColors.resolve(context, LhColors.ink),
                             weight: FontWeight.w700,
                             height: 1.0,
+                            context: context,
                           ),
                         ),
                       ),
@@ -32871,7 +35970,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       width: w,
                       height: 7,
                       decoration: BoxDecoration(
-                        color: LhColors.line2,
+                        color: DunesColors.resolve(
+                          context,
+                          LhColors.line2,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -32880,7 +35983,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         width: w * fore,
                         height: 7,
                         decoration: BoxDecoration(
-                          color: color.withAlpha(70),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            color.withAlpha(70),
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -32888,7 +35995,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       width: w * fill,
                       height: 7,
                       decoration: BoxDecoration(
-                        color: color,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          color,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -32904,7 +36015,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           bottom: 0,
                           width: 1,
                           child: Container(
-                            color: LhColors.paper.withAlpha(200),
+                            color: DunesColors.resolve(
+                              context,
+                              LhColors.paper,
+                              role: DunesColorRole.surface,
+                            ).withAlpha(200),
                           ),
                         ),
                     // 当前位置指针
@@ -32913,7 +36028,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       top: -2,
                       bottom: -2,
                       width: 1.5,
-                      child: Container(color: LhColors.ink),
+                      child: Container(
+                        color: DunesColors.resolve(
+                          context,
+                          LhColors.ink,
+                          role: DunesColorRole.surface,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -32965,9 +36086,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 key,
                 style: LhTypography.mono(
                   size: 9,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   letterSpacing: 0.4,
                   height: 1.5,
+                  context: context,
                 ),
               ),
             ),
@@ -32978,8 +36100,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   children: spans,
                   style: LhTypography.sans(
                     size: 11,
-                    color: LhColors.ink2,
+                    color: DunesColors.resolve(context, LhColors.ink2),
                     height: 1.5,
+                    context: context,
                   ),
                 ),
               ),
@@ -32994,9 +36117,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       style: _tabular(
         LhTypography.mono(
           size: 11,
-          color: c ?? LhColors.ink,
+          color: c ?? DunesColors.resolve(context, LhColors.ink),
           weight: FontWeight.w700,
           height: 1.5,
+          context: context,
         ),
       ),
     );
@@ -33050,7 +36174,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (apiGain != null && apiGain > 0) {
       verdicts.add(
         verdict('至少赚', [
-          strong('+${lighthouseDiscountCompactWan(apiGain)}', c: LhColors.pos),
+          strong(
+            '+${lighthouseDiscountCompactWan(apiGain)}',
+            c: DunesColors.resolve(context, LhColors.pos),
+          ),
           const TextSpan(text: ' 返点（按下一档门槛算）'),
         ]),
       );
@@ -33059,7 +36186,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         verdict('估计赚', [
           strong(
             '+${lighthouseDiscountCompactWan(localGain)}',
-            c: LhColors.pos,
+            c: DunesColors.resolve(context, LhColors.pos),
           ),
           const TextSpan(text: ' 返点（按当前速度到期末算）'),
         ]),
@@ -33081,10 +36208,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       duration: const Duration(milliseconds: 400),
       padding: const EdgeInsets.fromLTRB(13, 12, 13, 11),
       decoration: BoxDecoration(
-        color: LhColors.paper,
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: focused ? _LhPlum.primary.withAlpha(120) : LhColors.line2,
+          color: focused
+              ? DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                  role: DunesColorRole.border,
+                ).withAlpha(120)
+              : DunesColors.resolve(
+                  context,
+                  LhColors.line2,
+                  role: DunesColorRole.border,
+                ),
           width: focused ? 1.2 : 1,
         ),
         boxShadow: focused
@@ -33109,9 +36250,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       : '共 ${ladder.tiers.length} 档，当前第 ${ladder.currentLevel} 档',
                   style: LhTypography.sans(
                     size: 12.5,
-                    color: LhColors.ink,
+                    color: DunesColors.resolve(context, LhColors.ink),
                     weight: FontWeight.w600,
                     letterSpacing: -0.1,
+                    context: context,
                   ),
                 ),
               ),
@@ -33119,7 +36261,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                 decoration: BoxDecoration(
-                  color: color.withAlpha(30),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    color.withAlpha(30),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -33130,6 +36276,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     weight: FontWeight.w700,
                     letterSpacing: 0.4,
                     height: 1.0,
+                    context: context,
                   ),
                 ),
               ),
@@ -33153,14 +36300,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             borderRadius: BorderRadius.circular(8),
             child: Container(
               decoration: BoxDecoration(
-                border: Border.all(color: LhColors.line2, width: 1),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 1,
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   for (var i = 0; i < ladder.tiers.length; i++) ...[
-                    if (i > 0) Container(width: 1, color: LhColors.line2),
+                    if (i > 0)
+                      Container(
+                        width: 1,
+                        color: DunesColors.resolve(
+                          context,
+                          LhColors.line2,
+                          role: DunesColorRole.surface,
+                        ),
+                      ),
                     tierCell(ladder.tiers[i]),
                   ],
                 ],
@@ -33170,7 +36332,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           if (ladder.axisMax > 0) ...[const SizedBox(height: 9), track()],
           if (verdicts.isNotEmpty) ...[
             const SizedBox(height: 11),
-            Container(height: 0.5, color: LhColors.line2),
+            Container(
+              height: 0.5,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ),
+            ),
             const SizedBox(height: 10),
             ...verdicts,
           ],
@@ -33178,7 +36347,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Container(
             padding: const EdgeInsets.fromLTRB(9, 7, 9, 8),
             decoration: BoxDecoration(
-              color: LhColors.mist,
+              color: DunesColors.resolve(
+                context,
+                LhColors.mist,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text.rich(
@@ -33188,9 +36361,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     text: isFull ? '全额累进' : '超额累进',
                     style: LhTypography.sans(
                       size: 10,
-                      color: LhColors.ink,
+                      color: DunesColors.resolve(context, LhColors.ink),
                       weight: FontWeight.w700,
                       height: 1.55,
+                      context: context,
                     ),
                   ),
                   TextSpan(
@@ -33201,8 +36375,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ],
                 style: LhTypography.sans(
                   size: 10,
-                  color: LhColors.ink2,
+                  color: DunesColors.resolve(context, LhColors.ink2),
                   height: 1.55,
+                  context: context,
                 ),
               ),
             ),
@@ -33212,9 +36387,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             Container(
               padding: const EdgeInsets.fromLTRB(9, 7, 9, 8),
               decoration: BoxDecoration(
-                color: LhColors.copperSoft,
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.copperSoft,
+                  role: DunesColorRole.surface,
+                ),
                 border: Border.all(
-                  color: LhColors.copper.withAlpha(70),
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.copper,
+                    role: DunesColorRole.border,
+                  ).withAlpha(70),
                   width: 0.7,
                 ),
                 borderRadius: BorderRadius.circular(8),
@@ -33224,8 +36407,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 '其余档位的门槛与费率画「—」。等 /lighthouse/discounts 补上 tiers 字段。',
                 style: LhTypography.sans(
                   size: 10,
-                  color: LhColors.ink2,
+                  color: DunesColors.resolve(context, LhColors.ink2),
                   height: 1.55,
+                  context: context,
                 ),
               ),
             ),
@@ -33324,6 +36508,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         weight: FontWeight.w700,
                         height: 1.0,
                         letterSpacing: 0,
+                        context: context,
                       ),
                     ),
                   ),
@@ -33336,7 +36521,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     child: Icon(
                       Icons.keyboard_arrow_down_rounded,
                       size: _fs(11),
-                      color: _LhPlum.primary.withAlpha(190),
+                      color: DunesColors.resolve(
+                        context,
+                        _LhPlum.primary,
+                      ).withAlpha(190),
                     ),
                   ),
                 ],
@@ -33387,7 +36575,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 height: h,
                 decoration: BoxDecoration(
-                  color: LhColors.line2,
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.line2,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -33398,7 +36590,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   height: h,
                   decoration: BoxDecoration(
                     // 够得到画得实一点，够不到再淡一档 —— 颜色深浅就是结论。
-                    color: color.withAlpha(strip.reachable == true ? 96 : 46),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      color.withAlpha(strip.reachable == true ? 96 : 46),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -33406,7 +36602,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 width: w * fill,
                 height: h,
                 decoration: BoxDecoration(
-                  color: strip.paceOnly ? color.withAlpha(110) : color,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    strip.paceOnly ? color.withAlpha(110) : color,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -33455,7 +36655,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 : lighthouseLedgerSummaryValueFontSize,
                           ),
                           // 负数不再染绿：这批数几乎全是负的，整片绿等于没有语义。
-                          color: missing ? LhColors.mute2 : LhColors.ink,
+                          color: missing
+                              ? DunesColors.resolve(context, LhColors.mute2)
+                              : DunesColors.resolve(context, LhColors.ink),
+                          context: context,
                         ).copyWith(
                           fontWeight: missing
                               ? FontWeight.w500
@@ -33468,9 +36671,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       text: parts.unit,
                       style: LhTypography.sans(
                         size: _fs(lighthouseLedgerSummaryUnitFontSize),
-                        color: LhColors.mute,
+                        color: DunesColors.resolve(context, LhColors.mute),
                         weight: FontWeight.w500,
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                 ],
@@ -33493,13 +36697,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             decoration: BoxDecoration(
               // 选中用实色淡紫，不用 alpha 叠色 —— alpha 12 压在白底上看不出来。
               color: selected
-                  ? _LhPlum.mist
-                  : const Color(lighthouseLedgerSummaryNeutralPanelValue),
+                  ? DunesColors.resolve(
+                      context,
+                      _LhPlum.mist,
+                      role: DunesColorRole.surface,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(lighthouseLedgerSummaryNeutralPanelValue),
+                      role: DunesColorRole.surface,
+                    ),
               borderRadius: BorderRadius.circular(
                 _fs(lighthouseLedgerSummaryPanelRadius),
               ),
               border: Border.all(
-                color: selected ? _LhPlum.soft : Colors.transparent,
+                color: selected
+                    ? DunesColors.resolve(
+                        context,
+                        _LhPlum.soft,
+                        role: DunesColorRole.border,
+                      )
+                    : Colors.transparent,
                 width: 1,
               ),
             ),
@@ -33529,10 +36747,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               overflow: TextOverflow.ellipsis,
                               style: LhTypography.sans(
                                 size: _fs(lighthouseLedgerMetricLabelFontSize),
-                                color: selected ? _LhPlum.deep : LhColors.mute2,
+                                color: selected
+                                    ? DunesColors.resolve(context, _LhPlum.deep)
+                                    : DunesColors.resolve(
+                                        context,
+                                        LhColors.mute2,
+                                      ),
                                 weight: FontWeight.w500,
                                 letterSpacing: 0.2,
                                 height: 1.0,
+                                context: context,
                               ),
                             ),
                           ),
@@ -33542,7 +36766,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 ? Icons.keyboard_arrow_up_rounded
                                 : Icons.keyboard_arrow_down_rounded,
                             size: _fs(lighthouseFundPoolPreviewChevronSize),
-                            color: selected ? _LhPlum.deep : LhColors.mute2,
+                            color: selected
+                                ? DunesColors.resolve(context, _LhPlum.deep)
+                                : DunesColors.resolve(context, LhColors.mute2),
                           ),
                         ],
                       ),
@@ -33632,7 +36858,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           // 四类四色块：色进到整张卡，四个分区一眼分得开。
           // 底色和描边都查表取固定值，不用 accent.withAlpha —— 透明度叠色
           // 压在白底上会掉彩度，四张卡会一起发灰。
-          color: tint,
+          color: DunesColors.resolveNullable(
+            context,
+            tint,
+            role: DunesColorRole.surface,
+          ),
           border: Border.all(color: edge, width: 0.8),
           borderRadius: BorderRadius.circular(11),
         ),
@@ -33650,10 +36880,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   height: _fs(17),
                   decoration: BoxDecoration(
                     // 实心色片 + 白图标：卡片转白之后，淡色底的图标片会糊掉。
-                    color: accent,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      accent,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(4.5),
                   ),
-                  child: Icon(icon, size: _fs(10), color: LhColors.paper),
+                  child: Icon(
+                    icon,
+                    size: _fs(10),
+                    color: DunesColors.resolve(context, LhColors.paper),
+                  ),
                 ),
                 SizedBox(width: _fs(lighthouseFundPoolSectionTitleIconGap)),
                 Flexible(
@@ -33671,6 +36909,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       color: titleColor,
                       weight: FontWeight.w600,
                       height: lighthouseFundPoolSectionTitleLineHeight,
+                      context: context,
                     ),
                   ),
                 ),
@@ -33693,15 +36932,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     lighthouseFundPoolFlowDividerLabel,
                     style: LhTypography.sans(
                       size: _fs(8),
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w600,
                       letterSpacing: 0.3,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                   SizedBox(width: _fs(5)),
                   Expanded(
-                    child: Container(height: 0.7, color: LhColors.line2),
+                    child: Container(
+                      height: 0.7,
+                      color: DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -33730,8 +36977,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       padding: EdgeInsets.fromLTRB(_fs(10), _fs(9), _fs(10), _fs(11)),
       decoration: BoxDecoration(
-        color: const Color(0xFFFCFBFE),
-        border: Border(top: BorderSide(color: LhColors.line2, width: 0.5)),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFFCFBFE),
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -33797,9 +37057,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       overflow: TextOverflow.ellipsis,
       style: LhTypography.sans(
         size: _fs(9),
-        color: LhColors.mute2,
+        color: DunesColors.resolve(context, LhColors.mute2),
         weight: FontWeight.w500,
         height: 1.0,
+        context: context,
       ),
     );
 
@@ -33887,6 +37148,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           weight: FontWeight.w700,
           letterSpacing: 0.2,
           height: 1.0,
+          context: context,
         ),
       ),
       TextSpan(
@@ -33896,6 +37158,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           color: active ? accent : accent.withAlpha(70),
           weight: FontWeight.w700,
           height: 1.0,
+          context: context,
         ),
       ),
     ];
@@ -33911,10 +37174,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             size: _fs(9),
             color: op
                 ? (active ? accent : accent.withAlpha(70))
-                : (active ? LhColors.mute2 : LhColors.mute2.withAlpha(90)),
+                : (active
+                      ? DunesColors.resolve(context, LhColors.mute2)
+                      : DunesColors.resolve(
+                          context,
+                          LhColors.mute2,
+                        ).withAlpha(90)),
             weight: op ? FontWeight.w700 : FontWeight.w500,
             letterSpacing: 0.2,
             height: 1.0,
+            context: context,
           ),
         ),
       );
@@ -33939,38 +37208,38 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 票税是独立面板，不与上面四张卡同屏，沿用蓝不冲突。
     LighthouseFundPoolSectionKind.invoice => (
       Icons.receipt_long_rounded,
-      const Color(0xFF2F6FD0),
-      const Color(0xFFEFF4FD),
-      const Color(0xFFCFDDF7),
-      const Color(0xFF1F55A8),
+      DunesColors.resolve(context, const Color(0xFF2F6FD0)),
+      DunesColors.resolve(context, const Color(0xFFEFF4FD)),
+      DunesColors.resolve(context, const Color(0xFFCFDDF7)),
+      DunesColors.resolve(context, const Color(0xFF1F55A8)),
     ),
     LighthouseFundPoolSectionKind.assets => (
       Icons.show_chart_rounded,
-      const Color(0xFF1E9E72),
-      const Color(0xFFEDF8F3),
-      const Color(0xFFC6E7D9),
-      const Color(0xFF146B4E),
+      DunesColors.resolve(context, const Color(0xFF1E9E72)),
+      DunesColors.resolve(context, const Color(0xFFEDF8F3)),
+      DunesColors.resolve(context, const Color(0xFFC6E7D9)),
+      DunesColors.resolve(context, const Color(0xFF146B4E)),
     ),
     LighthouseFundPoolSectionKind.funds => (
       Icons.account_balance_wallet_rounded,
-      const Color(0xFF7B5CD8),
-      const Color(0xFFF6F3FD),
-      const Color(0xFFDCD1F5),
-      const Color(0xFF5B3FB0),
+      DunesColors.resolve(context, const Color(0xFF7B5CD8)),
+      DunesColors.resolve(context, const Color(0xFFF6F3FD)),
+      DunesColors.resolve(context, const Color(0xFFDCD1F5)),
+      DunesColors.resolve(context, const Color(0xFF5B3FB0)),
     ),
     LighthouseFundPoolSectionKind.vouchers => (
       Icons.confirmation_number_rounded,
-      const Color(0xFFC4791C),
-      const Color(0xFFFCF6EC),
-      const Color(0xFFEDDCC2),
-      const Color(0xFF8F550F),
+      DunesColors.resolve(context, const Color(0xFFC4791C)),
+      DunesColors.resolve(context, const Color(0xFFFCF6EC)),
+      DunesColors.resolve(context, const Color(0xFFEDDCC2)),
+      DunesColors.resolve(context, const Color(0xFF8F550F)),
     ),
     LighthouseFundPoolSectionKind.recon => (
       Icons.balance_rounded,
-      const Color(0xFFB8478F),
-      const Color(0xFFFBF1F7),
-      const Color(0xFFEFD2E4),
-      const Color(0xFF8E3169),
+      DunesColors.resolve(context, const Color(0xFFB8478F)),
+      DunesColors.resolve(context, const Color(0xFFFBF1F7)),
+      DunesColors.resolve(context, const Color(0xFFEFD2E4)),
+      DunesColors.resolve(context, const Color(0xFF8E3169)),
     ),
   };
 
@@ -33988,7 +37257,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final isGrowth =
         !missing && lighthouseFundPoolGrowthMetricKeys.contains(metricKey);
     final growthUp = isGrowth && (amount ?? 0) >= 0;
-    final growthColor = growthUp ? LhColors.neg : LhColors.pos;
+    final growthColor = growthUp
+        ? DunesColors.resolve(context, LhColors.neg)
+        : DunesColors.resolve(context, LhColors.pos);
     // 这一格是结果格（挂箭头），还是当前被追溯的加数格（点亮）？
     final ownFormula = lighthouseFundPoolFormulaForKey(metricKey);
     final isTraceOpen = traced != null && traced == metricKey;
@@ -33999,10 +37270,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ? null
         : lighthouseFundPoolFormulaForKey(traced);
     final traceAccent = tracedFormula == null
-        ? LhColors.ink2
+        ? DunesColors.resolve(context, LhColors.ink2)
         : _fundPoolSectionPalette(tracedFormula.kind).$2;
     final ownAccent = ownFormula == null
-        ? LhColors.ink2
+        ? DunesColors.resolve(context, LhColors.ink2)
         : _fundPoolSectionPalette(ownFormula.kind).$2;
 
     final body = Column(
@@ -34019,7 +37290,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 padding: EdgeInsets.all(_fs(1.5)),
                 decoration: BoxDecoration(
-                  color: isTraceOpen ? ownAccent : Colors.transparent,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    isTraceOpen ? ownAccent : Colors.transparent,
+                    role: DunesColorRole.surface,
+                  ),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -34027,7 +37302,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ? Icons.arrow_back_rounded
                       : Icons.arrow_forward_rounded,
                   size: _fs(9.5),
-                  color: isTraceOpen ? LhColors.paper : ownAccent,
+                  color: isTraceOpen
+                      ? DunesColors.resolve(context, LhColors.paper)
+                      : ownAccent,
                 ),
               ),
             ],
@@ -34047,6 +37324,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       color: growthColor,
                       weight: FontWeight.w700,
                       height: 1.0,
+                      context: context,
                     ),
                   ),
                 ),
@@ -34058,10 +37336,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   LhTypography.mono(
                     size: _fs(lighthouseLedgerValueFontSize),
                     color: missing
-                        ? LhColors.mute2
-                        : (isGrowth ? growthColor : LhColors.ink),
+                        ? DunesColors.resolve(context, LhColors.mute2)
+                        : (isGrowth
+                              ? growthColor
+                              : DunesColors.resolve(context, LhColors.ink)),
                     weight: missing ? FontWeight.w500 : FontWeight.w700,
                     height: 1.0,
+                    context: context,
                   ),
                 ),
               ),
@@ -34072,10 +37353,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     size: _fs(lighthouseLedgerUnitFontSize),
                     color: isGrowth
                         ? growthColor.withAlpha(190)
-                        : LhColors.mute,
+                        : DunesColors.resolve(context, LhColors.mute),
                     weight: FontWeight.w500,
                     height: 1.0,
                     letterSpacing: 0.2,
+                    context: context,
                   ),
                 ),
             ],
@@ -34092,7 +37374,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       duration: const Duration(milliseconds: 140),
       padding: EdgeInsets.all(_fs(3)),
       decoration: BoxDecoration(
-        color: isSource ? LhColors.paper : Colors.transparent,
+        color: isSource
+            ? DunesColors.resolve(
+                context,
+                LhColors.paper,
+                role: DunesColorRole.surface,
+              )
+            : Colors.transparent,
         border: Border.all(
           color: isSource ? traceAccent : Colors.transparent,
           width: 1,
@@ -34133,9 +37421,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             style: _tabular(
               LhTypography.mono(
                 size: _fs(lighthouseLedgerValueFontSize),
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w500,
                 height: 1.0,
+                context: context,
               ),
             ),
           )
@@ -34157,12 +37446,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       errorBuilder: (context, error, stack) => Container(
                         width: _fs(44),
                         height: _fs(44),
-                        color: LhColors.line2,
+                        color: DunesColors.resolve(
+                          context,
+                          LhColors.line2,
+                          role: DunesColorRole.surface,
+                        ),
                         alignment: Alignment.center,
                         child: Icon(
                           Icons.photo_outlined,
                           size: _fs(14),
-                          color: LhColors.mute,
+                          color: DunesColors.resolve(context, LhColors.mute),
                         ),
                       ),
                     ),
@@ -34178,7 +37471,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     showDialog<void>(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: Colors.black,
+        backgroundColor: DunesColors.resolve(
+          ctx,
+          Colors.black,
+          role: DunesColorRole.surface,
+        ),
         insetPadding: const EdgeInsets.all(24),
         child: GestureDetector(
           onTap: () => Navigator.of(ctx).pop(),
@@ -34186,9 +37483,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             child: Image.network(
               url,
               fit: BoxFit.contain,
-              errorBuilder: (context, error, stack) => const Padding(
+              errorBuilder: (context, error, stack) => Padding(
                 padding: EdgeInsets.all(24),
-                child: Icon(Icons.broken_image_outlined, color: Colors.white70),
+                child: Icon(
+                  Icons.broken_image_outlined,
+                  color: DunesColors.resolve(context, Colors.white70),
+                ),
               ),
             ),
           ),
@@ -34291,7 +37591,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         : cols;
     final name = rawName.isEmpty ? '未命名产品' : rawName;
     final group = r['group']?.toString() ?? '';
-    final groupColor = group.isEmpty ? LhColors.mute2 : lhGroupColor(group);
+    final groupColor = group.isEmpty
+        ? DunesColors.resolve(context, LhColors.mute2)
+        : lhGroupColor(group);
     final prefix = trendKeyPrefix ?? tab;
     final trendKey = '$prefix::$name::$group';
     final soloMetricKey = _expandedLedgerSolo[trendKey];
@@ -34347,10 +37649,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         r['isChild'] != true &&
         (r['name']?.toString() ?? '') == _equityFocusRow;
     final cardBorder = isEquityFocus
-        ? _LhPlum.primary.withAlpha(150)
+        ? DunesColors.resolve(context, _LhPlum.primary).withAlpha(150)
         : (isAnyExpanded
-              ? _LhPlum.primary.withAlpha(70)
-              : _LhPlum.line.withAlpha(165));
+              ? DunesColors.resolve(context, _LhPlum.primary).withAlpha(70)
+              : DunesColors.resolve(context, _LhPlum.line).withAlpha(165));
     final isChildRow = r['isChild'] == true;
     final isTopTenLedgerRow =
         !isChildRow &&
@@ -34399,7 +37701,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: isEquityFocus
-                    ? const Color(0xFFFBF9FF)
+                    ? DunesColors.resolve(
+                        context,
+                        const Color(0xFFFBF9FF),
+                        role: DunesColorRole.surface,
+                      )
                     : (isChildRow
                           ? (isRowHovered
                                 ? lighthouseProductL3ChildHoverFill(groupColor)
@@ -34408,12 +37714,28 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 ? Color.alphaBlend(
                                     groupColor.withAlpha(8),
                                     isTopTenLedgerRow && idx.isOdd
-                                        ? const Color(0xFFFAFCFF)
-                                        : Colors.white,
+                                        ? DunesColors.resolve(
+                                            context,
+                                            const Color(0xFFFAFCFF),
+                                            role: DunesColorRole.surface,
+                                          )
+                                        : DunesColors.resolve(
+                                            context,
+                                            Colors.white,
+                                            role: DunesColorRole.surface,
+                                          ),
                                   )
                                 : (isTopTenLedgerRow && idx.isOdd
-                                      ? const Color(0xFFFAFCFF)
-                                      : Colors.white))),
+                                      ? DunesColors.resolve(
+                                          context,
+                                          const Color(0xFFFAFCFF),
+                                          role: DunesColorRole.surface,
+                                        )
+                                      : DunesColors.resolve(
+                                          context,
+                                          Colors.white,
+                                          role: DunesColorRole.surface,
+                                        )))),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: isChildRow
@@ -34455,7 +37777,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       height: rowH,
                       pinnedWidth: pinnedW,
                       background: Colors.transparent,
-                      borderColor: isAnyExpanded ? LhColors.line2 : null,
+                      borderColor: isAnyExpanded
+                          ? DunesColors.resolve(
+                              context,
+                              LhColors.line2,
+                              role: DunesColorRole.border,
+                            )
+                          : null,
                       shadeFrac: lighthouseLedgerShowsShareWash
                           ? _ledgerShare(r)
                           : 0,
@@ -34970,13 +38298,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             decoration: BoxDecoration(
               color: Color.alphaBlend(
                 groupColor.withAlpha(open ? 20 : (hovered ? 12 : 0)),
-                const Color(0xFFFAF9FD),
+                DunesColors.resolve(
+                  context,
+                  const Color(0xFFFAF9FD),
+                  role: DunesColorRole.surface,
+                ),
               ),
               border: Border(
                 top: BorderSide(
                   color: hovered
                       ? groupColor.withAlpha(92)
-                      : _LhPlum.line.withAlpha(150),
+                      : DunesColors.resolve(
+                          context,
+                          _LhPlum.line,
+                          role: DunesColorRole.border,
+                        ).withAlpha(150),
                   width: hovered ? 0.9 : 0.7,
                 ),
               ),
@@ -34991,7 +38327,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     vertical: _fs(1.5),
                   ),
                   decoration: BoxDecoration(
-                    color: groupColor.withAlpha(26),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      groupColor.withAlpha(26),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(_fs(4)),
                   ),
                   child: Text(
@@ -35000,8 +38340,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       LhTypography.sans(
                         size: _fs(10),
                         weight: FontWeight.w700,
-                        color: _LhPlum.deep,
+                        color: DunesColors.resolve(context, _LhPlum.deep),
                         height: 1.2,
+                        context: context,
                       ),
                     ),
                   ),
@@ -35017,8 +38358,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     style: LhTypography.sans(
                       size: _fs(11),
                       weight: FontWeight.w500,
-                      color: LhColors.ink2,
+                      color: DunesColors.resolve(context, LhColors.ink2),
                       height: 1.2,
+                      context: context,
                     ),
                   ),
                 ),
@@ -35028,8 +38370,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   style: LhTypography.sans(
                     size: _fs(10.5),
                     weight: FontWeight.w600,
-                    color: _LhPlum.primary,
+                    color: DunesColors.resolve(context, _LhPlum.primary),
                     height: 1.2,
+                    context: context,
                   ),
                 ),
                 AnimatedRotation(
@@ -35038,7 +38381,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   child: Icon(
                     Icons.keyboard_arrow_down_rounded,
                     size: _fs(17),
-                    color: _LhPlum.primary,
+                    color: DunesColors.resolve(context, _LhPlum.primary),
                   ),
                 ),
               ],
@@ -35094,7 +38437,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(
-            left: BorderSide(color: groupColor.withAlpha(88), width: 1.2),
+            left: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                groupColor.withAlpha(88),
+                role: DunesColorRole.border,
+              ),
+              width: 1.2,
+            ),
           ),
         ),
         child: Padding(
@@ -35123,10 +38473,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(7, 0, 8, 4),
                   child: Material(
-                    color: groupColor.withAlpha(10),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      groupColor.withAlpha(10),
+                      role: DunesColorRole.surface,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(9),
-                      side: BorderSide(color: groupColor.withAlpha(40)),
+                      side: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          groupColor.withAlpha(40),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: InkWell(
@@ -35143,7 +38503,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             Icon(
                               Icons.expand_more_rounded,
                               size: _fs(15),
-                              color: _LhPlum.primary,
+                              color: DunesColors.resolve(
+                                context,
+                                _LhPlum.primary,
+                              ),
                             ),
                             SizedBox(width: _fs(4)),
                             Text(
@@ -35151,8 +38514,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               style: LhTypography.sans(
                                 size: _fs(10.5),
                                 weight: FontWeight.w600,
-                                color: _LhPlum.primary,
+                                color: DunesColors.resolve(
+                                  context,
+                                  _LhPlum.primary,
+                                ),
                                 height: 1.2,
+                                context: context,
                               ),
                             ),
                             SizedBox(width: _fs(4)),
@@ -35161,8 +38528,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               style: LhTypography.sans(
                                 size: _fs(9.5),
                                 weight: FontWeight.w500,
-                                color: LhColors.mute,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.mute,
+                                ),
                                 height: 1.2,
+                                context: context,
                               ),
                             ),
                           ],
@@ -35196,7 +38567,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: LhColors.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -35242,7 +38617,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           height: 3,
                           margin: const EdgeInsets.only(top: 6, bottom: 14),
                           decoration: BoxDecoration(
-                            color: LhColors.line,
+                            color: DunesColors.resolve(
+                              ctx,
+                              LhColors.line,
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -35251,9 +38630,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         name,
                         style: LhTypography.sans(
                           size: 15,
-                          color: LhColors.ink,
+                          color: DunesColors.resolve(ctx, LhColors.ink),
                           weight: FontWeight.w700,
                           letterSpacing: -0.2,
+                          context: ctx,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -35264,9 +38644,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             _heroTrendTitle(),
                             style: LhTypography.mono(
                               size: 9,
-                              color: LhColors.mute2,
+                              color: DunesColors.resolve(ctx, LhColors.mute2),
                               weight: FontWeight.w600,
                               letterSpacing: 0.8,
+                              context: ctx,
                             ),
                           ),
                           if (rangeLabel.isNotEmpty)
@@ -35274,8 +38655,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               rangeLabel,
                               style: LhTypography.mono(
                                 size: 9,
-                                color: LhColors.ink2,
+                                color: DunesColors.resolve(ctx, LhColors.ink2),
                                 weight: FontWeight.w600,
+                                context: ctx,
                               ),
                             ),
                         ],
@@ -35296,7 +38678,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               '暂无趋势数据',
                               style: LhTypography.sans(
                                 size: 11,
-                                color: LhColors.mute,
+                                color: DunesColors.resolve(ctx, LhColors.mute),
+                                context: ctx,
                               ),
                             ),
                           ),
@@ -35657,8 +39040,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 width: screenW * 0.95,
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: _LhPlum.lavender, width: 1),
+                  color: DunesColors.resolve(
+                    ctx,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      ctx,
+                      _LhPlum.lavender,
+                      role: DunesColorRole.border,
+                    ),
+                    width: 1,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
@@ -35739,7 +39133,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Widget _buildNetTABankBalanceLine() {
     final balance = (_bundle?.metrics['netTaBankBalance'] as num?)?.toDouble();
     if (balance == null) return const SizedBox.shrink();
-    final accent = Color(lighthouseHeroSectionAccentValues['cash']!);
+    final accent = DunesColors.resolve(
+      context,
+      Color(lighthouseHeroSectionAccentValues['cash']!),
+    );
     // 业务日优先，拿不到才退回拉取时刻。两者格式本来就区分得开：
     // 业务日是 `09.02`，拉取时刻带时分 `09.03 14:22` —— 一眼看出后者是「我们拉的时间」。
     final asOfRaw = _bundle?.metrics['netTaBankBalanceAtDate']
@@ -35775,7 +39172,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(9, 5, 9, 6),
         decoration: BoxDecoration(
-          color: accent.withAlpha(open || trendOpen ? 20 : 10),
+          color: DunesColors.resolveNullable(
+            context,
+            accent.withAlpha(open || trendOpen ? 20 : 10),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(9),
           border: Border.all(
             color: accent.withAlpha(open || trendOpen ? 90 : 28),
@@ -35796,7 +39197,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         Icon(
           Icons.account_balance_rounded,
           size: 11,
-          color: accent.withAlpha(210),
+          color: DunesColors.resolveNullable(context, accent.withAlpha(210)),
         ),
         const SizedBox(width: 4),
         Flexible(
@@ -35806,9 +39207,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             overflow: TextOverflow.ellipsis,
             style: LhTypography.sans(
               size: 10,
-              color: LhColors.ink2,
+              color: DunesColors.resolve(context, LhColors.ink2),
               weight: FontWeight.w600,
               letterSpacing: 0.2,
+              context: context,
             ),
           ),
         ),
@@ -35819,7 +39221,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ? Icons.keyboard_arrow_up_rounded
                 : Icons.keyboard_arrow_down_rounded,
             size: 13,
-            color: accent.withAlpha(open ? 230 : 150),
+            color: DunesColors.resolveNullable(
+              context,
+              accent.withAlpha(open ? 230 : 150),
+            ),
           ),
         ],
       ],
@@ -35832,14 +39237,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         children: [
           TextSpan(
             text: _fmtMoney(balance),
-            style: LhTypography.number(size: 18, color: LhColors.ink),
+            style: LhTypography.number(
+              size: 18,
+              color: DunesColors.resolve(context, LhColors.ink),
+              context: context,
+            ),
           ),
           TextSpan(
             text: _unitMoney(balance),
             style: LhTypography.sans(
               size: 10,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w600,
+              context: context,
             ),
           ),
         ],
@@ -35858,8 +39268,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           overflow: TextOverflow.ellipsis,
           style: LhTypography.mono(
             size: 8.5,
-            color: LhColors.mute2,
+            color: DunesColors.resolve(context, LhColors.mute2),
             weight: FontWeight.w500,
+            context: context,
           ),
         ),
       ],
@@ -35925,9 +39336,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           style: _tabular(
             LhTypography.mono(
               size: 8.5,
-              color: change.amount >= 0 ? LhColors.neg : LhColors.pos,
+              color: change.amount >= 0
+                  ? DunesColors.resolve(context, LhColors.neg)
+                  : DunesColors.resolve(context, LhColors.pos),
               weight: FontWeight.w700,
               height: 1.0,
+              context: context,
             ),
           ),
         ),
@@ -35944,9 +39358,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           style: _tabular(
             LhTypography.mono(
               size: 8.5,
-              color: momPct >= 0 ? LhColors.neg : LhColors.pos,
+              color: momPct >= 0
+                  ? DunesColors.resolve(context, LhColors.neg)
+                  : DunesColors.resolve(context, LhColors.pos),
               weight: FontWeight.w700,
               height: 1.0,
+              context: context,
             ),
           ),
         ),
@@ -35990,18 +39407,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 报了等于没报。老板会上要的是「有不通过的把那个问题暴露出来」。
   (Color, Color) _reconColors(LighthouseReconStatus status) {
     if (status.hasReject || status.state == LighthouseReconState.overdue) {
-      return (LhColors.neg, const Color(0xFFFBEBE8));
+      return (
+        DunesColors.resolve(context, LhColors.neg),
+        DunesColors.resolve(context, const Color(0xFFFBEBE8)),
+      );
     }
     return switch (status.state) {
       LighthouseReconState.done => (
-        const Color(0xFF146B4E),
-        const Color(0xFFDDF0E7),
+        DunesColors.resolve(context, const Color(0xFF146B4E)),
+        DunesColors.resolve(context, const Color(0xFFDDF0E7)),
       ),
       LighthouseReconState.partial => (
-        const Color(0xFF8F550F),
-        const Color(0xFFF6EADA),
+        DunesColors.resolve(context, const Color(0xFF8F550F)),
+        DunesColors.resolve(context, const Color(0xFFF6EADA)),
       ),
-      _ => (LhColors.mute, const Color(0xFFEFEDE6)),
+      _ => (
+        DunesColors.resolve(context, LhColors.mute),
+        DunesColors.resolve(context, const Color(0xFFEFEDE6)),
+      ),
     };
   }
 
@@ -36020,7 +39443,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final bad =
         status.hasReject || status.state == LighthouseReconState.overdue;
     // 已对账是常态，文字退成中性墨色只留绿点 —— 一屏绿字和一屏红字一样吵。
-    final fg = status.state == LighthouseReconState.done ? LhColors.mute : dot;
+    final fg = status.state == LighthouseReconState.done
+        ? DunesColors.resolve(context, LhColors.mute)
+        : dot;
     final label = lighthouseReconChipLabel(status);
     final commentCount = lighthouseReconCommentEntryCount(status);
     return Row(
@@ -36029,7 +39454,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         Container(
           width: _fs(4.5),
           height: _fs(4.5),
-          decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: DunesColors.resolveNullable(
+              context,
+              dot,
+              role: DunesColorRole.surface,
+            ),
+            shape: BoxShape.circle,
+          ),
         ),
         SizedBox(width: _fs(4)),
         Flexible(
@@ -36044,6 +39476,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 weight: bad ? FontWeight.w700 : FontWeight.w500,
                 height: 1.0,
                 letterSpacing: 0.1,
+                context: context,
               ),
             ),
           ),
@@ -36068,7 +39501,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   Icon(
                     Icons.chat_bubble_outline_rounded,
                     size: _fs(8.5),
-                    color: fg.withAlpha(175),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      fg.withAlpha(175),
+                    ),
                   ),
                   SizedBox(width: _fs(2)),
                   Text(
@@ -36079,6 +39515,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         color: fg.withAlpha(175),
                         weight: FontWeight.w600,
                         height: 1.0,
+                        context: context,
                       ),
                     ),
                   ),
@@ -36100,7 +39537,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 child: Icon(
                   Icons.north_east_rounded,
                   size: _fs(8),
-                  color: fg.withAlpha(150),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    fg.withAlpha(150),
+                  ),
                 ),
               ),
             ),
@@ -36119,7 +39559,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      backgroundColor: LhColors.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        LhColors.paper,
+        role: DunesColorRole.surface,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -36136,7 +39580,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   width: _fs(28),
                   height: _fs(3),
                   decoration: BoxDecoration(
-                    color: LhColors.line2,
+                    color: DunesColors.resolve(
+                      context,
+                      LhColors.line2,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -36151,9 +39599,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       overflow: TextOverflow.ellipsis,
                       style: LhTypography.sans(
                         size: _fs(14),
-                        color: LhColors.ink,
+                        color: DunesColors.resolve(context, LhColors.ink),
                         weight: FontWeight.w700,
                         height: 1.15,
+                        context: context,
                       ),
                     ),
                   ),
@@ -36164,6 +39613,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         size: _fs(11),
                         color: _reconColors(status).$1,
                         weight: FontWeight.w700,
+                        context: context,
                       ),
                     ),
                   ),
@@ -36180,7 +39630,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     Icon(
                       Icons.person_outline_rounded,
                       size: _fs(12),
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                     ),
                     SizedBox(width: _fs(5)),
                     Expanded(
@@ -36190,9 +39640,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         overflow: TextOverflow.ellipsis,
                         style: LhTypography.sans(
                           size: _fs(12),
-                          color: LhColors.ink2,
+                          color: DunesColors.resolve(context, LhColors.ink2),
                           weight: FontWeight.w600,
                           height: 1.2,
+                          context: context,
                         ),
                       ),
                     ),
@@ -36203,8 +39654,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         style: _tabular(
                           LhTypography.mono(
                             size: _fs(10),
-                            color: LhColors.mute2,
+                            color: DunesColors.resolve(context, LhColors.mute2),
                             weight: FontWeight.w600,
+                            context: context,
                           ),
                         ),
                       ),
@@ -36218,14 +39670,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     '资管说明',
                     style: LhTypography.sans(
                       size: _fs(10),
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w700,
                       letterSpacing: 0.3,
+                      context: context,
                     ),
                   ),
                   SizedBox(width: _fs(6)),
                   Expanded(
-                    child: Container(height: 0.7, color: LhColors.line2),
+                    child: Container(
+                      height: 0.7,
+                      color: DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   ),
                   SizedBox(width: _fs(6)),
                   Text(
@@ -36233,8 +39693,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     style: _tabular(
                       LhTypography.mono(
                         size: _fs(10),
-                        color: LhColors.mute2,
+                        color: DunesColors.resolve(context, LhColors.mute2),
                         weight: FontWeight.w600,
+                        context: context,
                       ),
                     ),
                   ),
@@ -36249,9 +39710,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     textAlign: TextAlign.center,
                     style: LhTypography.sans(
                       size: _fs(12),
-                      color: LhColors.mute,
+                      color: DunesColors.resolve(context, LhColors.mute),
                       weight: FontWeight.w500,
                       height: 1.4,
+                      context: context,
                     ),
                   ),
                 )
@@ -36260,8 +39722,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: comments.length,
-                    separatorBuilder: (context, index) =>
-                        Divider(height: _fs(20), color: LhColors.line2),
+                    separatorBuilder: (context, index) => Divider(
+                      height: _fs(20),
+                      color: DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                     itemBuilder: (_, index) {
                       final comment = comments[index];
                       // 驳回后端已经排到最前，但视觉上和「确认」长得一样，
@@ -36279,16 +39747,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     vertical: _fs(1.5),
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFFBEBE8),
+                                    color: DunesColors.resolve(
+                                      context,
+                                      const Color(0xFFFBEBE8),
+                                      role: DunesColorRole.surface,
+                                    ),
                                     borderRadius: BorderRadius.circular(_fs(4)),
                                   ),
                                   child: Text(
                                     '驳回',
                                     style: LhTypography.sans(
                                       size: _fs(9),
-                                      color: LhColors.neg,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        LhColors.neg,
+                                      ),
                                       weight: FontWeight.w700,
                                       height: 1.0,
+                                      context: context,
                                     ),
                                   ),
                                 ),
@@ -36302,9 +39778,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     overflow: TextOverflow.ellipsis,
                                     style: LhTypography.sans(
                                       size: _fs(9.5),
-                                      color: LhColors.mute2,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        LhColors.mute2,
+                                      ),
                                       weight: FontWeight.w600,
                                       height: 1.2,
+                                      context: context,
                                     ),
                                   ),
                                 ),
@@ -36315,9 +39795,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             comment.body,
                             style: LhTypography.sans(
                               size: _fs(11.5),
-                              color: rejected ? LhColors.neg : LhColors.ink,
+                              color: rejected
+                                  ? DunesColors.resolve(context, LhColors.neg)
+                                  : DunesColors.resolve(context, LhColors.ink),
                               weight: FontWeight.w500,
                               height: 1.5,
+                              context: context,
                             ),
                           ),
                         ],
@@ -36406,7 +39889,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 做成行底填充之后，同样的信息量少一半高度，条也不再是"多出来的一条线"。
   Widget _buildNetTABankBalancePanel() {
     final rows = _netTABankBalanceRows();
-    final accent = Color(lighthouseHeroSectionAccentValues['cash']!);
+    final accent = DunesColors.resolve(
+      context,
+      Color(lighthouseHeroSectionAccentValues['cash']!),
+    );
     final total =
         (_bundle?.metrics['netTaBankBalance'] as num?)?.toDouble() ?? 0;
     final count =
@@ -36436,12 +39922,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           borderRadius: BorderRadius.circular(7),
           child: Stack(
             children: [
-              Positioned.fill(child: Container(color: LhColors.mist)),
+              Positioned.fill(
+                child: Container(
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.mist,
+                    role: DunesColorRole.surface,
+                  ),
+                ),
+              ),
               Positioned.fill(
                 child: FractionallySizedBox(
                   alignment: Alignment.centerLeft,
                   widthFactor: frac < 0.02 ? 0.02 : frac,
-                  child: Container(color: accent.withAlpha(v < 0 ? 22 : 38)),
+                  child: Container(
+                    color: DunesColors.resolveNullable(
+                      context,
+                      accent.withAlpha(v < 0 ? 22 : 38),
+                      role: DunesColorRole.surface,
+                    ),
+                  ),
                 ),
               ),
               Padding(
@@ -36454,7 +39954,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             ? Icons.keyboard_arrow_down_rounded
                             : Icons.keyboard_arrow_right_rounded,
                         size: 12,
-                        color: isOpen ? accent : LhColors.mute2,
+                        color: isOpen
+                            ? accent
+                            : DunesColors.resolve(context, LhColors.mute2),
                       ),
                       const SizedBox(width: 2),
                     ],
@@ -36465,8 +39967,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         overflow: TextOverflow.ellipsis,
                         style: LhTypography.sans(
                           size: 11,
-                          color: LhColors.ink,
+                          color: DunesColors.resolve(context, LhColors.ink),
                           weight: isOpen ? FontWeight.w700 : FontWeight.w500,
+                          context: context,
                         ),
                       ),
                     ),
@@ -36480,15 +39983,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             text: _fmtMoney(v),
                             style: LhTypography.number(
                               size: 12.5,
-                              color: v < 0 ? LhColors.neg : LhColors.ink,
+                              color: v < 0
+                                  ? DunesColors.resolve(context, LhColors.neg)
+                                  : DunesColors.resolve(context, LhColors.ink),
+                              context: context,
                             ),
                           ),
                           TextSpan(
                             text: _unitMoney(v),
                             style: LhTypography.sans(
                               size: 9,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                               weight: FontWeight.w600,
+                              context: context,
                             ),
                           ),
                         ],
@@ -36502,8 +40012,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         textAlign: TextAlign.right,
                         style: LhTypography.mono(
                           size: 9,
-                          color: LhColors.mute2,
+                          color: DunesColors.resolve(context, LhColors.mute2),
                           weight: FontWeight.w600,
+                          context: context,
                         ),
                       ),
                     ),
@@ -36537,7 +40048,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.fromLTRB(9, 7, 9, 4),
         decoration: BoxDecoration(
-          color: accent.withAlpha(12),
+          color: DunesColors.resolveNullable(
+            context,
+            accent.withAlpha(12),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(7),
           border: Border.all(color: accent.withAlpha(45), width: 0.7),
         ),
@@ -36554,6 +40069,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 color: accent,
                 weight: FontWeight.w700,
                 letterSpacing: 0.2,
+                context: context,
               ),
             ),
             const SizedBox(height: 5),
@@ -36569,13 +40085,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: Container(color: LhColors.paper),
+                            child: Container(
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.paper,
+                                role: DunesColorRole.surface,
+                              ),
+                            ),
                           ),
                           Positioned.fill(
                             child: FractionallySizedBox(
                               alignment: Alignment.centerLeft,
                               widthFactor: f < 0.02 ? 0.02 : f,
-                              child: Container(color: accent.withAlpha(24)),
+                              child: Container(
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  accent.withAlpha(24),
+                                  role: DunesColorRole.surface,
+                                ),
+                              ),
                             ),
                           ),
                           Padding(
@@ -36589,8 +40117,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     overflow: TextOverflow.ellipsis,
                                     style: LhTypography.mono(
                                       size: 9.5,
-                                      color: LhColors.ink2,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        LhColors.ink2,
+                                      ),
                                       weight: FontWeight.w500,
+                                      context: context,
                                     ),
                                   ),
                                 ),
@@ -36605,16 +40137,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                         style: LhTypography.number(
                                           size: 11,
                                           color: av < 0
-                                              ? LhColors.neg
-                                              : LhColors.ink,
+                                              ? DunesColors.resolve(
+                                                  context,
+                                                  LhColors.neg,
+                                                )
+                                              : DunesColors.resolve(
+                                                  context,
+                                                  LhColors.ink,
+                                                ),
+                                          context: context,
                                         ),
                                       ),
                                       TextSpan(
                                         text: _unitMoney(av),
                                         style: LhTypography.sans(
                                           size: 8.5,
-                                          color: LhColors.mute,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            LhColors.mute,
+                                          ),
                                           weight: FontWeight.w600,
+                                          context: context,
                                         ),
                                       ),
                                     ],
@@ -36674,13 +40217,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   width: 15,
                   height: 15,
                   decoration: BoxDecoration(
-                    color: accent.withAlpha(24),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      accent.withAlpha(24),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Icon(
                     Icons.account_balance_rounded,
                     size: 9,
-                    color: accent,
+                    color: DunesColors.resolveNullable(context, accent),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -36688,8 +40235,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   '银行余额 · 按公司',
                   style: LhTypography.sans(
                     size: 11,
-                    color: LhColors.ink2,
+                    color: DunesColors.resolve(context, LhColors.ink2),
                     weight: FontWeight.w600,
+                    context: context,
                   ),
                 ),
                 const Spacer(),
@@ -36699,30 +40247,45 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.right,
-                    style: LhTypography.sans(size: 10, color: LhColors.mute),
+                    style: LhTypography.sans(
+                      size: 10,
+                      color: DunesColors.resolve(context, LhColors.mute),
+                      context: context,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   _fmtAmountWithUnit(total),
-                  style: LhTypography.number(size: 13, color: LhColors.ink),
+                  style: LhTypography.number(
+                    size: 13,
+                    color: DunesColors.resolve(context, LhColors.ink),
+                    context: context,
+                  ),
                 ),
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => setState(() => _netTaBalanceOpen = false),
-                  child: const Padding(
+                  child: Padding(
                     padding: EdgeInsets.only(left: 8),
                     child: Icon(
                       Icons.close_rounded,
                       size: 14,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                     ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            Container(height: 0.7, color: _LhPlum.line),
+            Container(
+              height: 0.7,
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.line,
+                role: DunesColorRole.surface,
+              ),
+            ),
             if (rows.isNotEmpty) ...[
               const SizedBox(height: 8),
               // 排不下就滚动，不截断 —— 截断会让人以为公司只有这么多家。
@@ -36753,8 +40316,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final isBill = r['secondaryCaliber']?.toString() == 'bill';
     final bucket = r['name']?.toString() ?? '';
     final accent = bucket == '经营活动'
-        ? LhColors.pos
-        : (bucket == '筹资活动' ? LhColors.copper : LhColors.neg);
+        ? DunesColors.resolve(context, LhColors.pos)
+        : (bucket == '筹资活动'
+              ? DunesColors.resolve(context, LhColors.copper)
+              : DunesColors.resolve(context, LhColors.neg));
     var sumAbs = 0.0;
     for (final e in secondaries) {
       sumAbs += ((e['netTa'] as num?)?.toDouble() ?? 0).abs();
@@ -36765,8 +40330,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Widget card() => Container(
       padding: const EdgeInsets.fromLTRB(11, 9, 11, 11),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFDFF),
-        border: Border.all(color: _LhPlum.heroEdge, width: 0.7),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFFFFDFF),
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _LhPlum.heroEdge,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
         borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
         boxShadow: [
           BoxShadow(
@@ -36786,7 +40362,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 width: 15,
                 height: 15,
                 decoration: BoxDecoration(
-                  color: accent.withAlpha(24),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    accent.withAlpha(24),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Icon(
@@ -36794,7 +40374,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ? Icons.receipt_long_rounded
                       : Icons.account_tree_rounded,
                   size: 9,
-                  color: accent,
+                  color: DunesColors.resolveNullable(context, accent),
                 ),
               ),
               const SizedBox(width: 6),
@@ -36802,14 +40382,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 isBill ? '账单三级' : '二级分类',
                 style: LhTypography.sans(
                   size: 11,
-                  color: LhColors.ink2,
+                  color: DunesColors.resolve(context, LhColors.ink2),
                   weight: FontWeight.w600,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 5),
               Text(
                 '${secondaries.length} 项',
-                style: LhTypography.sans(size: 10, color: LhColors.mute),
+                style: LhTypography.sans(
+                  size: 10,
+                  color: DunesColors.resolve(context, LhColors.mute),
+                  context: context,
+                ),
               ),
               const Spacer(),
               if (inflow != null && outflow != null)
@@ -36818,13 +40403,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     '流入 ${_fmtAmountWithUnit(inflow)} · 流出 ${_fmtAmountWithUnit(outflow)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: LhTypography.sans(size: 9.5, color: LhColors.mute2),
+                    style: LhTypography.sans(
+                      size: 9.5,
+                      color: DunesColors.resolve(context, LhColors.mute2),
+                      context: context,
+                    ),
                   ),
                 ),
             ],
           ),
           const SizedBox(height: 9),
-          Container(height: 0.5, color: LhColors.line2),
+          Container(
+            height: 0.5,
+            color: DunesColors.resolve(
+              context,
+              LhColors.line2,
+              role: DunesColorRole.surface,
+            ),
+          ),
           const SizedBox(height: 10),
           _buildNetTAMetricGrid(
             secondaries,
@@ -36839,11 +40435,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       duration: const Duration(milliseconds: 220),
       child: Container(
         width: double.infinity,
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(height: 0.5, color: _LhPlum.line),
+            Container(
+              height: 0.5,
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.line,
+                role: DunesColorRole.surface,
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               child: secondaries.isEmpty
@@ -36851,7 +40458,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       '无下级分类',
                       style: LhTypography.sans(
                         size: 10.5,
-                        color: LhColors.mute,
+                        color: DunesColors.resolve(context, LhColors.mute),
+                        context: context,
                       ),
                     )
                   : card(),
@@ -37003,20 +40611,38 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Widget sec(String title, Color accent, {String trailing = ''}) {
       return Row(
         children: [
-          Container(width: 2, height: 9, color: accent),
+          Container(
+            width: 2,
+            height: 9,
+            color: DunesColors.resolveNullable(
+              context,
+              accent,
+              role: DunesColorRole.surface,
+            ),
+          ),
           const SizedBox(width: 6),
           Text(
             title,
             style: LhTypography.mono(
               size: 9,
-              color: LhColors.mute,
+              color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w700,
               letterSpacing: 1.0,
               height: 1.0,
+              context: context,
             ),
           ),
           const SizedBox(width: 10),
-          Expanded(child: Container(height: 0.5, color: _LhPlum.line)),
+          Expanded(
+            child: Container(
+              height: 0.5,
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.line,
+                role: DunesColorRole.surface,
+              ),
+            ),
+          ),
           if (trailing.isNotEmpty) ...[
             const SizedBox(width: 10),
             Text(
@@ -37024,10 +40650,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: _tabular(
                 LhTypography.mono(
                   size: 8.5,
-                  color: LhColors.ink2,
+                  color: DunesColors.resolve(context, LhColors.ink2),
                   weight: FontWeight.w600,
                   letterSpacing: 0.3,
                   height: 1.0,
+                  context: context,
                 ),
               ),
             ),
@@ -37060,13 +40687,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         //   展开体是全宽的，面积比 hero 卡还大，一铺色整页的紫就从
         //   「一处焦点」退化成「到处都是」。层级完全交给上下两条
         //   hairline + 左侧 2px 色条承担，边界比色块更省视觉预算。
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 顶边 hairline —— 让展开体从上方账本行「陷下去」一档，
             // 层级靠边界而不是靠加深底色。
-            Container(height: 0.5, color: _LhPlum.line),
+            Container(
+              height: 0.5,
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.line,
+                role: DunesColorRole.surface,
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
               child: Column(
@@ -37077,7 +40715,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   //   而且「这个省怎么定价」本来就是读下面规模/成本/利润的前提。
                   //   非供给维、或这一行没有折扣规则时整段不出现，不留空槽。
                   if (discountCard != null) ...[
-                    sec('折扣档位', _LhPlum.deep, trailing: discountMeta),
+                    sec(
+                      '折扣档位',
+                      DunesColors.resolve(context, _LhPlum.deep),
+                      trailing: discountMeta,
+                    ),
                     const SizedBox(height: 12),
                     discountCard,
                     const SizedBox(height: 18),
@@ -37088,7 +40730,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         ? '整行走势'
                         : '单指标走势 · ${_ledgerSummaryMetricLabel(focus)}',
                     focus == null
-                        ? _LhPlum.primary
+                        ? DunesColors.resolve(context, _LhPlum.primary)
                         : lighthouseLedgerTrendEmphasisColor(focus),
                     trailing: focus == null ? '名称列打开' : '数字格打开',
                   ),
@@ -37110,11 +40752,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             style: LhTypography.sans(
                               size: 10,
                               color: trendFailed
-                                  ? _LhPlum.primary
-                                  : LhColors.mute,
+                                  ? DunesColors.resolve(
+                                      context,
+                                      _LhPlum.primary,
+                                    )
+                                  : DunesColors.resolve(context, LhColors.mute),
                               weight: trendFailed
                                   ? FontWeight.w600
                                   : FontWeight.normal,
+                              context: context,
                             ),
                           ),
                         ),
@@ -37138,7 +40784,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
             // 底边 hairline —— 底色改白后，展开体和下一条账本行之间
             // 没有色差可依，收口交给这条线。
-            Container(height: 0.5, color: _LhPlum.line),
+            Container(
+              height: 0.5,
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.line,
+                role: DunesColorRole.surface,
+              ),
+            ),
           ],
         ),
       ),
@@ -37154,7 +40807,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Container(
             width: 28,
             height: 0.5,
-            color: _LhPlum.primary.withAlpha(140),
+            color: DunesColors.resolve(
+              context,
+              _LhPlum.primary,
+              role: DunesColorRole.surface,
+            ).withAlpha(140),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -37162,16 +40819,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '· FIN ·',
               style: LhTypography.mono(
                 size: 9,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w500,
                 letterSpacing: 2,
+                context: context,
               ),
             ),
           ),
           Container(
             width: 28,
             height: 0.5,
-            color: _LhPlum.primary.withAlpha(140),
+            color: DunesColors.resolve(
+              context,
+              _LhPlum.primary,
+              role: DunesColorRole.surface,
+            ).withAlpha(140),
           ),
         ],
       ),
@@ -37270,9 +40932,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '‹',
               style: LhTypography.mono(
                 size: 15,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w600,
                 height: 1.0,
+                context: context,
               ),
             ),
             const SizedBox(width: 5),
@@ -37280,8 +40943,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               label,
               style: LhTypography.sans(
                 size: 10.5,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w600,
+                context: context,
               ),
             ),
           ],
@@ -37354,7 +41018,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: isCurrent ? _LhPlum.primary : Colors.transparent,
+              color: isCurrent
+                  ? DunesColors.resolve(
+                      context,
+                      _LhPlum.primary,
+                      role: DunesColorRole.border,
+                    )
+                  : Colors.transparent,
               width: isCurrent ? 2 : 0,
             ),
           ),
@@ -37367,10 +41037,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               level,
               style: LhTypography.mono(
                 size: 7.5,
-                color: isCurrent ? _LhPlum.primary : LhColors.mute2,
+                color: isCurrent
+                    ? DunesColors.resolve(context, _LhPlum.primary)
+                    : DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w700,
                 letterSpacing: 0.7,
                 height: 1.0,
+                context: context,
               ),
             ),
             const SizedBox(height: 4),
@@ -37380,9 +41053,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               overflow: TextOverflow.ellipsis,
               style: LhTypography.sans(
                 size: 9.5,
-                color: isCurrent ? _LhPlum.deep : LhColors.ink2,
+                color: isCurrent
+                    ? DunesColors.resolve(context, _LhPlum.deep)
+                    : DunesColors.resolve(context, LhColors.ink2),
                 weight: isCurrent ? FontWeight.w700 : FontWeight.w600,
                 height: 1.15,
+                context: context,
               ),
             ),
           ],
@@ -37405,16 +41081,31 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     Widget divider() => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 1),
-      child: Icon(Icons.chevron_right_rounded, size: 14, color: LhColors.mute2),
+      child: Icon(
+        Icons.chevron_right_rounded,
+        size: 14,
+        color: DunesColors.resolve(context, LhColors.mute2),
+      ),
     );
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAF9FD),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFFAF9FD),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _LhPlum.line, width: 0.6),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _LhPlum.line,
+            role: DunesColorRole.border,
+          ),
+          width: 0.6,
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -37483,7 +41174,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 二级详情首次载入 —— 与一级切 tab 同一套品牌 loader 遮罩特效。
   Widget _buildDetailLoadingSkeleton({String? error, VoidCallback? onRetry}) {
     return ColoredBox(
-      color: Colors.white.withAlpha(210),
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ).withAlpha(210),
       child: Center(
         child: error == null
             ? _buildBrandBusyContent(label: '数据同步中')
@@ -37494,15 +41189,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     '详情加载失败',
                     style: LhTypography.sans(
                       size: 13,
-                      color: LhColors.ink,
+                      color: DunesColors.resolve(context, LhColors.ink),
                       weight: FontWeight.w700,
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     error,
                     textAlign: TextAlign.center,
-                    style: LhTypography.sans(size: 10, color: LhColors.mute),
+                    style: LhTypography.sans(
+                      size: 10,
+                      color: DunesColors.resolve(context, LhColors.mute),
+                      context: context,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextButton(onPressed: onRetry, child: const Text('点击重试')),
@@ -37872,8 +41572,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     style: LhTypography.sans(
                       size: 19,
                       weight: FontWeight.w500,
-                      color: const Color(0xFF7C5CE6),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF7C5CE6),
+                      ),
                       letterSpacing: -0.2,
+                      context: context,
                     ),
                   ),
                   const Spacer(),
@@ -37919,8 +41623,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 margin: const EdgeInsets.fromLTRB(22, 0, 22, 18),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: _LhPlum.line, width: 0.5),
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      _LhPlum.line,
+                      role: DunesColorRole.border,
+                    ),
+                    width: 0.5,
+                  ),
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
@@ -37942,7 +41657,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ),
                     if (isSkuTab) _buildDetailSkuSearchBar(),
                     _buildSortbar(anchorScope: _detailRouteKey()),
-                    Container(height: 1, color: _LhPlum.line),
+                    Container(
+                      height: 1,
+                      color: DunesColors.resolve(
+                        context,
+                        _LhPlum.line,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                     if (filteredSubRows.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 40),
@@ -37953,7 +41675,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 : '暂无数据',
                             style: LhTypography.sans(
                               size: 12,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -38103,8 +41829,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 style: LhTypography.sans(
                   size: 19,
                   weight: FontWeight.w500,
-                  color: const Color(0xFF7C5CE6),
+                  color: DunesColors.resolve(context, const Color(0xFF7C5CE6)),
                   letterSpacing: -0.2,
+                  context: context,
                 ),
               ),
               const Spacer(),
@@ -38124,8 +41851,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 margin: const EdgeInsets.fromLTRB(22, 0, 22, 0),
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 11),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: LhColors.line2, width: 1),
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      LhColors.line2,
+                      role: DunesColorRole.border,
+                    ),
+                    width: 1,
+                  ),
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
@@ -38144,8 +41882,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       style: LhTypography.sans(
                         size: 13.5,
                         weight: FontWeight.w600,
-                        color: LhColors.ink2,
+                        color: DunesColors.resolve(context, LhColors.ink2),
                         letterSpacing: -0.1,
+                        context: context,
                       ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 2,
@@ -38156,15 +41895,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         _codeDrillGroup,
                         style: LhTypography.mono(
                           size: 8.6,
-                          color: LhColors.mute,
+                          color: DunesColors.resolve(context, LhColors.mute),
                           weight: FontWeight.w600,
+                          context: context,
                         ),
                       ),
                     ],
                     const SizedBox(height: 10),
                     Container(
                       height: 1,
-                      color: LhColors.line2,
+                      color: DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.surface,
+                      ),
                       margin: const EdgeInsets.only(bottom: 10),
                     ),
                     Row(
@@ -38208,8 +41952,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   '产品码 · ${sortedRows.length} 项',
                   style: LhTypography.mono(
                     size: 8.4,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                     letterSpacing: 0.2,
+                    context: context,
                   ),
                 ),
               ),
@@ -38221,7 +41966,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   child: Center(
                     child: Text(
                       '暂无 supplier_product_code 数据',
-                      style: LhTypography.sans(size: 12, color: LhColors.mute),
+                      style: LhTypography.sans(
+                        size: 12,
+                        color: DunesColors.resolve(context, LhColors.mute),
+                        context: context,
+                      ),
                     ),
                   ),
                 )
@@ -38270,9 +42019,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           label,
           style: LhTypography.mono(
             size: 8,
-            color: LhColors.mute,
+            color: DunesColors.resolve(context, LhColors.mute),
             weight: FontWeight.w600,
             letterSpacing: 0.4,
+            context: context,
           ),
         ),
         const SizedBox(height: 2),
@@ -38281,8 +42031,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           style: LhTypography.sans(
             size: 11.5,
             weight: FontWeight.w600,
-            color: isNeg ? LhColors.pos : LhColors.ink2,
+            color: isNeg
+                ? DunesColors.resolve(context, LhColors.pos)
+                : DunesColors.resolve(context, LhColors.ink2),
             letterSpacing: -0.1,
+            context: context,
           ),
         ),
       ],
@@ -38312,8 +42065,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       margin: const EdgeInsets.fromLTRB(22, 0, 22, 0),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: LhColors.paper,
-        border: Border.all(color: LhColors.line2, width: 1),
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 1,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -38326,7 +42090,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 width: 3,
                 height: 10,
                 decoration: BoxDecoration(
-                  color: _LhPlum.primary,
+                  color: DunesColors.resolve(
+                    context,
+                    _LhPlum.primary,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(1.5),
                 ),
               ),
@@ -38335,9 +42103,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 '归属路径',
                 style: LhTypography.mono(
                   size: 8.4,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w700,
                   letterSpacing: 1.4,
+                  context: context,
                 ),
               ),
             ],
@@ -38362,7 +42131,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             width: 32,
             padding: const EdgeInsets.symmetric(vertical: 2),
             decoration: BoxDecoration(
-              color: _LhPlum.primary.withAlpha(38),
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.primary,
+                role: DunesColorRole.surface,
+              ).withAlpha(38),
               borderRadius: BorderRadius.circular(3),
             ),
             child: Text(
@@ -38370,9 +42143,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               textAlign: TextAlign.center,
               style: LhTypography.mono(
                 size: 8.4,
-                color: _LhPlum.primary,
+                color: DunesColors.resolve(context, _LhPlum.primary),
                 weight: FontWeight.w800,
                 letterSpacing: 0.4,
+                context: context,
               ),
             ),
           ),
@@ -38382,9 +42156,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               label,
               style: LhTypography.sans(
                 size: 11,
-                color: LhColors.ink2,
+                color: DunesColors.resolve(context, LhColors.ink2),
                 weight: FontWeight.w500,
                 letterSpacing: -0.05,
+                context: context,
               ),
               overflow: TextOverflow.ellipsis,
               maxLines: 2,
@@ -38399,7 +42174,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       height: 1,
       margin: const EdgeInsets.symmetric(vertical: 1),
-      color: LhColors.line2.withAlpha(120),
+      color: DunesColors.resolve(
+        context,
+        LhColors.line2,
+        role: DunesColorRole.surface,
+      ).withAlpha(120),
     );
   }
 
@@ -38417,8 +42196,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       margin: const EdgeInsets.only(bottom: 7),
       padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
       decoration: BoxDecoration(
-        color: LhColors.paper,
-        border: Border.all(color: LhColors.line2, width: 1),
+        color: DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.border,
+          ),
+          width: 1,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -38432,8 +42222,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 rank,
                 style: LhTypography.mono(
                   size: 11.5,
-                  color: LhColors.mute2,
+                  color: DunesColors.resolve(context, LhColors.mute2),
                   weight: FontWeight.w600,
+                  context: context,
                 ),
               ),
             ),
@@ -38453,16 +42244,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         vertical: 1.5,
                       ),
                       decoration: BoxDecoration(
-                        color: _LhPlum.primary.withAlpha(40),
+                        color: DunesColors.resolve(
+                          context,
+                          _LhPlum.primary,
+                          role: DunesColorRole.surface,
+                        ).withAlpha(40),
                         borderRadius: BorderRadius.circular(3),
                       ),
                       child: Text(
                         'CODE',
                         style: LhTypography.mono(
                           size: 9.5,
-                          color: _LhPlum.primary,
+                          color: DunesColors.resolve(context, _LhPlum.primary),
                           weight: FontWeight.w800,
                           letterSpacing: 0.6,
+                          context: context,
                         ),
                       ),
                     ),
@@ -38472,9 +42268,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         name,
                         style: LhTypography.mono(
                           size: 13,
-                          color: LhColors.ink2,
+                          color: DunesColors.resolve(context, LhColors.ink2),
                           weight: FontWeight.w700,
                           letterSpacing: 0.1,
+                          context: context,
                         ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 2,
@@ -38494,15 +42291,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             text: '销售 ',
                             style: LhTypography.mono(
                               size: 11,
-                              color: LhColors.mute2,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute2,
+                              ),
+                              context: context,
                             ),
                           ),
                           TextSpan(
                             text: '${_fmt(sales.abs())}${_unit(sales.abs())}',
                             style: LhTypography.mono(
                               size: 11,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                               weight: FontWeight.w500,
+                              context: context,
                             ),
                           ),
                         ],
@@ -38515,15 +42320,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             text: '利润 ',
                             style: LhTypography.mono(
                               size: 11,
-                              color: LhColors.mute2,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute2,
+                              ),
+                              context: context,
                             ),
                           ),
                           TextSpan(
                             text: '${_fmt(profit.abs())}${_unit(profit.abs())}',
                             style: LhTypography.mono(
                               size: 11,
-                              color: isNeg ? LhColors.pos : LhColors.ink2,
+                              color: isNeg
+                                  ? DunesColors.resolve(context, LhColors.pos)
+                                  : DunesColors.resolve(context, LhColors.ink2),
                               weight: FontWeight.w600,
+                              context: context,
                             ),
                           ),
                         ],
@@ -38551,17 +42363,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               style: LhTypography.mono(
                                 size: 14.5,
                                 color: rateValue < 0
-                                    ? LhColors.pos
-                                    : LhColors.ink2,
+                                    ? DunesColors.resolve(context, LhColors.pos)
+                                    : DunesColors.resolve(
+                                        context,
+                                        LhColors.ink2,
+                                      ),
                                 weight: FontWeight.w600,
+                                context: context,
                               ),
                             ),
                             TextSpan(
                               text: '%',
                               style: LhTypography.mono(
                                 size: 10,
-                                color: LhColors.mute,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.mute,
+                                ),
                                 weight: FontWeight.w500,
+                                context: context,
                               ),
                             ),
                           ],
@@ -38571,8 +42391,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         '—',
                         style: LhTypography.mono(
                           size: 14.5,
-                          color: LhColors.mute2,
+                          color: DunesColors.resolve(context, LhColors.mute2),
                           weight: FontWeight.w500,
+                          context: context,
                         ),
                       ),
                 const SizedBox(height: 2),
@@ -38580,9 +42401,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   'ROI',
                   style: LhTypography.mono(
                     size: 10.5,
-                    color: LhColors.mute,
+                    color: DunesColors.resolve(context, LhColors.mute),
                     weight: FontWeight.w600,
                     letterSpacing: 0.6,
+                    context: context,
                   ),
                 ),
               ],
@@ -38705,7 +42527,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   Widget _analysisDivider() => Padding(
     padding: const EdgeInsets.symmetric(vertical: 14),
-    child: Container(height: 1, color: LhColors.line2),
+    child: Container(
+      height: 1,
+      color: DunesColors.resolve(
+        context,
+        LhColors.line2,
+        role: DunesColorRole.surface,
+      ),
+    ),
   );
 
   // ── A. ROI 仪表 ────────────────────────────────────────────────────────
@@ -38720,13 +42549,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Color verdictColor;
     String verdictText;
     if (roi >= benchmark * 1.3) {
-      verdictColor = LhColors.neg;
+      verdictColor = DunesColors.resolve(context, LhColors.neg);
       verdictText = '优秀';
     } else if (roi >= benchmark * 0.7) {
-      verdictColor = _LhPlum.primary;
+      verdictColor = DunesColors.resolve(context, _LhPlum.primary);
       verdictText = '良好';
     } else {
-      verdictColor = LhColors.pos;
+      verdictColor = DunesColors.resolve(context, LhColors.pos);
       verdictText = '待提升';
     }
 
@@ -38738,9 +42567,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             label,
             style: LhTypography.sans(
               size: 9,
-              color: LhColors.mute2,
+              color: DunesColors.resolve(context, LhColors.mute2),
               weight: FontWeight.w500,
               letterSpacing: 0.3,
+              context: context,
             ),
           ),
           const SizedBox(height: 4),
@@ -38755,6 +42585,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   color: color,
                   weight: FontWeight.w700,
                   letterSpacing: -0.7,
+                  context: context,
                 ),
               ),
               const SizedBox(width: 2),
@@ -38766,6 +42597,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     size: 11,
                     color: color.withAlpha(180),
                     weight: FontWeight.w600,
+                    context: context,
                   ),
                 ),
               ),
@@ -38785,15 +42617,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             Container(
               width: 1,
               height: 36,
-              color: LhColors.line2,
+              color: DunesColors.resolve(
+                context,
+                LhColors.line2,
+                role: DunesColorRole.surface,
+              ),
               margin: const EdgeInsets.symmetric(horizontal: 12),
             ),
-            Expanded(child: bigNum('毛利率', margin, LhColors.ink)),
+            Expanded(
+              child: bigNum(
+                '毛利率',
+                margin,
+                DunesColors.resolve(context, LhColors.ink),
+              ),
+            ),
             const SizedBox(width: 10),
             Container(
               padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
               decoration: BoxDecoration(
-                color: verdictColor.withAlpha(33),
+                color: DunesColors.resolveNullable(
+                  context,
+                  verdictColor.withAlpha(33),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(3),
               ),
               child: Text(
@@ -38803,6 +42649,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   color: verdictColor,
                   weight: FontWeight.w700,
                   letterSpacing: 0.5,
+                  context: context,
                 ),
               ),
             ),
@@ -38815,7 +42662,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               width: 4,
               height: 4,
               decoration: BoxDecoration(
-                color: diff >= 0 ? LhColors.neg : LhColors.pos,
+                color: diff >= 0
+                    ? DunesColors.resolve(
+                        context,
+                        LhColors.neg,
+                        role: DunesColorRole.surface,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        LhColors.pos,
+                        role: DunesColorRole.surface,
+                      ),
                 shape: BoxShape.circle,
               ),
             ),
@@ -38824,17 +42681,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '同组均值 ${groupAvg.toStringAsFixed(1)}%',
               style: LhTypography.sans(
                 size: 10,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w500,
+                context: context,
               ),
             ),
             Text(
               ' · ${diff >= 0 ? "+" : ""}${diff.toStringAsFixed(1)}pp',
               style: LhTypography.mono(
                 size: 10,
-                color: diff >= 0 ? LhColors.neg : LhColors.pos,
+                color: diff >= 0
+                    ? DunesColors.resolve(context, LhColors.neg)
+                    : DunesColors.resolve(context, LhColors.pos),
                 weight: FontWeight.w700,
                 letterSpacing: 0.3,
+                context: context,
               ),
             ),
             const Spacer(),
@@ -38842,9 +42703,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '目标 ${benchmark.toStringAsFixed(1)}%',
               style: LhTypography.mono(
                 size: 9,
-                color: LhColors.mute2,
+                color: DunesColors.resolve(context, LhColors.mute2),
                 weight: FontWeight.w500,
                 letterSpacing: 0.5,
+                context: context,
               ),
             ),
           ],
@@ -38877,11 +42739,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     // 4 段：业务 / 税 / SaaS / 利润；占比统一以销售额为分母
     final segments = <({String label, double value, Color color})>[
-      (label: '业务', value: cost, color: const Color(0xFFD05568)),
-      (label: '税务', value: tax, color: const Color(0xFF8A6FE0)),
+      (
+        label: '业务',
+        value: cost,
+        color: DunesColors.resolve(context, const Color(0xFFD05568)),
+      ),
+      (
+        label: '税务',
+        value: tax,
+        color: DunesColors.resolve(context, const Color(0xFF8A6FE0)),
+      ),
       if (saas > 0)
-        (label: 'SaaS', value: saas, color: const Color(0xFFC9842A)),
-      (label: '利润', value: profit, color: LhColors.pos),
+        (
+          label: 'SaaS',
+          value: saas,
+          color: DunesColors.resolve(context, const Color(0xFFC9842A)),
+        ),
+      (
+        label: '利润',
+        value: profit,
+        color: DunesColors.resolve(context, LhColors.pos),
+      ),
     ];
     final barTotal = segments.fold<double>(0, (s, x) => s + x.value);
     if (barTotal <= 0) return const SizedBox.shrink();
@@ -38895,9 +42773,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '成本结构',
               style: LhTypography.sans(
                 size: 11,
-                color: LhColors.ink2,
+                color: DunesColors.resolve(context, LhColors.ink2),
                 weight: FontWeight.w600,
                 letterSpacing: 0.2,
+                context: context,
               ),
             ),
             const Spacer(),
@@ -38905,9 +42784,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '销售 ¥${_fmt(sales)}${_unit(sales)}',
               style: LhTypography.mono(
                 size: 9.5,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w500,
                 letterSpacing: 0.3,
+                context: context,
               ),
             ),
           ],
@@ -38925,7 +42805,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       1,
                       10000,
                     ),
-                    child: Container(color: s.color),
+                    child: Container(
+                      color: DunesColors.resolveNullable(
+                        context,
+                        s.color,
+                        role: DunesColorRole.surface,
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -38944,7 +42830,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     width: 7,
                     height: 7,
                     decoration: BoxDecoration(
-                      color: s.color,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        s.color,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(1),
                     ),
                   ),
@@ -38953,8 +42843,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     s.label,
                     style: LhTypography.sans(
                       size: 9.5,
-                      color: LhColors.ink2,
+                      color: DunesColors.resolve(context, LhColors.ink2),
                       weight: FontWeight.w500,
+                      context: context,
                     ),
                   ),
                   const SizedBox(width: 4),
@@ -38962,9 +42853,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     '${(s.value / sales * 100).toStringAsFixed(0)}%',
                     style: LhTypography.mono(
                       size: 9,
-                      color: s.label == '利润' ? LhColors.neg : LhColors.mute,
+                      color: s.label == '利润'
+                          ? DunesColors.resolve(context, LhColors.neg)
+                          : DunesColors.resolve(context, LhColors.mute),
                       weight: FontWeight.w700,
                       letterSpacing: 0.2,
+                      context: context,
                     ),
                   ),
                 ],
@@ -38980,9 +42874,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final h = _calcHealthScores(r, type);
 
     Color scoreColor(int s) {
-      if (s >= 70) return LhColors.neg;
-      if (s >= 40) return _LhPlum.primary;
-      return LhColors.pos;
+      if (s >= 70) return DunesColors.resolve(context, LhColors.neg);
+      if (s >= 40) return DunesColors.resolve(context, _LhPlum.primary);
+      return DunesColors.resolve(context, LhColors.pos);
     }
 
     Widget bar(String label, int score) {
@@ -38997,8 +42891,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 label,
                 style: LhTypography.sans(
                   size: 10,
-                  color: LhColors.ink2,
+                  color: DunesColors.resolve(context, LhColors.ink2),
                   weight: FontWeight.w500,
+                  context: context,
                 ),
               ),
             ),
@@ -39008,7 +42903,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   Container(
                     height: 5,
                     decoration: BoxDecoration(
-                      color: LhColors.line2,
+                      color: DunesColors.resolve(
+                        context,
+                        LhColors.line2,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(2.5),
                     ),
                   ),
@@ -39017,7 +42916,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     child: Container(
                       height: 5,
                       decoration: BoxDecoration(
-                        color: c,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          c,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(2.5),
                       ),
                     ),
@@ -39036,6 +42939,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   color: c,
                   weight: FontWeight.w700,
                   letterSpacing: 0.3,
+                  context: context,
                 ),
               ),
             ),
@@ -39055,9 +42959,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '健康度',
               style: LhTypography.sans(
                 size: 11,
-                color: LhColors.ink2,
+                color: DunesColors.resolve(context, LhColors.ink2),
                 weight: FontWeight.w600,
                 letterSpacing: 0.2,
+                context: context,
               ),
             ),
             const Spacer(),
@@ -39068,6 +42973,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 color: scoreColor(h.score),
                 weight: FontWeight.w700,
                 letterSpacing: -0.3,
+                context: context,
               ),
             ),
             const SizedBox(width: 1),
@@ -39075,9 +42981,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '/100',
               style: LhTypography.mono(
                 size: 9,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w500,
                 letterSpacing: 0.3,
+                context: context,
               ),
             ),
           ],
@@ -39114,9 +43021,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '同组对比',
               style: LhTypography.sans(
                 size: 11,
-                color: LhColors.ink2,
+                color: DunesColors.resolve(context, LhColors.ink2),
                 weight: FontWeight.w600,
                 letterSpacing: 0.2,
+                context: context,
               ),
             ),
             const SizedBox(width: 6),
@@ -39124,9 +43032,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '· $groupName ${ranking.total} 家',
               style: LhTypography.mono(
                 size: 9,
-                color: LhColors.mute,
+                color: DunesColors.resolve(context, LhColors.mute),
                 weight: FontWeight.w500,
                 letterSpacing: 0.3,
+                context: context,
               ),
             ),
             const Spacer(),
@@ -39134,9 +43043,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '第 ${ranking.rank}/${ranking.total} · 前 ${ranking.percentile.toStringAsFixed(0)}%',
               style: LhTypography.mono(
                 size: 10,
-                color: _LhPlum.primary,
+                color: DunesColors.resolve(context, _LhPlum.primary),
                 weight: FontWeight.w700,
                 letterSpacing: 0.3,
+                context: context,
               ),
             ),
           ],
@@ -39162,8 +43072,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           ),
                           decoration: BoxDecoration(
                             color: p.isMe
-                                ? _LhPlum.primary
-                                : LhColors.mute2.withAlpha(70),
+                                ? DunesColors.resolve(
+                                    context,
+                                    _LhPlum.primary,
+                                    role: DunesColorRole.surface,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    LhColors.mute2,
+                                    role: DunesColorRole.surface,
+                                  ).withAlpha(70),
                             borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(1.5),
                             ),
@@ -39175,7 +43093,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             width: 7,
                             height: 2,
                             decoration: BoxDecoration(
-                              color: _LhPlum.primary,
+                              color: DunesColors.resolve(
+                                context,
+                                _LhPlum.primary,
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(1),
                             ),
                           )
@@ -39247,7 +43169,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '收入 ÷ $anchorLabel',
                   value: spreadRate,
                   isRate: true,
-                  accent: _LhPlum.primary,
+                  accent: DunesColors.resolve(context, _LhPlum.primary),
                   delta: deltaFor('spreadRate'),
                   deltaUnit: 'pp',
                 ),
@@ -39258,7 +43180,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '已核销利差',
                   value: revenue,
                   isRate: false,
-                  accent: _LhPlum.primary,
+                  accent: DunesColors.resolve(context, _LhPlum.primary),
                   delta: deltaFor('revenue'),
                   deltaUnit: '%',
                 ),
@@ -39269,7 +43191,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '销售规模',
                   value: sales,
                   isRate: false,
-                  accent: _LhPlum.primary,
+                  accent: DunesColors.resolve(context, _LhPlum.primary),
                   delta: deltaFor('sales'),
                   deltaUnit: '%',
                 ),
@@ -39290,7 +43212,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '核销额',
                   value: verified,
                   isRate: false,
-                  accent: _LhPlum.primary,
+                  accent: DunesColors.resolve(context, _LhPlum.primary),
                   delta: deltaFor('verifiedSales'),
                   deltaUnit: '%',
                 ),
@@ -39301,7 +43223,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '成本合计',
                   value: totalCost,
                   isRate: false,
-                  accent: LhColors.pos,
+                  accent: DunesColors.resolve(context, LhColors.pos),
                   delta: deltaFor('totalCost'),
                   deltaUnit: '%',
                 ),
@@ -39312,7 +43234,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   subLabel: '利润 ÷ 成本合计',
                   value: rate,
                   isRate: true,
-                  accent: _LhPlum.primary,
+                  accent: DunesColors.resolve(context, _LhPlum.primary),
                   delta: deltaFor('rate'),
                   deltaUnit: 'pp',
                 ),
@@ -39337,14 +43259,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     ({double pct, bool isUp})? delta,
     String deltaUnit = '%',
   }) {
-    final fg = valueColor ?? LhColors.ink;
-    final unitColor = isRate && valueColor != null ? valueColor : LhColors.ink2;
+    final fg = valueColor ?? DunesColors.resolve(context, LhColors.ink);
+    final unitColor = isRate && valueColor != null
+        ? valueColor
+        : DunesColors.resolve(context, LhColors.ink2);
     final momCompact = delta == null
         ? '—'
         : _fmtSignedMomPct(delta.pct, unit: deltaUnit, digits: 1);
     final momColor = delta == null
-        ? LhColors.mute2
-        : (delta.isUp ? LhColors.neg : LhColors.pos);
+        ? DunesColors.resolve(context, LhColors.mute2)
+        : (delta.isUp
+              ? DunesColors.resolve(context, LhColors.neg)
+              : DunesColors.resolve(context, LhColors.pos));
     return Padding(
       // v10: 内边距 + 内容居中 (crossAxis center), 跟 L1 完全对齐
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -39355,7 +43281,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           // ── ① Label (居中) ──
           _heroSemanticText(
             label,
-            baseColor: LhColors.ink2,
+            baseColor: DunesColors.resolve(context, LhColors.ink2),
             size: 11,
             baseWeight: FontWeight.w700,
             termWeight: FontWeight.w700,
@@ -39371,7 +43297,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             children: [
               Text(
                 isRate ? value.toStringAsFixed(2) : _fmtMoney(value),
-                style: LhTypography.number(size: 15, color: fg),
+                style: LhTypography.number(
+                  size: 15,
+                  color: fg,
+                  context: context,
+                ),
                 maxLines: 1,
               ),
               const SizedBox(width: 2),
@@ -39381,6 +43311,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   size: 9,
                   color: unitColor,
                   weight: FontWeight.w500,
+                  context: context,
                 ),
               ),
             ],
@@ -39395,6 +43326,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               color: momColor,
               weight: FontWeight.w600,
               letterSpacing: 0.15,
+              context: context,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -39447,7 +43379,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 height: 1,
                 margin: const EdgeInsets.symmetric(vertical: 11),
-                color: LhColors.line2,
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.line2,
+                  role: DunesColorRole.surface,
+                ),
               ),
             );
           }
@@ -39513,10 +43449,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Colors.white, _LhPlum.mist],
+              colors: [
+                DunesColors.resolve(context, Colors.white),
+                DunesColors.resolve(context, _LhPlum.mist),
+              ],
               stops: const [0.0, 1.0],
             ),
-            border: Border.all(color: _LhPlum.lavender, width: 1),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.lavender,
+                role: DunesColorRole.border,
+              ),
+              width: 1,
+            ),
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
@@ -39551,9 +43497,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 style: LhTypography.sans(
                                   size: 11.2,
                                   weight: FontWeight.w700,
-                                  color: LhColors.ink,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.ink,
+                                  ),
                                   height: 1.2,
                                   letterSpacing: -0.1,
+                                  context: context,
                                 ),
                               ),
                               if (onDrillTap != null)
@@ -39564,7 +43514,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     child: Icon(
                                       Icons.chevron_right_rounded,
                                       size: 14,
-                                      color: LhColors.mute2,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        LhColors.mute2,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -39580,7 +43533,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               vertical: 1,
                             ),
                             decoration: BoxDecoration(
-                              color: tagBg,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                tagBg,
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(3),
                             ),
                             child: Text(
@@ -39590,6 +43547,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 color: tagFg,
                                 weight: FontWeight.w600,
                                 letterSpacing: 0.2,
+                                context: context,
                               ),
                             ),
                           ),
@@ -39601,8 +43559,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         supplierCode,
                         style: LhTypography.mono(
                           size: 8.6,
-                          color: LhColors.mute,
+                          color: DunesColors.resolve(context, LhColors.mute),
                           weight: FontWeight.w500,
+                          context: context,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -39623,15 +43582,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                       text: '${m.label} ',
                                       style: LhTypography.mono(
                                         size: 8.6,
-                                        color: LhColors.mute2,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          LhColors.mute2,
+                                        ),
+                                        context: context,
                                       ),
                                     ),
                                     TextSpan(
                                       text: m.value,
                                       style: LhTypography.mono(
                                         size: 8.6,
-                                        color: LhColors.mute,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          LhColors.mute,
+                                        ),
                                         weight: FontWeight.w500,
+                                        context: context,
                                       ),
                                     ),
                                   ],
@@ -39660,8 +43627,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               style: LhTypography.sans(
                                 size: 10.5,
                                 weight: FontWeight.w600,
-                                color: LhColors.pos,
+                                color: DunesColors.resolve(
+                                  context,
+                                  LhColors.pos,
+                                ),
                                 letterSpacing: -0.1,
+                                context: context,
                               ),
                             ),
                           TextSpan(
@@ -39669,16 +43640,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             style: LhTypography.sans(
                               size: 10.5,
                               weight: FontWeight.w600,
-                              color: isNeg ? LhColors.pos : LhColors.ink2,
+                              color: isNeg
+                                  ? DunesColors.resolve(context, LhColors.pos)
+                                  : DunesColors.resolve(context, LhColors.ink2),
                               letterSpacing: -0.1,
+                              context: context,
                             ),
                           ),
                           TextSpan(
                             text: _unit(profit.abs()),
                             style: LhTypography.mono(
                               size: 7.8,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                               weight: FontWeight.w500,
+                              context: context,
                             ),
                           ),
                         ],
@@ -39689,9 +43667,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       '利润',
                       style: LhTypography.mono(
                         size: 7.6,
-                        color: LhColors.mute,
+                        color: DunesColors.resolve(context, LhColors.mute),
                         weight: FontWeight.w600,
                         letterSpacing: 0.4,
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -39706,17 +43685,28 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   style: LhTypography.mono(
                                     size: 8.4,
                                     color: rateValue < 0
-                                        ? LhColors.pos
-                                        : LhColors.ink2,
+                                        ? DunesColors.resolve(
+                                            context,
+                                            LhColors.pos,
+                                          )
+                                        : DunesColors.resolve(
+                                            context,
+                                            LhColors.ink2,
+                                          ),
                                     weight: FontWeight.w600,
+                                    context: context,
                                   ),
                                 ),
                                 TextSpan(
                                   text: '%',
                                   style: LhTypography.mono(
                                     size: 7.4,
-                                    color: LhColors.mute,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      LhColors.mute,
+                                    ),
                                     weight: FontWeight.w500,
+                                    context: context,
                                   ),
                                 ),
                               ],
@@ -39726,8 +43716,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             '—',
                             style: LhTypography.mono(
                               size: 8.4,
-                              color: LhColors.mute2,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute2,
+                              ),
                               weight: FontWeight.w500,
+                              context: context,
                             ),
                           ),
                   ],
@@ -39873,8 +43867,19 @@ class _LhDropdownPanel extends StatelessWidget {
       constraints: BoxConstraints(maxWidth: width, maxHeight: maxHeight),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: LhColors.paper,
-          border: Border.all(color: LhColors.line, width: 1),
+          color: DunesColors.resolve(
+            context,
+            LhColors.paper,
+            role: DunesColorRole.surface,
+          ),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              LhColors.line,
+              role: DunesColorRole.border,
+            ),
+            width: 1,
+          ),
           borderRadius: BorderRadius.circular(10),
           boxShadow: const [
             BoxShadow(
@@ -40005,10 +44010,20 @@ class _AnalysisCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Colors.white, _LhPlum.mist],
+          colors: [
+            DunesColors.resolve(context, Colors.white),
+            DunesColors.resolve(context, _LhPlum.mist),
+          ],
           stops: const [0.0, 1.0],
         ),
-        border: Border.all(color: _LhPlum.lavender, width: 1),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _LhPlum.lavender,
+            role: DunesColorRole.border,
+          ),
+          width: 1,
+        ),
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
@@ -40028,9 +44043,16 @@ class _AnalysisCard extends StatelessWidget {
             //   Border color 也换成暖 hairline 保持一致
             Container(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(color: _LhPlum.lavender, width: 1),
+                  bottom: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      _LhPlum.lavender,
+                      role: DunesColorRole.border,
+                    ),
+                    width: 1,
+                  ),
                 ),
               ),
               child: Row(
@@ -40041,9 +44063,10 @@ class _AnalysisCard extends StatelessWidget {
                     index,
                     style: LhTypography.mono(
                       size: 8.4,
-                      color: LhColors.mute2,
+                      color: DunesColors.resolve(context, LhColors.mute2),
                       weight: FontWeight.w700,
                       letterSpacing: 1.4,
+                      context: context,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -40051,9 +44074,10 @@ class _AnalysisCard extends StatelessWidget {
                     title,
                     style: LhTypography.sans(
                       size: 11.5,
-                      color: LhColors.ink,
+                      color: DunesColors.resolve(context, LhColors.ink),
                       weight: FontWeight.w700,
                       letterSpacing: 0.2,
+                      context: context,
                     ),
                   ),
                   const SizedBox(width: 7),
@@ -40062,9 +44086,10 @@ class _AnalysisCard extends StatelessWidget {
                       sub,
                       style: LhTypography.mono(
                         size: 8.8,
-                        color: LhColors.mute,
+                        color: DunesColors.resolve(context, LhColors.mute),
                         weight: FontWeight.w500,
                         letterSpacing: 0.3,
+                        context: context,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -41388,8 +45413,10 @@ class _CubeChipButton extends StatelessWidget {
     //   跟 rank badge / meta chip / detail sub-tabs 全线同族: chrome 减法, 靠 typography 承担
     //   active(传入 copper) = copper 文字 + 图标; 默认 = mute
     //   点击热区靠 padding 保证 tap target 够
-    final active = color == _LhPlum.primary;
-    final fg = active ? _LhPlum.primary : LhColors.mute;
+    final active = color == DunesColors.resolve(context, _LhPlum.primary);
+    final fg = active
+        ? DunesColors.resolve(context, _LhPlum.primary)
+        : DunesColors.resolve(context, LhColors.mute);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -41399,7 +45426,11 @@ class _CubeChipButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 13, color: fg),
+            Icon(
+              icon,
+              size: 13,
+              color: DunesColors.resolveNullable(context, fg),
+            ),
             const SizedBox(width: 4),
             Text(
               label,
@@ -41408,6 +45439,7 @@ class _CubeChipButton extends StatelessWidget {
                 color: fg,
                 weight: active ? FontWeight.w700 : FontWeight.w600,
                 letterSpacing: 0.2,
+                context: context,
               ),
             ),
           ],
@@ -41510,10 +45542,23 @@ class _LedgerGridLine extends StatelessWidget {
       // 避免网格恰好顶满时每行出现 BOTTOM OVERFLOWED BY 0.500 PIXELS。
       height: height + 1,
       decoration: BoxDecoration(
-        color: background,
+        color: DunesColors.resolveNullable(
+          context,
+          background,
+          role: DunesColorRole.surface,
+        ),
         border: borderColor == null
             ? null
-            : Border(bottom: BorderSide(color: borderColor!, width: 0.5)),
+            : Border(
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    borderColor!,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 0.5,
+                ),
+              ),
       ),
       child: Stack(
         children: [
@@ -41523,7 +45568,13 @@ class _LedgerGridLine extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: FractionallySizedBox(
                   widthFactor: shadeFrac.clamp(0.0, 1.0),
-                  child: Container(color: shadeColor),
+                  child: Container(
+                    color: DunesColors.resolveNullable(
+                      context,
+                      shadeColor,
+                      role: DunesColorRole.surface,
+                    ),
+                  ),
                 ),
               ),
             ),

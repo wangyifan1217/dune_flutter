@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -19,45 +19,55 @@ class MeetingMinutesMarkdown extends StatelessWidget {
     final style = MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
       p: DunesTypography.sans(
         fontSize: 14,
-        color: DunesColors.text2,
+        color: DunesColors.resolve(context, DunesColors.text2),
         height: 1.7,
+        context: context,
       ),
       h1: DunesTypography.sans(
         fontSize: 18,
         fontWeight: FontWeight.w600,
-        color: DunesColors.text,
+        color: DunesColors.resolve(context, DunesColors.text),
         height: 1.4,
+        context: context,
       ),
       h2: DunesTypography.sans(
         fontSize: 15,
         fontWeight: FontWeight.w600,
-        color: DunesColors.text,
+        color: DunesColors.resolve(context, DunesColors.text),
         height: 1.4,
+        context: context,
       ),
       h3: DunesTypography.sans(
         fontSize: 14,
         fontWeight: FontWeight.w600,
-        color: DunesColors.text2,
+        color: DunesColors.resolve(context, DunesColors.text2),
         height: 1.4,
+        context: context,
       ),
-      strong: const TextStyle(
+      strong: TextStyle(
         fontWeight: FontWeight.w600,
-        color: DunesColors.text,
+        color: DunesColors.resolve(context, DunesColors.text),
       ),
       em: const TextStyle(fontStyle: FontStyle.italic),
-      code: DunesTypography.mono(fontSize: 12, color: DunesColors.text),
+      code: DunesTypography.mono(
+        fontSize: 12,
+        color: DunesColors.resolve(context, DunesColors.text),
+        context: context,
+      ),
       listBullet: DunesTypography.sans(
         fontSize: 14,
-        color: DunesColors.text3,
+        color: DunesColors.resolve(context, DunesColors.text3),
         height: 1.7,
+        context: context,
       ),
       blockquote: DunesTypography.sans(
         fontSize: 13,
-        color: DunesColors.text3,
+        color: DunesColors.resolve(context, DunesColors.text3),
         height: 1.6,
+        context: context,
       ),
-      a: const TextStyle(
-        color: DunesColors.brandPurpleDeep,
+      a: TextStyle(
+        color: DunesColors.resolve(context, DunesColors.brandPurpleDeep),
         decoration: TextDecoration.underline,
       ),
     );

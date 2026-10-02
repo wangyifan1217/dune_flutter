@@ -328,7 +328,11 @@ class _NativeFavoritesPageState extends State<NativeFavoritesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F5F5),
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -352,10 +356,10 @@ class _NativeFavoritesPageState extends State<NativeFavoritesPage> {
 
   Widget _buildBody() {
     if (_loading && _items.isEmpty) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
           strokeWidth: 2,
-          color: DunesColors.accent,
+          color: DunesColors.resolve(context, DunesColors.accent),
         ),
       );
     }
@@ -368,7 +372,8 @@ class _NativeFavoritesPageState extends State<NativeFavoritesPage> {
               _error!,
               style: DunesTypography.sans(
                 fontSize: 13,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
             const SizedBox(height: 12),
@@ -388,7 +393,10 @@ class _NativeFavoritesPageState extends State<NativeFavoritesPage> {
             Icon(
               Icons.bookmark_border_rounded,
               size: 48,
-              color: DunesColors.text3.withValues(alpha: 0.55),
+              color: DunesColors.resolve(
+                context,
+                DunesColors.text3,
+              ).withValues(alpha: 0.55),
             ),
             const SizedBox(height: 12),
             Text(
@@ -396,7 +404,8 @@ class _NativeFavoritesPageState extends State<NativeFavoritesPage> {
               style: DunesTypography.sans(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
             const SizedBox(height: 6),
@@ -404,7 +413,8 @@ class _NativeFavoritesPageState extends State<NativeFavoritesPage> {
               _query.isEmpty ? '在聊天中长按消息即可收藏' : '试试其他关键词',
               style: DunesTypography.sans(
                 fontSize: 13,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],
@@ -469,9 +479,7 @@ String _favoriteContentKind(NativeMessageFavorite item) {
 
   if (kind == 'FILE' || bodyLower.startsWith('[文件]')) return 'FILE';
   if (kind == 'VIDEO' || bodyLower.startsWith('[视频]')) return 'VIDEO';
-  if (kind == 'AUDIO' ||
-      kind == 'VOICE' ||
-      bodyLower.startsWith('[语音]')) {
+  if (kind == 'AUDIO' || kind == 'VOICE' || bodyLower.startsWith('[语音]')) {
     return 'AUDIO';
   }
   if (kind == 'IMAGE' ||
@@ -547,7 +555,11 @@ class _FavoriteCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final dateLabel = _favoriteDateLabel(item.favoritedAt);
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(12),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
@@ -559,7 +571,7 @@ class _FavoriteCard extends StatelessWidget {
                 Icon(
                   _kindIcon(kind),
                   size: 16,
-                  color: const Color(0xFF9CA3AF),
+                  color: DunesColors.resolve(context, const Color(0xFF9CA3AF)),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -567,8 +579,12 @@ class _FavoriteCard extends StatelessWidget {
                     _kindLabel(kind),
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: const Color(0xFF9CA3AF),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF9CA3AF),
+                      ),
                       fontWeight: FontWeight.w500,
+                      context: context,
                     ),
                   ),
                 ),
@@ -577,7 +593,11 @@ class _FavoriteCard extends StatelessWidget {
                     dateLabel,
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: const Color(0xFF9CA3AF),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF9CA3AF),
+                      ),
+                      context: context,
                     ),
                   ),
               ],
@@ -592,7 +612,7 @@ class _FavoriteCard extends StatelessWidget {
                       ? Icons.groups_outlined
                       : Icons.person_outline_rounded,
                   size: 15,
-                  color: const Color(0xFF6B7280),
+                  color: DunesColors.resolve(context, const Color(0xFF6B7280)),
                 ),
                 const SizedBox(width: 4),
                 Expanded(
@@ -602,7 +622,11 @@ class _FavoriteCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: DunesTypography.sans(
                       fontSize: 12.5,
-                      color: const Color(0xFF6B7280),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF6B7280),
+                      ),
+                      context: context,
                     ),
                   ),
                 ),
@@ -615,7 +639,11 @@ class _FavoriteCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: DunesTypography.sans(
                         fontSize: 12,
-                        color: const Color(0xFF9CA3AF),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF9CA3AF),
+                        ),
+                        context: context,
                       ),
                     ),
                   ),
@@ -630,36 +658,24 @@ class _FavoriteCard extends StatelessWidget {
                   onSelected: onAction,
                   itemBuilder: (ctx) => <PopupMenuEntry<String>>[
                     if (kind == 'IMAGE')
-                      const PopupMenuItem(
-                        value: 'open',
-                        child: Text('查看图片'),
-                      ),
+                      const PopupMenuItem(value: 'open', child: Text('查看图片')),
                     if (kind == 'VIDEO')
-                      const PopupMenuItem(
-                        value: 'open',
-                        child: Text('播放视频'),
-                      ),
+                      const PopupMenuItem(value: 'open', child: Text('播放视频')),
                     if (kind == 'FILE')
-                      const PopupMenuItem(
-                        value: 'open',
-                        child: Text('打开文件'),
-                      ),
+                      const PopupMenuItem(value: 'open', child: Text('打开文件')),
                     if (canCopy)
-                      const PopupMenuItem(
-                        value: 'copy',
-                        child: Text('复制'),
-                      ),
-                    const PopupMenuItem(
-                      value: 'remove',
-                      child: Text('取消收藏'),
-                    ),
+                      const PopupMenuItem(value: 'copy', child: Text('复制')),
+                    const PopupMenuItem(value: 'remove', child: Text('取消收藏')),
                   ],
-                  child: const Padding(
+                  child: Padding(
                     padding: EdgeInsets.fromLTRB(8, 4, 4, 4),
                     child: Icon(
                       Icons.more_horiz_rounded,
                       size: 20,
-                      color: Color(0xFF9CA3AF),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF9CA3AF),
+                      ),
                     ),
                   ),
                 ),

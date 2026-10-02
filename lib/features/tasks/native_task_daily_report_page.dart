@@ -27,12 +27,22 @@ class _CalendarLegend extends StatelessWidget {
         Container(
           width: 9,
           height: 9,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: DunesColors.resolveNullable(
+              context,
+              color,
+              role: DunesColorRole.surface,
+            ),
+            shape: BoxShape.circle,
+          ),
         ),
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 11,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       ],
     );
@@ -50,7 +60,10 @@ class _WeekdayLabel extends StatelessWidget {
       child: Center(
         child: Text(
           label,
-          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 11,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       ),
     );
@@ -572,7 +585,11 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
   Widget build(BuildContext context) {
     return TaskTheme(
       child: Material(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         child: Column(
           children: [
             Padding(
@@ -582,21 +599,27 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
                   InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: widget.onBack,
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                       child: Row(
                         children: [
                           Icon(
                             Icons.arrow_back_ios_new,
                             size: 14,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
                           ),
                           SizedBox(width: 2),
                           Text(
                             '返回',
                             style: TextStyle(
                               fontSize: 13,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
                             ),
                           ),
                         ],
@@ -616,9 +639,12 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
                               tooltip: '使用指引',
                               onPressed: () =>
                                   unawaited(_showGuide(force: true)),
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.help_outline,
-                                color: DunesColors.text2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
                               ),
                             ),
                             TextButton(
@@ -666,8 +692,13 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
     }
     final calendar = _calendar;
     if (calendar == null) {
-      return const Center(
-        child: Text('暂无日报日历数据', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '暂无日报日历数据',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     return ListView(
@@ -719,26 +750,44 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
         _calendarSummary(calendar.summary),
         const SizedBox(height: 14),
         if (_teamCalendar) ...[
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: Text(
               '点某一天查看该成员的日报',
-              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
           _teamCalendarTable(calendar),
         ] else
           _personalCalendarGrid(calendar),
         const SizedBox(height: 12),
-        const Wrap(
+        Wrap(
           spacing: 10,
           runSpacing: 6,
           children: [
-            _CalendarLegend('已填', Color(0xFF1F9D76)),
-            _CalendarLegend('请假', Color(0xFF4C7FD4)),
-            _CalendarLegend('漏交', Color(0xFFBE123C)),
-            _CalendarLegend('待填', Color(0xFFB45309)),
-            _CalendarLegend('休息日', Color(0xFF94A3B8)),
+            _CalendarLegend(
+              '已填',
+              DunesColors.resolve(context, Color(0xFF1F9D76)),
+            ),
+            _CalendarLegend(
+              '请假',
+              DunesColors.resolve(context, Color(0xFF4C7FD4)),
+            ),
+            _CalendarLegend(
+              '漏交',
+              DunesColors.resolve(context, Color(0xFFBE123C)),
+            ),
+            _CalendarLegend(
+              '待填',
+              DunesColors.resolve(context, Color(0xFFB45309)),
+            ),
+            _CalendarLegend(
+              '休息日',
+              DunesColors.resolve(context, Color(0xFF94A3B8)),
+            ),
           ],
         ),
       ],
@@ -748,10 +797,26 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
   Widget _calendarSummary(TaskDailyReportCalendarSummary summary) {
     return Row(
       children: [
-        _summaryTile('应填', summary.expected, DunesColors.text),
-        _summaryTile('已填', summary.submitted, const Color(0xFF1F9D76)),
-        _summaryTile('请假', summary.leave, const Color(0xFF4C7FD4)),
-        _summaryTile('漏交', summary.missing, const Color(0xFFBE123C)),
+        _summaryTile(
+          '应填',
+          summary.expected,
+          DunesColors.resolve(context, DunesColors.text),
+        ),
+        _summaryTile(
+          '已填',
+          summary.submitted,
+          DunesColors.resolve(context, const Color(0xFF1F9D76)),
+        ),
+        _summaryTile(
+          '请假',
+          summary.leave,
+          DunesColors.resolve(context, const Color(0xFF4C7FD4)),
+        ),
+        _summaryTile(
+          '漏交',
+          summary.missing,
+          DunesColors.resolve(context, const Color(0xFFBE123C)),
+        ),
       ],
     );
   }
@@ -762,18 +827,28 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
         margin: const EdgeInsets.only(right: 6),
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
           children: [
             Text(
               '$value',
-              style: TextStyle(fontWeight: FontWeight.w800, color: color),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: DunesColors.resolveNullable(context, color),
+              ),
             ),
             Text(
               label,
-              style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 11,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ],
         ),
@@ -822,7 +897,11 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
                   : () => unawaited(_changeDate(parsed)),
               child: Container(
                 decoration: BoxDecoration(
-                  color: _calendarColor(day.status).withValues(alpha: 0.13),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    _calendarColor(day.status).withValues(alpha: 0.13),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: _calendarColor(day.status).withValues(alpha: 0.28),
@@ -833,7 +912,10 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
                     '${parsed?.day ?? ''}',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      color: _calendarColor(day.status),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        _calendarColor(day.status),
+                      ),
                     ),
                   ),
                 ),
@@ -916,24 +998,33 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
       width: 16,
       height: 16,
       decoration: BoxDecoration(
-        color: _calendarColor(status),
+        color: DunesColors.resolveNullable(
+          context,
+          _calendarColor(status),
+          role: DunesColorRole.surface,
+        ),
         shape: BoxShape.circle,
       ),
     );
   }
 
   Color _calendarColor(String status) => switch (status) {
-    'submitted' => const Color(0xFF1F9D76),
-    'leave' => const Color(0xFF4C7FD4),
-    'missing' => const Color(0xFFBE123C),
-    'pending' => const Color(0xFFB45309),
-    _ => const Color(0xFF94A3B8),
+    'submitted' => DunesColors.resolve(context, const Color(0xFF1F9D76)),
+    'leave' => DunesColors.resolve(context, const Color(0xFF4C7FD4)),
+    'missing' => DunesColors.resolve(context, const Color(0xFFBE123C)),
+    'pending' => DunesColors.resolve(context, const Color(0xFFB45309)),
+    _ => DunesColors.resolve(context, const Color(0xFF94A3B8)),
   };
 
   Widget _buildHistory() {
     if (_history.isEmpty) {
-      return const Center(
-        child: Text('还没有历史日报', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '还没有历史日报',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     return ListView.separated(
@@ -943,7 +1034,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
       itemBuilder: (context, i) {
         final r = _history[i];
         return ListTile(
-          tileColor: Colors.white,
+          tileColor: DunesColors.resolve(context, Colors.white),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -987,7 +1078,11 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Material(
-              color: const Color(0xFFF3EEFF),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF3EEFF),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -1017,12 +1112,19 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
-                const Icon(Icons.event, color: kTaskPurple),
+                Icon(
+                  Icons.event,
+                  color: DunesColors.resolveNullable(context, kTaskPurple),
+                ),
                 const SizedBox(width: 8),
                 Text(
                   formatTaskYmd(_date),
@@ -1042,24 +1144,45 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
                               : '已按时提交',
                           style: TextStyle(
                             color: bundle?.report?.source == 'backfill'
-                                ? const Color(0xFFB45309)
-                                : const Color(0xFF1F9D76),
+                                ? DunesColors.resolve(
+                                    context,
+                                    const Color(0xFFB45309),
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    const Color(0xFF1F9D76),
+                                  ),
                           ),
                         )
                       else if (bundle?.canBackfill == true)
                         Text(
                           '可补填至 ${bundle?.backfillUntil}',
-                          style: const TextStyle(color: Color(0xFFB45309)),
+                          style: TextStyle(
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFFB45309),
+                            ),
+                          ),
                         )
                       else if (bundle?.canSubmit == true)
-                        const Text(
+                        Text(
                           '待填',
-                          style: TextStyle(color: Color(0xFFB45309)),
+                          style: TextStyle(
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFFB45309),
+                            ),
+                          ),
                         ),
                       if (bundle?.leaveExempt == true)
-                        const Text(
+                        Text(
                           '请假免填',
-                          style: TextStyle(color: Color(0xFF1F9D76)),
+                          style: TextStyle(
+                            color: DunesColors.resolveNullable(
+                              context,
+                              Color(0xFF1F9D76),
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -1076,7 +1199,10 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
               bundle?.leaveReason.isNotEmpty == true
                   ? bundle!.leaveReason
                   : '已同步请假状态，当天不要求填写日报。',
-              style: const TextStyle(color: Color(0xFF1F9D76), height: 1.4),
+              style: TextStyle(
+                color: DunesColors.resolveNullable(context, Color(0xFF1F9D76)),
+                height: 1.4,
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -1087,17 +1213,22 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
               bundle.nonWorkReason.isEmpty
                   ? '当前日期无需提交日报。'
                   : bundle.nonWorkReason,
-              style: const TextStyle(color: DunesColors.text2, height: 1.4),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text2),
+                height: 1.4,
+              ),
             ),
           ),
           const SizedBox(height: 10),
         ],
         if (_lines.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Text(
               '当天没有进行中的主目标或子目标，可填写其他工作。',
-              style: TextStyle(color: DunesColors.text3),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ),
         if (!readOnly && _lines.isNotEmpty)
@@ -1126,7 +1257,10 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
                 _draftStatus,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ),
           ),
@@ -1138,7 +1272,10 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
             '填报状态',
             Text(
               _lateReportHint(bundle),
-              style: const TextStyle(color: DunesColors.text2, height: 1.4),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text2),
+                height: 1.4,
+              ),
             ),
           ),
         if (!submitted &&
@@ -1211,7 +1348,11 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.035),
+        color: DunesColors.resolveNullable(
+          context,
+          accent.withValues(alpha: 0.035),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: accent.withValues(alpha: 0.28)),
       ),
@@ -1225,7 +1366,11 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
                 width: 4,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: accent,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    accent,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -1244,17 +1389,23 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
                     if (line.task.parentTitle.trim().isNotEmpty)
                       Text(
                         '所属主目标：${line.task.parentTitle}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     if (period != null)
                       Text(
                         '任务周期：$period',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                   ],
@@ -1263,13 +1414,17 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    accent.withValues(alpha: 0.12),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   line.task.isMain ? '主目标' : '子目标',
                   style: TextStyle(
-                    color: accent,
+                    color: DunesColors.resolveNullable(context, accent),
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1280,12 +1435,12 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
           const SizedBox(height: 14),
           Row(
             children: [
-              const Text(
+              Text(
                 '当前进度',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
               const Spacer(),
@@ -1295,13 +1450,17 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    accent.withValues(alpha: 0.12),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   '${line.progress.round()}%',
                   style: TextStyle(
-                    color: accent,
+                    color: DunesColors.resolveNullable(context, accent),
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1319,12 +1478,12 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
                 ? null
                 : (v) => setState(() => line.progress = v),
           ),
-          const Text(
+          Text(
             '今日完成 *',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
           const SizedBox(height: 6),
@@ -1336,12 +1495,12 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
             decoration: _inputDecoration('写清楚今天完成了什么', accent: accent),
           ),
           const SizedBox(height: 10),
-          const Text(
+          Text(
             '下一步',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
           const SizedBox(height: 6),
@@ -1393,7 +1552,12 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (comments.isEmpty)
-            const Text('还没有评论', style: TextStyle(color: DunesColors.text3))
+            Text(
+              '还没有评论',
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
+            )
           else
             for (final comment in comments)
               Padding(
@@ -1459,7 +1623,11 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -1467,10 +1635,10 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           const SizedBox(height: 10),
@@ -1481,12 +1649,12 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
   }
 
   Color _lineAccent(TaskItem task) {
-    const colors = <Color>[
-      kTaskPurple,
-      Color(0xFF5B6FC4),
-      Color(0xFF4A7C9B),
-      Color(0xFFB7791F),
-      Color(0xFF9C5FB5),
+    final colors = <Color>[
+      DunesColors.resolve(context, kTaskPurple),
+      DunesColors.resolve(context, Color(0xFF5B6FC4)),
+      DunesColors.resolve(context, Color(0xFF4A7C9B)),
+      DunesColors.resolve(context, Color(0xFFB7791F)),
+      DunesColors.resolve(context, Color(0xFF9C5FB5)),
     ];
     return colors[task.id.abs() % colors.length];
   }
@@ -1494,21 +1662,47 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
   InputDecoration _inputDecoration(String hint, {Color accent = kTaskPurple}) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: DunesColors.text3, fontSize: 13),
+      hintStyle: TextStyle(
+        color: DunesColors.resolve(context, DunesColors.text3),
+        fontSize: 13,
+      ),
       filled: true,
-      fillColor: const Color(0xFFF6F7F9),
+      fillColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF6F7F9),
+        role: DunesColorRole.surface,
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+        borderSide: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            Color(0xFFE5E7EB),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: accent, width: 1.4),
+        borderSide: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            accent,
+            role: DunesColorRole.border,
+          ),
+          width: 1.4,
+        ),
       ),
       disabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+        borderSide: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            Color(0xFFE5E7EB),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
     );
   }

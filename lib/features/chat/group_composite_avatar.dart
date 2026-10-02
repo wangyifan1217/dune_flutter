@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import 'user_avatar_widget.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// 微信风格群聊头像：最多展示 9 位成员头像拼贴（含当前用户）。
 /// 外框尺寸由 [size] 固定；格子随人数用正方形自适应，不足一行居中。
@@ -54,7 +55,11 @@ class GroupCompositeAvatar extends StatelessWidget {
       child: Container(
         width: size,
         height: size,
-        color: _bgColor,
+        color: DunesColors.resolveNullable(
+          context,
+          _bgColor,
+          role: DunesColorRole.surface,
+        ),
         alignment: Alignment.center,
         padding: const EdgeInsets.all(_gap),
         child: Column(

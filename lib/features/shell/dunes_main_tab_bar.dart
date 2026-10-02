@@ -196,8 +196,10 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                       filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: const Color(
-                            0xFFF9F8FF,
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFF9F8FF),
+                            role: DunesColorRole.surface,
                           ).withValues(alpha: 0.40),
                           borderRadius: BorderRadius.circular(28),
                         ),
@@ -229,7 +231,11 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
         child: DecoratedBox(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: const Color(0xFFF9F8FF).withValues(alpha: 0.46),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF9F8FF),
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.46),
             border: Border.all(color: Colors.white.withValues(alpha: 0.66)),
           ),
           child: ClipOval(
@@ -281,15 +287,31 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
         Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
     return Container(
       width: kDunesMainSideRailWidth,
-      color: palette.app,
+      color: DunesColors.resolveNullable(
+        context,
+        palette.app,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         // 保留左右安全区（外接刘海/圆角屏）；顶部由系统标题栏占用，无需再垫。
         top: false,
         bottom: false,
         child: Container(
           decoration: BoxDecoration(
-            color: palette.app,
-            border: Border(right: BorderSide(color: palette.borderSubtle)),
+            color: DunesColors.resolveNullable(
+              context,
+              palette.app,
+              role: DunesColorRole.surface,
+            ),
+            border: Border(
+              right: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  palette.borderSubtle,
+                  role: DunesColorRole.border,
+                ),
+              ),
+            ),
           ),
           child: Column(
             children: [
@@ -326,13 +348,17 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
         Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
     final active = screen != null && widget.activeScreen == screen;
     final color = active
-        ? DunesColors.brandPurple
+        ? DunesColors.resolve(context, DunesColors.brandPurple)
         : _isVertical
         ? palette.textMuted
         : palette.textSecondary;
     final tabIcon = iconBuilder != null
         ? SizedBox(width: 24, height: 24, child: iconBuilder(color))
-        : Icon(icon, size: _isVertical ? 24 : 23, color: color);
+        : Icon(
+            icon,
+            size: _isVertical ? 24 : 23,
+            color: DunesColors.resolveNullable(context, color),
+          );
 
     final body = Semantics(
       selected: active,
@@ -400,7 +426,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                         fontWeight: !_isVertical && active
                             ? FontWeight.w600
                             : FontWeight.w400,
-                        color: color,
+                        color: DunesColors.resolveNullable(context, color),
                       ),
                     ),
                   ),
@@ -470,7 +496,11 @@ class _UnreadDot extends StatelessWidget {
       width: 9,
       height: 9,
       decoration: BoxDecoration(
-        color: DunesColors.coral,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.coral,
+          role: DunesColorRole.surface,
+        ),
         shape: BoxShape.circle,
         border: Border.all(color: palette.app, width: 2),
       ),

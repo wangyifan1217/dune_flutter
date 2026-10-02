@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cross_file/cross_file.dart';
@@ -350,7 +350,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         content: Text(
           '确定要结束录音「$title」吗？\n\n'
           '结束后将无法继续追加录音，接下来可选择立即生成、存为草稿，或取消并只把录音留在本机。',
-          style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
+          style: DunesTypography.sans(
+            fontSize: 13.5,
+            height: 1.55,
+            context: ctx,
+          ),
         ),
         actions: [
           TextButton(
@@ -419,9 +423,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     return true;
   }
 
-  Future<void> _promptPersistAfterEnd({
-    required String filePath,
-  }) async {
+  Future<void> _promptPersistAfterEnd({required String filePath}) async {
     _dismissKeyboard();
     while (mounted) {
       final displayTitle = _resolvedPersistTitle();
@@ -435,7 +437,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
             '选择「立即生成」将上传录音并开始转写；'
             '选择「存为草稿」会保存到列表，稍后可进详情页生成；'
             '选择「取消」只把录音留在本机，不上传会议纪要。',
-            style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
+            style: DunesTypography.sans(
+              fontSize: 13.5,
+              height: 1.55,
+              context: ctx,
+            ),
           ),
           actions: [
             TextButton(
@@ -499,7 +505,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         content: Text(
           '确定取消「$title」吗？\n\n'
           '录音会保存在本机，不会上传，也不会生成会议纪要。',
-          style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
+          style: DunesTypography.sans(
+            fontSize: 13.5,
+            height: 1.55,
+            context: ctx,
+          ),
         ),
         actions: [
           TextButton(
@@ -508,7 +518,13 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: DunesColors.coral),
+            style: FilledButton.styleFrom(
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                DunesColors.coral,
+                role: DunesColorRole.surface,
+              ),
+            ),
             child: const Text('确认取消'),
           ),
         ],
@@ -570,11 +586,15 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
           _endingLive
               ? '正在保存录音文件，现在离开可能中断保存。'
               : _keepingLocal
-                  ? '正在把录音保存在本机，现在离开可能中断保存。'
-                  : _persistingAfterEnd
-                      ? '正在创建会议记录，请稍候...'
-                      : '录音正在后台上传，现在离开不影响上传进度。',
-          style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
+              ? '正在把录音保存在本机，现在离开可能中断保存。'
+              : _persistingAfterEnd
+              ? '正在创建会议记录，请稍候...'
+              : '录音正在后台上传，现在离开不影响上传进度。',
+          style: DunesTypography.sans(
+            fontSize: 13.5,
+            height: 1.55,
+            context: ctx,
+          ),
         ),
         actions: [
           TextButton(
@@ -623,18 +643,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     final title = _resolvedPersistTitle();
 
     try {
-      await _persistAfterEnd(
-        title: title,
-        filePath: filePath,
-        generate: false,
-      );
+      await _persistAfterEnd(title: title, filePath: filePath, generate: false);
       return true;
     } catch (e) {
       if (!mounted) return false;
-      final msg = friendlyErrorText(
-        e,
-        fallback: '自动存草稿失败，请稍后重试',
-      );
+      final msg = friendlyErrorText(e, fallback: '自动存草稿失败，请稍后重试');
       setState(() => _error = '自动存草稿失败：$msg');
       showDunesToast(context, msg, kind: DunesToastKind.error);
       return false;
@@ -666,9 +679,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       if (!mounted) return;
       showDunesToast(
         context,
-        generate
-            ? '录音正在后台上传，完成后将自动开始转写'
-            : '录音正在后台上传，完成后可在详情页生成纪要',
+        generate ? '录音正在后台上传，完成后将自动开始转写' : '录音正在后台上传，完成后可在详情页生成纪要',
       );
       _live.clearPreview();
       _live.consumeRecordedFile();
@@ -685,11 +696,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         fallback: generate ? '提交失败，请稍后重试' : '草稿保存失败，请稍后重试',
       );
       setState(() => _error = generate ? '提交失败：$msg' : '草稿保存失败：$msg');
-      showDunesToast(
-        context,
-        msg,
-        kind: DunesToastKind.error,
-      );
+      showDunesToast(context, msg, kind: DunesToastKind.error);
     } finally {
       if (mounted) {
         setState(() {
@@ -733,13 +740,21 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     return Positioned.fill(
       child: AbsorbPointer(
         child: ColoredBox(
-          color: Colors.black.withValues(alpha: 0.32),
+          color: DunesColors.resolve(
+            context,
+            Colors.black,
+            role: DunesColorRole.surface,
+          ).withValues(alpha: 0.32),
           child: Center(
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 40),
               padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
@@ -764,8 +779,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                     style: DunesTypography.sans(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                       height: 1.45,
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -774,8 +790,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                     textAlign: TextAlign.center,
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                       height: 1.4,
+                      context: context,
                     ),
                   ),
                 ],
@@ -853,7 +870,8 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     final livePaused = _live.paused.value;
     final liveElapsed = _live.elapsed.value;
     final recording = liveWorking;
-    final canSubmit = !_submitting &&
+    final canSubmit =
+        !_submitting &&
         !_endingLive &&
         !_persistingAfterEnd &&
         _titleCtrl.text.trim().isNotEmpty &&
@@ -876,482 +894,676 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       child: Stack(
         children: [
           Scaffold(
-      backgroundColor: DunesColors.bgApp,
-      appBar: AppBar(
-        leading: BackButton(onPressed: _handleBack),
-        title: const Text('新建会议纪要'),
-      ),
-      body: ListView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7B5CD8), Color(0xFF6A4FA0)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
             ),
-            child: Row(
+            appBar: AppBar(
+              leading: BackButton(onPressed: _handleBack),
+              title: const Text('新建会议纪要'),
+            ),
+            body: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
               children: [
                 Container(
-                  width: 50,
-                  height: 50,
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(18),
+                    gradient: LinearGradient(
+                      colors: [
+                        DunesColors.resolve(context, Color(0xFF7B5CD8)),
+                        DunesColors.resolve(context, Color(0xFF6A4FA0)),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                   ),
-                  child: Icon(
-                    isDesktopCommOnly
-                        ? Icons.upload_file_rounded
-                        : Icons.mic_none_rounded,
-                    color: Colors.white,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Text(
-                        'AI 会议纪要',
-                        style: DunesTypography.sans(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolveNullable(
+                            context,
+                            Colors.white.withValues(alpha: 0.16),
+                            role: DunesColorRole.surface,
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isDesktopCommOnly
+                              ? Icons.upload_file_rounded
+                              : Icons.mic_none_rounded,
+                          color: DunesColors.resolve(context, Colors.white),
+                          size: 28,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _mode == _CreateMode.upload
-                            ? (isDesktopCommOnly
-                                ? '上传音频，生成摘要与待办'
-                                : '上传或录制音频，生成摘要与待办')
-                            : '现场录音，结束后一键生成纪要',
-                        style: DunesTypography.sans(
-                          fontSize: 12,
-                          color: Colors.white.withValues(alpha: 0.85),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'AI 会议纪要',
+                              style: DunesTypography.sans(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
+                                context: context,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _mode == _CreateMode.upload
+                                  ? (isDesktopCommOnly
+                                        ? '上传音频，生成摘要与待办'
+                                        : '上传或录制音频，生成摘要与待办')
+                                  : '现场录音，结束后一键生成纪要',
+                              style: DunesTypography.sans(
+                                fontSize: 12,
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ).withValues(alpha: 0.85),
+                                context: context,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
 
-          if (!isDesktopCommOnly) ...[
-            const SizedBox(height: 14),
-            Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: DunesColors.borderSoft),
-            ),
-            child: CupertinoSlidingSegmentedControl<_CreateMode>(
-              groupValue: _mode,
-              thumbColor: DunesColors.brandPurple,
-              backgroundColor: DunesColors.bgSoft,
-              children: {
-                _CreateMode.upload: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Text(
-                    '上传录音转写',
-                    textAlign: TextAlign.center,
-                    style: DunesTypography.sans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _mode == _CreateMode.upload
-                          ? Colors.white
-                          : DunesColors.text2,
+                if (!isDesktopCommOnly) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                _CreateMode.live: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Text(
-                    '现场录音',
-                    textAlign: TextAlign.center,
-                    style: DunesTypography.sans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _mode == _CreateMode.live
-                          ? Colors.white
-                          : DunesColors.text2,
-                    ),
-                  ),
-                ),
-              },
-              onValueChanged: (value) {
-                if (value == null || value == _mode) return;
-                setState(() {
-                  _mode = value;
-                  _error = null;
-                });
-              },
-            ),
-          ),
-          ],
-
-          const SizedBox(height: 12),
-          _sectionCard(
-            title: '会议信息',
-            icon: Icons.title_rounded,
-            child: TextField(
-              controller: _titleCtrl,
-              readOnly: _showBusyOverlay,
-              onChanged: (value) {
-                final title = value.trim();
-                if (_live.active.value) {
-                  _live.meetingTitle.value = title;
-                } else if (_pendingPersistAfterEnd) {
-                  _pendingDraftTitle = title;
-                }
-                setState(() => _error = null);
-              },
-              style: DunesTypography.sans(fontSize: 14, color: DunesColors.text),
-              decoration: InputDecoration(
-                hintText: '请输入会议标题，例如：周例会-销售复盘',
-                helperText: _mode == _CreateMode.live && !recording && !_hasMeetingTitle
-                    ? '开始录音前必须填写会议标题'
-                    : null,
-                helperStyle: DunesTypography.sans(
-                  fontSize: 11,
-                  color: DunesColors.coral,
-                ),
-                filled: true,
-                fillColor: DunesColors.bgSoft,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: DunesColors.borderSoft),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: DunesColors.borderSoft),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-          if (_mode == _CreateMode.upload) ...[
-            _sectionCard(
-              title: '录音文件',
-              icon: Icons.audio_file_outlined,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: (_picking || _submitting) ? null : _pickFile,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 11,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _fileDragging
-                                ? DunesColors.brandPurpleSoft
-                                : DunesColors.bgSoft,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: _fileDragging
-                                  ? DunesColors.brandPurple
-                                  : DunesColors.borderSoft,
+                    child: CupertinoSlidingSegmentedControl<_CreateMode>(
+                      groupValue: _mode,
+                      thumbColor: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
+                      ),
+                      backgroundColor: DunesColors.resolve(
+                        context,
+                        DunesColors.bgSoft,
+                        role: DunesColorRole.surface,
+                      ),
+                      children: {
+                        _CreateMode.upload: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          child: Text(
+                            '上传录音转写',
+                            textAlign: TextAlign.center,
+                            style: DunesTypography.sans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _mode == _CreateMode.upload
+                                  ? DunesColors.resolve(context, Colors.white)
+                                  : DunesColors.resolve(
+                                      context,
+                                      DunesColors.text2,
+                                    ),
+                              context: context,
                             ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _fileDragging ? '松开以添加录音' : _fileLabel(),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: DunesTypography.sans(
-                                  fontSize: 13,
+                        ),
+                        _CreateMode.live: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          child: Text(
+                            '现场录音',
+                            textAlign: TextAlign.center,
+                            style: DunesTypography.sans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _mode == _CreateMode.live
+                                  ? DunesColors.resolve(context, Colors.white)
+                                  : DunesColors.resolve(
+                                      context,
+                                      DunesColors.text2,
+                                    ),
+                              context: context,
+                            ),
+                          ),
+                        ),
+                      },
+                      onValueChanged: (value) {
+                        if (value == null || value == _mode) return;
+                        setState(() {
+                          _mode = value;
+                          _error = null;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 12),
+                _sectionCard(
+                  title: '会议信息',
+                  icon: Icons.title_rounded,
+                  child: TextField(
+                    controller: _titleCtrl,
+                    readOnly: _showBusyOverlay,
+                    onChanged: (value) {
+                      final title = value.trim();
+                      if (_live.active.value) {
+                        _live.meetingTitle.value = title;
+                      } else if (_pendingPersistAfterEnd) {
+                        _pendingDraftTitle = title;
+                      }
+                      setState(() => _error = null);
+                    },
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '请输入会议标题，例如：周例会-销售复盘',
+                      helperText:
+                          _mode == _CreateMode.live &&
+                              !recording &&
+                              !_hasMeetingTitle
+                          ? '开始录音前必须填写会议标题'
+                          : null,
+                      helperStyle: DunesTypography.sans(
+                        fontSize: 11,
+                        color: DunesColors.resolve(context, DunesColors.coral),
+                        context: context,
+                      ),
+                      filled: true,
+                      fillColor: DunesColors.resolve(
+                        context,
+                        DunesColors.bgSoft,
+                        role: DunesColorRole.surface,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.borderSoft,
+                            role: DunesColorRole.border,
+                          ),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.borderSoft,
+                            role: DunesColorRole.border,
+                          ),
+                        ),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+                if (_mode == _CreateMode.upload) ...[
+                  _sectionCard(
+                    title: '录音文件',
+                    icon: Icons.audio_file_outlined,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: (_picking || _submitting)
+                                  ? null
+                                  : _pickFile,
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 11,
+                                ),
+                                decoration: BoxDecoration(
                                   color: _fileDragging
-                                      ? DunesColors.brandPurpleDeep
-                                      : (_filePath.isEmpty
-                                          ? DunesColors.text3
-                                          : DunesColors.text),
+                                      ? DunesColors.resolve(
+                                          context,
+                                          DunesColors.brandPurpleSoft,
+                                          role: DunesColorRole.surface,
+                                        )
+                                      : DunesColors.resolve(
+                                          context,
+                                          DunesColors.bgSoft,
+                                          role: DunesColorRole.surface,
+                                        ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: _fileDragging
+                                        ? DunesColors.resolve(
+                                            context,
+                                            DunesColors.brandPurple,
+                                            role: DunesColorRole.border,
+                                          )
+                                        : DunesColors.resolve(
+                                            context,
+                                            DunesColors.borderSoft,
+                                            role: DunesColorRole.border,
+                                          ),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _fileDragging ? '松开以添加录音' : _fileLabel(),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: DunesTypography.sans(
+                                        fontSize: 13,
+                                        color: _fileDragging
+                                            ? DunesColors.resolve(
+                                                context,
+                                                DunesColors.brandPurpleDeep,
+                                              )
+                                            : (_filePath.isEmpty
+                                                  ? DunesColors.resolve(
+                                                      context,
+                                                      DunesColors.text3,
+                                                    )
+                                                  : DunesColors.resolve(
+                                                      context,
+                                                      DunesColors.text,
+                                                    )),
+                                        context: context,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _supportsDesktopDrop
+                                          ? '支持 wav/mp3/m4a · 可拖拽文件到本页'
+                                          : '支持 wav/mp3/m4a',
+                                      style: DunesTypography.sans(
+                                        fontSize: 11,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text3,
+                                        ),
+                                        context: context,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 2),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        CupertinoButton(
+                          minimumSize: const Size(40, 40),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurpleSoft,
+                          ),
+                          onPressed: (_picking || _submitting)
+                              ? null
+                              : _pickFile,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.upload_rounded,
+                                size: 18,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.brandPurpleDeep,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
                               Text(
-                                _supportsDesktopDrop
-                                    ? '支持 wav/mp3/m4a · 可拖拽文件到本页'
-                                    : '支持 wav/mp3/m4a',
+                                '上传',
                                 style: DunesTypography.sans(
-                                  fontSize: 11,
-                                  color: DunesColors.text3,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.brandPurpleDeep,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  CupertinoButton(
-                    minimumSize: const Size(40, 40),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    color: DunesColors.brandPurpleSoft,
-                    onPressed: (_picking || _submitting) ? null : _pickFile,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.upload_rounded,
-                          size: 18,
-                          color: DunesColors.brandPurpleDeep,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '上传',
-                          style: DunesTypography.sans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.brandPurpleDeep,
-                          ),
-                        ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          if (_mode == _CreateMode.live) ...[
-            _sectionCard(
-              title: '录音控制',
-              icon: Icons.fiber_manual_record_rounded,
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      AnimatedBuilder(
-                        animation: _pulseController,
-                        builder: (context, child) {
-                          final active = recording && !livePaused;
-                          final scale = active ? 0.9 + _pulseController.value * 0.3 : 1.0;
-                          return Transform.scale(
-                            scale: scale,
-                            child: Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: recording ? DunesColors.coral : DunesColors.text3,
-                                boxShadow: active
-                                    ? [
-                                        BoxShadow(
-                                          color: DunesColors.coral.withValues(alpha: 0.45),
-                                          blurRadius: 8,
-                                          spreadRadius: 1.5,
-                                        ),
-                                      ]
-                                    : const [],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        liveWorking
-                            ? (livePaused ? '录音已暂停' : '录音进行中')
-                            : statusText,
-                        style: DunesTypography.sans(
-                          fontSize: 13,
-                          color: DunesColors.text2,
-                        ),
-                      ),
-                      if (liveWorking || liveElapsed > Duration.zero) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          _formatLiveElapsed(liveElapsed),
-                          style: DunesTypography.sans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.brandPurpleDeep,
-                          ),
-                        ),
-                      ],
-                    ],
                   ),
                   const SizedBox(height: 12),
-                  if (!recording)
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: canStartLive ? _startLive : null,
-                        icon: const Icon(Icons.mic_rounded),
-                        label: const Text('开始录音'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: DunesColors.brandPurpleDeep,
-                          side: const BorderSide(color: DunesColors.brandPurpleLine),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    Row(
+                ],
+
+                if (_mode == _CreateMode.live) ...[
+                  _sectionCard(
+                    title: '录音控制',
+                    icon: Icons.fiber_manual_record_rounded,
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: (_endingLive || _persistingAfterEnd)
-                                ? null
-                                : (livePaused ? _resumeLive : _pauseLive),
-                            icon: Icon(
-                              livePaused
-                                  ? Icons.play_arrow_rounded
-                                  : Icons.pause_rounded,
+                        Row(
+                          children: [
+                            AnimatedBuilder(
+                              animation: _pulseController,
+                              builder: (context, child) {
+                                final active = recording && !livePaused;
+                                final scale = active
+                                    ? 0.9 + _pulseController.value * 0.3
+                                    : 1.0;
+                                return Transform.scale(
+                                  scale: scale,
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: recording
+                                          ? DunesColors.resolve(
+                                              context,
+                                              DunesColors.coral,
+                                              role: DunesColorRole.surface,
+                                            )
+                                          : DunesColors.resolve(
+                                              context,
+                                              DunesColors.text3,
+                                              role: DunesColorRole.surface,
+                                            ),
+                                      boxShadow: active
+                                          ? [
+                                              BoxShadow(
+                                                color: DunesColors.coral
+                                                    .withValues(alpha: 0.45),
+                                                blurRadius: 8,
+                                                spreadRadius: 1.5,
+                                              ),
+                                            ]
+                                          : const [],
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                            label: Text(livePaused ? '继续录音' : '暂停录音'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: DunesColors.brandPurpleDeep,
-                              side: const BorderSide(color: DunesColors.brandPurpleLine),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                            const SizedBox(width: 8),
+                            Text(
+                              liveWorking
+                                  ? (livePaused ? '录音已暂停' : '录音进行中')
+                                  : statusText,
+                              style: DunesTypography.sans(
+                                fontSize: 13,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
+                                context: context,
                               ),
                             ),
+                            if (liveWorking || liveElapsed > Duration.zero) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                _formatLiveElapsed(liveElapsed),
+                                style: DunesTypography.sans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.brandPurpleDeep,
+                                  ),
+                                  context: context,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        if (!recording)
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: canStartLive ? _startLive : null,
+                              icon: const Icon(Icons.mic_rounded),
+                              label: const Text('开始录音'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: DunesColors.resolve(
+                                  context,
+                                  DunesColors.brandPurpleDeep,
+                                ),
+                                side: BorderSide(
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.brandPurpleLine,
+                                    role: DunesColorRole.border,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed:
+                                      (_endingLive || _persistingAfterEnd)
+                                      ? null
+                                      : (livePaused ? _resumeLive : _pauseLive),
+                                  icon: Icon(
+                                    livePaused
+                                        ? Icons.play_arrow_rounded
+                                        : Icons.pause_rounded,
+                                  ),
+                                  label: Text(livePaused ? '继续录音' : '暂停录音'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: DunesColors.resolve(
+                                      context,
+                                      DunesColors.brandPurpleDeep,
+                                    ),
+                                    side: BorderSide(
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.brandPurpleLine,
+                                        role: DunesColorRole.border,
+                                      ),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: canEndLive
+                                      ? _confirmEndLive
+                                      : null,
+                                  icon: (_endingLive || _persistingAfterEnd)
+                                      ? SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              Colors.white,
+                                            ),
+                                          ),
+                                        )
+                                      : const Icon(Icons.stop_rounded),
+                                  label: Text(
+                                    (_endingLive || _persistingAfterEnd)
+                                        ? '保存中...'
+                                        : '结束并保存',
+                                  ),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: DunesColors.resolve(
+                                      context,
+                                      DunesColors.coral,
+                                      role: DunesColorRole.surface,
+                                    ),
+                                    disabledBackgroundColor:
+                                        DunesColors.resolve(
+                                          context,
+                                          DunesColors.coral,
+                                          role: DunesColorRole.surface,
+                                        ).withValues(alpha: 0.35),
+                                    foregroundColor: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ),
+                                    disabledForegroundColor: Colors.white
+                                        .withValues(alpha: 0.75),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _sectionCard(
+                    title: '录音状态',
+                    icon: Icons.graphic_eq_rounded,
+                    child: _buildRecordingStatusContent(
+                      recording: liveRecording,
+                      paused: livePaused,
+                      elapsed: liveElapsed,
+                      recorderState: state,
+                    ),
+                  ),
+                ],
+
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.coralSoft,
+                        role: DunesColorRole.surface,
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.coral,
+                          ),
+                          size: 18,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: FilledButton.icon(
-                            onPressed: canEndLive ? _confirmEndLive : null,
-                            icon: (_endingLive || _persistingAfterEnd)
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.stop_rounded),
-                            label: Text(
-                              (_endingLive || _persistingAfterEnd)
-                                  ? '保存中...'
-                                  : '结束并保存',
-                            ),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: DunesColors.coral,
-                              disabledBackgroundColor:
-                                  DunesColors.coral.withValues(alpha: 0.35),
-                              foregroundColor: Colors.white,
-                              disabledForegroundColor:
-                                  Colors.white.withValues(alpha: 0.75),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                          child: Text(
+                            _error!,
+                            style: DunesTypography.sans(
+                              fontSize: 12,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.coral,
                               ),
+                              context: context,
                             ),
                           ),
                         ),
                       ],
                     ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            _sectionCard(
-              title: '录音状态',
-              icon: Icons.graphic_eq_rounded,
-              child: _buildRecordingStatusContent(
-                recording: liveRecording,
-                paused: livePaused,
-                elapsed: liveElapsed,
-                recorderState: state,
-              ),
-            ),
-          ],
-
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: DunesColors.coralSoft,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.error_outline_rounded,
-                    color: DunesColors.coral,
-                    size: 18,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _error!,
-                      style: DunesTypography.sans(
-                        fontSize: 12,
-                        color: DunesColors.coral,
+                ],
+              ],
+            ),
+            bottomNavigationBar: _mode == _CreateMode.upload
+                ? SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: FilledButton.icon(
+                        onPressed: canSubmit ? _submit : null,
+                        icon: (_submitting || _persistingAfterEnd)
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.auto_awesome_rounded),
+                        label: Text(
+                          (_submitting || _persistingAfterEnd)
+                              ? '处理中...'
+                              : '开始转写并生成纪要',
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                            role: DunesColorRole.surface,
+                          ),
+                          foregroundColor: DunesColors.resolve(
+                            context,
+                            Colors.white,
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-      bottomNavigationBar: _mode == _CreateMode.upload
-          ? SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: FilledButton.icon(
-            onPressed: canSubmit ? _submit : null,
-            icon: (_submitting || _persistingAfterEnd)
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.auto_awesome_rounded),
-            label: Text(
-              (_submitting || _persistingAfterEnd)
-                  ? '处理中...'
-                  : '开始转写并生成纪要',
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor: DunesColors.brandPurple,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-          ),
-        ),
-      )
-          : null,
+                : null,
           ),
           if (_showBusyOverlay) _buildBusyOverlay(),
         ],
@@ -1390,8 +1602,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         '点击「开始录音」后，这里会显示录音时长与状态。结束后再上传转写并生成纪要。',
         style: DunesTypography.sans(
           fontSize: 13,
-          color: DunesColors.text3,
+          color: DunesColors.resolve(context, DunesColors.text3),
           height: 1.5,
+          context: context,
         ),
       );
     }
@@ -1400,18 +1613,15 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     final title = systemPaused
         ? '来电已暂停'
         : paused
-            ? '录音已暂停'
-            : '正在录音中';
+        ? '录音已暂停'
+        : '正在录音中';
     final hint = _live.interruptionHint.value?.trim() ?? '';
     final subtitle = systemPaused
-        ? (hint.isNotEmpty
-            ? hint
-            : '挂断后将自动继续，已录部分已保存。也可点「继续录音」。')
+        ? (hint.isNotEmpty ? hint : '挂断后将自动继续，已录部分已保存。也可点「继续录音」。')
         : paused
         ? '点击「继续录音」后恢复采集，结束后再转写生成纪要'
         : switch (recorderState) {
-            MeetingRecordingState.recordingBackground =>
-              '已进入后台/锁屏，录音仍在继续',
+            MeetingRecordingState.recordingBackground => '已进入后台/锁屏，录音仍在继续',
             MeetingRecordingState.stopping => '正在停止并保存录音…',
             _ => '麦克风采集中，结束后可选择生成纪要、存为草稿或取消',
           };
@@ -1429,16 +1639,39 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                 height: 72,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: (paused ? DunesColors.text3 : DunesColors.coral)
-                      .withValues(alpha: 0.12),
+                  color:
+                      (paused
+                              ? DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                  role: DunesColorRole.surface,
+                                )
+                              : DunesColors.resolve(
+                                  context,
+                                  DunesColors.coral,
+                                  role: DunesColorRole.surface,
+                                ))
+                          .withValues(alpha: 0.12),
                   border: Border.all(
-                    color: paused ? DunesColors.text3 : DunesColors.coral,
+                    color: paused
+                        ? DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                            role: DunesColorRole.border,
+                          )
+                        : DunesColors.resolve(
+                            context,
+                            DunesColors.coral,
+                            role: DunesColorRole.border,
+                          ),
                     width: 2,
                   ),
                 ),
                 child: Icon(
                   paused ? Icons.pause_rounded : Icons.mic_rounded,
-                  color: paused ? DunesColors.text2 : DunesColors.coral,
+                  color: paused
+                      ? DunesColors.resolve(context, DunesColors.text2)
+                      : DunesColors.resolve(context, DunesColors.coral),
                   size: 32,
                 ),
               ),
@@ -1451,7 +1684,10 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
           style: DunesTypography.sans(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: paused ? DunesColors.text2 : DunesColors.coral,
+            color: paused
+                ? DunesColors.resolve(context, DunesColors.text2)
+                : DunesColors.resolve(context, DunesColors.coral),
+            context: context,
           ),
         ),
         const SizedBox(height: 6),
@@ -1460,8 +1696,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
           style: DunesTypography.sans(
             fontSize: 28,
             fontWeight: FontWeight.w700,
-            color: DunesColors.brandPurpleDeep,
+            color: DunesColors.resolve(context, DunesColors.brandPurpleDeep),
             letterSpacing: 1.2,
+            context: context,
           ),
         ),
         const SizedBox(height: 8),
@@ -1470,8 +1707,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
           textAlign: TextAlign.center,
           style: DunesTypography.sans(
             fontSize: 12.5,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
             height: 1.45,
+            context: context,
           ),
         ),
       ],
@@ -1487,16 +1725,30 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: DunesColors.brandPurple),
+              Icon(
+                icon,
+                size: 18,
+                color: DunesColors.resolve(context, DunesColors.brandPurple),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1504,7 +1756,8 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                   style: DunesTypography.sans(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
               ),

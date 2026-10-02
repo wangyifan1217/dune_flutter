@@ -262,7 +262,10 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFC44949),
+              foregroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFC44949),
+              ),
             ),
             child: const Text('清空'),
           ),
@@ -306,7 +309,8 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
     // 兜底：无宿主回调时 PC 外跳；APP 仍应尽量走 XR1 内嵌。
     setState(() => _opening = true);
     try {
-      final preferPc = !kIsWeb &&
+      final preferPc =
+          !kIsWeb &&
           (defaultTargetPlatform == TargetPlatform.windows ||
               defaultTargetPlatform == TargetPlatform.macOS ||
               defaultTargetPlatform == TargetPlatform.linux);
@@ -322,11 +326,7 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
       final opened = await _xrxs.openInSystemBrowser(login);
       if (!mounted) return;
       if (!opened) {
-        showDunesToast(
-          context,
-          '无法打开系统浏览器',
-          kind: DunesToastKind.error,
-        );
+        showDunesToast(context, '无法打开系统浏览器', kind: DunesToastKind.error);
       }
     } catch (e) {
       if (mounted) {
@@ -344,7 +344,11 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -405,10 +409,12 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
       );
     }
     if (_messages.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           '薪人薪事审批待办与通知会显示在这里',
-          style: TextStyle(color: DunesColors.text3),
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       );
     }
@@ -465,12 +471,16 @@ class XrxsAssistantAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: const Color(0xFF0F766E),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFF0F766E),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(size * .18),
       ),
       child: Icon(
         Icons.badge_outlined,
-        color: Colors.white,
+        color: DunesColors.resolve(context, Colors.white),
         size: size * .48,
       ),
     );

@@ -47,9 +47,19 @@ class XfDetCard extends StatelessWidget {
       decoration:
           decoration ??
           BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(21),
-            border: Border.all(color: const Color(0xFFECEAF1)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFECEAF1),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,11 +74,22 @@ class XfDetCard extends StatelessWidget {
                       width: 27,
                       height: 27,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF1EEFB),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFF1EEFB),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(9),
                       ),
                       alignment: Alignment.center,
-                      child: Icon(icon, size: 15, color: const Color(0xFF7054D8)),
+                      child: Icon(
+                        icon,
+                        size: 15,
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF7054D8),
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 6),
                   ] else ...[
@@ -76,7 +97,11 @@ class XfDetCard extends StatelessWidget {
                       width: 3,
                       height: 16,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF8064E6),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF8064E6),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(3),
                       ),
                     ),
@@ -87,7 +112,8 @@ class XfDetCard extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                   ),
                 ],
@@ -102,13 +128,10 @@ class XfDetCard extends StatelessWidget {
 
 /// 审批详情页主信息卡片。
 class XfDetHero extends StatelessWidget {
-  const XfDetHero({
-    super.key,
-    required this.detail,
-    this.showStatus = true,
-  });
+  const XfDetHero({super.key, required this.detail, this.showStatus = true});
 
   final XflowProposalDetail detail;
+
   /// 可选隐藏状态角标；详情页默认同时展示状态和流程进度。
   final bool showStatus;
 
@@ -129,8 +152,7 @@ class XfDetHero extends StatelessWidget {
     final createdAt = fmtDetailTime(raw['createdAt']);
 
     final chips = <Widget>[
-      if (tag1.isNotEmpty && tag1 != '—')
-        _metaChip(Icons.sell_outlined, tag1),
+      if (tag1.isNotEmpty && tag1 != '—') _metaChip(Icons.sell_outlined, tag1),
       if (taskLevel.isNotEmpty)
         _metaChip(Icons.bar_chart_outlined, '$taskLevel 级'),
       if (coverageText.isNotEmpty && coverageText != '—')
@@ -141,8 +163,12 @@ class XfDetHero extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(20, 19, 20, 18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF30235F), Color(0xFF51408F), Color(0xFF7058B6)],
+        gradient: LinearGradient(
+          colors: [
+            DunesColors.resolve(context, Color(0xFF30235F)),
+            DunesColors.resolve(context, Color(0xFF51408F)),
+            DunesColors.resolve(context, Color(0xFF7058B6)),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -165,11 +191,15 @@ class XfDetHero extends StatelessWidget {
                 detail.code,
                 style: DunesTypography.mono(
                   fontSize: 10,
-                  color: const Color(0xFFCFC6EA),
+                  color: DunesColors.resolve(context, const Color(0xFFCFC6EA)),
+                  context: context,
                 ),
               ),
               if (showStatus)
-                _StatusPill(label: detailStatusLabel(detail.status), tone: tone),
+                _StatusPill(
+                  label: detailStatusLabel(detail.status),
+                  tone: tone,
+                ),
             ],
           ),
           const SizedBox(height: 14),
@@ -179,7 +209,8 @@ class XfDetHero extends StatelessWidget {
               fontSize: 20,
               fontWeight: FontWeight.w700,
               height: 1.35,
-              color: Colors.white,
+              color: DunesColors.resolve(context, Colors.white),
+              context: context,
             ),
           ),
           if (amount.isNotEmpty) ...[
@@ -195,8 +226,9 @@ class XfDetHero extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 30,
                       fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      color: DunesColors.resolve(context, Colors.white),
                       letterSpacing: -0.8,
+                      context: context,
                     ),
                   ),
                 ),
@@ -207,7 +239,11 @@ class XfDetHero extends StatelessWidget {
                     '申请金额',
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: const Color(0xFFD5CDEB),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFD5CDEB),
+                      ),
+                      context: context,
                     ),
                   ),
                 ),
@@ -216,15 +252,18 @@ class XfDetHero extends StatelessWidget {
           ],
           if (chips.isNotEmpty) ...[
             const SizedBox(height: 13),
-            Wrap(
-              spacing: 7,
-              runSpacing: 6,
-              children: chips,
-            ),
+            Wrap(spacing: 7, runSpacing: 6, children: chips),
           ],
           if (owner.isNotEmpty || createdAt.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Container(height: 1, color: Colors.white.withValues(alpha: 0.16)),
+            Container(
+              height: 1,
+              color: DunesColors.resolveNullable(
+                context,
+                Colors.white.withValues(alpha: 0.16),
+                role: DunesColorRole.surface,
+              ),
+            ),
             const SizedBox(height: 13),
             Row(
               children: [
@@ -298,25 +337,29 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color bg = DunesColors.bgSoft;
-    Color fg = DunesColors.text2;
+    Color bg = DunesColors.resolve(context, DunesColors.bgSoft);
+    Color fg = DunesColors.resolve(context, DunesColors.text2);
     switch (tone) {
       case DetailStatusTone.ok:
-        bg = const Color(0xFFE6F5EC);
-        fg = const Color(0xFF2D8A5E);
+        bg = DunesColors.resolve(context, const Color(0xFFE6F5EC));
+        fg = DunesColors.resolve(context, const Color(0xFF2D8A5E));
       case DetailStatusTone.warn:
-        bg = const Color(0xFFFFF4E0);
-        fg = const Color(0xFFD4A017);
+        bg = DunesColors.resolve(context, const Color(0xFFFFF4E0));
+        fg = DunesColors.resolve(context, const Color(0xFFD4A017));
       case DetailStatusTone.bad:
-        bg = const Color(0xFFFDE8E4);
-        fg = DunesColors.coral;
+        bg = DunesColors.resolve(context, const Color(0xFFFDE8E4));
+        fg = DunesColors.resolve(context, DunesColors.coral);
       case DetailStatusTone.muted:
         break;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: bg,
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -325,6 +368,7 @@ class _StatusPill extends StatelessWidget {
           fontSize: 11,
           fontWeight: FontWeight.w600,
           color: fg,
+          context: context,
         ),
       ),
     );
@@ -343,23 +387,39 @@ class XfDetClosedBanner extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: DunesColors.borderSoft, width: 1.5),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+          width: 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.block, size: 16, color: DunesColors.text2),
+              Icon(
+                Icons.block,
+                size: 16,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
               const SizedBox(width: 6),
-  Text(
+              Text(
                 '已作废',
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
             ],
@@ -369,10 +429,21 @@ class XfDetClosedBanner extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
               border: Border(
-                left: BorderSide(color: DunesColors.border, width: 3),
+                left: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.border,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 3,
+                ),
               ),
             ),
             child: Text(
@@ -380,7 +451,8 @@ class XfDetClosedBanner extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 12,
                 height: 1.55,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ),
@@ -412,27 +484,42 @@ class XfDetRejectBanner extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFF5F3), Colors.white],
+        gradient: LinearGradient(
+          colors: [
+            DunesColors.resolve(context, Color(0xFFFFF5F3)),
+            DunesColors.resolve(context, Colors.white),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFF0C4BC), width: 1.5),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFF0C4BC),
+            role: DunesColorRole.border,
+          ),
+          width: 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.error_outline, size: 16, color: DunesColors.coral),
+              Icon(
+                Icons.error_outline,
+                size: 16,
+                color: DunesColors.resolve(context, DunesColors.coral),
+              ),
               const SizedBox(width: 6),
               Text(
                 '审批已驳回',
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.coral,
+                  color: DunesColors.resolve(context, DunesColors.coral),
+                  context: context,
                 ),
               ),
             ],
@@ -440,17 +527,29 @@ class XfDetRejectBanner extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             meta,
-            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
           const SizedBox(height: 4),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: DunesColors.coral.withValues(alpha: 0.12),
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.coral,
+                  role: DunesColorRole.border,
+                ).withValues(alpha: 0.12),
               ),
             ),
             child: Text(
@@ -458,7 +557,8 @@ class XfDetRejectBanner extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 12,
                 height: 1.65,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
           ),
@@ -470,11 +570,7 @@ class XfDetRejectBanner extends StatelessWidget {
 
 /// 终审通过后的办理进度：所有人都能看到子状态；办理人还能看到自己的待办动作。
 class XfDetTaskTodoBanner extends StatelessWidget {
-  const XfDetTaskTodoBanner({
-    super.key,
-    this.subStatus = '',
-    this.myTask,
-  });
+  const XfDetTaskTodoBanner({super.key, this.subStatus = '', this.myTask});
 
   final String subStatus;
   final XflowProposalItem? myTask;
@@ -490,23 +586,38 @@ class XfDetTaskTodoBanner extends StatelessWidget {
         : '当前办理进度';
     final body = mine != null
         ? (status.isEmpty
-            ? '办理意见会写到下方评论区。核验失败等原因也会显示在评论里。'
-            : '当前：$status。办理意见会写到下方评论区。')
+              ? '办理意见会写到下方评论区。核验失败等原因也会显示在评论里。'
+              : '当前：$status。办理意见会写到下方评论区。')
         : '当前：$status。办理人可在「审批待办」或本页底部操作。';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF6E8),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFFFF6E8),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE8D4B0), width: 1.5),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8D4B0),
+            role: DunesColorRole.border,
+          ),
+          width: 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.task_alt_outlined, size: 16, color: Color(0xFFB26A00)),
+              Icon(
+                Icons.task_alt_outlined,
+                size: 16,
+                color: DunesColors.resolveNullable(context, Color(0xFFB26A00)),
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -514,24 +625,45 @@ class XfDetTaskTodoBanner extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFF8A5400),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF8A5400),
+                    ),
+                    context: context,
                   ),
                 ),
               ),
               if (status.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: const Color(0xFFE8D4B0)),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFE8D4B0),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                   ),
                   child: Text(
                     status,
                     style: DunesTypography.sans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: const Color(0xFF8A5400),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF8A5400),
+                      ),
+                      context: context,
                     ),
                   ),
                 ),
@@ -543,7 +675,8 @@ class XfDetTaskTodoBanner extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12,
               height: 1.55,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
         ],
@@ -582,7 +715,8 @@ class XfDetTaskCompletionCard extends StatelessWidget {
               row.$1,
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
             const SizedBox(height: 2),
@@ -591,7 +725,8 @@ class XfDetTaskCompletionCard extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
             const SizedBox(height: 8),
@@ -601,7 +736,8 @@ class XfDetTaskCompletionCard extends StatelessWidget {
               group.$1,
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
             const SizedBox(height: 6),
@@ -668,7 +804,11 @@ class XfDetPeopleCard extends StatelessWidget {
                   : BoxDecoration(
                       border: Border(
                         bottom: BorderSide(
-                          color: DunesColors.borderSoft.withValues(alpha: 0.8),
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.borderSoft,
+                            role: DunesColorRole.border,
+                          ).withValues(alpha: 0.8),
                           style: BorderStyle.solid,
                         ),
                       ),
@@ -682,7 +822,8 @@ class XfDetPeopleCard extends StatelessWidget {
                       rows[i].$1,
                       style: DunesTypography.sans(
                         fontSize: 12,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
                       ),
                     ),
                   ),
@@ -694,7 +835,8 @@ class XfDetPeopleCard extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                     ),
                   ),
@@ -735,7 +877,8 @@ class XfDetPendingHint extends StatelessWidget {
           style: DunesTypography.sans(
             fontSize: 12,
             height: 1.5,
-            color: DunesColors.text2,
+            color: DunesColors.resolve(context, DunesColors.text2),
+            context: context,
           ),
           children: [
             const TextSpan(text: '当前节点：'),
@@ -787,9 +930,19 @@ class XfDetPushContext extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: DunesColors.bgSoft,
+              color: DunesColors.resolve(
+                context,
+                DunesColors.bgSoft,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: DunesColors.borderSoft),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: Column(
               children: [
@@ -806,10 +959,18 @@ class XfDetPushContext extends StatelessWidget {
               margin: const EdgeInsets.only(top: 8),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: DunesColors.amberSoft.withValues(alpha: 0.35),
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.amberSoft,
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: DunesColors.amber.withValues(alpha: 0.35),
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.amber,
+                    role: DunesColorRole.border,
+                  ).withValues(alpha: 0.35),
                 ),
               ),
               child: Column(
@@ -820,7 +981,8 @@ class XfDetPushContext extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -829,7 +991,8 @@ class XfDetPushContext extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 12,
                       height: 1.5,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                      context: context,
                     ),
                   ),
                 ],
@@ -945,7 +1108,11 @@ class XfDetFormSections extends StatelessWidget {
     if (sections.isEmpty) {
       return Text(
         '暂无填报内容',
-        style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+        style: DunesTypography.sans(
+          fontSize: 12,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
+        ),
       );
     }
     return Column(
@@ -1000,7 +1167,11 @@ class _SectionBlockState extends State<_SectionBlock> {
                 width: 3,
                 height: 16,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8064E6),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFF8064E6),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -1011,14 +1182,22 @@ class _SectionBlockState extends State<_SectionBlock> {
                   style: DunesTypography.sans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFF292531),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF292531),
+                    ),
+                    context: context,
                   ),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1EEFB),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF1EEFB),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -1026,7 +1205,11 @@ class _SectionBlockState extends State<_SectionBlock> {
                   style: DunesTypography.sans(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF7054D8),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF7054D8),
+                    ),
+                    context: context,
                   ),
                 ),
               ),
@@ -1062,8 +1245,15 @@ class _SectionBlockState extends State<_SectionBlock> {
               style: TextButton.styleFrom(
                 minimumSize: Size.zero,
                 padding: const EdgeInsets.symmetric(vertical: 9),
-                foregroundColor: DunesColors.accentDeep,
-                backgroundColor: DunesColors.bgSoft,
+                foregroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.accentDeep,
+                ),
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.bgSoft,
+                  role: DunesColorRole.surface,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -1076,6 +1266,7 @@ class _SectionBlockState extends State<_SectionBlock> {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
+                    context: context,
                   ),
                 ),
               ),
@@ -1104,21 +1295,33 @@ class XfDetKv extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = formatDetailPlainText(value);
     final long = !linkStyle && isLongDetailPlainText(text);
-    final valueStyle = DunesTypography.sans(
-      fontSize: 13,
-      height: long ? 1.65 : 1.45,
-      fontWeight: long ? FontWeight.w400 : FontWeight.w600,
-      color: linkStyle ? const Color(0xFF7054D8) : DunesColors.text,
-    ).copyWith(
-      decoration: linkStyle ? TextDecoration.underline : TextDecoration.none,
-      decorationColor: linkStyle ? const Color(0xFF7054D8) : null,
-    );
+    final valueStyle =
+        DunesTypography.sans(
+          fontSize: 13,
+          height: long ? 1.65 : 1.45,
+          fontWeight: long ? FontWeight.w400 : FontWeight.w600,
+          color: linkStyle
+              ? DunesColors.resolve(context, const Color(0xFF7054D8))
+              : DunesColors.resolve(context, DunesColors.text),
+          context: context,
+        ).copyWith(
+          decoration: linkStyle
+              ? TextDecoration.underline
+              : TextDecoration.none,
+          decorationColor: linkStyle
+              ? DunesColors.resolve(context, const Color(0xFF7054D8))
+              : null,
+        );
     final body = Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.fromLTRB(13, 11, 13, 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F7FB),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF8F7FB),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
       ),
       child: long
@@ -1130,7 +1333,11 @@ class XfDetKv extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF8D879A),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF8D879A),
+                    ),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 7),
@@ -1149,15 +1356,15 @@ class XfDetKv extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF8D879A),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF8D879A),
+                    ),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  text,
-                  textAlign: TextAlign.left,
-                  style: valueStyle,
-                ),
+                Text(text, textAlign: TextAlign.left, style: valueStyle),
               ],
             ),
     );
@@ -1192,7 +1399,11 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F7FB),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF8F7FB),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -1213,7 +1424,11 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
                           style: DunesTypography.sans(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
-                            color: const Color(0xFF8D879A),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFF8D879A),
+                            ),
+                            context: context,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -1224,7 +1439,11 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
                           style: DunesTypography.sans(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: const Color(0xFF292531),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFF292531),
+                            ),
+                            context: context,
                           ),
                         ),
                       ],
@@ -1234,10 +1453,13 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
                   AnimatedRotation(
                     turns: _open ? 0.5 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: const Icon(
+                    child: Icon(
                       Icons.expand_more,
                       size: 18,
-                      color: Color(0xFF8D879A),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF8D879A),
+                      ),
                     ),
                   ),
                 ],
@@ -1321,6 +1543,7 @@ class XfDetBillCascadeList extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
+                    context: context,
                   ),
                 ),
                 if (xflowBillTypeProjectLine(row).isNotEmpty) ...[
@@ -1329,7 +1552,8 @@ class XfDetBillCascadeList extends StatelessWidget {
                     xflowBillTypeProjectLine(row),
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ],
@@ -1371,7 +1595,11 @@ class XfDetRepeatableGroups extends StatelessWidget {
     if (rows.isEmpty) {
       return Text(
         '暂无明细',
-        style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+        style: DunesTypography.sans(
+          fontSize: 11,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
+        ),
       );
     }
     final cols = field.columnsAsFields;
@@ -1488,7 +1716,11 @@ class XfDetTable extends StatelessWidget {
     if (rows.isEmpty) {
       return Text(
         '暂无明细',
-        style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+        style: DunesTypography.sans(
+          fontSize: 11,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
+        ),
       );
     }
     final cols = inferColumns(rows, field);
@@ -1497,12 +1729,22 @@ class XfDetTable extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          border: Border.all(color: DunesColors.borderSoft),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           const JsonEncoder.withIndent('  ').convert(rows),
-          style: DunesTypography.mono(fontSize: 11, height: 1.5),
+          style: DunesTypography.mono(
+            fontSize: 11,
+            height: 1.5,
+            context: context,
+          ),
         ),
       );
     }
@@ -1550,7 +1792,13 @@ class XfDetTable extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       clipBehavior: Clip.antiAlias,
@@ -1626,7 +1874,11 @@ class XfDetFileList extends StatelessWidget {
     if (items.isEmpty) {
       return Text(
         '暂无文件',
-        style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+        style: DunesTypography.sans(
+          fontSize: 11,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
+        ),
       );
     }
     return Column(
@@ -1700,7 +1952,10 @@ class _FileItemState extends State<_FileItem> {
     return '${(n / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  Future<void> _open(BuildContext context, {required bool preferPreview}) async {
+  Future<void> _open(
+    BuildContext context, {
+    required bool preferPreview,
+  }) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -1755,8 +2010,7 @@ class _FileItemState extends State<_FileItem> {
   Widget build(BuildContext context) {
     final name = _fileName;
     final size = item['size'];
-    final showPreview =
-        !kIsWeb && !isDesktopCommOnly && (_isImage || _isPdf);
+    final showPreview = !kIsWeb && !isDesktopCommOnly && (_isImage || _isPdf);
     final metaParts = <String>[
       if (size != null) _formatSize(size),
       if (_statusChecked && _downloaded) '已下载',
@@ -1765,9 +2019,19 @@ class _FileItemState extends State<_FileItem> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),
@@ -1791,6 +2055,7 @@ class _FileItemState extends State<_FileItem> {
                   style: DunesTypography.sans(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
+                    context: context,
                   ),
                 ),
                 if (metaParts.isNotEmpty)
@@ -1799,8 +2064,12 @@ class _FileItemState extends State<_FileItem> {
                     style: DunesTypography.sans(
                       fontSize: 10,
                       color: _downloaded
-                          ? const Color(0xFF3B82F6)
-                          : DunesColors.text3,
+                          ? DunesColors.resolve(
+                              context,
+                              const Color(0xFF3B82F6),
+                            )
+                          : DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
               ],
@@ -2040,8 +2309,16 @@ class _CcRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: isLast
           ? null
-          : const BoxDecoration(
-              border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+          : BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                ),
+              ),
             ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2051,6 +2328,7 @@ class _CcRow extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
+              context: context,
             ),
           ),
           if (metaParts.isNotEmpty)
@@ -2060,8 +2338,9 @@ class _CcRow extends StatelessWidget {
                 metaParts.join(' · '),
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                   height: 1.45,
+                  context: context,
                 ),
               ),
             ),
@@ -2088,9 +2367,19 @@ class XfDetApproveDock extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ).withValues(alpha: 0.96),
         border: Border(
-          top: BorderSide(color: const Color(0xFFECEAF1).withValues(alpha: 0.9)),
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFECEAF1),
+              role: DunesColorRole.border,
+            ).withValues(alpha: 0.9),
+          ),
         ),
       ),
       child: Padding(
@@ -2123,9 +2412,19 @@ class XfDetTaskDock extends StatelessWidget {
     final label = item.actionTitle ?? '办理';
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         border: Border(
-          top: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.9)),
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ).withValues(alpha: 0.9),
+          ),
         ),
       ),
       child: Padding(
@@ -2135,10 +2434,21 @@ class XfDetTaskDock extends StatelessWidget {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: busy ? null : () => onComplete(verifyPassed: false),
+                      onPressed: busy
+                          ? null
+                          : () => onComplete(verifyPassed: false),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: DunesColors.coral,
-                        side: BorderSide(color: DunesColors.coral),
+                        foregroundColor: DunesColors.resolve(
+                          context,
+                          DunesColors.coral,
+                        ),
+                        side: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.coral,
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                       ),
                       child: const Text('核验失败'),
                     ),
@@ -2146,7 +2456,9 @@ class XfDetTaskDock extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: FilledButton(
-                      onPressed: busy ? null : () => onComplete(verifyPassed: true),
+                      onPressed: busy
+                          ? null
+                          : () => onComplete(verifyPassed: true),
                       child: const Text('核验通过'),
                     ),
                   ),
@@ -2196,9 +2508,7 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
       showDunesToast(context, '请填写审批意见', kind: DunesToastKind.error);
       return;
     }
-    final ok = approve
-        ? await confirmApproveDecision(context)
-        : true;
+    final ok = approve ? await confirmApproveDecision(context) : true;
     if (approve && !ok) return;
     var comment = text;
     if (!approve) {
@@ -2222,9 +2532,19 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
   Widget build(BuildContext context) {
     return XfDetCard(
       decoration: BoxDecoration(
-        color: const Color(0xFFFAF9FD),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFFAF9FD),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(21),
-        border: Border.all(color: const Color(0xFFE4DEF5)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE4DEF5),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       title: '待您审批',
       icon: Icons.gavel_outlined,
@@ -2240,8 +2560,9 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
               '请查看填报内容与流程进度，填写意见后确认。',
               style: DunesTypography.sans(
                 fontSize: 11.5,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
                 height: 1.45,
+                context: context,
               ),
             ),
             const SizedBox(height: 10),
@@ -2256,21 +2577,38 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
               hintText: '通过请填意见；驳回将在确认时填写原因',
               hintStyle: DunesTypography.sans(
                 fontSize: 12,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 11,
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(13),
-                borderSide: const BorderSide(color: Color(0xFFB4A5E8)),
+                borderSide: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFB4A5E8),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(13),
-                borderSide: const BorderSide(color: Color(0xFFE5E1EE)),
+                borderSide: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFE5E1EE),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
             ),
           ),
@@ -2320,11 +2658,21 @@ class _ApvBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = approve ? const Color(0xFF7054D8) : Colors.white;
-    final fg = approve ? Colors.white : DunesColors.coral;
-    final border = approve ? const Color(0xFF7054D8) : DunesColors.coral;
+    final bg = approve
+        ? DunesColors.resolve(context, const Color(0xFF7054D8))
+        : DunesColors.resolve(context, Colors.white);
+    final fg = approve
+        ? DunesColors.resolve(context, Colors.white)
+        : DunesColors.resolve(context, DunesColors.coral);
+    final border = approve
+        ? DunesColors.resolve(context, const Color(0xFF7054D8))
+        : DunesColors.resolve(context, DunesColors.coral);
     return Material(
-      color: bg,
+      color: DunesColors.resolveNullable(
+        context,
+        bg,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: loading ? null : onPressed,
@@ -2341,13 +2689,19 @@ class _ApvBtn extends StatelessWidget {
                   height: 14,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: approve ? Colors.white : DunesColors.coral,
+                    color: approve
+                        ? DunesColors.resolve(context, Colors.white)
+                        : DunesColors.resolve(context, DunesColors.coral),
                   ),
                 )
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, size: 14, color: fg),
+                    Icon(
+                      icon,
+                      size: 14,
+                      color: DunesColors.resolveNullable(context, fg),
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       label,
@@ -2355,6 +2709,7 @@ class _ApvBtn extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: fg,
+                        context: context,
                       ),
                     ),
                   ],
@@ -2492,16 +2847,27 @@ class XfDetActions extends StatelessWidget {
           margin: const EdgeInsets.fromLTRB(0, 12, 0, 20),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: DunesColors.bgSoft,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.bgSoft,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: DunesColors.borderSoft),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Text(
             '已推送给代发起人，等待对方继续填写并提交审批；对方也可退回给你。',
             style: DunesTypography.sans(
               fontSize: 12,
               height: 1.5,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
         );
@@ -2539,20 +2905,24 @@ class _ActBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color bg = Colors.white;
-    Color fg = DunesColors.text;
-    Color border = DunesColors.border;
+    Color bg = DunesColors.resolve(context, Colors.white);
+    Color fg = DunesColors.resolve(context, DunesColors.text);
+    Color border = DunesColors.resolve(context, DunesColors.border);
     if (primary) {
-      bg = DunesColors.accent;
-      fg = Colors.white;
-      border = DunesColors.accent;
+      bg = DunesColors.resolve(context, DunesColors.accent);
+      fg = DunesColors.resolve(context, Colors.white);
+      border = DunesColors.resolve(context, DunesColors.accent);
     } else if (danger) {
-      bg = DunesColors.coral;
-      fg = Colors.white;
-      border = DunesColors.coral;
+      bg = DunesColors.resolve(context, DunesColors.coral);
+      fg = DunesColors.resolve(context, Colors.white);
+      border = DunesColors.resolve(context, DunesColors.coral);
     }
     return Material(
-      color: bg,
+      color: DunesColors.resolveNullable(
+        context,
+        bg,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onPressed,
@@ -2566,7 +2936,11 @@ class _ActBtn extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16, color: fg),
+              Icon(
+                icon,
+                size: 16,
+                color: DunesColors.resolveNullable(context, fg),
+              ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
@@ -2576,6 +2950,7 @@ class _ActBtn extends StatelessWidget {
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: fg,
+                    context: context,
                   ),
                 ),
               ),

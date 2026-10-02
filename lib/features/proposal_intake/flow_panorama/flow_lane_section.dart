@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'flow_ctx.dart';
 import 'flow_lanes.dart';
 import 'flow_topology.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 const Color _kBorder = Color(0xFFE4E8ED);
 const Color _kDivider = Color(0xFFEDF0F3);
@@ -147,7 +148,9 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
             issues == 0 ? '全部正常' : '$issues 条待处理',
             style: TextStyle(
               fontSize: 12,
-              color: issues == 0 ? _kFaint : kLevel[FlowLevel.block]!.ink,
+              color: issues == 0
+                  ? DunesColors.resolve(context, _kFaint)
+                  : kLevel[FlowLevel.block]!.ink,
             ),
           ),
         ),
@@ -162,10 +165,30 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
         decoration: BoxDecoration(
-          color: active ? const Color(0xFFF2F5F8) : Colors.white,
+          color: active
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFFF2F5F8),
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: active ? const Color(0xFFB9C4CF) : _kBorder,
+            color: active
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFB9C4CF),
+                    role: DunesColorRole.border,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    _kBorder,
+                    role: DunesColorRole.border,
+                  ),
           ),
         ),
         child: Row(
@@ -175,7 +198,14 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
               Container(
                 width: 7,
                 height: 7,
-                decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolveNullable(
+                    context,
+                    dot,
+                    role: DunesColorRole.surface,
+                  ),
+                  shape: BoxShape.circle,
+                ),
               ),
               const SizedBox(width: 6),
             ],
@@ -185,7 +215,9 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
                 fontSize: 12.5,
                 height: 1.2,
                 fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                color: active ? _kInk : _kMuted,
+                color: active
+                    ? DunesColors.resolve(context, _kInk)
+                    : DunesColors.resolve(context, _kMuted),
               ),
             ),
           ],
@@ -200,7 +232,11 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
     final collapsed = _collapsed.contains(lane.kind);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: _kBorder),
       ),
@@ -241,10 +277,20 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
       child: Container(
         padding: EdgeInsets.fromLTRB(widget.compact ? 12 : 16, 12, 12, 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           border: Border(
             bottom: BorderSide(
-              color: collapsed ? Colors.transparent : _kDivider,
+              color: collapsed
+                  ? Colors.transparent
+                  : DunesColors.resolve(
+                      context,
+                      _kDivider,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
         ),
@@ -254,7 +300,11 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
               width: 8,
               height: 8,
               decoration: BoxDecoration(
-                color: style.color,
+                color: DunesColors.resolveNullable(
+                  context,
+                  style.color,
+                  role: DunesColorRole.surface,
+                ),
                 shape: BoxShape.circle,
               ),
             ),
@@ -265,7 +315,7 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
                 fontSize: 15,
                 height: 1.2,
                 fontWeight: FontWeight.w600,
-                color: style.ink,
+                color: DunesColors.resolveNullable(context, style.ink),
               ),
             ),
             const SizedBox(width: 10),
@@ -277,18 +327,24 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
                   style.desc,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11.5, color: _kFaint),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: DunesColors.resolveNullable(context, _kFaint),
+                  ),
                 ),
               ),
             Text(
               shown == total ? '$total 条链路' : '$shown / $total 条',
-              style: const TextStyle(fontSize: 11.5, color: _kFaint),
+              style: TextStyle(
+                fontSize: 11.5,
+                color: DunesColors.resolveNullable(context, _kFaint),
+              ),
             ),
             const SizedBox(width: 6),
             Icon(
               collapsed ? Icons.expand_more : Icons.expand_less,
               size: 18,
-              color: const Color(0xFF9AA4B0),
+              color: DunesColors.resolve(context, const Color(0xFF9AA4B0)),
             ),
           ],
         ),
@@ -297,11 +353,14 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
   }
 
   Widget _emptyHint() {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.fromLTRB(16, 14, 16, 18),
       child: Text(
         '本条流当前没有待处理链路',
-        style: TextStyle(fontSize: 12.5, color: _kFaint),
+        style: TextStyle(
+          fontSize: 12.5,
+          color: DunesColors.resolveNullable(context, _kFaint),
+        ),
       ),
     );
   }
@@ -340,7 +399,13 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(
-                    color: isLast ? Colors.transparent : _kDivider,
+                    color: isLast
+                        ? Colors.transparent
+                        : DunesColors.resolve(
+                            context,
+                            _kDivider,
+                            role: DunesColorRole.border,
+                          ),
                   ),
                 ),
               ),
@@ -357,9 +422,15 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             _listNodeChip(edge.a.node, lane.kind),
-                            const Text(
+                            Text(
                               '→',
-                              style: TextStyle(fontSize: 12, color: _kFaint),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  _kFaint,
+                                ),
+                              ),
                             ),
                             _listNodeChip(edge.b.node, lane.kind),
                           ],
@@ -378,7 +449,7 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
                       fontSize: 13,
                       height: 1.35,
                       fontWeight: FontWeight.w600,
-                      color: style.ink,
+                      color: DunesColors.resolveNullable(context, style.ink),
                     ),
                   ),
                   if (sub.isNotEmpty)
@@ -386,10 +457,10 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
                         sub,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11.5,
                           height: 1.35,
-                          color: _kMuted,
+                          color: DunesColors.resolveNullable(context, _kMuted),
                         ),
                       ),
                     ),
@@ -397,10 +468,10 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
                     padding: const EdgeInsets.only(top: 5),
                     child: Text(
                       ownerText,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         height: 1.3,
-                        color: _kFaint,
+                        color: DunesColors.resolveNullable(context, _kFaint),
                       ),
                     ),
                   ),
@@ -427,7 +498,11 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(4),
           border: Border.all(color: style.color),
         ),
@@ -437,7 +512,7 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
             fontSize: 12,
             height: 1.3,
             fontWeight: FontWeight.w600,
-            color: style.ink,
+            color: DunesColors.resolveNullable(context, style.ink),
           ),
         ),
       ),
@@ -508,7 +583,11 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: style.color),
             ),
@@ -520,18 +599,22 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
                   def?.role ?? pos.id,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 10, height: 1.2, color: style.ink),
+                  style: TextStyle(
+                    fontSize: 10,
+                    height: 1.2,
+                    color: DunesColors.resolveNullable(context, style.ink),
+                  ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   _nodeName(def),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     height: 1.25,
                     fontWeight: FontWeight.w600,
-                    color: _kInk,
+                    color: DunesColors.resolveNullable(context, _kInk),
                   ),
                 ),
                 if (meta.isNotEmpty) ...[
@@ -540,10 +623,10 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
                     meta,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10.5,
                       height: 1.2,
-                      color: _kMuted,
+                      color: DunesColors.resolveNullable(context, _kMuted),
                     ),
                   ),
                 ],
@@ -584,7 +667,7 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
             fontSize: 12,
             height: 1.3,
             fontWeight: FontWeight.w600,
-            color: style.ink,
+            color: DunesColors.resolveNullable(context, style.ink),
           ),
         ),
         if (sub.isNotEmpty) ...[
@@ -594,7 +677,11 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
             textAlign: geo.vertical ? TextAlign.left : TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 10.5, height: 1.2, color: _kMuted),
+            style: TextStyle(
+              fontSize: 10.5,
+              height: 1.2,
+              color: DunesColors.resolveNullable(context, _kMuted),
+            ),
           ),
         ],
       ],
@@ -611,7 +698,11 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
             ownerText,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 10, height: 1.2, color: _kFaint),
+            style: TextStyle(
+              fontSize: 10,
+              height: 1.2,
+              color: DunesColors.resolveNullable(context, _kFaint),
+            ),
           ),
         ),
         if (status.level != FlowLevel.ok) ...[
@@ -687,7 +778,11 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
         decoration: BoxDecoration(
-          color: level.chip,
+          color: DunesColors.resolveNullable(
+            context,
+            level.chip,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(3),
         ),
         child: Text(
@@ -696,7 +791,7 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
             fontSize: 9.5,
             height: 1.3,
             fontWeight: FontWeight.w600,
-            color: level.ink,
+            color: DunesColors.resolveNullable(context, level.ink),
           ),
         ),
       ),

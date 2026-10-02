@@ -543,7 +543,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF7F5FA),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF7F5FA),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -564,9 +568,19 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: DunesColors.resolve(
+                              context,
+                              Colors.white,
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFECE4F3)),
+                            border: Border.all(
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFECE4F3),
+                                role: DunesColorRole.border,
+                              ),
+                            ),
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(
@@ -577,13 +591,16 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                               ),
                             ],
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
                                 Icons.arrow_back_ios_new_rounded,
                                 size: 14,
-                                color: Color(0xFF6B5882),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFF6B5882),
+                                ),
                               ),
                               SizedBox(width: 4),
                               Text(
@@ -591,7 +608,10 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w600,
-                                  color: Color(0xFF37274C),
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    Color(0xFF37274C),
+                                  ),
                                 ),
                               ),
                             ],
@@ -610,9 +630,19 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: DunesColors.resolve(
+                              context,
+                              Colors.white,
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFECE4F3)),
+                            border: Border.all(
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFECE4F3),
+                                role: DunesColorRole.border,
+                              ),
+                            ),
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(
@@ -626,20 +656,26 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.arrow_back_ios_new_rounded,
                                 size: 14,
-                                color: Color(0xFF6B5882),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFF6B5882),
+                                ),
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 (_contentChrome?.backLabel ?? '').trim().isEmpty
                                     ? '工作台'
                                     : _contentChrome!.backLabel!.trim(),
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w600,
-                                  color: Color(0xFF37274C),
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    Color(0xFF37274C),
+                                  ),
                                 ),
                               ),
                             ],
@@ -655,8 +691,14 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                           fontSize: _isOverview ? 20 : 17,
                           fontWeight: FontWeight.w800,
                           color: _isOverview
-                              ? const Color(0xFF2C1E3F)
-                              : const Color(0xFF7045B2),
+                              ? DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF2C1E3F),
+                                )
+                              : DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF7045B2),
+                                ),
                         ),
                       ),
                     ),
@@ -673,10 +715,18 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                           child: Container(
                             padding: const EdgeInsets.all(7),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: DunesColors.resolve(
+                                context,
+                                Colors.white,
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: const Color(0xFFECE4F3),
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFFECE4F3),
+                                  role: DunesColorRole.border,
+                                ),
                               ),
                               boxShadow: [
                                 BoxShadow(
@@ -688,10 +738,13 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                                 ),
                               ],
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.refresh_rounded,
                               size: 19,
-                              color: Color(0xFF7045B2),
+                              color: DunesColors.resolveNullable(
+                                context,
+                                Color(0xFF7045B2),
+                              ),
                             ),
                           ),
                         ),
@@ -877,7 +930,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '采购提案',
           subtitle: '采购合同 · 供货商政策',
           icon: Icons.shopping_bag_outlined,
-          color: const Color(0xFF3D7A8C),
+          color: DunesColors.resolve(context, const Color(0xFF3D7A8C)),
           enabled: true,
           onTap: () => _open(_WorkbenchView.purchaseProposalIntake),
         ),
@@ -900,7 +953,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '付款发票审批',
           subtitle: '对公用途查询 · 未开完/完结',
           icon: Icons.receipt_long_outlined,
-          color: const Color(0xFF0F766E),
+          color: DunesColors.resolve(context, const Color(0xFF0F766E)),
           enabled: true,
           onTap: () => _open(_WorkbenchView.paymentInvoice),
         ),
@@ -909,7 +962,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '合同归集',
           subtitle: '编号 · 名称 · 附件',
           icon: Icons.description_outlined,
-          color: const Color(0xFF5B6FC4),
+          color: DunesColors.resolve(context, const Color(0xFF5B6FC4)),
           enabled: true,
           onTap: () => _open(_WorkbenchView.contracts),
         ),
@@ -918,7 +971,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '每日对账',
           subtitle: '日清月结 · 点开核对',
           icon: Icons.sync_alt_outlined,
-          color: const Color(0xFF5B6FC4),
+          color: DunesColors.resolve(context, const Color(0xFF5B6FC4)),
           enabled: true,
           onTap: () => _open(_WorkbenchView.dailyRecon),
         ),
@@ -930,7 +983,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '行政通知',
           subtitle: '发布通知 · 查看确认进度',
           icon: Icons.campaign_outlined,
-          color: const Color(0xFF3D7A8C),
+          color: DunesColors.resolve(context, const Color(0xFF3D7A8C)),
           enabled: true,
           onTap: () => _open(_WorkbenchView.administrativeNotice),
         ),
@@ -939,7 +992,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '公司广播',
           subtitle: '全员推送 · 发布与历史',
           icon: Icons.cell_tower_outlined,
-          color: const Color(0xFF7B5CD8),
+          color: DunesColors.resolve(context, const Color(0xFF7B5CD8)),
           enabled: true,
           onTap: () => _open(_WorkbenchView.companyBroadcast),
         ),
@@ -951,7 +1004,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '组织通告',
           subtitle: '行政通知 · 公司广播',
           icon: Icons.campaign_outlined,
-          color: const Color(0xFF3D7A8C),
+          color: DunesColors.resolve(context, const Color(0xFF3D7A8C)),
           enabled: true,
           onTap: () =>
               _openMergedChoices(title: '选择通告类型', choices: noticeChoices),
@@ -961,7 +1014,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '月度绩效考评',
           subtitle: '导入量表 · 发布结果 · 导出',
           icon: Icons.insights_outlined,
-          color: const Color(0xFF0F766E),
+          color: DunesColors.resolve(context, const Color(0xFF0F766E)),
           enabled: true,
           onTap: () => _open(_WorkbenchView.kpiPerformance),
         ),
@@ -970,7 +1023,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '工资报表',
           subtitle: '按月同步 · 查询与导出',
           icon: Icons.payments_outlined,
-          color: const Color(0xFF3D7A8C),
+          color: DunesColors.resolve(context, const Color(0xFF3D7A8C)),
           enabled: true,
           onTap: () => _open(_WorkbenchView.payrollReports),
         ),
@@ -982,7 +1035,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '携程商旅',
           subtitle: '机票 · 酒店 · 用车',
           icon: Icons.flight_takeoff_outlined,
-          color: const Color(0xFF1668E8),
+          color: DunesColors.resolve(context, const Color(0xFF1668E8)),
           enabled: true,
           onTap: () => widget.navigation.go('CT1'),
         ),
@@ -991,7 +1044,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '薪人薪事',
           subtitle: '人事 · 薪酬 · 考勤',
           icon: Icons.badge_outlined,
-          color: const Color(0xFF0F766E),
+          color: DunesColors.resolve(context, const Color(0xFF0F766E)),
           enabled: true,
           onTap: () => widget.navigation.go('XR1'),
         ),
@@ -1038,7 +1091,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           _WorkbenchSection(
             title: '业务与财务',
             subtitle: '提案 · 合同 · 发票 · 对账',
-            accent: const Color(0xFF0F766E),
+            accent: DunesColors.resolve(context, const Color(0xFF0F766E)),
             children: businessTiles,
           ),
           const SizedBox(height: 14),
@@ -1047,7 +1100,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           _WorkbenchSection(
             title: '行政人事',
             subtitle: '通告 · 绩效 · 薪酬 · 差旅',
-            accent: const Color(0xFF3D7A8C),
+            accent: DunesColors.resolve(context, const Color(0xFF3D7A8C)),
             children: peopleTiles,
           ),
           const SizedBox(height: 14),
@@ -1056,7 +1109,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           _WorkbenchSection(
             title: '企业应用',
             subtitle: '高频直达 · 单点免登',
-            accent: const Color(0xFF3880FF),
+            accent: DunesColors.resolve(context, const Color(0xFF3880FF)),
             children: toolTiles,
           ),
         ],
@@ -1136,7 +1189,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
             Container(
               padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .14),
+                color: DunesColors.resolveNullable(
+                  context,
+                  Colors.white.withValues(alpha: .14),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: Colors.white.withValues(alpha: .20),
@@ -1146,7 +1203,10 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
               child: Icon(
                 icon,
                 size: 13,
-                color: Colors.white.withValues(alpha: .95),
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                ).withValues(alpha: .95),
               ),
             ),
             const SizedBox(width: 8),
@@ -1156,8 +1216,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
               children: [
                 Text(
                   value,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, Colors.white),
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.2,
@@ -1168,7 +1228,10 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: .75),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Colors.white.withValues(alpha: .75),
+                    ),
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1187,12 +1250,12 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         return Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(22),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               colors: [
-                Color(0xFF140E24),
-                Color(0xFF1B132F),
-                Color(0xFF281946),
-                Color(0xFF19102C),
+                DunesColors.resolve(context, Color(0xFF140E24)),
+                DunesColors.resolve(context, Color(0xFF1B132F)),
+                DunesColors.resolve(context, Color(0xFF281946)),
+                DunesColors.resolve(context, Color(0xFF19102C)),
               ],
               stops: [0.0, 0.35, 0.75, 1.0],
               begin: Alignment.topLeft,
@@ -1222,8 +1285,14 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        const Color(0xFF8855DF).withValues(alpha: .24),
-                        const Color(0xFF8855DF).withValues(alpha: 0),
+                        DunesColors.resolve(
+                          context,
+                          const Color(0xFF8855DF),
+                        ).withValues(alpha: .24),
+                        DunesColors.resolve(
+                          context,
+                          const Color(0xFF8855DF),
+                        ).withValues(alpha: 0),
                       ],
                     ),
                   ),
@@ -1275,8 +1344,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                                     name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: DunesColors.resolve(
+                                        context,
+                                        Colors.white,
+                                      ),
                                       fontSize: 18,
                                       fontWeight: FontWeight.w800,
                                       letterSpacing: 0.2,
@@ -1303,10 +1375,13 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                                         width: 0.6,
                                       ),
                                     ),
-                                    child: const Text(
+                                    child: Text(
                                       '数智协同中枢',
                                       style: TextStyle(
-                                        color: Colors.white,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          Colors.white,
+                                        ),
                                         fontSize: 9.5,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -1320,7 +1395,10 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  color: Colors.white.withValues(alpha: .72),
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    Colors.white.withValues(alpha: .72),
+                                  ),
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w400,
                                 ),
@@ -1385,16 +1463,22 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.sync_rounded,
-                                  color: Colors.white,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    Colors.white,
+                                  ),
                                   size: 18,
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
                                   '同步状态',
                                   style: TextStyle(
-                                    color: Colors.white.withValues(alpha: .95),
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ).withValues(alpha: .95),
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -1458,9 +1542,19 @@ class _PlaceholderPane extends StatelessWidget {
         width: 360,
         padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE8EAED)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1469,28 +1563,35 @@ class _PlaceholderPane extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: _themePurple.withValues(alpha: 0.1),
+                color: DunesColors.resolve(
+                  context,
+                  _themePurple,
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.construction_outlined,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
                 size: 28,
               ),
             ),
             const SizedBox(height: 16),
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               '功能建设中，敬请期待',
-              style: TextStyle(color: DunesColors.text3, fontSize: 13),
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+                fontSize: 13,
+              ),
             ),
           ],
         ),
@@ -1516,9 +1617,20 @@ class _WorkbenchSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFECE4F3), width: 0.8),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFECE4F3),
+            role: DunesColorRole.border,
+          ),
+          width: 0.8,
+        ),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF552D8E).withValues(alpha: .04),
@@ -1548,10 +1660,13 @@ class _WorkbenchSection extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15.5,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF2C1E3F),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF2C1E3F),
+                  ),
                   letterSpacing: -0.2,
                 ),
               ),
@@ -1563,26 +1678,40 @@ class _WorkbenchSection extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 11.5,
-                    color: const Color(0xFF7A688F).withValues(alpha: .85),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF7A688F),
+                    ).withValues(alpha: .85),
                   ),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF6F2FA),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF6F2FA),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(99),
                   border: Border.all(
-                    color: const Color(0xFFEBE3F2),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFEBE3F2),
+                      role: DunesColorRole.border,
+                    ),
                     width: 0.6,
                   ),
                 ),
                 child: Text(
                   '${children.length}项',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF7045B2),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFF7045B2),
+                    ),
                   ),
                 ),
               ),
@@ -1687,13 +1816,25 @@ class _WorkbenchCardState extends State<_WorkbenchCard> {
               curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
                 color: _hovered
-                    ? const Color(0xFFFAF7FD)
-                    : const Color(0xFFFDFDFE),
+                    ? DunesColors.resolve(
+                        context,
+                        const Color(0xFFFAF7FD),
+                        role: DunesColorRole.surface,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFFFDFDFE),
+                        role: DunesColorRole.surface,
+                      ),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: _hovered
                       ? tile.color.withValues(alpha: 0.45)
-                      : const Color(0xFFEFE8F5),
+                      : DunesColors.resolve(
+                          context,
+                          const Color(0xFFEFE8F5),
+                          role: DunesColorRole.border,
+                        ),
                   width: _hovered ? 1.0 : 0.8,
                 ),
                 boxShadow: [
@@ -1730,7 +1871,14 @@ class _WorkbenchCardState extends State<_WorkbenchCard> {
                             width: 0.8,
                           ),
                         ),
-                        child: Icon(tile.icon, color: tile.color, size: 18),
+                        child: Icon(
+                          tile.icon,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            tile.color,
+                          ),
+                          size: 18,
+                        ),
                       ),
                       const Spacer(),
                       Icon(
@@ -1738,7 +1886,10 @@ class _WorkbenchCardState extends State<_WorkbenchCard> {
                         size: 13,
                         color: _hovered
                             ? tile.color.withValues(alpha: 0.80)
-                            : const Color(0xFFB5A9C4).withValues(alpha: 0.60),
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFFB5A9C4),
+                              ).withValues(alpha: 0.60),
                       ),
                     ],
                   ),
@@ -1747,11 +1898,14 @@ class _WorkbenchCardState extends State<_WorkbenchCard> {
                     tile.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       height: 1.2,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF2C1E3F),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF2C1E3F),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -1759,10 +1913,13 @@ class _WorkbenchCardState extends State<_WorkbenchCard> {
                     tile.subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10.5,
                       height: 1.2,
-                      color: Color(0xFF7A688F),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF7A688F),
+                      ),
                     ),
                   ),
                 ],
@@ -1904,7 +2061,11 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1913,11 +2074,11 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
+                Text(
                   '管理科技产品与核心能力，支持标签分类与状态追踪',
                   style: TextStyle(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                     height: 1.3,
                   ),
                 ),
@@ -1932,9 +2093,19 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
                 Container(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE8EAED)),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFE8EAED),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -1943,17 +2114,27 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
                           controller: _search,
                           decoration: InputDecoration(
                             hintText: '搜索名称 / 编码 / 负责人',
-                            hintStyle: const TextStyle(
-                              color: DunesColors.text3,
+                            hintStyle: TextStyle(
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                               fontSize: 13,
                             ),
                             isDense: true,
                             filled: true,
-                            fillColor: const Color(0xFFF5F6F8),
-                            prefixIcon: const Icon(
+                            fillColor: DunesColors.resolve(
+                              context,
+                              const Color(0xFFF5F6F8),
+                              role: DunesColorRole.surface,
+                            ),
+                            prefixIcon: Icon(
                               Icons.search,
                               size: 20,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -2008,9 +2189,12 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
                       IconButton(
                         tooltip: '刷新',
                         onPressed: _load,
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.refresh_rounded,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 4),
@@ -2052,9 +2236,18 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, color: Colors.redAccent, size: 36),
+            Icon(
+              Icons.error_outline,
+              color: DunesColors.resolve(context, Colors.redAccent),
+              size: 36,
+            ),
             const SizedBox(height: 10),
-            Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: DunesColors.resolve(context, Colors.redAccent),
+              ),
+            ),
             TextButton(onPressed: _load, child: const Text('重试')),
           ],
         ),
@@ -2068,9 +2261,19 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
           width: 380,
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2081,34 +2284,40 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      _themePurple.withValues(alpha: 0.18),
-                      _themePurple.withValues(alpha: 0.06),
+                      DunesColors.resolve(
+                        context,
+                        _themePurple,
+                      ).withValues(alpha: 0.18),
+                      DunesColors.resolve(
+                        context,
+                        _themePurple,
+                      ).withValues(alpha: 0.06),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.inventory_2_outlined,
-                  color: _themePurple,
+                  color: DunesColors.resolveNullable(context, _themePurple),
                   size: 30,
                 ),
               ),
               const SizedBox(height: 18),
-              const Text(
+              Text(
                 '还没有产品 / 能力',
                 style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 '创建第一条目录，开始维护千机展厅内容',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                   height: 1.4,
                 ),
               ),
@@ -2135,10 +2344,13 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
     }
 
     if (items.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           '没有符合条件的结果',
-          style: TextStyle(fontSize: 14, color: DunesColors.text3),
+          style: TextStyle(
+            fontSize: 14,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
         ),
       );
     }
@@ -2235,7 +2447,7 @@ class _ProductSummaryRow extends StatelessWidget {
             title: '开发中',
             value: '$activeCount',
             subtitle: '进行中',
-            valueColor: const Color(0xFFE8A838),
+            valueColor: DunesColors.resolve(context, const Color(0xFFE8A838)),
           ),
         ),
         const SizedBox(width: 12),
@@ -2245,7 +2457,7 @@ class _ProductSummaryRow extends StatelessWidget {
             title: '已上线',
             value: '$doneCount',
             subtitle: '稳定运行',
-            valueColor: const Color(0xFF3CBFA9),
+            valueColor: DunesColors.resolve(context, const Color(0xFF3CBFA9)),
           ),
         ),
       ],
@@ -2273,9 +2485,19 @@ class _SummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -2289,11 +2511,18 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: DunesColors.text3),
+              Icon(
+                icon,
+                size: 16,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
               const SizedBox(width: 6),
               Text(
                 title,
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ],
           ),
@@ -2303,14 +2532,17 @@ class _SummaryCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w700,
-              color: valueColor,
+              color: DunesColors.resolveNullable(context, valueColor),
               height: 1.1,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -2388,8 +2620,16 @@ class _FilterChipDropdown<T> extends StatelessWidget {
         final open = controller.isOpen;
         return Material(
           color: open
-              ? _themePurple.withValues(alpha: 0.08)
-              : const Color(0xFFF5F6F8),
+              ? DunesColors.resolve(
+                  context,
+                  _themePurple,
+                  role: DunesColorRole.surface,
+                ).withValues(alpha: 0.08)
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFFF5F6F8),
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
@@ -2406,7 +2646,11 @@ class _FilterChipDropdown<T> extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: open
-                      ? _themePurple.withValues(alpha: 0.35)
+                      ? DunesColors.resolve(
+                          context,
+                          _themePurple,
+                          role: DunesColorRole.border,
+                        ).withValues(alpha: 0.35)
                       : Colors.transparent,
                 ),
               ),
@@ -2418,7 +2662,9 @@ class _FilterChipDropdown<T> extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: open ? FontWeight.w600 : FontWeight.w500,
-                      color: open ? _themePurple : DunesColors.text,
+                      color: open
+                          ? DunesColors.resolve(context, _themePurple)
+                          : DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                   const SizedBox(width: 4),
@@ -2427,7 +2673,9 @@ class _FilterChipDropdown<T> extends StatelessWidget {
                         ? Icons.keyboard_arrow_up_rounded
                         : Icons.keyboard_arrow_down_rounded,
                     size: 18,
-                    color: open ? _themePurple : DunesColors.text3,
+                    color: open
+                        ? DunesColors.resolve(context, _themePurple)
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ],
               ),
@@ -2475,7 +2723,11 @@ class _WorkbenchFormDropdown<T> extends StatelessWidget {
         builder: (context, controller, child) {
           final open = controller.isOpen;
           return Material(
-            color: const Color(0xFFF5F6F8),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF5F6F8),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(10),
             child: InkWell(
               borderRadius: BorderRadius.circular(10),
@@ -2495,7 +2747,11 @@ class _WorkbenchFormDropdown<T> extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: open
-                        ? _themePurple.withValues(alpha: 0.4)
+                        ? DunesColors.resolve(
+                            context,
+                            _themePurple,
+                            role: DunesColorRole.border,
+                          ).withValues(alpha: 0.4)
                         : Colors.transparent,
                   ),
                 ),
@@ -2509,7 +2765,9 @@ class _WorkbenchFormDropdown<T> extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: open ? FontWeight.w600 : FontWeight.w500,
-                          color: open ? _themePurple : DunesColors.text,
+                          color: open
+                              ? DunesColors.resolve(context, _themePurple)
+                              : DunesColors.resolve(context, DunesColors.text),
                         ),
                       ),
                     ),
@@ -2518,7 +2776,9 @@ class _WorkbenchFormDropdown<T> extends StatelessWidget {
                           ? Icons.keyboard_arrow_up_rounded
                           : Icons.keyboard_arrow_down_rounded,
                       size: 20,
-                      color: open ? _themePurple : DunesColors.text3,
+                      color: open
+                          ? DunesColors.resolve(context, _themePurple)
+                          : DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ],
                 ),
@@ -2557,20 +2817,23 @@ class _FormLabeledField extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
               ),
             ),
             if (required) ...[
               const SizedBox(width: 2),
-              const Text(
+              Text(
                 '*',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFFE35D6A),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFE35D6A),
+                  ),
                 ),
               ),
             ],
@@ -2597,18 +2860,22 @@ class _ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kindColor = switch (product.kind) {
-      'platform' => const Color(0xFF5B8DEF),
-      'capability' => const Color(0xFF3CBFA9),
-      _ => _themePurple,
+      'platform' => DunesColors.resolve(context, const Color(0xFF5B8DEF)),
+      'capability' => DunesColors.resolve(context, const Color(0xFF3CBFA9)),
+      _ => DunesColors.resolve(context, _themePurple),
     };
     final statusColor = switch (product.status) {
-      'paused' => const Color(0xFFE8A838),
-      'done' => const Color(0xFF6B7280),
-      _ => const Color(0xFF22A06B),
+      'paused' => DunesColors.resolve(context, const Color(0xFFE8A838)),
+      'done' => DunesColors.resolve(context, const Color(0xFF6B7280)),
+      _ => DunesColors.resolve(context, const Color(0xFF22A06B)),
     };
 
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -2616,7 +2883,13 @@ class _ProductCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
           child: Column(
@@ -2628,13 +2901,17 @@ class _ProductCard extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: kindColor.withValues(alpha: 0.12),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        kindColor.withValues(alpha: 0.12),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       Icons.inventory_2_outlined,
                       size: 18,
-                      color: kindColor,
+                      color: DunesColors.resolveNullable(context, kindColor),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -2643,10 +2920,10 @@ class _ProductCard extends StatelessWidget {
                       product.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ),
@@ -2654,20 +2931,20 @@ class _ProductCard extends StatelessWidget {
                     tooltip: '编辑',
                     visualDensity: VisualDensity.compact,
                     onPressed: onEdit,
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.edit_outlined,
                       size: 18,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
                     ),
                   ),
                   IconButton(
                     tooltip: '删除',
                     visualDensity: VisualDensity.compact,
                     onPressed: onDelete,
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.delete_outline,
                       size: 18,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 ],
@@ -2675,7 +2952,10 @@ class _ProductCard extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 product.code.isEmpty ? '未设置编码' : product.code,
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               const Spacer(),
               Wrap(
@@ -2691,7 +2971,7 @@ class _ProductCard extends StatelessWidget {
                   if (product.ownerName.isNotEmpty)
                     _MetaChip(
                       text: product.ownerName,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
                     ),
                 ],
               ),
@@ -2736,14 +3016,18 @@ class _MetaChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: DunesColors.resolveNullable(
+          context,
+          color.withValues(alpha: 0.1),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         text,
         style: TextStyle(
           fontSize: 11,
-          color: color,
+          color: DunesColors.resolveNullable(context, color),
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -2895,7 +3179,12 @@ class _ProductEditorDialogState extends State<_ProductEditorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消', style: TextStyle(color: DunesColors.text2)),
+          child: Text(
+            '取消',
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
+          ),
         ),
         FilledButton(
           style: FilledButton.styleFrom(
@@ -2947,21 +3236,32 @@ class _ProductEditorDialogState extends State<_ProductEditorDialog> {
           TextField(
             controller: c,
             maxLines: maxLines,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
               height: 1.3,
             ),
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: TextStyle(
                 fontSize: 14,
-                color: DunesColors.text3.withValues(alpha: 0.85),
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.text3,
+                ).withValues(alpha: 0.85),
               ),
               filled: true,
               fillColor: hasError
-                  ? const Color(0xFFFFF1F2)
-                  : const Color(0xFFF5F6F8),
+                  ? DunesColors.resolve(
+                      context,
+                      const Color(0xFFFFF1F2),
+                      role: DunesColorRole.surface,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFF5F6F8),
+                      role: DunesColorRole.surface,
+                    ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 14,
                 vertical: 12,
@@ -2973,15 +3273,29 @@ class _ProductEditorDialogState extends State<_ProductEditorDialog> {
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: hasError
-                    ? const BorderSide(color: Color(0xFFE35D6A))
+                    ? BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          Color(0xFFE35D6A),
+                          role: DunesColorRole.border,
+                        ),
+                      )
                     : BorderSide.none,
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
                   color: hasError
-                      ? const Color(0xFFE35D6A)
-                      : _themePurple.withValues(alpha: 0.4),
+                      ? DunesColors.resolve(
+                          context,
+                          const Color(0xFFE35D6A),
+                          role: DunesColorRole.border,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          _themePurple,
+                          role: DunesColorRole.border,
+                        ).withValues(alpha: 0.4),
                 ),
               ),
             ),
@@ -2990,7 +3304,10 @@ class _ProductEditorDialogState extends State<_ProductEditorDialog> {
             const SizedBox(height: 6),
             Text(
               errorText,
-              style: const TextStyle(fontSize: 12, color: Color(0xFFE35D6A)),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolveNullable(context, Color(0xFFE35D6A)),
+              ),
             ),
           ],
         ],
@@ -3077,7 +3394,10 @@ class _DisplaySettingsPaneState extends State<_DisplaySettingsPane> {
     }
     if (_error != null) {
       return Center(
-        child: Text(_error!, style: const TextStyle(color: Colors.red)),
+        child: Text(
+          _error!,
+          style: TextStyle(color: DunesColors.resolve(context, Colors.red)),
+        ),
       );
     }
     return ListView(
@@ -3086,9 +3406,19 @@ class _DisplaySettingsPaneState extends State<_DisplaySettingsPane> {
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3098,9 +3428,12 @@ class _DisplaySettingsPaneState extends State<_DisplaySettingsPane> {
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 '控制对内全量与对外展厅的默认呈现方式',
-                style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               const SizedBox(height: 14),
               Row(
@@ -3133,9 +3466,19 @@ class _DisplaySettingsPaneState extends State<_DisplaySettingsPane> {
         Container(
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3145,9 +3488,12 @@ class _DisplaySettingsPaneState extends State<_DisplaySettingsPane> {
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 '关闭后，对应字段在展厅中不再展示',
-                style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
               const SizedBox(height: 8),
               for (final e in _visibility.entries)
@@ -3220,8 +3566,16 @@ class _ModeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: selected
-          ? _themePurple.withValues(alpha: 0.08)
-          : const Color(0xFFF5F6F8),
+          ? DunesColors.resolve(
+              context,
+              _themePurple,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.08)
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF5F6F8),
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -3231,13 +3585,24 @@ class _ModeCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected ? _themePurple : Colors.transparent,
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : Colors.transparent,
               width: 1.5,
             ),
           ),
           child: Row(
             children: [
-              Icon(icon, color: selected ? _themePurple : DunesColors.text2),
+              Icon(
+                icon,
+                color: selected
+                    ? DunesColors.resolve(context, _themePurple)
+                    : DunesColors.resolve(context, DunesColors.text2),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -3247,22 +3612,28 @@ class _ModeCard extends StatelessWidget {
                       title,
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: selected ? _themePurple : DunesColors.text,
+                        color: selected
+                            ? DunesColors.resolve(context, _themePurple)
+                            : DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],
                 ),
               ),
               if (selected)
-                const Icon(Icons.check_circle, color: _themePurple, size: 20),
+                Icon(
+                  Icons.check_circle,
+                  color: DunesColors.resolveNullable(context, _themePurple),
+                  size: 20,
+                ),
             ],
           ),
         ),

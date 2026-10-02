@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// 云枢品牌图标，对齐 WebView `data-nova-icon` / `nova-icon-img`。
 abstract final class NovaIcon {
@@ -104,14 +105,22 @@ class _NovaIconSparkleFallback extends StatelessWidget {
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFA78BD9), Color(0xFF7C62C2), Color(0xFF5A40A0)],
+          colors: [
+            DunesColors.resolve(context, Color(0xFFA78BD9)),
+            DunesColors.resolve(context, Color(0xFF7C62C2)),
+            DunesColors.resolve(context, Color(0xFF5A40A0)),
+          ],
         ),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
-      child: Icon(Icons.auto_awesome, size: size * 0.42, color: Colors.white),
+      child: Icon(
+        Icons.auto_awesome,
+        size: size * 0.42,
+        color: DunesColors.resolve(context, Colors.white),
+      ),
     );
   }
 }

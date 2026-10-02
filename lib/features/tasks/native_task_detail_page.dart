@@ -437,7 +437,11 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFE35D6A),
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFE35D6A),
+                role: DunesColorRole.surface,
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除'),
@@ -664,7 +668,11 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFE35D6A),
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFE35D6A),
+                role: DunesColorRole.surface,
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除'),
@@ -699,7 +707,11 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFE35D6A),
+              backgroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFE35D6A),
+                role: DunesColorRole.surface,
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除'),
@@ -760,26 +772,37 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF7F8FA),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(9),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: DunesColors.text3),
+          Icon(
+            icon,
+            size: 16,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
           const SizedBox(width: 7),
           Text(
             '$label：',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(width: 2),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
                 height: 1.35,
               ),
             ),
@@ -817,19 +840,29 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF6E8),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFFFF6E8),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8C48A)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8C48A),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Color(0xFFB45309),
+              color: DunesColors.resolveNullable(context, Color(0xFFB45309)),
             ),
           ),
           const SizedBox(height: 4),
@@ -838,9 +871,9 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 line,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                   height: 1.4,
                 ),
               ),
@@ -874,9 +907,19 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE3E5EA)),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFE3E5EA),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -894,18 +937,30 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                       TaskMetaChip(
                         text: taskChangeStatusLabel(req.status),
                         color: req.status == 'approved'
-                            ? const Color(0xFF1F9D76)
+                            ? DunesColors.resolve(
+                                context,
+                                const Color(0xFF1F9D76),
+                              )
                             : req.status == 'rejected'
-                            ? const Color(0xFFE35D6A)
+                            ? DunesColors.resolve(
+                                context,
+                                const Color(0xFFE35D6A),
+                              )
                             : req.status == 'withdrawn'
-                            ? DunesColors.text3
-                            : const Color(0xFFB45309),
+                            ? DunesColors.resolve(context, DunesColors.text3)
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFFB45309),
+                              ),
                       ),
                       if (req.overdueAtSubmit) ...[
                         const SizedBox(width: 6),
-                        const TaskMetaChip(
+                        TaskMetaChip(
                           text: '逾期修改',
-                          color: Color(0xFFB45309),
+                          color: DunesColors.resolve(
+                            context,
+                            Color(0xFFB45309),
+                          ),
                         ),
                       ],
                     ],
@@ -913,9 +968,9 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                   const SizedBox(height: 6),
                   Text(
                     '${req.requesterName.isEmpty ? '发起人' : req.requesterName} → ${req.approverName.isEmpty ? '任务流上级' : req.approverName}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                   for (final field in req.changes)
@@ -923,10 +978,10 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
                         _changeFieldLine(field),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           height: 1.4,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
                         ),
                       ),
                     ),
@@ -935,9 +990,12 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
                         '审批意见：${req.decisionComment.trim()}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
                         ),
                       ),
                     ),
@@ -1058,7 +1116,13 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
               width: 220,
               child: Text(
                 completeBlock,
-                style: const TextStyle(fontSize: 12, color: Color(0xFFB45309)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFFB45309),
+                  ),
+                ),
               ),
             ),
           );
@@ -1114,7 +1178,13 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               foregroundColor: _themePurple,
-              side: BorderSide(color: _themePurple.withValues(alpha: 0.45)),
+              side: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  _themePurple,
+                  role: DunesColorRole.border,
+                ).withValues(alpha: 0.45),
+              ),
             ),
             onPressed: _busy
                 ? null
@@ -1147,19 +1217,29 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE3E5EA)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE3E5EA),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '任务操作',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
           const SizedBox(height: 10),
@@ -1174,7 +1254,11 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     final d = _detail;
     return TaskTheme(
       child: ColoredBox(
-        color: const Color(0xFFF5F6F8),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF5F6F8),
+          role: DunesColorRole.surface,
+        ),
         // 点击输入框外的空白处收起软键盘（详情页含描述内联编辑）
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
@@ -1220,31 +1304,40 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.arrow_back_ios_new,
                               size: 14,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
                             ),
                             const SizedBox(width: 2),
                             Text(
                               widget.backLabel,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
-                                color: DunesColors.text2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
                     );
-                    final title = const Text(
+                    final title = Text(
                       '任务详情',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: _themePurple,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          _themePurple,
+                        ),
                       ),
                     );
                     final share = IconButton(
@@ -1258,27 +1351,33 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(
+                          : Icon(
                               Icons.ios_share_rounded,
                               size: 19,
-                              color: _themePurple,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _themePurple,
+                              ),
                             ),
                     );
                     final guide = IconButton(
                       tooltip: '使用指引',
                       onPressed: () => unawaited(_showGuide(force: true)),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.help_outline,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
                       ),
                     );
                     final add = _canAddSubtask
                         ? IconButton(
                             tooltip: '添加子目标',
                             onPressed: _busy ? null : widget.onAddSubtask,
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.add_task_outlined,
-                              color: _themePurple,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _themePurple,
+                              ),
                             ),
                           )
                         : const SizedBox.shrink();
@@ -1286,9 +1385,12 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                         ? IconButton(
                             tooltip: '删除',
                             onPressed: _busy ? null : _delete,
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.delete_outline,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           )
                         : const SizedBox.shrink();
@@ -1345,7 +1447,11 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: _themePurple.withValues(alpha: 0.08),
+                      color: DunesColors.resolve(
+                        context,
+                        _themePurple,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -1355,9 +1461,9 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                               : _canEvaluate
                               ? '只读查看。任务完成后可以填写评价。'
                               : '只读：可查看任务信息，不可编辑或操作'),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -1380,9 +1486,19 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     return Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFE8EAED)),
+                        border: Border.all(
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFE8EAED),
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1423,10 +1539,13 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                                     ),
                               child: Text(
                                 '属于 ${d.task.parentTitle}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: _themePurple,
+                                  color: DunesColors.resolveNullable(
+                                    context,
+                                    _themePurple,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1439,18 +1558,30 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                               TaskMetaChip(
                                 text: d.task.isMain ? '主目标' : '子目标',
                                 color: d.task.isMain
-                                    ? _themePurple
-                                    : const Color(0xFF2D8A5E),
+                                    ? DunesColors.resolve(context, _themePurple)
+                                    : DunesColors.resolve(
+                                        context,
+                                        const Color(0xFF2D8A5E),
+                                      ),
                               ),
                               TaskMetaChip(
                                 text: overdueOpen
                                     ? '已逾期未办结'
                                     : taskStatusLabel(d.task.status),
                                 color: overdueOpen
-                                    ? const Color(0xFFB45309)
+                                    ? DunesColors.resolve(
+                                        context,
+                                        const Color(0xFFB45309),
+                                      )
                                     : (done
-                                          ? const Color(0xFF1F9D76)
-                                          : _themePurple),
+                                          ? DunesColors.resolve(
+                                              context,
+                                              const Color(0xFF1F9D76),
+                                            )
+                                          : DunesColors.resolve(
+                                              context,
+                                              _themePurple,
+                                            )),
                               ),
                               if (d.task.hasPendingChange ||
                                   d.pendingChangeRequest != null)
@@ -1459,23 +1590,32 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                                     d.pendingChangeRequest?.kind ??
                                         d.task.pendingChangeKind,
                                   ),
-                                  color: const Color(0xFFB45309),
+                                  color: DunesColors.resolve(
+                                    context,
+                                    const Color(0xFFB45309),
+                                  ),
                                 ),
                               TaskMetaChip(
                                 text:
                                     '优先级${taskPriorityLabel(d.task.priority)}',
-                                color: DunesColors.text2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
                               ),
                             ],
                           ),
                           if (_pendingChangeLocked) ...[
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               '有待审批的变更。通过或驳回之前，不能编辑、完成或删除。',
                               style: TextStyle(
                                 fontSize: 12,
                                 height: 1.4,
-                                color: Color(0xFFB45309),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFFB45309),
+                                ),
                               ),
                             ),
                           ],
@@ -1483,12 +1623,15 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                               d.task.status == 'completed' &&
                               !_viewOnly) ...[
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               '主目标已完成，不能直接添加子目标。需要继续时，请先重新打开。',
                               style: TextStyle(
                                 fontSize: 12,
                                 height: 1.4,
-                                color: DunesColors.text2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
                               ),
                             ),
                           ],
@@ -1523,9 +1666,12 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                             const SizedBox(height: 8),
                             Text(
                               overdueHint,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: Color(0xFFB45309),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFFB45309),
+                                ),
                                 height: 1.35,
                               ),
                             ),
@@ -1542,11 +1688,14 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                           ],
                           if (d.task.acceptanceCriteria.trim().isNotEmpty) ...[
                             const SizedBox(height: 14),
-                            const Text(
+                            Text(
                               '验收标准',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -1603,9 +1752,12 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     '这些子目标会独立考核，进度同时汇总到上面的主目标',
-                    style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   if (d.subtasks.isEmpty)
@@ -1613,13 +1765,28 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE8EAED)),
+                        border: Border.all(
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFE8EAED),
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                       ),
                       child: Text(
                         _canAddSubtask ? '还没有子目标，可点右上角添加' : '还没有子目标',
-                        style: const TextStyle(color: DunesColors.text3),
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
                       ),
                     )
                   else
@@ -1650,13 +1817,25 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE8EAED)),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFE8EAED),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
-                    child: const Text(
+                    child: Text(
                       '暂无进展记录',
-                      style: TextStyle(color: DunesColors.text3),
+                      style: TextStyle(
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
                   )
                 else
@@ -1690,13 +1869,25 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE8EAED)),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFE8EAED),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
-                    child: const Text(
+                    child: Text(
                       '暂无评价记录',
-                      style: TextStyle(color: DunesColors.text3),
+                      style: TextStyle(
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
                   )
                 else
@@ -1749,17 +1940,27 @@ class _ActivityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kindColor = taskKind == '子目标'
-        ? const Color(0xFF2D8A5E)
-        : _themePurple;
+        ? DunesColors.resolve(context, const Color(0xFF2D8A5E))
+        : DunesColors.resolve(context, _themePurple);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE8EAED)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1772,7 +1973,11 @@ class _ActivityCard extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: kindColor.withValues(alpha: 0.12),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      kindColor.withValues(alpha: 0.12),
+                      role: DunesColorRole.surface,
+                    ),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -1780,7 +1985,7 @@ class _ActivityCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: kindColor,
+                      color: DunesColors.resolveNullable(context, kindColor),
                     ),
                   ),
                 ),
@@ -1790,10 +1995,10 @@ class _ActivityCard extends StatelessWidget {
                     taskTitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                 ),
@@ -1802,10 +2007,10 @@ class _ActivityCard extends StatelessWidget {
                     tooltip: '删除',
                     visualDensity: VisualDensity.compact,
                     onPressed: onDelete,
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.delete_outline,
                       size: 18,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
               ],
@@ -1813,16 +2018,19 @@ class _ActivityCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
                 height: 1.4,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               '$userName · $timeText',
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
             if (attachments.isNotEmpty) ...[
               const SizedBox(height: 8),

@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 
 import 'lighthouse_equity_link.dart';
 import 'lighthouse_theme.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 // 权益指路（不是对账）
 //
@@ -350,7 +351,11 @@ class _EquityPopover extends StatelessWidget {
         width: width,
         constraints: BoxConstraints(maxHeight: maxHeight),
         decoration: BoxDecoration(
-          color: LhColors.paper,
+          color: DunesColors.resolve(
+            context,
+            LhColors.paper,
+            role: DunesColorRole.surface,
+          ),
           border: Border.all(color: _line, width: 0.8),
           borderRadius: BorderRadius.circular(14),
           boxShadow: const [
@@ -368,11 +373,18 @@ class _EquityPopover extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _header(),
-            Container(height: 0.7, color: _line),
+            Container(
+              height: 0.7,
+              color: DunesColors.resolveNullable(
+                context,
+                _line,
+                role: DunesColorRole.surface,
+              ),
+            ),
             if (transactionProfit != null) _transactionStrip(),
             Flexible(
               child: links.isEmpty
-                  ? const Padding(
+                  ? Padding(
                       padding: EdgeInsets.symmetric(
                         horizontal: 18,
                         vertical: 22,
@@ -381,7 +393,7 @@ class _EquityPopover extends StatelessWidget {
                         '暂无关联权益',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: LhColors.mute2,
+                          color: DunesColors.resolve(context, LhColors.mute2),
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
                         ),
@@ -430,7 +442,11 @@ class _EquityPopover extends StatelessWidget {
               width: arrowSize,
               height: arrowSize,
               decoration: BoxDecoration(
-                color: LhColors.paper,
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.paper,
+                  role: DunesColorRole.surface,
+                ),
                 border: Border.all(color: _line, width: 0.8),
               ),
             ),

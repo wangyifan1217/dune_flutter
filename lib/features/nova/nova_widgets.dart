@@ -30,8 +30,11 @@ class NovaAiBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFD580), Color(0xFFFFA850)],
+        gradient: LinearGradient(
+          colors: [
+            DunesColors.resolve(context, Color(0xFFFFD580)),
+            DunesColors.resolve(context, Color(0xFFFFA850)),
+          ],
         ),
         borderRadius: BorderRadius.circular(3),
       ),
@@ -40,7 +43,8 @@ class NovaAiBadge extends StatelessWidget {
         style: DunesTypography.mono(
           fontSize: 7.5,
           fontWeight: FontWeight.w700,
-          color: const Color(0xFF5D3508),
+          color: DunesColors.resolve(context, const Color(0xFF5D3508)),
+          context: context,
         ),
       ),
     );
@@ -90,10 +94,21 @@ class NovaPageHeader extends StatelessWidget {
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         border: Border(
-          bottom: BorderSide(color: Color(0xFFF0F1F5), width: 0.8),
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFF0F1F5),
+              role: DunesColorRole.border,
+            ),
+            width: 0.8,
+          ),
         ),
       ),
       child: Row(
@@ -140,7 +155,11 @@ class _NovaSegmentedTabs extends StatelessWidget {
           height: 32,
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: const Color(0xFFF2F3F7),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF2F3F7),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(16),
           ),
           child: LayoutBuilder(
@@ -155,7 +174,11 @@ class _NovaSegmentedTabs extends StatelessWidget {
                     width: segmentWidth,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(13),
                         boxShadow: const [
                           BoxShadow(
@@ -185,10 +208,17 @@ class _NovaSegmentedTabs extends StatelessWidget {
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color: Color.lerp(
-                                    const Color(0xFF8B919E),
-                                    const Color(0xFF6B3FE2),
+                                    DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF8B919E),
+                                    ),
+                                    DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF6B3FE2),
+                                    ),
                                     i == 0 ? (1 - t) : t,
                                   ),
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -231,9 +261,20 @@ class _HeaderCircleButton extends StatelessWidget {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-          color: const Color(0xFFF5F6F9),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFF5F6F9),
+            role: DunesColorRole.surface,
+          ),
           shape: BoxShape.circle,
-          border: Border.all(color: const Color(0xFFE8EAF0), width: 0.8),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8EAF0),
+              role: DunesColorRole.border,
+            ),
+            width: 0.8,
+          ),
         ),
         child: InkWell(
           customBorder: const CircleBorder(),
@@ -246,7 +287,11 @@ class _HeaderCircleButton extends StatelessWidget {
           child: Center(
             child: Transform.translate(
               offset: iconOffset,
-              child: Icon(icon, size: iconSize, color: const Color(0xFF2C323E)),
+              child: Icon(
+                icon,
+                size: iconSize,
+                color: DunesColors.resolve(context, const Color(0xFF2C323E)),
+              ),
             ),
           ),
         ),
@@ -272,9 +317,16 @@ class _NovaHeaderMenuItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: const Color(0xFF333333)),
+        Icon(
+          icon,
+          size: 18,
+          color: DunesColors.resolve(context, const Color(0xFF333333)),
+        ),
         const SizedBox(width: 10),
-        Text(label, style: DunesTypography.sans(fontSize: 14)),
+        Text(
+          label,
+          style: DunesTypography.sans(fontSize: 14, context: context),
+        ),
       ],
     );
   }
@@ -310,7 +362,11 @@ class NovaC4ModelPicker extends StatelessWidget {
       opacity: dimmed ? 0.55 : 1,
       child: Container(
         alignment: Alignment.centerLeft,
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         padding: const EdgeInsets.fromLTRB(52, 2, 16, 10),
         child: Material(
           color: Colors.transparent,
@@ -319,9 +375,19 @@ class NovaC4ModelPicker extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             child: Ink(
               decoration: BoxDecoration(
-                color: const Color(0xFFF5F1FB),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF5F1FB),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0xFFDFD4F0)),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFDFD4F0),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -331,10 +397,13 @@ class NovaC4ModelPicker extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.bolt_rounded,
                       size: 15,
-                      color: Color(0xFF7E64BD),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF7E64BD),
+                      ),
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -344,14 +413,21 @@ class NovaC4ModelPicker extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF553B96),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF553B96),
+                        ),
+                        context: context,
                       ),
                     ),
                     if (multi)
-                      const Icon(
+                      Icon(
                         Icons.keyboard_arrow_down_rounded,
                         size: 16,
-                        color: Color(0xFF7E64BD),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF7E64BD),
+                        ),
                       ),
                   ],
                 ),
@@ -380,8 +456,12 @@ Future<void> showNovaModelSheet(
       return SafeArea(
         top: false,
         child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              ctx,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
@@ -392,7 +472,11 @@ Future<void> showNovaModelSheet(
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: DunesColors.borderSoft,
+                  color: DunesColors.resolve(
+                    ctx,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(99),
                 ),
               ),
@@ -405,7 +489,8 @@ Future<void> showNovaModelSheet(
                     style: DunesTypography.sans(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(ctx, DunesColors.text2),
+                      context: ctx,
                     ),
                   ),
                 ),
@@ -425,7 +510,11 @@ Future<void> showNovaModelSheet(
                     final intro = novaModelDisplayIntro(id, modelCatalog);
                     return Material(
                       color: active
-                          ? const Color(0x14553B96)
+                          ? DunesColors.resolve(
+                              ctx,
+                              const Color(0x14553B96),
+                              role: DunesColorRole.surface,
+                            )
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(14),
                       child: InkWell(
@@ -443,7 +532,11 @@ Future<void> showNovaModelSheet(
                               ? BoxDecoration(
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                    color: const Color(0x2E553B96),
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      const Color(0x2E553B96),
+                                      role: DunesColorRole.border,
+                                    ),
                                   ),
                                 )
                               : null,
@@ -455,22 +548,37 @@ Future<void> showNovaModelSheet(
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
                                   gradient: active
-                                      ? const LinearGradient(
+                                      ? LinearGradient(
                                           colors: [
-                                            Color(0xFF553B96),
-                                            Color(0xFF7B5CB8),
+                                            DunesColors.resolve(
+                                              ctx,
+                                              Color(0xFF553B96),
+                                            ),
+                                            DunesColors.resolve(
+                                              ctx,
+                                              Color(0xFF7B5CB8),
+                                            ),
                                           ],
                                         )
                                       : null,
-                                  color: active ? null : DunesColors.bgApp,
+                                  color: active
+                                      ? null
+                                      : DunesColors.resolve(
+                                          ctx,
+                                          DunesColors.bgApp,
+                                          role: DunesColorRole.surface,
+                                        ),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
                                   Icons.memory,
                                   size: 18,
                                   color: active
-                                      ? Colors.white
-                                      : DunesColors.accent,
+                                      ? DunesColors.resolve(ctx, Colors.white)
+                                      : DunesColors.resolve(
+                                          ctx,
+                                          DunesColors.accent,
+                                        ),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -483,7 +591,11 @@ Future<void> showNovaModelSheet(
                                       style: DunesTypography.mono(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
-                                        color: DunesColors.text,
+                                        color: DunesColors.resolve(
+                                          ctx,
+                                          DunesColors.text,
+                                        ),
+                                        context: ctx,
                                       ),
                                     ),
                                     if (intro.isNotEmpty) ...[
@@ -492,8 +604,12 @@ Future<void> showNovaModelSheet(
                                         intro,
                                         style: DunesTypography.sans(
                                           fontSize: 11,
-                                          color: DunesColors.text3,
+                                          color: DunesColors.resolve(
+                                            ctx,
+                                            DunesColors.text3,
+                                          ),
                                           height: 1.45,
+                                          context: ctx,
                                         ),
                                       ),
                                     ],
@@ -505,19 +621,30 @@ Future<void> showNovaModelSheet(
                                   width: 22,
                                   height: 22,
                                   alignment: Alignment.center,
-                                  decoration: const BoxDecoration(
+                                  decoration: BoxDecoration(
                                     gradient: LinearGradient(
                                       colors: [
-                                        Color(0xFF553B96),
-                                        Color(0xFF7B5CB8),
+                                        DunesColors.resolve(
+                                          ctx,
+                                          Color(0xFF553B96),
+                                          role: DunesColorRole.surface,
+                                        ),
+                                        DunesColors.resolve(
+                                          ctx,
+                                          Color(0xFF7B5CB8),
+                                          role: DunesColorRole.surface,
+                                        ),
                                       ],
                                     ),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.check,
                                     size: 13,
-                                    color: Colors.white,
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      Colors.white,
+                                    ),
                                   ),
                                 ),
                             ],
@@ -552,14 +679,22 @@ class NovaStatusBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = warning ? DunesColors.coralSoft : DunesColors.accentSoft;
-    final fg = warning ? DunesColors.coral : DunesColors.accentDeep;
+    final bg = warning
+        ? DunesColors.resolve(context, DunesColors.coralSoft)
+        : DunesColors.resolve(context, DunesColors.accentSoft);
+    final fg = warning
+        ? DunesColors.resolve(context, DunesColors.coral)
+        : DunesColors.resolve(context, DunesColors.accentDeep);
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: bg,
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(9),
         border: Border.all(color: fg.withValues(alpha: 0.25)),
       ),
@@ -569,7 +704,7 @@ class NovaStatusBanner extends StatelessWidget {
           Icon(
             warning ? Icons.info_outline : Icons.check_circle_outline,
             size: 15,
-            color: fg,
+            color: DunesColors.resolveNullable(context, fg),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -579,6 +714,7 @@ class NovaStatusBanner extends StatelessWidget {
                 fontSize: 12,
                 color: fg,
                 height: 1.35,
+                context: context,
               ),
             ),
           ),
@@ -592,7 +728,13 @@ class NovaStatusBanner extends StatelessWidget {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text('重试', style: TextStyle(fontSize: 12, color: fg)),
+              child: Text(
+                '重试',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolveNullable(context, fg),
+                ),
+              ),
             ),
           ],
         ],
@@ -626,8 +768,9 @@ class NovaC4BusyHint extends StatelessWidget {
         textAlign: TextAlign.center,
         style: DunesTypography.sans(
           fontSize: 12,
-          color: DunesColors.text3,
+          color: DunesColors.resolve(context, DunesColors.text3),
           height: 1.4,
+          context: context,
         ),
       ),
     );
@@ -677,9 +820,19 @@ class _NovaC4ThinkPanelState extends State<NovaC4ThinkPanel> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -695,7 +848,7 @@ class _NovaC4ThinkPanelState extends State<NovaC4ThinkPanel> {
                   Icon(
                     Icons.auto_awesome,
                     size: 13,
-                    color: DunesColors.accentDeep,
+                    color: DunesColors.resolve(context, DunesColors.accentDeep),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -707,7 +860,11 @@ class _NovaC4ThinkPanelState extends State<NovaC4ThinkPanel> {
                           style: DunesTypography.sans(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                            context: context,
                           ),
                         ),
                         if (widget.status.isNotEmpty)
@@ -715,8 +872,12 @@ class _NovaC4ThinkPanelState extends State<NovaC4ThinkPanel> {
                             widget.status,
                             style: DunesTypography.sans(
                               fontSize: 11,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                               height: 1.4,
+                              context: context,
                             ),
                           ),
                       ],
@@ -727,7 +888,7 @@ class _NovaC4ThinkPanelState extends State<NovaC4ThinkPanel> {
                     child: Icon(
                       Icons.keyboard_arrow_down_rounded,
                       size: 16,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                 ],
@@ -738,15 +899,24 @@ class _NovaC4ThinkPanelState extends State<NovaC4ThinkPanel> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
+                ),
               ),
               child: Text(
                 widget.body,
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                   height: 1.55,
+                  context: context,
                 ),
               ),
             ),
@@ -769,7 +939,11 @@ class NovaC4AiBubble extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(4),
           topRight: Radius.circular(18),
@@ -783,13 +957,20 @@ class NovaC4AiBubble extends StatelessWidget {
             offset: Offset(0, 3),
           ),
         ],
-        border: Border.all(color: const Color(0xFFEDEFF5)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFEDEFF5),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: DefaultTextStyle(
         style: DunesTypography.sans(
           fontSize: 14.5,
-          color: const Color(0xFF1F2329),
+          color: DunesColors.resolve(context, const Color(0xFF1F2329)),
           height: 1.55,
+          context: context,
         ),
         child: child,
       ),
@@ -824,7 +1005,11 @@ class NovaC4SentBubble extends StatelessWidget {
           ? const EdgeInsets.all(4)
           : const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFE8F1FF),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFE8F1FF),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(18),
           topRight: Radius.circular(4),
@@ -839,8 +1024,22 @@ class NovaC4SentBubble extends StatelessWidget {
           ),
         ],
         border: highlighted
-            ? Border.all(color: const Color(0xFF2E75FF), width: 1.5)
-            : Border.all(color: const Color(0xFFD4E5FF), width: 0.8),
+            ? Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFF2E75FF),
+                  role: DunesColorRole.border,
+                ),
+                width: 1.5,
+              )
+            : Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFD4E5FF),
+                  role: DunesColorRole.border,
+                ),
+                width: 0.8,
+              ),
       ),
       child:
           child ??
@@ -848,8 +1047,9 @@ class NovaC4SentBubble extends StatelessWidget {
             text,
             style: DunesTypography.sans(
               fontSize: 14.5,
-              color: const Color(0xFF1D2129),
+              color: DunesColors.resolve(context, const Color(0xFF1D2129)),
               height: 1.45,
+              context: context,
             ),
           ),
     );
@@ -904,7 +1104,11 @@ class _NovaC4ThinkingDotsState extends State<NovaC4ThinkingDots>
                   height: 6,
                   margin: EdgeInsets.only(right: i < 2 ? 5 : 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6B3FE2).withValues(alpha: opacity),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF6B3FE2),
+                      role: DunesColorRole.surface,
+                    ).withValues(alpha: opacity),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -917,8 +1121,9 @@ class _NovaC4ThinkingDotsState extends State<NovaC4ThinkingDots>
             widget.label,
             style: DunesTypography.sans(
               fontSize: 12.5,
-              color: const Color(0xFF86909C),
+              color: DunesColors.resolve(context, const Color(0xFF86909C)),
               fontWeight: FontWeight.w500,
+              context: context,
             ),
           ),
       ],
@@ -934,11 +1139,22 @@ class NovaC4MessageStream extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFFF7F8FC), Color(0xFFF3F5FA)],
+          colors: [
+            DunesColors.resolve(
+              context,
+              Color(0xFFF7F8FC),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFF3F5FA),
+              role: DunesColorRole.surface,
+            ),
+          ],
         ),
       ),
       child: child,
@@ -976,7 +1192,8 @@ class NovaC4EmptyState extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF222222),
+                color: DunesColors.resolve(context, const Color(0xFF222222)),
+                context: context,
               ),
             ),
           ],
@@ -994,8 +1211,12 @@ class _NovaAnimatedEye extends StatelessWidget {
     return Container(
       width: 12,
       height: 12,
-      decoration: const BoxDecoration(
-        color: Color(0xFF7E64BD),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFF7E64BD),
+          role: DunesColorRole.surface,
+        ),
         shape: BoxShape.circle,
       ),
     );
@@ -1015,15 +1236,20 @@ class NovaMsgDateDivider extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: const Color(0xFFEDEFF5),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFEDEFF5),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
             label,
             style: DunesTypography.sans(
               fontSize: 11,
-              color: const Color(0xFF86909C),
+              color: DunesColors.resolve(context, const Color(0xFF86909C)),
               fontWeight: FontWeight.w500,
+              context: context,
             ),
           ),
         ),
@@ -1048,9 +1274,21 @@ class NovaC11Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(4, 6, 8, 10),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -1064,6 +1302,7 @@ class NovaC11Header extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
+                context: context,
               ),
             ),
           ),
@@ -1097,37 +1336,55 @@ class NovaC11SearchBar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
         decoration: BoxDecoration(
-          color: DunesColors.bgSoft,
+          color: DunesColors.resolve(
+            context,
+            DunesColors.bgSoft,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: DunesColors.borderSoft),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Row(
           children: [
-            const Icon(Icons.search, size: 15, color: DunesColors.text3),
+            Icon(
+              Icons.search,
+              size: 15,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
             const SizedBox(width: 7),
             Expanded(
               child: TextField(
                 controller: controller,
                 onChanged: onChanged,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
                   hintText: '搜索历史对话',
-                  hintStyle: TextStyle(fontSize: 13, color: DunesColors.text3),
+                  hintStyle: TextStyle(
+                    fontSize: 13,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
                 ),
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
             ),
             if (controller.text.isNotEmpty)
               GestureDetector(
                 onTap: onClear,
-                child: const Icon(
+                child: Icon(
                   Icons.close,
                   size: 14,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
           ],
@@ -1169,10 +1426,20 @@ class NovaHistoryCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
       child: Material(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: Color(0xFFEDEFF5)),
+          side: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFEDEFF5),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -1197,7 +1464,14 @@ class NovaHistoryCard extends StatelessWidget {
                   height: 36,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 1.2),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.border,
+                      ),
+                      width: 1.2,
+                    ),
                     boxShadow: const [
                       BoxShadow(
                         color: Color(0x146B3FE2),
@@ -1224,8 +1498,12 @@ class NovaHistoryCard extends StatelessWidget {
                               style: DunesTypography.sans(
                                 fontSize: 14.5,
                                 fontWeight: FontWeight.w700,
-                                color: const Color(0xFF1D2129),
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF1D2129),
+                                ),
                                 height: 1.35,
+                                context: context,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -1237,17 +1515,24 @@ class NovaHistoryCard extends StatelessWidget {
                               timeLabel,
                               style: DunesTypography.sans(
                                 fontSize: 11,
-                                color: const Color(0xFF86909C),
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF86909C),
+                                ),
+                                context: context,
                               ),
                             ),
                           ],
                           if (onDelete != null) ...[
                             const SizedBox(width: 4),
                             IconButton(
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.delete_outline_rounded,
                                 size: 16,
-                                color: Color(0xFFC2C7D0),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFFC2C7D0),
+                                ),
                               ),
                               tooltip: '删除对话',
                               visualDensity: VisualDensity.compact,
@@ -1267,8 +1552,12 @@ class NovaHistoryCard extends StatelessWidget {
                           preview,
                           style: DunesTypography.sans(
                             fontSize: 12.5,
-                            color: const Color(0xFF4E5969),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFF4E5969),
+                            ),
                             height: 1.45,
+                            context: context,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -1440,8 +1729,9 @@ class NovaC4MessageRow extends StatelessWidget {
                 text,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: const Color(0xFF1D2129),
+                  color: DunesColors.resolve(context, const Color(0xFF1D2129)),
                   height: 1.5,
+                  context: context,
                 ),
               ),
             ...uniqueAttachments.map(
@@ -1525,7 +1815,8 @@ class NovaC4MessageRow extends StatelessWidget {
                 '已参考您的文档',
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ),
@@ -1644,8 +1935,9 @@ class NovaC4MessageRow extends StatelessWidget {
         seed: userSeed,
         size: 38,
         avatarPreset: userAvatarPreset.trim().isEmpty ? null : userAvatarPreset,
-        avatarObjectKey:
-            userAvatarObjectKey.trim().isEmpty ? null : userAvatarObjectKey,
+        avatarObjectKey: userAvatarObjectKey.trim().isEmpty
+            ? null
+            : userAvatarObjectKey,
         avatarUrl: userAvatarUrl.trim().isEmpty ? null : userAvatarUrl,
         avatarService: avatarService,
         fallbackBackground: const Color(0xFFF0F4FC),
@@ -1670,9 +1962,7 @@ class NovaC4MessageRow extends StatelessWidget {
           ),
         ],
       ),
-      child: ClipOval(
-        child: NovaPersonAvatarImage(width: 38, height: 38),
-      ),
+      child: ClipOval(child: NovaPersonAvatarImage(width: 38, height: 38)),
     );
   }
 
@@ -1693,11 +1983,7 @@ class NovaC4MessageRow extends StatelessWidget {
           ),
         );
       },
-      child: _NovaTappableTime(
-        time: time,
-        alignEnd: mine,
-        child: body,
-      ),
+      child: _NovaTappableTime(time: time, alignEnd: mine, child: body),
     );
   }
 
@@ -1727,7 +2013,10 @@ class NovaC4MessageRow extends StatelessWidget {
               child: TextButton(
                 onPressed: onResend,
                 style: TextButton.styleFrom(
-                  foregroundColor: DunesColors.text3,
+                  foregroundColor: DunesColors.resolve(
+                    context,
+                    DunesColors.text3,
+                  ),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 0,
@@ -1740,7 +2029,8 @@ class NovaC4MessageRow extends StatelessWidget {
                   '重新发送',
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -1764,7 +2054,11 @@ class NovaC4MessageRow extends StatelessWidget {
                   ? BoxDecoration(
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
-                        color: const Color(0xFF6B3FE2),
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF6B3FE2),
+                          role: DunesColorRole.border,
+                        ),
                         width: 1.8,
                       ),
                       boxShadow: const [
@@ -1808,8 +2102,7 @@ class _NovaTappableTimeState extends State<_NovaTappableTime> {
   bool _pinned = false;
   bool _hovering = false;
 
-  bool get _showTime =>
-      widget.time.isNotEmpty && (_pinned || _hovering);
+  bool get _showTime => widget.time.isNotEmpty && (_pinned || _hovering);
 
   @override
   Widget build(BuildContext context) {
@@ -1848,7 +2141,11 @@ class _NovaTappableTimeState extends State<_NovaTappableTime> {
                         widget.time,
                         style: DunesTypography.sans(
                           fontSize: 11,
-                          color: const Color(0xFF86909C),
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF86909C),
+                          ),
+                          context: context,
                         ),
                       ),
                     )
@@ -1905,9 +2202,21 @@ class NovaC4QuickActions extends StatelessWidget {
       opacity: enabled ? 1.0 : 0.55,
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          border: Border(
+            top: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.borderSoft,
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
         ),
         child: Row(
           children: cells
@@ -1921,13 +2230,24 @@ class NovaC4QuickActions extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(c.icon, size: 18, color: DunesColors.text2),
+                          Icon(
+                            c.icon,
+                            size: 18,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
+                          ),
                           const SizedBox(height: 3),
                           Text(
                             c.label,
                             style: DunesTypography.sans(
                               fontSize: 9.5,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
                             ),
                           ),
                         ],
@@ -2033,7 +2353,11 @@ class NovaC4InputBar extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(30),
               boxShadow: const [
                 BoxShadow(
@@ -2043,7 +2367,13 @@ class NovaC4InputBar extends StatelessWidget {
                   spreadRadius: 1,
                 ),
               ],
-              border: Border.all(color: const Color(0xFFEDEFF5)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFEDEFF5),
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
             child: voiceMode
                 ? Row(
@@ -2100,15 +2430,31 @@ class NovaC4InputBar extends StatelessWidget {
                           onSubmitted: locked ? null : (_) => onSend(),
                           style: DunesTypography.sans(
                             fontSize: 14.5,
-                            color: const Color(0xFF1D2129),
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFF1D2129),
+                            ),
+                            context: context,
                           ),
                           decoration: InputDecoration(
                             isDense: true,
+                            // The outer pill owns the background and border in
+                            // both themes; the editor itself stays transparent.
+                            filled: false,
                             border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            disabledBorder: InputBorder.none,
+                            errorBorder: InputBorder.none,
+                            focusedErrorBorder: InputBorder.none,
                             hintText: hintText,
                             hintStyle: DunesTypography.sans(
                               fontSize: 14,
-                              color: const Color(0xFF86909C),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFF86909C),
+                              ),
+                              context: context,
                             ),
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 4,
@@ -2288,8 +2634,16 @@ class _NovaShortcutStrip extends StatelessWidget {
               height: 4,
               decoration: BoxDecoration(
                 color: expanded
-                    ? const Color(0xFFC4B5E8)
-                    : const Color(0xFFD8DCE6),
+                    ? DunesColors.resolve(
+                        context,
+                        const Color(0xFFC4B5E8),
+                        role: DunesColorRole.surface,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFFD8DCE6),
+                        role: DunesColorRole.surface,
+                      ),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -2335,12 +2689,30 @@ class _NovaCircleAction extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: active ? const Color(0xFFF1EBFA) : Colors.white,
+                  color: active
+                      ? DunesColors.resolve(
+                          context,
+                          const Color(0xFFF1EBFA),
+                          role: DunesColorRole.surface,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: active
-                        ? const Color(0xFFD9C9F4)
-                        : const Color(0xFFEEF0F5),
+                        ? DunesColors.resolve(
+                            context,
+                            const Color(0xFFD9C9F4),
+                            role: DunesColorRole.border,
+                          )
+                        : DunesColors.resolve(
+                            context,
+                            const Color(0xFFEEF0F5),
+                            role: DunesColorRole.border,
+                          ),
                   ),
                   boxShadow: const [
                     BoxShadow(
@@ -2354,8 +2726,8 @@ class _NovaCircleAction extends StatelessWidget {
                   icon,
                   size: 22,
                   color: active
-                      ? const Color(0xFF6B3FE2)
-                      : const Color(0xFF2C323F),
+                      ? DunesColors.resolve(context, const Color(0xFF6B3FE2))
+                      : DunesColors.resolve(context, const Color(0xFF2C323F)),
                 ),
               ),
               const SizedBox(height: 6),
@@ -2367,8 +2739,9 @@ class _NovaCircleAction extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: active
-                      ? const Color(0xFF6B3FE2)
-                      : const Color(0xFF4E5969),
+                      ? DunesColors.resolve(context, const Color(0xFF6B3FE2))
+                      : DunesColors.resolve(context, const Color(0xFF4E5969)),
+                  context: context,
                 ),
               ),
             ],
@@ -2487,17 +2860,27 @@ class _NovaModelChip extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: const Color(0xFFF5F1FB),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF5F1FB),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: const Color(0xFFDFD4F0)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFDFD4F0),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.auto_awesome_rounded,
                 size: 13,
-                color: Color(0xFF7E64BD),
+                color: DunesColors.resolveNullable(context, Color(0xFF7E64BD)),
               ),
               const SizedBox(width: 4),
               ConstrainedBox(
@@ -2509,7 +2892,11 @@ class _NovaModelChip extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF553B96),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF553B96),
+                    ),
+                    context: context,
                   ),
                 ),
               ),
@@ -2547,9 +2934,21 @@ class _NovaInputIcon extends StatelessWidget {
           decoration: BoxDecoration(
             color: filled
                 ? (accentBlue
-                      ? const Color(0xFF6B3FE2)
-                      : const Color(0xFF4E5969))
-                : const Color(0xFFF5F6F9),
+                      ? DunesColors.resolve(
+                          context,
+                          const Color(0xFF6B3FE2),
+                          role: DunesColorRole.surface,
+                        )
+                      : DunesColors.resolve(
+                          context,
+                          const Color(0xFF4E5969),
+                          role: DunesColorRole.surface,
+                        ))
+                : DunesColors.resolve(
+                    context,
+                    const Color(0xFFF5F6F9),
+                    role: DunesColorRole.surface,
+                  ),
             shape: BoxShape.circle,
             boxShadow: filled
                 ? const [
@@ -2564,7 +2963,9 @@ class _NovaInputIcon extends StatelessWidget {
           child: Icon(
             icon,
             size: filled ? 18 : 17,
-            color: filled ? Colors.white : const Color(0xFF4E5969),
+            color: filled
+                ? DunesColors.resolve(context, Colors.white)
+                : DunesColors.resolve(context, const Color(0xFF4E5969)),
           ),
         ),
       ),
@@ -2605,11 +3006,31 @@ class _NovaVoiceHoldField extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: recording
-              ? (recordWillCancel ? DunesColors.coral : const Color(0xFF2E75FF))
-              : const Color(0xFFF3F7FF),
+              ? (recordWillCancel
+                    ? DunesColors.resolve(
+                        context,
+                        DunesColors.coral,
+                        role: DunesColorRole.surface,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        const Color(0xFF2E75FF),
+                        role: DunesColorRole.surface,
+                      ))
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFFF3F7FF),
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(23),
           border: Border.all(
-            color: recording ? Colors.transparent : const Color(0xFFD6E4FF),
+            color: recording
+                ? Colors.transparent
+                : DunesColors.resolve(
+                    context,
+                    const Color(0xFFD6E4FF),
+                    role: DunesColorRole.border,
+                  ),
             width: 1,
           ),
         ),
@@ -2618,10 +3039,10 @@ class _NovaVoiceHoldField extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (!recording) ...[
-              const Icon(
+              Icon(
                 Icons.mic_none_rounded,
                 size: 20,
-                color: Color(0xFF2E75FF),
+                color: DunesColors.resolveNullable(context, Color(0xFF2E75FF)),
               ),
               const SizedBox(width: 6),
             ],
@@ -2634,7 +3055,10 @@ class _NovaVoiceHoldField extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: recording ? Colors.white : const Color(0xFF2E75FF),
+                color: recording
+                    ? DunesColors.resolve(context, Colors.white)
+                    : DunesColors.resolve(context, const Color(0xFF2E75FF)),
+                context: context,
               ),
             ),
           ],

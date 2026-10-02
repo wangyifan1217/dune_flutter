@@ -116,9 +116,7 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('进度已到 100%'),
-        content: const Text(
-          '可以标记完成，或仅表示工作已做完、继续等待验收。选择等待验收时，任务仍是进行中。',
-        ),
+        content: const Text('可以标记完成，或仅表示工作已做完、继续等待验收。选择等待验收时，任务仍是进行中。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -229,7 +227,11 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
   Widget build(BuildContext context) {
     // Material 供 InkWell 使用；保持内嵌三级页，避免独立路由全屏/撑破双栏。
     return Material(
-      color: widget.backgroundColor,
+      color: DunesColors.resolveNullable(
+        context,
+        widget.backgroundColor,
+        role: DunesColorRole.surface,
+      ),
       // 点击输入框外的空白处收起软键盘
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
@@ -244,7 +246,7 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                   InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: _saving ? null : widget.onBack,
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -252,14 +254,20 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                           Icon(
                             Icons.arrow_back_ios_new,
                             size: 14,
-                            color: DunesColors.text2,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
                           ),
                           SizedBox(width: 2),
                           Text(
                             '返回',
                             style: TextStyle(
                               fontSize: 13,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
                             ),
                           ),
                         ],
@@ -277,7 +285,7 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: _accent,
+                        color: DunesColors.resolveNullable(context, _accent),
                       ),
                     ),
                   ),
@@ -285,9 +293,9 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                     IconButton(
                       tooltip: '使用指引',
                       onPressed: () => _showGuide(force: true),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.help_outline,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
                       ),
                     ),
                   FilledButton(
@@ -303,12 +311,12 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                     ),
                     onPressed: _saving ? null : _submit,
                     child: _saving
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: DunesColors.resolve(context, Colors.white),
                             ),
                           )
                         : Text(
@@ -330,9 +338,19 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFFE8EAED)),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFE8EAED),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -352,7 +370,10 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                             style: TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.w700,
-                              color: _accent,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _accent,
+                              ),
                             ),
                           ),
                           SliderTheme(
@@ -363,7 +384,10 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                               ),
                               thumbColor: _accent,
                               overlayColor: _accent.withValues(alpha: 0.12),
-                              activeTickMarkColor: Colors.white70,
+                              activeTickMarkColor: DunesColors.resolve(
+                                context,
+                                Colors.white70,
+                              ),
                               inactiveTickMarkColor: _accent.withValues(
                                 alpha: 0.35,
                               ),
@@ -384,10 +408,13 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                             decoration: _softDecoration('进展说明（可选）'),
                           ),
                         ] else if (_isComplete) ...[
-                          const Text(
+                          Text(
                             '确认办结后，完成月份不会因后续编辑或延期改动。',
                             style: TextStyle(
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
                               height: 1.4,
                             ),
                           ),
@@ -422,7 +449,11 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
     return InputDecoration(
       hintText: hint,
       filled: true,
-      fillColor: const Color(0xFFF5F6F8),
+      fillColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide.none,

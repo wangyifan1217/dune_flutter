@@ -57,7 +57,11 @@ class _NativeSelfMemoSettingsPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
         leading: IconButton(
           onPressed: widget.onBack,

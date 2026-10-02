@@ -13,7 +13,11 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6F8),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: TweenAnimationBuilder<double>(
@@ -54,7 +58,11 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: Row(
         children: [
           IconButton(
@@ -64,11 +72,19 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
           Container(
             width: 38,
             height: 38,
-            decoration: const BoxDecoration(
-              color: _assistantPurple,
+            decoration: BoxDecoration(
+              color: DunesColors.resolveNullable(
+                context,
+                _assistantPurple,
+                role: DunesColorRole.surface,
+              ),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20),
+            child: Icon(
+              Icons.auto_awesome_rounded,
+              color: DunesColors.resolve(context, Colors.white),
+              size: 20,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -81,12 +97,17 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 Text(
                   '仅查询你有权限查看的会议纪要',
-                  style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
+                  ),
                 ),
               ],
             ),
@@ -164,7 +185,11 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
           child: _ChatBubble(
             child: Text(
               '欢迎回来。你可以直接问我会议中的决策、行动项，或查看某场会议的要点。',
-              style: DunesTypography.sans(fontSize: 13, height: 1.55, color: DunesColors.text),
+              style: DunesTypography.sans(
+                fontSize: 13,
+                height: 1.55,
+                color: DunesColors.text,
+              ),
             ),
           ),
         ),
@@ -184,7 +209,11 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
         ),
         child: Text(
           '帮我总结今天项目例会的重要决策',
-          style: DunesTypography.sans(fontSize: 13, height: 1.45, color: Colors.white),
+          style: DunesTypography.sans(
+            fontSize: 13,
+            height: 1.45,
+            color: Colors.white,
+          ),
         ),
       ),
     );
@@ -234,7 +263,10 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
                 const SizedBox(height: 9),
                 Text(
                   '以上为静态预览内容，尚未连接真实会议数据。',
-                  style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ],
             ),
@@ -264,7 +296,10 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
               ),
               child: Text(
                 '输入你的问题…',
-                style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  color: DunesColors.text3,
+                ),
               ),
             ),
           ),
@@ -272,7 +307,11 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
           const CircleAvatar(
             radius: 20,
             backgroundColor: _assistantPurple,
-            child: Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20),
+            child: Icon(
+              Icons.arrow_upward_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
           ),
         ],
       ),
@@ -290,13 +329,27 @@ class _PromptChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFD8D0FB)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFD8D0FB),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Text(
         label,
-        style: DunesTypography.sans(fontSize: 12, color: const Color(0xFF5D43AE)),
+        style: DunesTypography.sans(
+          fontSize: 12,
+          color: DunesColors.resolve(context, const Color(0xFF5D43AE)),
+          context: context,
+        ),
       ),
     );
   }
@@ -317,21 +370,42 @@ class _ConversationAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = primary ? Colors.white : const Color(0xFF5D43AE);
+    final foreground = primary
+        ? DunesColors.resolve(context, Colors.white)
+        : DunesColors.resolve(context, const Color(0xFF5D43AE));
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 9 : 11,
-        vertical: 8,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 9 : 11, vertical: 8),
       decoration: BoxDecoration(
-        color: primary ? _assistantPurple : Colors.white,
+        color: primary
+            ? DunesColors.resolve(
+                context,
+                _assistantPurple,
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(9),
-        border: primary ? null : Border.all(color: const Color(0xFFD8D0FB)),
+        border: primary
+            ? null
+            : Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFD8D0FB),
+                  role: DunesColorRole.border,
+                ),
+              ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: foreground),
+          Icon(
+            icon,
+            size: 15,
+            color: DunesColors.resolveNullable(context, foreground),
+          ),
           if (!compact) ...[
             const SizedBox(width: 5),
             Text(
@@ -340,6 +414,7 @@ class _ConversationAction extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: foreground,
+                context: context,
               ),
             ),
           ],
@@ -359,8 +434,19 @@ class _AssistantAvatar extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: const BoxDecoration(color: _assistantPurple, shape: BoxShape.circle),
-      child: Icon(Icons.auto_awesome_rounded, color: Colors.white, size: size * 0.52),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          _assistantPurple,
+          role: DunesColorRole.surface,
+        ),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        Icons.auto_awesome_rounded,
+        color: DunesColors.resolve(context, Colors.white),
+        size: size * 0.52,
+      ),
     );
   }
 }
@@ -376,9 +462,19 @@ class _ChatBubble extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 460),
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: child,
     );

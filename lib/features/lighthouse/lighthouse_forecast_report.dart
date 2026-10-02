@@ -16,6 +16,7 @@ import 'lighthouse_forecast.dart';
 import 'lighthouse_product_ordinal.dart';
 import 'lighthouse_product_ordinal_view.dart';
 import 'lighthouse_theme.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 String _money(double v) {
   final a = v.abs();
@@ -71,7 +72,11 @@ class LighthouseForecastReportSheet extends StatelessWidget {
     maxChildSize: 1,
     expand: true,
     builder: (ctx, scroll) => ColoredBox(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        ctx,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       child: ListView(
         controller: scroll,
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
@@ -81,7 +86,11 @@ class LighthouseForecastReportSheet extends StatelessWidget {
               width: 32,
               height: 4,
               decoration: BoxDecoration(
-                color: _line,
+                color: DunesColors.resolveNullable(
+                  ctx,
+                  _line,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(3),
               ),
             ),

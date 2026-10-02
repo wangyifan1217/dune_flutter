@@ -37,7 +37,9 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
   bool _sending = false;
   String? _error;
 
-  bool get _isDocChat => widget.chatKind.toUpperCase() == 'KB_DOC' && (widget.docId?.isNotEmpty ?? false);
+  bool get _isDocChat =>
+      widget.chatKind.toUpperCase() == 'KB_DOC' &&
+      (widget.docId?.isNotEmpty ?? false);
 
   @override
   void initState() {
@@ -95,14 +97,23 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
     final assistantId = userId + 1;
     setState(() {
       _sending = true;
-      _messages.add(NativeKbMessage(id: userId, role: 'user', text: text, createdAt: DateTime.now()));
-      _messages.add(NativeKbMessage(
-        id: assistantId,
-        role: 'assistant',
-        text: '正在检索知识库…',
-        streaming: true,
-        createdAt: DateTime.now(),
-      ));
+      _messages.add(
+        NativeKbMessage(
+          id: userId,
+          role: 'user',
+          text: text,
+          createdAt: DateTime.now(),
+        ),
+      );
+      _messages.add(
+        NativeKbMessage(
+          id: assistantId,
+          role: 'assistant',
+          text: '正在检索知识库…',
+          streaming: true,
+          createdAt: DateTime.now(),
+        ),
+      );
     });
     _input.clear();
     _scrollBottom();
@@ -117,7 +128,10 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
           setState(() {
             final idx = _messages.indexWhere((m) => m.id == assistantId);
             if (idx >= 0) {
-              _messages[idx] = _messages[idx].copyWith(text: acc, streaming: true);
+              _messages[idx] = _messages[idx].copyWith(
+                text: acc,
+                streaming: true,
+              );
             }
           });
           _scrollBottom();
@@ -167,13 +181,19 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         child: Column(
           children: [
             _buildHeader(),
             if (_loading)
-              const Expanded(child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+              const Expanded(
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              )
             else if (_error != null)
               Expanded(child: _buildError())
             else ...[
@@ -182,18 +202,41 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
                   padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: DunesColors.accentSoft,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.accentSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(99),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.auto_awesome, size: 12, color: DunesColors.accentDeep),
+                        Icon(
+                          Icons.auto_awesome,
+                          size: 12,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.accentDeep,
+                          ),
+                        ),
                         SizedBox(width: 6),
-                        Text('知识库助手 · 可引用原文回答', style: TextStyle(fontSize: 10, color: DunesColors.accentDeep)),
+                        Text(
+                          '知识库助手 · 可引用原文回答',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.accentDeep,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -210,9 +253,21 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(4, 4, 8, 8),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -226,18 +281,47 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
               children: [
                 const Row(
                   children: [
-                    Text('知识库', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                    Text(
+                      '知识库',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     SizedBox(width: 6),
                     _AiBadge(),
                   ],
                 ),
-                Text(_subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: DunesColors.text3)),
+                Text(
+                  _subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
+                ),
                 if (_isDocChat)
-                  Text(_docTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: DunesColors.accentDeep)),
+                  Text(
+                    _docTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.accentDeep,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
-          IconButton(onPressed: _newChat, icon: const Icon(Icons.add, size: 20), tooltip: '新对话'),
+          IconButton(
+            onPressed: _newChat,
+            icon: const Icon(Icons.add, size: 20),
+            tooltip: '新对话',
+          ),
           IconButton(
             onPressed: () => widget.navigation.popTo('K1'),
             icon: const Icon(Icons.menu_book_outlined, size: 20),
@@ -275,24 +359,51 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
         return Align(
           alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.82),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.82,
+            ),
             child: Column(
-              crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: mine
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
                 Container(
                   margin: const EdgeInsets.only(bottom: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: mine ? DunesColors.accent : Colors.white,
+                    color: mine
+                        ? DunesColors.resolve(
+                            context,
+                            DunesColors.accent,
+                            role: DunesColorRole.surface,
+                          )
+                        : DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.surface,
+                          ),
                     borderRadius: BorderRadius.circular(10),
-                    border: mine ? null : Border.all(color: DunesColors.borderSoft),
+                    border: mine
+                        ? null
+                        : Border.all(
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.borderSoft,
+                              role: DunesColorRole.border,
+                            ),
+                          ),
                   ),
                   child: Text(
                     m.text,
                     style: TextStyle(
                       fontSize: 13,
                       height: 1.4,
-                      color: mine ? Colors.white : DunesColors.text,
+                      color: mine
+                          ? DunesColors.resolve(context, Colors.white)
+                          : DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                 ),
@@ -312,22 +423,49 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F6F2),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF7F6F2),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(c.sourceTitle, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: DunesColors.accentDeep)),
+          Text(
+            c.sourceTitle,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.resolve(context, DunesColors.accentDeep),
+            ),
+          ),
           if (c.page != null)
-            Text('第 ${c.page} 页', style: const TextStyle(fontSize: 9, color: DunesColors.text3)),
+            Text(
+              '第 ${c.page} 页',
+              style: TextStyle(
+                fontSize: 9,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
+            ),
           const SizedBox(height: 4),
           Text(
             c.chunkText,
             maxLines: 4,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 10.5, height: 1.4, color: DunesColors.text2),
+            style: TextStyle(
+              fontSize: 10.5,
+              height: 1.4,
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
         ],
       ),
@@ -337,9 +475,21 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
   Widget _buildInput() {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -352,8 +502,13 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
               decoration: InputDecoration(
                 hintText: _sending ? '知识库助手思考中…' : '向知识库提问…',
                 isDense: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
               onSubmitted: (_) => _send(),
             ),
@@ -361,7 +516,13 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
           const SizedBox(width: 8),
           FilledButton(
             onPressed: _sending ? null : _send,
-            style: FilledButton.styleFrom(backgroundColor: DunesColors.accentDeep),
+            style: FilledButton.styleFrom(
+              backgroundColor: DunesColors.resolve(
+                context,
+                DunesColors.accentDeep,
+                role: DunesColorRole.surface,
+              ),
+            ),
             child: Text(_sending ? '…' : '发送'),
           ),
         ],
@@ -378,10 +539,21 @@ class _AiBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: DunesColors.accentSoft,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.accentSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: const Text('AI', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w700, color: DunesColors.accentDeep)),
+      child: Text(
+        'AI',
+        style: TextStyle(
+          fontSize: 8.5,
+          fontWeight: FontWeight.w700,
+          color: DunesColors.resolve(context, DunesColors.accentDeep),
+        ),
+      ),
     );
   }
 }

@@ -52,7 +52,11 @@ Future<void> showProposalIntakeOverlay({
               minHeight: 480,
             ),
             child: Material(
-              color: DunesColors.bgApp,
+              color: DunesColors.resolve(
+                ctx,
+                DunesColors.bgApp,
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(14),
               clipBehavior: Clip.antiAlias,
               child: hostFor(close),
@@ -66,7 +70,11 @@ Future<void> showProposalIntakeOverlay({
   return Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
       builder: (ctx) => Material(
-        color: DunesColors.bgApp,
+        color: DunesColors.resolve(
+          ctx,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         child: SafeArea(
           bottom: false,
           child: hostFor(() {
@@ -259,7 +267,7 @@ class _ProposalIntakeOverlayHostState
       return Center(
         child: Text(
           _error ?? '加载失败',
-          style: const TextStyle(color: Colors.red),
+          style: TextStyle(color: DunesColors.resolve(context, Colors.red)),
         ),
       );
     }

@@ -85,7 +85,14 @@ class AiSummaryAvatarStack extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(size * 0.18),
-                  border: Border.all(color: Colors.white, width: 1.2),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.border,
+                    ),
+                    width: 1.2,
+                  ),
                 ),
                 child: AiSummaryConversationAvatar(
                   conversation: shown[i],
@@ -141,14 +148,15 @@ class AiSummaryParticipantsRow extends StatelessWidget {
                 style: DunesTypography.sans(
                   fontSize: dense ? 12.5 : 14,
                   fontWeight: FontWeight.w500,
-                  color: const Color(0xFF4B5563),
+                  color: DunesColors.resolve(context, const Color(0xFF4B5563)),
+                  context: context,
                 ),
               ),
             ),
-            const Icon(
+            Icon(
               Icons.chevron_right_rounded,
               size: 18,
-              color: Color(0xFFC4C4C4),
+              color: DunesColors.resolveNullable(context, Color(0xFFC4C4C4)),
             ),
           ],
         ),
@@ -186,15 +194,18 @@ class AiSummaryConversationAvatar extends StatelessWidget {
         height: size,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(radius),
-          gradient: const LinearGradient(
-            colors: [Color(0xFFCABCEB), Color(0xFFA88CD8)],
+          gradient: LinearGradient(
+            colors: [
+              DunesColors.resolve(context, Color(0xFFCABCEB)),
+              DunesColors.resolve(context, Color(0xFFA88CD8)),
+            ],
           ),
         ),
         child: Icon(
           c.isWorkgroupApproval
               ? Icons.assignment_outlined
               : Icons.groups_outlined,
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           size: size * 0.39,
         ),
       );
@@ -227,7 +238,11 @@ Future<void> showAiSummaryParticipantsSheet({
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    ),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -249,7 +264,11 @@ Future<void> showAiSummaryParticipantsSheet({
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE5E7EB),
+                        color: DunesColors.resolve(
+                          ctx,
+                          const Color(0xFFE5E7EB),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
@@ -263,6 +282,7 @@ Future<void> showAiSummaryParticipantsSheet({
                           style: DunesTypography.sans(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
+                            context: ctx,
                           ),
                         ),
                       ),
@@ -282,7 +302,11 @@ Future<void> showAiSummaryParticipantsSheet({
                         ].join(' · '),
                         style: DunesTypography.sans(
                           fontSize: 12.5,
-                          color: const Color(0xFF9CA3AF),
+                          color: DunesColors.resolve(
+                            ctx,
+                            const Color(0xFF9CA3AF),
+                          ),
+                          context: ctx,
                         ),
                       ),
                     ),
@@ -298,9 +322,16 @@ Future<void> showAiSummaryParticipantsSheet({
                       ),
                       label: Text(addLabel),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: DunesColors.brandPurpleDeep,
-                        side: const BorderSide(
-                          color: DunesColors.brandPurpleLine,
+                        foregroundColor: DunesColors.resolve(
+                          ctx,
+                          DunesColors.brandPurpleDeep,
+                        ),
+                        side: BorderSide(
+                          color: DunesColors.resolve(
+                            ctx,
+                            DunesColors.brandPurpleLine,
+                            role: DunesColorRole.border,
+                          ),
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
@@ -314,7 +345,11 @@ Future<void> showAiSummaryParticipantsSheet({
                         '至少保留 1 个会话才能生成总结',
                         style: DunesTypography.sans(
                           fontSize: 12.5,
-                          color: const Color(0xFFB45309),
+                          color: DunesColors.resolve(
+                            ctx,
+                            const Color(0xFFB45309),
+                          ),
+                          context: ctx,
                         ),
                       ),
                     ),
@@ -329,7 +364,11 @@ Future<void> showAiSummaryParticipantsSheet({
                               child: Text(
                                 editable ? '已清空，请添加会话' : '暂无会话',
                                 style: DunesTypography.sans(
-                                  color: const Color(0xFF9CA3AF),
+                                  color: DunesColors.resolve(
+                                    ctx,
+                                    const Color(0xFF9CA3AF),
+                                  ),
+                                  context: ctx,
                                 ),
                               ),
                             ),
@@ -337,9 +376,13 @@ Future<void> showAiSummaryParticipantsSheet({
                         : ListView.separated(
                             shrinkWrap: true,
                             itemCount: items.length,
-                            separatorBuilder: (_, _) => const Divider(
+                            separatorBuilder: (_, _) => Divider(
                               height: 1,
-                              color: Color(0xFFF3F4F6),
+                              color: DunesColors.resolve(
+                                ctx,
+                                Color(0xFFF3F4F6),
+                                role: DunesColorRole.border,
+                              ),
                             ),
                             itemBuilder: (_, i) {
                               final c = items[i];
@@ -355,13 +398,18 @@ Future<void> showAiSummaryParticipantsSheet({
                                   style: DunesTypography.sans(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w600,
+                                    context: ctx,
                                   ),
                                 ),
                                 subtitle: Text(
                                   c.isPrivate ? '私聊' : '群聊',
                                   style: DunesTypography.sans(
                                     fontSize: 12.5,
-                                    color: const Color(0xFF9CA3AF),
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      const Color(0xFF9CA3AF),
+                                    ),
+                                    context: ctx,
                                   ),
                                 ),
                                 trailing: editable
@@ -369,15 +417,19 @@ Future<void> showAiSummaryParticipantsSheet({
                                         tooltip: '移除',
                                         onPressed: () {
                                           setModalState(() {
-                                            items = List<NativeConversation>.from(
-                                              items,
-                                            )..removeAt(i);
+                                            items =
+                                                List<NativeConversation>.from(
+                                                  items,
+                                                )..removeAt(i);
                                           });
                                           onConversationsChanged?.call(items);
                                         },
-                                        icon: const Icon(
+                                        icon: Icon(
                                           Icons.remove_circle_outline,
-                                          color: Color(0xFF9CA3AF),
+                                          color: DunesColors.resolveNullable(
+                                            ctx,
+                                            Color(0xFF9CA3AF),
+                                          ),
                                           size: 22,
                                         ),
                                       )
@@ -415,7 +467,7 @@ Future<bool> confirmAiSummaryAction({
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(true),
           style: TextButton.styleFrom(
-            foregroundColor: DunesColors.brandPurple,
+            foregroundColor: DunesColors.resolve(ctx, DunesColors.brandPurple),
           ),
           child: Text(confirmLabel),
         ),
@@ -429,34 +481,66 @@ ThemeData aiSummaryPurplePickerTheme(BuildContext context) {
   final base = Theme.of(context);
   return base.copyWith(
     colorScheme: base.colorScheme.copyWith(
-      primary: DunesColors.brandPurple,
-      onPrimary: Colors.white,
-      secondary: DunesColors.brandPurpleDeep,
-      surface: Colors.white,
+      primary: DunesColors.resolve(
+        context,
+        DunesColors.brandPurple,
+        role: DunesColorRole.surface,
+      ),
+      onPrimary: DunesColors.resolve(context, Colors.white),
+      secondary: DunesColors.resolve(
+        context,
+        DunesColors.brandPurpleDeep,
+        role: DunesColorRole.surface,
+      ),
+      surface: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
     ),
     datePickerTheme: DatePickerThemeData(
-      headerBackgroundColor: DunesColors.brandPurple,
-      headerForegroundColor: Colors.white,
-      todayForegroundColor: WidgetStateProperty.all(DunesColors.brandPurple),
+      headerBackgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.brandPurple,
+        role: DunesColorRole.surface,
+      ),
+      headerForegroundColor: DunesColors.resolve(context, Colors.white),
+      todayForegroundColor: WidgetStateProperty.all(
+        DunesColors.resolve(context, DunesColors.brandPurple),
+      ),
       todayBackgroundColor: WidgetStateProperty.all(
-        DunesColors.brandPurpleSoft,
+        DunesColors.resolve(
+          context,
+          DunesColors.brandPurpleSoft,
+          role: DunesColorRole.surface,
+        ),
       ),
       dayForegroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) return Colors.white;
+        if (states.contains(WidgetState.selected)) {
+          return DunesColors.resolve(context, Colors.white);
+        }
         return null;
       }),
       dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return DunesColors.brandPurple;
+          return DunesColors.resolve(
+            context,
+            DunesColors.brandPurple,
+            role: DunesColorRole.surface,
+          );
         }
         return null;
       }),
-      rangeSelectionBackgroundColor: DunesColors.brandPurpleSoft,
+      rangeSelectionBackgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.brandPurpleSoft,
+        role: DunesColorRole.surface,
+      ),
       confirmButtonStyle: TextButton.styleFrom(
-        foregroundColor: DunesColors.brandPurple,
+        foregroundColor: DunesColors.resolve(context, DunesColors.brandPurple),
       ),
       cancelButtonStyle: TextButton.styleFrom(
-        foregroundColor: DunesColors.brandPurple,
+        foregroundColor: DunesColors.resolve(context, DunesColors.brandPurple),
       ),
     ),
   );
@@ -472,7 +556,8 @@ DateTimeRange aiSummaryInclusiveRangeFromApi(DateTime? from, DateTime? to) {
   if (to != null) {
     final localTo = to.toLocal();
     // to 一般为结束日次日 0 点；若恰好在 0 点则回退一天。
-    final endCandidate = (localTo.hour == 0 &&
+    final endCandidate =
+        (localTo.hour == 0 &&
             localTo.minute == 0 &&
             localTo.second == 0 &&
             localTo.millisecond == 0)

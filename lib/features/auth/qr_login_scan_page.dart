@@ -210,7 +210,8 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 8),
@@ -219,8 +220,9 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
                   height: 1.5,
+                  context: context,
                 ),
               ),
               const SizedBox(height: 14),
@@ -246,7 +248,11 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
             onDetect: _onDetect,
             errorBuilder: (context, error) {
               return Container(
-                color: Colors.black87,
+                color: DunesColors.resolve(
+                  context,
+                  Colors.black87,
+                  role: DunesColorRole.surface,
+                ),
                 alignment: Alignment.center,
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Text(
@@ -254,8 +260,9 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                   textAlign: TextAlign.center,
                   style: DunesTypography.sans(
                     fontSize: 14,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
                     height: 1.5,
+                    context: context,
                   ),
                 ),
               );
@@ -267,7 +274,14 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
               height: 240,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white, width: 2),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 2,
+                ),
               ),
             ),
           ),
@@ -276,10 +290,18 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
     }
 
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
         title: const Text('扫码登录工作台'),
-        backgroundColor: DunesColors.bgApp,
+        backgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         elevation: 0,
       ),
       body: Column(
@@ -288,13 +310,18 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
-            color: DunesColors.bgApp,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
             child: Text(
               _tip,
               textAlign: TextAlign.center,
               style: DunesTypography.sans(
                 fontSize: 13,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
           ),

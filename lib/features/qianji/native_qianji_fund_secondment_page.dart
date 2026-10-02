@@ -33,8 +33,9 @@ class NativeQianjiFundSecondmentPage extends StatefulWidget {
 
 class _NativeQianjiFundSecondmentPageState
     extends State<NativeQianjiFundSecondmentPage> {
-  late final FundSecondmentService _service =
-      FundSecondmentService(session: widget.session);
+  late final FundSecondmentService _service = FundSecondmentService(
+    session: widget.session,
+  );
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _keywordCtrl = TextEditingController();
 
@@ -78,7 +79,10 @@ class _NativeQianjiFundSecondmentPageState
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients || _loading || _loadingMore || !_hasMore) {
+    if (!_scrollController.hasClients ||
+        _loading ||
+        _loadingMore ||
+        !_hasMore) {
       return;
     }
     final pos = _scrollController.position;
@@ -121,7 +125,8 @@ class _NativeQianjiFundSecondmentPageState
         _summary = result.summary;
         _page = 0;
         _total = result.totalCount;
-        _hasMore = result.items.length >= _pageSize &&
+        _hasMore =
+            result.items.length >= _pageSize &&
             result.items.length < result.totalCount;
       });
     } catch (e) {
@@ -169,7 +174,11 @@ class _NativeQianjiFundSecondmentPageState
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F6F8),
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -207,7 +216,7 @@ class _NativeQianjiFundSecondmentPageState
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: widget.onBack,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -215,25 +224,28 @@ class _NativeQianjiFundSecondmentPageState
                   Icon(
                     Icons.arrow_back_ios_new,
                     size: 14,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                   ),
                   SizedBox(width: 2),
                   Text(
                     '饕',
-                    style: TextStyle(fontSize: 13, color: DunesColors.text2),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               '资金借调',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _themePurple,
+                color: DunesColors.resolveNullable(context, _themePurple),
               ),
             ),
           ),
@@ -261,15 +273,34 @@ class _NativeQianjiFundSecondmentPageState
                   icon: const Icon(Icons.close, size: 18),
                 ),
           filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          fillColor: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 8,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
         ),
       ),
@@ -313,7 +344,10 @@ class _NativeQianjiFundSecondmentPageState
           const Spacer(),
           Text(
             '$_total 条',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -339,7 +373,9 @@ class _NativeQianjiFundSecondmentPageState
           Text(
             friendlyErrorText(_error, fallback: '加载失败，请稍后重试'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: DunesColors.text2),
+            style: TextStyle(
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -359,12 +395,15 @@ class _NativeQianjiFundSecondmentPageState
         SliverToBoxAdapter(child: _buildSummaryBoard()),
         SliverToBoxAdapter(child: _buildFilterChips()),
         if (_rows.isEmpty)
-          const SliverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Text(
                 '暂无资金借调记录',
-                style: TextStyle(color: DunesColors.text3, fontSize: 14),
+                style: TextStyle(
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  fontSize: 14,
+                ),
               ),
             ),
           )
@@ -391,8 +430,9 @@ class _NativeQianjiFundSecondmentPageState
                 return _FundSecondmentCard(
                   row: row,
                   amountText: _amountText(row.borrowAmountWan),
-                  remainingText:
-                      row.isCleared ? '' : '剩 ${_amountText(row.remainingWan)}万',
+                  remainingText: row.isCleared
+                      ? ''
+                      : '剩 ${_amountText(row.remainingWan)}万',
                   onTap: () => widget.onOpenDetail(row.id),
                 );
               },
@@ -417,7 +457,17 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFF0EEF7) : Colors.white,
+      color: selected
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EEF7),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -427,7 +477,17 @@ class _FilterChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: selected ? _themePurple : const Color(0xFFE8EAED),
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      _themePurple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      const Color(0xFFE8EAED),
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -435,7 +495,9 @@ class _FilterChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? _themePurple : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, _themePurple)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -463,7 +525,11 @@ class _FundSecondmentCard extends StatelessWidget {
     final borrow = row.borrowSubject.isEmpty ? '—' : row.borrowSubject;
     final pay = row.paySubject.isEmpty ? '—' : row.paySubject;
     return Material(
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -472,7 +538,13 @@ class _FundSecondmentCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Row(
             children: [
@@ -485,10 +557,13 @@ class _FundSecondmentCard extends StatelessWidget {
                         if (row.code.isNotEmpty) ...[
                           Text(
                             row.code,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color: _themePurple,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                _themePurple,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -499,7 +574,11 @@ class _FundSecondmentCard extends StatelessWidget {
                             vertical: 1,
                           ),
                           decoration: BoxDecoration(
-                            color: status.bg,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              status.bg,
+                              role: DunesColorRole.surface,
+                            ),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -507,7 +586,10 @@ class _FundSecondmentCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
-                              color: status.fg,
+                              color: DunesColors.resolveNullable(
+                                context,
+                                status.fg,
+                              ),
                             ),
                           ),
                         ),
@@ -518,9 +600,12 @@ class _FundSecondmentCard extends StatelessWidget {
                               row.approvedAt,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: DunesColors.text3,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
                               ),
                             ),
                           ),
@@ -532,10 +617,10 @@ class _FundSecondmentCard extends StatelessWidget {
                       '$borrow  →  $pay',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                   ],
@@ -547,23 +632,27 @@ class _FundSecondmentCard extends StatelessWidget {
                 children: [
                   Text(
                     '$amountText万',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                     ),
                   ),
                   if (remainingText.isNotEmpty)
                     Text(
                       remainingText,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: DunesColors.coral,
+                        color: DunesColors.resolve(context, DunesColors.coral),
                       ),
                     ),
                 ],
               ),
-              const Icon(Icons.chevron_right, size: 18, color: DunesColors.text3),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ],
           ),
         ),

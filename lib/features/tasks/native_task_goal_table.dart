@@ -27,7 +27,9 @@ class TaskGoalTable extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
-        headingRowColor: const WidgetStatePropertyAll(Color(0xFFF7F5FB)),
+        headingRowColor: WidgetStatePropertyAll(
+          DunesColors.resolve(context, Color(0xFFF7F5FB)),
+        ),
         dataRowMinHeight: 52,
         dataRowMaxHeight: 64,
         columnSpacing: 28,

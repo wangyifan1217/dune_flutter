@@ -53,8 +53,16 @@ class _AppUpdateTopBannerBody extends StatelessWidget {
 
     return Material(
       color: result.forceUpdate
-          ? const Color(0xFFB65252)
-          : const Color(0xFF5B4A9A),
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFB65252),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              const Color(0xFF5B4A9A),
+              role: DunesColorRole.surface,
+            ),
       child: SafeArea(
         bottom: false,
         child: Padding(
@@ -66,7 +74,7 @@ class _AppUpdateTopBannerBody extends StatelessWidget {
                     ? Icons.warning_amber_rounded
                     : Icons.system_update_alt_rounded,
                 size: 18,
-                color: Colors.white,
+                color: DunesColors.resolve(context, Colors.white),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -75,8 +83,9 @@ class _AppUpdateTopBannerBody extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
                     height: 1.3,
+                    context: context,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -86,7 +95,7 @@ class _AppUpdateTopBannerBody extends StatelessWidget {
               TextButton(
                 onPressed: onUpdate,
                 style: TextButton.styleFrom(
-                  foregroundColor: Colors.white,
+                  foregroundColor: DunesColors.resolve(context, Colors.white),
                   backgroundColor: Colors.white.withValues(alpha: 0.18),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -103,7 +112,8 @@ class _AppUpdateTopBannerBody extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
+                    context: context,
                   ),
                 ),
               ),
@@ -115,9 +125,12 @@ class _AppUpdateTopBannerBody extends StatelessWidget {
                   padding: const EdgeInsets.all(4),
                   constraints: const BoxConstraints(),
                   iconSize: 18,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.close_rounded,
-                    color: Color(0xCCFFFFFF),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xCCFFFFFF),
+                    ),
                   ),
                 ),
             ],

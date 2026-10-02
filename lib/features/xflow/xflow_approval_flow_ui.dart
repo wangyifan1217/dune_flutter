@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/util/detail_text_format.dart';
 import 'proposal_upload_config.dart';
 import 'xflow_form_styles.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 enum XflowApprovalFlowStepState { pending, current, done, rejected }
 
@@ -53,9 +54,9 @@ class XflowApprovalFlowSection extends StatelessWidget {
                     (emptyHint != null && emptyHint!.trim().isNotEmpty)
                         ? emptyHint!.trim()
                         : '未配置审批阶段，请在模板设计器「审批阶段」中维护',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: XfProposalUi.mute,
+                      color: DunesColors.resolve(context, XfProposalUi.mute),
                       height: 1.5,
                     ),
                   ),
@@ -98,8 +99,9 @@ class XflowApprovalFlowSection extends StatelessWidget {
       rows.add(
         _FlowPreviewRow(
           stepNo: stepNo,
-          title: (stage['stageName'] ?? stage['name'] ?? stage['label'] ?? '审批步骤')
-              .toString(),
+          title:
+              (stage['stageName'] ?? stage['name'] ?? stage['label'] ?? '审批步骤')
+                  .toString(),
           meta: uploadStageMetaLabel(stage, userNames: userNames),
           statusLabel: pendingStatusLabel,
           state: XflowApprovalFlowStepState.pending,
@@ -152,9 +154,13 @@ class XflowApprovalFlowTrackSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) {
-      return const Text(
+      return Text(
         '暂无审批流程记录',
-        style: TextStyle(fontSize: 13, color: XfProposalUi.mute, height: 1.5),
+        style: TextStyle(
+          fontSize: 13,
+          color: DunesColors.resolve(context, XfProposalUi.mute),
+          height: 1.5,
+        ),
       );
     }
     return Column(
@@ -214,15 +220,19 @@ class XflowApprovalFlowBadge extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: XfProposalUi.coral.withAlpha(31),
+            color: DunesColors.resolve(
+              context,
+              XfProposalUi.coral,
+              role: DunesColorRole.surface,
+            ).withAlpha(31),
             borderRadius: BorderRadius.circular(3),
           ),
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'monospace',
               fontSize: 10,
-              color: XfProposalUi.coral,
+              color: DunesColors.resolve(context, XfProposalUi.coral),
               letterSpacing: 1,
               fontWeight: FontWeight.w600,
             ),
@@ -231,24 +241,33 @@ class XflowApprovalFlowBadge extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           subLabel,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'monospace',
             fontSize: 10,
-            color: XfProposalUi.mute2,
+            color: DunesColors.resolve(context, XfProposalUi.mute2),
             letterSpacing: 1.2,
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(width: 8),
-        Expanded(child: Container(height: 0.5, color: XfProposalUi.line)),
+        Expanded(
+          child: Container(
+            height: 0.5,
+            color: DunesColors.resolve(
+              context,
+              XfProposalUi.line,
+              role: DunesColorRole.surface,
+            ),
+          ),
+        ),
         if (trailing != null) ...[
           const SizedBox(width: 8),
           Text(
             trailing!,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'monospace',
               fontSize: 11,
-              color: XfProposalUi.coral,
+              color: DunesColors.resolve(context, XfProposalUi.coral),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -268,9 +287,20 @@ class XflowApprovalFlowCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
       decoration: BoxDecoration(
-        color: XfProposalUi.card,
+        color: DunesColors.resolve(
+          context,
+          XfProposalUi.card,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: XfProposalUi.lineSoft, width: 0.6),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            XfProposalUi.lineSoft,
+            role: DunesColorRole.border,
+          ),
+          width: 0.6,
+        ),
       ),
       child: Column(children: children),
     );
@@ -312,7 +342,11 @@ class _FlowPreviewRow extends StatelessWidget {
                   Expanded(
                     child: Container(
                       width: 0.5,
-                      color: XfProposalUi.lineSoft,
+                      color: DunesColors.resolve(
+                        context,
+                        XfProposalUi.lineSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       margin: const EdgeInsets.symmetric(vertical: 2),
                     ),
                   ),
@@ -333,9 +367,12 @@ class _FlowPreviewRow extends StatelessWidget {
                       Expanded(
                         child: Text(
                           '$stepNo. $title',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11.5,
-                            color: XfProposalUi.ink,
+                            color: DunesColors.resolve(
+                              context,
+                              XfProposalUi.ink,
+                            ),
                             fontWeight: FontWeight.w600,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -343,18 +380,25 @@ class _FlowPreviewRow extends StatelessWidget {
                       ),
                       if (onHelp != null) ...[
                         Material(
-                          color: XfProposalUi.cardAlt,
+                          color: DunesColors.resolve(
+                            context,
+                            XfProposalUi.cardAlt,
+                            role: DunesColorRole.surface,
+                          ),
                           shape: const CircleBorder(),
                           child: InkWell(
                             customBorder: const CircleBorder(),
                             onTap: onHelp,
-                            child: const SizedBox(
+                            child: SizedBox(
                               width: 20,
                               height: 20,
                               child: Icon(
                                 Icons.help_outline,
                                 size: 12,
-                                color: XfProposalUi.mute,
+                                color: DunesColors.resolve(
+                                  context,
+                                  XfProposalUi.mute,
+                                ),
                               ),
                             ),
                           ),
@@ -366,7 +410,10 @@ class _FlowPreviewRow extends StatelessWidget {
                         style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 8,
-                          color: _statusColor(state),
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _statusColor(state),
+                          ),
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.4,
                         ),
@@ -377,10 +424,10 @@ class _FlowPreviewRow extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       meta,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 9,
-                        color: XfProposalUi.mute2,
+                        color: DunesColors.resolve(context, XfProposalUi.mute2),
                         letterSpacing: 0.2,
                       ),
                     ),
@@ -418,7 +465,11 @@ class _FlowTrackRow extends StatelessWidget {
                   Expanded(
                     child: Container(
                       width: 0.5,
-                      color: XfProposalUi.lineSoft,
+                      color: DunesColors.resolve(
+                        context,
+                        XfProposalUi.lineSoft,
+                        role: DunesColorRole.surface,
+                      ),
                       margin: const EdgeInsets.symmetric(vertical: 2),
                     ),
                   ),
@@ -445,9 +496,17 @@ class _FlowTrackRow extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: data.state == XflowApprovalFlowStepState.pending
-                                    ? XfProposalUi.mute
-                                    : XfProposalUi.ink,
+                                color:
+                                    data.state ==
+                                        XflowApprovalFlowStepState.pending
+                                    ? DunesColors.resolve(
+                                        context,
+                                        XfProposalUi.mute,
+                                      )
+                                    : DunesColors.resolve(
+                                        context,
+                                        XfProposalUi.ink,
+                                      ),
                               ),
                             ),
                             if (data.role != null && data.role!.isNotEmpty)
@@ -457,9 +516,19 @@ class _FlowTrackRow extends StatelessWidget {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: data.state == XflowApprovalFlowStepState.done
-                                      ? const Color(0xFFE8F5EE)
-                                      : XfProposalUi.cardAlt,
+                                  color:
+                                      data.state ==
+                                          XflowApprovalFlowStepState.done
+                                      ? DunesColors.resolve(
+                                          context,
+                                          const Color(0xFFE8F5EE),
+                                          role: DunesColorRole.surface,
+                                        )
+                                      : DunesColors.resolve(
+                                          context,
+                                          XfProposalUi.cardAlt,
+                                          role: DunesColorRole.surface,
+                                        ),
                                   borderRadius: BorderRadius.circular(3),
                                 ),
                                 child: Text(
@@ -467,9 +536,17 @@ class _FlowTrackRow extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
-                                    color: data.state == XflowApprovalFlowStepState.done
-                                        ? const Color(0xFF085041)
-                                        : XfProposalUi.mute2,
+                                    color:
+                                        data.state ==
+                                            XflowApprovalFlowStepState.done
+                                        ? DunesColors.resolve(
+                                            context,
+                                            const Color(0xFF085041),
+                                          )
+                                        : DunesColors.resolve(
+                                            context,
+                                            XfProposalUi.mute2,
+                                          ),
                                   ),
                                 ),
                               ),
@@ -479,9 +556,12 @@ class _FlowTrackRow extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         data.time,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
-                          color: XfProposalUi.mute2,
+                          color: DunesColors.resolve(
+                            context,
+                            XfProposalUi.mute2,
+                          ),
                           letterSpacing: 0.2,
                         ),
                       ),
@@ -492,10 +572,21 @@ class _FlowTrackRow extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
                     decoration: BoxDecoration(
-                      color: commentStyle.bg,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        commentStyle.bg,
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(7),
                       border: Border(
-                        left: BorderSide(color: commentStyle.border, width: 2),
+                        left: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            commentStyle.border,
+                            role: DunesColorRole.border,
+                          ),
+                          width: 2,
+                        ),
                       ),
                     ),
                     child: Column(
@@ -506,19 +597,27 @@ class _FlowTrackRow extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             height: 1.65,
-                            color: commentStyle.fg,
-                            fontWeight: data.state == XflowApprovalFlowStepState.current
+                            color: DunesColors.resolveNullable(
+                              context,
+                              commentStyle.fg,
+                            ),
+                            fontWeight:
+                                data.state == XflowApprovalFlowStepState.current
                                 ? FontWeight.w500
                                 : FontWeight.w400,
                           ),
                         ),
-                        if (data.subComment != null && data.subComment!.isNotEmpty) ...[
+                        if (data.subComment != null &&
+                            data.subComment!.isNotEmpty) ...[
                           const SizedBox(height: 3),
                           Text(
                             data.subComment!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: XfProposalUi.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                XfProposalUi.mute,
+                              ),
                             ),
                           ),
                         ],
@@ -547,40 +646,78 @@ class _FlowDot extends StatelessWidget {
         return Container(
           width: 14,
           height: 14,
-          decoration: const BoxDecoration(
-            color: Color(0xFF4A7A3E),
+          decoration: BoxDecoration(
+            color: DunesColors.resolveNullable(
+              context,
+              Color(0xFF4A7A3E),
+              role: DunesColorRole.surface,
+            ),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.check, size: 9, color: Colors.white),
+          child: Icon(
+            Icons.check,
+            size: 9,
+            color: DunesColors.resolve(context, Colors.white),
+          ),
         );
       case XflowApprovalFlowStepState.current:
         return Container(
           width: 14,
           height: 14,
           decoration: BoxDecoration(
-            color: XfProposalUi.card,
+            color: DunesColors.resolve(
+              context,
+              XfProposalUi.card,
+              role: DunesColorRole.surface,
+            ),
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF7054D8), width: 2),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFF7054D8),
+                role: DunesColorRole.border,
+              ),
+              width: 2,
+            ),
           ),
         );
       case XflowApprovalFlowStepState.rejected:
         return Container(
           width: 14,
           height: 14,
-          decoration: const BoxDecoration(
-            color: Color(0xFFB4443D),
+          decoration: BoxDecoration(
+            color: DunesColors.resolveNullable(
+              context,
+              Color(0xFFB4443D),
+              role: DunesColorRole.surface,
+            ),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.close, size: 9, color: Colors.white),
+          child: Icon(
+            Icons.close,
+            size: 9,
+            color: DunesColors.resolve(context, Colors.white),
+          ),
         );
       case XflowApprovalFlowStepState.pending:
         return Container(
           width: 14,
           height: 14,
           decoration: BoxDecoration(
-            color: XfProposalUi.card,
+            color: DunesColors.resolve(
+              context,
+              XfProposalUi.card,
+              role: DunesColorRole.surface,
+            ),
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFFC9C3B7), width: 1),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFC9C3B7),
+                role: DunesColorRole.border,
+              ),
+              width: 1,
+            ),
           ),
         );
     }
@@ -600,7 +737,9 @@ Color _statusColor(XflowApprovalFlowStepState state) {
   }
 }
 
-({Color bg, Color fg, Color border}) _commentStyle(XflowApprovalFlowStepState state) {
+({Color bg, Color fg, Color border}) _commentStyle(
+  XflowApprovalFlowStepState state,
+) {
   switch (state) {
     case XflowApprovalFlowStepState.done:
       return (

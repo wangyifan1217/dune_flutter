@@ -61,7 +61,8 @@ class ContactsHeader extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -69,7 +70,8 @@ class ContactsHeader extends StatelessWidget {
                   groupPickMode ? groupPickSubtitle : '$total 人',
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ],
@@ -98,7 +100,10 @@ class ContactsHeader extends StatelessWidget {
                               onTap: onConfirmCreate ?? () {},
                               tooltip: '完成',
                               active: true,
-                              activeColor: DunesColors.accent,
+                              activeColor: DunesColors.resolve(
+                                context,
+                                DunesColors.accent,
+                              ),
                             ),
                     )
                   : Row(
@@ -142,13 +147,18 @@ class ExternalSectionLabel extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
           const SizedBox(width: 8),
           Text(
             '$total',
-            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ],
       ),
@@ -171,7 +181,11 @@ class OrgSectionLabel extends StatelessWidget {
             width: 3,
             height: 14,
             decoration: BoxDecoration(
-              color: const Color(0xFF7B5CD8),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFF7B5CD8),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -181,13 +195,18 @@ class OrgSectionLabel extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
           const Spacer(),
           Text(
             '$total 人',
-            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ],
       ),
@@ -228,9 +247,7 @@ class ContactRowTile extends StatelessWidget {
     final isMe = contact.userId == currentUserId;
     final disabled =
         !contact.enabled || (pickMode && isMe && !allowSelfInPickMode);
-    final onTap = pickMode
-        ? (disabled ? null : onToggleSelect)
-        : onOpenProfile;
+    final onTap = pickMode ? (disabled ? null : onToggleSelect) : onOpenProfile;
     final status = imStatus ?? contact.statusValue;
     return Opacity(
       opacity: disabled ? 0.55 : 1,
@@ -248,13 +265,37 @@ class ContactRowTile extends StatelessWidget {
                     height: 22,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: selected ? DunesColors.accent : Colors.white,
+                      color: selected
+                          ? DunesColors.resolve(
+                              context,
+                              DunesColors.accent,
+                              role: DunesColorRole.surface,
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              Colors.white,
+                              role: DunesColorRole.surface,
+                            ),
                       border: Border.all(
-                        color: selected ? DunesColors.accent : DunesColors.border,
+                        color: selected
+                            ? DunesColors.resolve(
+                                context,
+                                DunesColors.accent,
+                                role: DunesColorRole.border,
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                DunesColors.border,
+                                role: DunesColorRole.border,
+                              ),
                       ),
                     ),
                     child: selected
-                        ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
+                        ? Icon(
+                            Icons.check_rounded,
+                            size: 14,
+                            color: DunesColors.resolve(context, Colors.white),
+                          )
                         : null,
                   ),
                   const SizedBox(width: 10),
@@ -287,8 +328,15 @@ class ContactRowTile extends StatelessWidget {
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
                                 color: disabled
-                                    ? DunesColors.text3
-                                    : DunesColors.text,
+                                    ? DunesColors.resolve(
+                                        context,
+                                        DunesColors.text3,
+                                      )
+                                    : DunesColors.resolve(
+                                        context,
+                                        DunesColors.text,
+                                      ),
+                                context: context,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -301,7 +349,11 @@ class ContactRowTile extends StatelessWidget {
                                 vertical: 1,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF7B5CD8).withValues(alpha: 0.12),
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF7B5CD8),
+                                  role: DunesColorRole.surface,
+                                ).withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -309,7 +361,11 @@ class ContactRowTile extends StatelessWidget {
                                 style: DunesTypography.sans(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF7B5CD8),
+                                  color: DunesColors.resolve(
+                                    context,
+                                    const Color(0xFF7B5CD8),
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -323,7 +379,8 @@ class ContactRowTile extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         [
-                          if (contact.primaryRole.isNotEmpty) contact.primaryRole,
+                          if (contact.primaryRole.isNotEmpty)
+                            contact.primaryRole,
                           if ((contact.department ?? '').trim().isNotEmpty)
                             contact.department!.trim(),
                         ].join(' · '),
@@ -331,7 +388,11 @@ class ContactRowTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -424,10 +485,10 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                   AnimatedRotation(
                     turns: _expanded ? 0.25 : 0,
                     duration: const Duration(milliseconds: 180),
-                    child: const Icon(
+                    child: Icon(
                       Icons.chevron_right_rounded,
                       size: 18,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -435,13 +496,20 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF7B5CD8).withValues(alpha: 0.1),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF7B5CD8),
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.apartment_rounded,
                       size: 16,
-                      color: Color(0xFF7B5CD8),
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF7B5CD8),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -451,7 +519,8 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                       style: DunesTypography.sans(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                     ),
                   ),
@@ -459,7 +528,8 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                     '${dep.userCount}',
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ],
@@ -471,29 +541,41 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
           Container(
             margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8F7FB),
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF8F7FB),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
               children: [
                 for (var i = 0; i < dep.users.length; i++) ...[
                   if (i > 0)
-                    const Divider(
+                    Divider(
                       height: 1,
                       thickness: 1,
                       indent: 66,
-                      color: Color(0xFFEDECF2),
+                      color: DunesColors.resolve(
+                        context,
+                        Color(0xFFEDECF2),
+                        role: DunesColorRole.border,
+                      ),
                     ),
                   ContactRowTile(
                     contact: dep.users[i],
                     currentUserId: widget.currentUserId,
-                    showOnline: widget.onlineUsers.contains(dep.users[i].userId),
+                    showOnline: widget.onlineUsers.contains(
+                      dep.users[i].userId,
+                    ),
                     imStatus: widget.imStatuses[dep.users[i].userId],
                     onOpenProfile: () => widget.onOpenContact(dep.users[i]),
                     onMessage: () => widget.onMessageContact(dep.users[i]),
                     avatarService: widget.avatarService,
                     pickMode: widget.pickMode,
-                    selected: widget.selectedUserIds.contains(dep.users[i].userId),
+                    selected: widget.selectedUserIds.contains(
+                      dep.users[i].userId,
+                    ),
                     onToggleSelect: widget.onToggleContact == null
                         ? null
                         : () => widget.onToggleContact!(dep.users[i]),
@@ -540,11 +622,16 @@ class _HeaderIconBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = activeColor ?? const Color(0xFF7B5CD8);
+    final accent =
+        activeColor ?? DunesColors.resolve(context, const Color(0xFF7B5CD8));
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: active ? accent.withValues(alpha: 0.12) : Colors.transparent,
+        color: DunesColors.resolveNullable(
+          context,
+          active ? accent.withValues(alpha: 0.12) : Colors.transparent,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
@@ -555,7 +642,9 @@ class _HeaderIconBtn extends StatelessWidget {
             child: Icon(
               icon,
               size: icon == Icons.arrow_back_ios_new_rounded ? 18 : 22,
-              color: active ? accent : DunesColors.text2,
+              color: active
+                  ? accent
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -579,8 +668,16 @@ class _ActionIconBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: primary
-          ? const Color(0xFF7B5CD8).withValues(alpha: 0.1)
-          : const Color(0xFFF0F1F3),
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFF7B5CD8),
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.1)
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF0F1F3),
+              role: DunesColorRole.surface,
+            ),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -591,7 +688,9 @@ class _ActionIconBtn extends StatelessWidget {
           child: Icon(
             icon,
             size: 16,
-            color: primary ? const Color(0xFF7B5CD8) : DunesColors.text2,
+            color: primary
+                ? DunesColors.resolve(context, const Color(0xFF7B5CD8))
+                : DunesColors.resolve(context, DunesColors.text2),
           ),
         ),
       ),

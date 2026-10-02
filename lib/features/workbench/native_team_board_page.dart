@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../lighthouse/lighthouse_theme.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 // ═══════════════════════════════════════════════════
 // 设计令牌 · 灯塔编辑风格（如接入 LhColors / LhTypography 请替换）
@@ -47,18 +48,18 @@ class _Task {
   }) : createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'content': content,
-        'done': done,
-        'createdAt': createdAt.toIso8601String(),
-      };
+    'id': id,
+    'content': content,
+    'done': done,
+    'createdAt': createdAt.toIso8601String(),
+  };
 
   factory _Task.fromJson(Map<String, dynamic> j) => _Task(
-        id: j['id'] as String,
-        content: j['content'] as String,
-        done: j['done'] as bool? ?? false,
-        createdAt: DateTime.parse(j['createdAt'] as String),
-      );
+    id: j['id'] as String,
+    content: j['content'] as String,
+    done: j['done'] as bool? ?? false,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+  );
 }
 
 class _Member {
@@ -75,22 +76,9 @@ const _members = <_Member>[
 ];
 
 const _seedTasks = <String, List<String>>{
-  'zhai': [
-    '合同 PDF 解析',
-    '会议纪要模版修改：上线并提供接口',
-    '保险知识库：搭建完成，向保险分发平台提供对接接口',
-  ],
-  'wang': [
-    '聊天系统优化：新增表情包、聊天记录转发',
-    '审批流配置后台',
-    'OA 新增合同用印申请流程',
-  ],
-  'zhu': [
-    '汇集行政合同用印 OA 流程需求',
-    '汇集人事标签四需求',
-    '灯塔细节修复与优化',
-    '提案导入',
-  ],
+  'zhai': ['合同 PDF 解析', '会议纪要模版修改：上线并提供接口', '保险知识库：搭建完成，向保险分发平台提供对接接口'],
+  'wang': ['聊天系统优化：新增表情包、聊天记录转发', '审批流配置后台', 'OA 新增合同用印申请流程'],
+  'zhu': ['汇集行政合同用印 OA 流程需求', '汇集人事标签四需求', '灯塔细节修复与优化', '提案导入'],
 };
 
 // ═══════════════════════════════════════════════════
@@ -162,10 +150,12 @@ class _NativeTeamBoardPageState extends State<NativeTeamBoardPage> {
     final text = content.trim();
     if (text.isEmpty) return;
     setState(() {
-      _tasks[key]!.add(_Task(
-        id: '${key}_${DateTime.now().millisecondsSinceEpoch}',
-        content: text,
-      ));
+      _tasks[key]!.add(
+        _Task(
+          id: '${key}_${DateTime.now().millisecondsSinceEpoch}',
+          content: text,
+        ),
+      );
     });
     _persist(key);
   }
@@ -180,15 +170,21 @@ class _NativeTeamBoardPageState extends State<NativeTeamBoardPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        backgroundColor: _Tokens.paper,
+      return Scaffold(
+        backgroundColor: DunesColors.resolve(
+          context,
+          _Tokens.paper,
+          role: DunesColorRole.surface,
+        ),
         body: Center(
           child: SizedBox(
             width: 20,
             height: 20,
             child: CircularProgressIndicator(
               strokeWidth: 1.5,
-              valueColor: AlwaysStoppedAnimation(_Tokens.copper),
+              valueColor: AlwaysStoppedAnimation(
+                DunesColors.resolve(context, _Tokens.copper),
+              ),
             ),
           ),
         ),
@@ -196,11 +192,17 @@ class _NativeTeamBoardPageState extends State<NativeTeamBoardPage> {
     }
 
     final total = _tasks.values.fold<int>(0, (s, l) => s + l.length);
-    final done = _tasks.values
-        .fold<int>(0, (s, l) => s + l.where((t) => t.done).length);
+    final done = _tasks.values.fold<int>(
+      0,
+      (s, l) => s + l.where((t) => t.done).length,
+    );
 
     return Scaffold(
-      backgroundColor: _Tokens.paper,
+      backgroundColor: DunesColors.resolve(
+        context,
+        _Tokens.paper,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (ctx, cons) {
@@ -225,9 +227,14 @@ class _NativeTeamBoardPageState extends State<NativeTeamBoardPage> {
                             if (i != _members.length - 1)
                               Container(
                                 width: 1,
-                                margin:
-                                    const EdgeInsets.symmetric(horizontal: 24),
-                                color: _Tokens.hairline,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                ),
+                                color: DunesColors.resolve(
+                                  ctx,
+                                  _Tokens.hairline,
+                                  role: DunesColorRole.surface,
+                                ),
                               ),
                           ],
                         ],
@@ -242,7 +249,11 @@ class _NativeTeamBoardPageState extends State<NativeTeamBoardPage> {
                             Container(
                               height: 1,
                               margin: const EdgeInsets.symmetric(vertical: 32),
-                              color: _Tokens.hairline,
+                              color: DunesColors.resolve(
+                                ctx,
+                                _Tokens.hairline,
+                                role: DunesColorRole.surface,
+                              ),
                             ),
                         ],
                       ],
@@ -261,24 +272,24 @@ class _NativeTeamBoardPageState extends State<NativeTeamBoardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '团队工作台',
           style: TextStyle(
             fontFamily: _Tokens.fontSans,
             fontSize: 32,
             fontWeight: FontWeight.w500,
-            color: _Tokens.ink,
+            color: DunesColors.resolve(context, _Tokens.ink),
             letterSpacing: -0.5,
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'TEAM · BOARD',
           style: TextStyle(
             fontFamily: _Tokens.fontMono,
             fontSize: 11,
             letterSpacing: 3,
-            color: _Tokens.mute,
+            color: DunesColors.resolve(context, _Tokens.mute),
           ),
         ),
         const SizedBox(height: 24),
@@ -287,11 +298,11 @@ class _NativeTeamBoardPageState extends State<NativeTeamBoardPage> {
           children: [
             Text(
               '$done',
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: _Tokens.fontNumber,
                 fontSize: 42,
                 fontWeight: FontWeight.w300,
-                color: _Tokens.copper,
+                color: DunesColors.resolve(context, _Tokens.copper),
                 height: 1,
               ),
             ),
@@ -299,10 +310,10 @@ class _NativeTeamBoardPageState extends State<NativeTeamBoardPage> {
               padding: const EdgeInsets.only(bottom: 6, left: 4),
               child: Text(
                 '/ $total',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: _Tokens.fontNumber,
                   fontSize: 16,
-                  color: _Tokens.mute,
+                  color: DunesColors.resolve(context, _Tokens.mute),
                 ),
               ),
             ),
@@ -311,10 +322,10 @@ class _NativeTeamBoardPageState extends State<NativeTeamBoardPage> {
               padding: const EdgeInsets.only(bottom: 10),
               child: Text(
                 '本周任务完成度 ${(pct * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: _Tokens.fontSans,
                   fontSize: 12,
-                  color: _Tokens.inkSoft,
+                  color: DunesColors.resolve(context, _Tokens.inkSoft),
                 ),
               ),
             ),
@@ -324,11 +335,21 @@ class _NativeTeamBoardPageState extends State<NativeTeamBoardPage> {
         // 进度条
         Container(
           height: 2,
-          color: _Tokens.paperDeep,
+          color: DunesColors.resolve(
+            context,
+            _Tokens.paperDeep,
+            role: DunesColorRole.surface,
+          ),
           child: FractionallySizedBox(
             alignment: Alignment.centerLeft,
             widthFactor: pct,
-            child: Container(color: _Tokens.copper),
+            child: Container(
+              color: DunesColors.resolve(
+                context,
+                _Tokens.copper,
+                role: DunesColorRole.surface,
+              ),
+            ),
           ),
         ),
       ],
@@ -402,11 +423,11 @@ class _MemberColumnState extends State<_MemberColumn> {
           children: [
             Text(
               widget.member.name,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: _Tokens.fontSans,
                 fontSize: 18,
                 fontWeight: FontWeight.w500,
-                color: _Tokens.ink,
+                color: DunesColors.resolve(context, _Tokens.ink),
                 letterSpacing: 0.5,
               ),
             ),
@@ -415,11 +436,11 @@ class _MemberColumnState extends State<_MemberColumn> {
               padding: const EdgeInsets.only(bottom: 3),
               child: Text(
                 widget.member.pinyin,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: _Tokens.fontMono,
                   fontSize: 10,
                   letterSpacing: 2.5,
-                  color: _Tokens.mute,
+                  color: DunesColors.resolve(context, _Tokens.mute),
                 ),
               ),
             ),
@@ -428,27 +449,34 @@ class _MemberColumnState extends State<_MemberColumn> {
               padding: const EdgeInsets.only(bottom: 3),
               child: Text(
                 '${widget.doneCount} / ${widget.tasks.length}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: _Tokens.fontNumber,
                   fontSize: 12,
-                  color: _Tokens.inkSoft,
+                  color: DunesColors.resolve(context, _Tokens.inkSoft),
                 ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        Container(height: 1, color: _Tokens.hairline),
+        Container(
+          height: 1,
+          color: DunesColors.resolve(
+            context,
+            _Tokens.hairline,
+            role: DunesColorRole.surface,
+          ),
+        ),
         // 任务
         if (widget.tasks.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 20, horizontal: 4),
             child: Text(
               '暂无任务',
               style: TextStyle(
                 fontFamily: _Tokens.fontSans,
                 fontSize: 12,
-                color: _Tokens.mute,
+                color: DunesColors.resolve(context, _Tokens.mute),
               ),
             ),
           )
@@ -461,11 +489,7 @@ class _MemberColumnState extends State<_MemberColumn> {
             ),
         // 输入
         const SizedBox(height: 8),
-        _InputRow(
-          controller: _controller,
-          focus: _focus,
-          onSubmit: _submit,
-        ),
+        _InputRow(controller: _controller, focus: _focus, onSubmit: _submit),
       ],
     );
   }
@@ -499,12 +523,23 @@ class _TaskRowState extends State<_TaskRow> {
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: Container(
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: _Tokens.hairline)),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                _Tokens.hairline,
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
         ),
         child: InkWell(
           onTap: widget.onToggle,
-          hoverColor: _Tokens.paperDeep.withOpacity(0.5),
+          hoverColor: DunesColors.resolve(
+            context,
+            _Tokens.paperDeep,
+          ).withOpacity(0.5),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
             child: Row(
@@ -519,10 +554,14 @@ class _TaskRowState extends State<_TaskRow> {
                       fontFamily: _Tokens.fontSans,
                       fontSize: 14,
                       height: 1.5,
-                      color: done ? _Tokens.mute : _Tokens.ink,
-                      decoration:
-                          done ? TextDecoration.lineThrough : null,
-                      decorationColor: _Tokens.mute,
+                      color: done
+                          ? DunesColors.resolve(context, _Tokens.mute)
+                          : DunesColors.resolve(context, _Tokens.ink),
+                      decoration: done ? TextDecoration.lineThrough : null,
+                      decorationColor: DunesColors.resolve(
+                        context,
+                        _Tokens.mute,
+                      ),
                       decorationThickness: 1,
                     ),
                   ),
@@ -532,11 +571,16 @@ class _TaskRowState extends State<_TaskRow> {
                   duration: const Duration(milliseconds: 150),
                   child: IconButton(
                     onPressed: widget.onDelete,
-                    icon: const Icon(Icons.close,
-                        size: 14, color: _Tokens.mute),
+                    icon: Icon(
+                      Icons.close,
+                      size: 14,
+                      color: DunesColors.resolve(context, _Tokens.mute),
+                    ),
                     padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 24, minHeight: 24),
+                    constraints: const BoxConstraints(
+                      minWidth: 24,
+                      minHeight: 24,
+                    ),
                     splashRadius: 16,
                     tooltip: '删除',
                   ),
@@ -564,15 +608,35 @@ class _Checkbox extends StatelessWidget {
       width: 16,
       height: 16,
       decoration: BoxDecoration(
-        color: checked ? _Tokens.copper : Colors.transparent,
+        color: checked
+            ? DunesColors.resolve(
+                context,
+                _Tokens.copper,
+                role: DunesColorRole.surface,
+              )
+            : Colors.transparent,
         border: Border.all(
-          color: checked ? _Tokens.copper : _Tokens.mute,
+          color: checked
+              ? DunesColors.resolve(
+                  context,
+                  _Tokens.copper,
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  _Tokens.mute,
+                  role: DunesColorRole.border,
+                ),
           width: 1.2,
         ),
         borderRadius: BorderRadius.circular(2),
       ),
       child: checked
-          ? const Icon(Icons.check, size: 12, color: _Tokens.paper)
+          ? Icon(
+              Icons.check,
+              size: 12,
+              color: DunesColors.resolve(context, _Tokens.paper),
+            )
           : null,
     );
   }
@@ -595,13 +659,25 @@ class _InputRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: _Tokens.hairline)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _Tokens.hairline,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
       child: Row(
         children: [
-          const Icon(Icons.add, size: 16, color: _Tokens.mute),
+          Icon(
+            Icons.add,
+            size: 16,
+            color: DunesColors.resolve(context, _Tokens.mute),
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: TextField(
@@ -609,19 +685,19 @@ class _InputRow extends StatelessWidget {
               focusNode: focus,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => onSubmit(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: _Tokens.fontSans,
                 fontSize: 14,
-                color: _Tokens.ink,
+                color: DunesColors.resolve(context, _Tokens.ink),
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
                 hintText: '添加任务，回车提交',
                 hintStyle: TextStyle(
                   fontFamily: _Tokens.fontSans,
                   fontSize: 14,
-                  color: _Tokens.mute,
+                  color: DunesColors.resolve(context, _Tokens.mute),
                 ),
                 contentPadding: EdgeInsets.symmetric(vertical: 10),
               ),
@@ -630,7 +706,7 @@ class _InputRow extends StatelessWidget {
           InkWell(
             onTap: onSubmit,
             borderRadius: BorderRadius.circular(2),
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               child: Text(
                 '添加',
@@ -638,7 +714,7 @@ class _InputRow extends StatelessWidget {
                   fontFamily: _Tokens.fontMono,
                   fontSize: 11,
                   letterSpacing: 1.5,
-                  color: _Tokens.copper,
+                  color: DunesColors.resolve(context, _Tokens.copper),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -671,17 +747,23 @@ class TeamBoardEntryCard extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xFFFFFFFC),
-                  Color(0xFFFAF8F0),
-                  Color(0xFFF2EFDF),
+                  DunesColors.resolve(context, Color(0xFFFFFFFC)),
+                  DunesColors.resolve(context, Color(0xFFFAF8F0)),
+                  DunesColors.resolve(context, Color(0xFFF2EFDF)),
                 ],
                 stops: [0.0, 0.6, 1.0],
               ),
-              border: Border.all(color: const Color(0xFFDDD5C0)),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFDDD5C0),
+                  role: DunesColorRole.border,
+                ),
+              ),
               borderRadius: BorderRadius.circular(7),
               boxShadow: const [
                 BoxShadow(
@@ -697,14 +779,18 @@ class TeamBoardEntryCard extends StatelessWidget {
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: LhColors.copper.withAlpha(18),
+                    color: DunesColors.resolve(
+                      context,
+                      LhColors.copper,
+                      role: DunesColorRole.surface,
+                    ).withAlpha(18),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   alignment: Alignment.center,
-                  child: const Icon(
+                  child: Icon(
                     Icons.dashboard_customize_outlined,
                     size: 18,
-                    color: LhColors.copper,
+                    color: DunesColors.resolve(context, LhColors.copper),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -717,9 +803,10 @@ class TeamBoardEntryCard extends StatelessWidget {
                         '团队工作台',
                         style: LhTypography.sans(
                           size: 13,
-                          color: LhColors.ink,
+                          color: DunesColors.resolve(context, LhColors.ink),
                           weight: FontWeight.w700,
                           letterSpacing: -0.1,
+                          context: context,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -727,14 +814,19 @@ class TeamBoardEntryCard extends StatelessWidget {
                         '三成员协作看板 · 录入勾选 · 本地持久化',
                         style: LhTypography.sans(
                           size: 9.5,
-                          color: LhColors.mute,
+                          color: DunesColors.resolve(context, LhColors.mute),
                           weight: FontWeight.w500,
+                          context: context,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, size: 16, color: LhColors.mute2),
+                Icon(
+                  Icons.chevron_right,
+                  size: 16,
+                  color: DunesColors.resolve(context, LhColors.mute2),
+                ),
               ],
             ),
           ),

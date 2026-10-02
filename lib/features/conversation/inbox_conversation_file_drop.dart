@@ -134,10 +134,7 @@ class _InboxConversationFileDropTargetState
       );
       widget.onActivateTarget?.call();
     } catch (e) {
-      _toast(
-        friendlyErrorText(e, fallback: '添加失败，请稍后重试'),
-        error: true,
-      );
+      _toast(friendlyErrorText(e, fallback: '添加失败，请稍后重试'), error: true);
     } finally {
       _inboxFileDropBusy = false;
       for (final bookmark in accessed) {
@@ -172,15 +169,32 @@ class _InboxConversationFileDropTargetState
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: (widget.acceptsFiles
-                            ? DunesColors.accent
-                            : DunesColors.coral)
-                        .withValues(alpha: 0.12),
+                    color:
+                        (widget.acceptsFiles
+                                ? DunesColors.resolve(
+                                    context,
+                                    DunesColors.accent,
+                                    role: DunesColorRole.surface,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    DunesColors.coral,
+                                    role: DunesColorRole.surface,
+                                  ))
+                            .withValues(alpha: 0.12),
                     border: Border(
                       left: BorderSide(
                         color: widget.acceptsFiles
-                            ? DunesColors.accent
-                            : DunesColors.coral,
+                            ? DunesColors.resolve(
+                                context,
+                                DunesColors.accent,
+                                role: DunesColorRole.border,
+                              )
+                            : DunesColors.resolve(
+                                context,
+                                DunesColors.coral,
+                                role: DunesColorRole.border,
+                              ),
                         width: 3,
                       ),
                     ),

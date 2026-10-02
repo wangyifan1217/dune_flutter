@@ -16,7 +16,13 @@ class NativeNovaHistoryPage extends StatefulWidget {
 
   final AuthSession session;
   final VoidCallback onBack;
-  final void Function(int conversationId, int messageId, String title, String preview) onOpenConversation;
+  final void Function(
+    int conversationId,
+    int messageId,
+    String title,
+    String preview,
+  )
+  onOpenConversation;
 
   @override
   State<NativeNovaHistoryPage> createState() => _NativeNovaHistoryPageState();
@@ -59,7 +65,10 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
       });
     }
     try {
-      final page = await _service.fetchHistoryTurns(size: 20, before: append ? _oldestAt : '');
+      final page = await _service.fetchHistoryTurns(
+        size: 20,
+        before: append ? _oldestAt : '',
+      );
       if (!mounted) return;
       setState(() {
         if (append) {
@@ -92,9 +101,12 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
       _visible = _all;
       return;
     }
-    _visible = _all.where((t) {
-      return t.title.toLowerCase().contains(keyword) || t.preview.toLowerCase().contains(keyword);
-    }).toList(growable: false);
+    _visible = _all
+        .where((t) {
+          return t.title.toLowerCase().contains(keyword) ||
+              t.preview.toLowerCase().contains(keyword);
+        })
+        .toList(growable: false);
   }
 
   void _toggleSearch() {
@@ -117,20 +129,40 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('删除对话记录', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        title: const Text(
+          '删除对话记录',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
         content: Text(
           '确定要删除「${t.title.isEmpty ? '此对话' : t.title}」吗？删除后将无法恢复。',
-          style: const TextStyle(fontSize: 13.5, color: Color(0xFF4E5969), height: 1.4),
+          style: TextStyle(
+            fontSize: 13.5,
+            color: DunesColors.resolveNullable(ctx, Color(0xFF4E5969)),
+            height: 1.4,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消', style: TextStyle(color: Color(0xFF86909C))),
+            child: Text(
+              '取消',
+              style: TextStyle(
+                color: DunesColors.resolveNullable(ctx, Color(0xFF86909C)),
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFFF4D4F)),
-            child: const Text('删除', style: TextStyle(fontWeight: FontWeight.w700)),
+            style: TextButton.styleFrom(
+              foregroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFFF4D4F),
+              ),
+            ),
+            child: const Text(
+              '删除',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -167,7 +199,12 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
           title: t.title.isEmpty ? '新对话' : t.title,
           preview: t.preview.isEmpty ? '（暂无消息预览）' : t.preview,
           timeLabel: formatNovaHistoryTime(at),
-          onTap: () => widget.onOpenConversation(t.conversationId, t.messageId, t.title, t.preview),
+          onTap: () => widget.onOpenConversation(
+            t.conversationId,
+            t.messageId,
+            t.title,
+            t.preview,
+          ),
           onDelete: () => _deleteTurn(t),
         ),
       );
@@ -178,7 +215,11 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
           padding: const EdgeInsets.all(12),
           child: Center(
             child: _loadingMore
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : TextButton(
                     onPressed: () => _load(append: true),
                     child: const Text('加载更多历史'),
@@ -193,7 +234,11 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FC),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF6F8FC),
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -226,7 +271,12 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: const TextStyle(color: DunesColors.text3)),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
+            ),
             const SizedBox(height: 8),
             OutlinedButton(onPressed: () => _load(), child: const Text('重试')),
           ],
@@ -234,7 +284,14 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
       );
     }
     if (_visible.isEmpty) {
-      return const Center(child: Text('暂无历史对话', style: TextStyle(color: DunesColors.text3)));
+      return Center(
+        child: Text(
+          '暂无历史对话',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
+      );
     }
     return ListView(
       padding: const EdgeInsets.only(bottom: 16),

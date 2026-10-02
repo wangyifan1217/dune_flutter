@@ -18,6 +18,7 @@ import 'xflow_form_styles.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// Detail view for dynamic submissions (everything except PROPOSAL).
 /// Supports both initiator actions and approver actions from inbox.
@@ -43,6 +44,7 @@ class NativeXflowSubmissionPage extends StatefulWidget {
   final VoidCallback onEdit;
   final XflowTodoHint? todoHint;
   final VoidCallback? onApprovalCompleted;
+
   /// 打开下一条待审批（宿主导航 / 覆盖层切换）。
   final ValueChanged<XflowProposalItem>? onOpenPendingItem;
 
@@ -489,7 +491,9 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     );
   }
 
-  List<ApprovalStakeholderPerson> _fallbackStakeholders(XflowDetailBundle bundle) {
+  List<ApprovalStakeholderPerson> _fallbackStakeholders(
+    XflowDetailBundle bundle,
+  ) {
     final out = <ApprovalStakeholderPerson>[];
     final seen = <int>{};
     void add(int id, String name) {
@@ -502,6 +506,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         ),
       );
     }
+
     for (final e in bundle.assigneeNames.entries) {
       add(e.key, e.value);
     }
@@ -531,9 +536,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         return rejected ? 'REJECTED' : 'APPROVED';
       }
     }
-    return (detail?.status ?? '').trim().isEmpty
-        ? 'PENDING'
-        : detail!.status;
+    return (detail?.status ?? '').trim().isEmpty ? 'PENDING' : detail!.status;
   }
 
   XflowProposalDetail? get _heroDetail {
@@ -550,10 +553,13 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         ? 'S-${detail.businessId}'
         : (detail.templateKey.isEmpty ? '—' : detail.templateKey);
     // 仅展示表单里真实有的字段，不编造「C 级」等默认值。
-    final tag1 = (form['tag1'] ?? form['businessSegment'] ?? form['proposalType'] ?? '')
+    final tag1 =
+        (form['tag1'] ?? form['businessSegment'] ?? form['proposalType'] ?? '')
+            .toString()
+            .trim();
+    final taskLevel = (form['taskLevel'] ?? form['level'] ?? '')
         .toString()
         .trim();
-    final taskLevel = (form['taskLevel'] ?? form['level'] ?? '').toString().trim();
     final coverage = form['provinces'] ?? form['coverage'] ?? form['region'];
     return XflowProposalDetail(
       id: detail.businessId,
@@ -585,11 +591,16 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     final hero = _heroDetail;
     final formTitle = _template?.title ?? detail?.title ?? '提交详情';
     final submitter = _submitterName.trim();
-    final titledForm =
-        submitter.isEmpty ? formTitle : '$submitter - $formTitle';
+    final titledForm = submitter.isEmpty
+        ? formTitle
+        : '$submitter - $formTitle';
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return ColoredBox(
-      color: XfProposalUi.bg,
+      color: DunesColors.resolve(
+        context,
+        XfProposalUi.bg,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -598,8 +609,9 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
               crumb: '动态审批 · 返回列表',
               title: formTitle,
               onBack: () => widget.navigation.popTo(widget.backScreen),
-              onForward:
-                  detail == null ? null : () => unawaited(_forwardApproval()),
+              onForward: detail == null
+                  ? null
+                  : () => unawaited(_forwardApproval()),
               forwarding: _forwarding,
             ),
             Expanded(
@@ -615,73 +627,73 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                         onTap: () =>
                             FocusManager.instance.primaryFocus?.unfocus(),
                         child: ListView(
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                      children: [
-                        if (hero != null)
-                          XfDetHero(detail: hero),
-                        if (bundle != null) ...[
-                          XfDetClosedBanner(detail: bundle.detail),
-                          XfDetRejectBanner(
-                            detail: bundle.detail,
-                            info: lastRejectStep(
-                              bundle.trail,
-                              bundle.assigneeNames,
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          children: [
+                            if (hero != null) XfDetHero(detail: hero),
+                            if (bundle != null) ...[
+                              XfDetClosedBanner(detail: bundle.detail),
+                              XfDetRejectBanner(
+                                detail: bundle.detail,
+                                info: lastRejectStep(
+                                  bundle.trail,
+                                  bundle.assigneeNames,
+                                ),
+                              ),
+                              if (_todoEnabled)
+                                XfDetTaskTodoBanner(
+                                  subStatus: detail?.subStatus ?? '',
+                                  myTask: _myTask,
+                                ),
+                            ],
+                            XflowFormCard(
+                              title: titledForm,
+                              child: XfDetFormSections(
+                                sections: buildFieldSections(
+                                  _template!.fields,
+                                  detail!.formData,
+                                  bundle!.detail,
+                                ),
+                                service: _service,
+                                onOpenLinkedProposal: (proposalId, source) {
+                                  openLinkedProposalDetail(
+                                    context: context,
+                                    session: widget.session,
+                                    proposalId: proposalId,
+                                    source: source,
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                          if (_todoEnabled)
-                            XfDetTaskTodoBanner(
-                              subStatus: detail?.subStatus ?? '',
-                              myTask: _myTask,
+                            const SizedBox(height: 12),
+                            XfDetTaskCompletionCard(
+                              form:
+                                  detail?.formData ?? const <String, dynamic>{},
+                              service: _service,
+                              fields: _template?.fields ?? const [],
                             ),
-                        ],
-                        XflowFormCard(
-                          title: titledForm,
-                          child: XfDetFormSections(
-                            sections: buildFieldSections(
-                              _template!.fields,
-                              detail!.formData,
-                              bundle!.detail,
+                            XfDetCommentsSection(
+                              service: _service,
+                              businessType: widget.businessType,
+                              businessId: widget.businessId,
+                              fallbackPeople: _fallbackStakeholders(bundle),
                             ),
-                            service: _service,
-                            onOpenLinkedProposal: (proposalId, source) {
-                              openLinkedProposalDetail(
-                                context: context,
-                                session: widget.session,
-                                proposalId: proposalId,
-                                source: source,
-                              );
-                            },
-                          ),
+                            const SizedBox(height: 12),
+                            XflowFormCard(
+                              title: '审批进度',
+                              tag: _trail == null ? '待同步' : '流程追踪',
+                              child: XfDetTrackTimeline(bundle: bundle),
+                            ),
+                            XfDetActions(
+                              detail: bundle.detail,
+                              canReedit: bundle.canReedit,
+                              onReedit: widget.onEdit,
+                              onVoid: _voidSubmission,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        XfDetTaskCompletionCard(
-                          form: detail?.formData ?? const <String, dynamic>{},
-                          service: _service,
-                          fields: _template?.fields ?? const [],
-                        ),
-                        XfDetCommentsSection(
-                          service: _service,
-                          businessType: widget.businessType,
-                          businessId: widget.businessId,
-                          fallbackPeople: _fallbackStakeholders(bundle),
-                        ),
-                        const SizedBox(height: 12),
-                        XflowFormCard(
-                          title: '审批进度',
-                          tag: _trail == null ? '待同步' : '流程追踪',
-                          child: XfDetTrackTimeline(bundle: bundle),
-                        ),
-                        XfDetActions(
-                          detail: bundle.detail,
-                          canReedit: bundle.canReedit,
-                          onReedit: widget.onEdit,
-                          onVoid: _voidSubmission,
-                        ),
-                      ],
-                    ),
-                    ),
+                      ),
                     ),
             ),
             if (_myTodo != null) ...[

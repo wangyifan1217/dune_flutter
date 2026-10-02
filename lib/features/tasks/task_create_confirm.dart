@@ -29,7 +29,10 @@ Future<bool> confirmCreateTask(
             const SizedBox(height: 8),
             Text(
               '周期：$range',
-              style: const TextStyle(color: DunesColors.text2, height: 1.4),
+              style: TextStyle(
+                color: DunesColors.resolve(ctx, DunesColors.text2),
+                height: 1.4,
+              ),
             ),
           ],
         ],

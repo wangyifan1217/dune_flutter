@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'robot_catalog_cache.dart';
 import 'robot_models.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// 扁平矢量机器人头像：方形脑袋 + LED 眼 + 轻待机动画。
 /// 外形与 IM 用户头像一致：圆角方形（[commBorderRadius]）。
@@ -14,6 +15,7 @@ class RobotFaceAvatar extends StatefulWidget {
     required this.role,
     this.size = 48,
     this.animate = true,
+
     /// 执行中：浮动/轻倾/呼吸；空闲：只眨眼。
     this.busy = false,
   });
@@ -79,11 +81,7 @@ class _RobotFaceAvatarState extends State<RobotFaceAvatar>
     if (!widget.animate) {
       return CustomPaint(
         size: Size.square(widget.size),
-        painter: _FacePainter(
-          role: widget.role,
-          eyeClose: 0,
-          breath: 0.5,
-        ),
+        painter: _FacePainter(role: widget.role, eyeClose: 0, breath: 0.5),
       );
     }
 
@@ -167,14 +165,11 @@ class _FacePainter extends CustomPainter {
     canvas.drawRRect(
       outer,
       Paint()
-        ..shader = ui.Gradient.linear(
-          Offset(c.dx, c.dy - r),
-          Offset(c.dx, c.dy + r),
-          [
-            Color.lerp(Colors.white, role.accent, 0.08)!,
-            Color.lerp(role.accent, const Color(0xFFF2F4F8), 0.82)!,
-          ],
-        ),
+        ..shader =
+            ui.Gradient.linear(Offset(c.dx, c.dy - r), Offset(c.dx, c.dy + r), [
+              Color.lerp(Colors.white, role.accent, 0.08)!,
+              Color.lerp(role.accent, const Color(0xFFF2F4F8), 0.82)!,
+            ]),
     );
 
     _paintAntenna(canvas, c, r);
@@ -284,7 +279,8 @@ class _FacePainter extends CustomPainter {
   }
 
   void _paintEars(Canvas canvas, Offset c, double r) {
-    final earPaint = Paint()..color = Color.lerp(_metalDeep, role.accent, 0.25)!;
+    final earPaint = Paint()
+      ..color = Color.lerp(_metalDeep, role.accent, 0.25)!;
     final bolt = Paint()..color = Colors.white.withValues(alpha: 0.7);
     for (final side in [-1.0, 1.0]) {
       final ear = RRect.fromRectAndRadius(
@@ -476,11 +472,7 @@ class _FacePainter extends CustomPainter {
 }
 
 class RobotAvatarStack extends StatelessWidget {
-  const RobotAvatarStack({
-    super.key,
-    required this.roleIds,
-    this.size = 28,
-  });
+  const RobotAvatarStack({super.key, required this.roleIds, this.size = 28});
 
   final List<String> roleIds;
   final double size;
@@ -501,7 +493,14 @@ class RobotAvatarStack extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(radius),
-                  border: Border.all(color: Colors.white, width: 1.5),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.border,
+                    ),
+                    width: 1.5,
+                  ),
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(radius),

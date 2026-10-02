@@ -34,7 +34,11 @@ class _NativeQianjiMyPerfPageState extends State<NativeQianjiMyPerfPage> {
     final items = _items;
 
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -78,7 +82,11 @@ class _NativeQianjiMyPerfPageState extends State<NativeQianjiMyPerfPage> {
                                 '当前筛选暂无记录',
                                 style: DunesTypography.sans(
                                   fontSize: 13,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -119,10 +127,22 @@ class _MonthRow extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: muted
-                    ? DunesColors.bgSoft
+                    ? DunesColors.resolve(
+                        context,
+                        DunesColors.bgSoft,
+                        role: DunesColorRole.surface,
+                      )
                     : item.level.startsWith('B')
-                        ? DunesColors.amberSoft
-                        : QianjiPerfTheme.purpleSoft,
+                    ? DunesColors.resolve(
+                        context,
+                        DunesColors.amberSoft,
+                        role: DunesColorRole.surface,
+                      )
+                    : DunesColors.resolve(
+                        context,
+                        QianjiPerfTheme.purpleSoft,
+                        role: DunesColorRole.surface,
+                      ),
                 borderRadius: BorderRadius.circular(11),
               ),
               child: Text(
@@ -131,10 +151,11 @@ class _MonthRow extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   color: muted
-                      ? DunesColors.text3
+                      ? DunesColors.resolve(context, DunesColors.text3)
                       : item.level.startsWith('B')
-                          ? DunesColors.amber
-                          : QianjiPerfTheme.purple,
+                      ? DunesColors.resolve(context, DunesColors.amber)
+                      : DunesColors.resolve(context, QianjiPerfTheme.purple),
+                  context: context,
                 ),
               ),
             ),
@@ -148,7 +169,8 @@ class _MonthRow extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -156,7 +178,8 @@ class _MonthRow extends StatelessWidget {
                     item.meta,
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: DunesColors.text3,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
                     ),
                   ),
                 ],
@@ -166,7 +189,11 @@ class _MonthRow extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: DunesColors.amberSoft,
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.amberSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -174,7 +201,8 @@ class _MonthRow extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.amber,
+                    color: DunesColors.resolve(context, DunesColors.amber),
+                    context: context,
                   ),
                 ),
               )
@@ -187,7 +215,11 @@ class _MonthRow extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: QianjiPerfTheme.purple,
+                      color: DunesColors.resolve(
+                        context,
+                        QianjiPerfTheme.purple,
+                      ),
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -198,8 +230,16 @@ class _MonthRow extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: item.level.startsWith('B')
-                          ? DunesColors.amberSoft
-                          : QianjiPerfTheme.purpleSoft,
+                          ? DunesColors.resolve(
+                              context,
+                              DunesColors.amberSoft,
+                              role: DunesColorRole.surface,
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              QianjiPerfTheme.purpleSoft,
+                              role: DunesColorRole.surface,
+                            ),
                       borderRadius: BorderRadius.circular(7),
                     ),
                     child: Text(
@@ -208,8 +248,12 @@ class _MonthRow extends StatelessWidget {
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
                         color: item.level.startsWith('B')
-                            ? DunesColors.amber
-                            : QianjiPerfTheme.purple,
+                            ? DunesColors.resolve(context, DunesColors.amber)
+                            : DunesColors.resolve(
+                                context,
+                                QianjiPerfTheme.purple,
+                              ),
+                        context: context,
                       ),
                     ),
                   ),

@@ -248,8 +248,13 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
   Widget build(BuildContext context) {
     final person = _person;
     if (person == null || person.categories.isEmpty) {
-      return const Center(
-        child: Text('该月暂无计入绩效明细', style: TextStyle(color: DunesColors.text3)),
+      return Center(
+        child: Text(
+          '该月暂无计入绩效明细',
+          style: TextStyle(
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+        ),
       );
     }
     return SingleChildScrollView(
@@ -259,10 +264,10 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
         children: [
           Text(
             '${widget.personName} · ${widget.monthLabel}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
             ),
           ),
           if (person.isRubric && person.scoredByName.trim().isNotEmpty) ...[
@@ -270,7 +275,10 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
             Text(
               '考核人 ${person.scoredByName}',
               key: const Key('kpi-scored-by'),
-              style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
           ],
           if (person.isRubric && person.isAcked) ...[
@@ -278,14 +286,20 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
             Text(
               '被考核人已确认 ${formatKpiAckedAt(person.ackedAt)}',
               key: const Key('kpi-acked'),
-              style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
           ] else if (person.isRubric && person.isUnpublished) ...[
             const SizedBox(height: 4),
-            const Text(
+            Text(
               '尚未发布到绩效助手',
               key: Key('kpi-unpublished'),
-              style: TextStyle(fontSize: 13, color: DunesColors.text2),
+              style: TextStyle(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
             ),
           ],
           const SizedBox(height: 8),
@@ -315,9 +329,12 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   _rubricError!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFFB42318),
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Color(0xFFB42318),
+                    ),
                   ),
                 ),
               ),
@@ -385,9 +402,19 @@ class _CategoryEditor extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -405,10 +432,10 @@ class _CategoryEditor extends StatelessWidget {
               ),
               Text(
                 category.score.toStringAsFixed(2),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
             ],
@@ -418,15 +445,21 @@ class _CategoryEditor extends StatelessWidget {
             category.tasks.length >= 2
                 ? '板块分 = 各任务分 × 当月营收占比，合计 ${category.score.toStringAsFixed(2)}'
                 : '本板块只有一条任务，板块分就是它的任务分',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 10),
           if (canEdit && category.tasks.length >= 2)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(bottom: 8),
               child: Text(
                 '未改的任务会按自动权重分摊剩余比例；全部手改时合计须为 100%。',
-                style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
               ),
             ),
           for (final task in category.tasks)
@@ -482,9 +515,19 @@ class _TaskEditorState extends State<_TaskEditor> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFFBFCFC),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFFBFCFC),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -517,16 +560,23 @@ class _TaskEditorState extends State<_TaskEditor> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF4E8D2),
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFF4E8D2),
+                                role: DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
                               task.scoreAdjusted && !task.weightOverridden
                                   ? '加减分'
                                   : '手工',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: Color(0xFFB07A2B),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  Color(0xFFB07A2B),
+                                ),
                               ),
                             ),
                           ),
@@ -538,9 +588,9 @@ class _TaskEditorState extends State<_TaskEditor> {
                       kpiLighthouseSliceSubtitle(task),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                   ],
@@ -552,16 +602,19 @@ class _TaskEditorState extends State<_TaskEditor> {
                 children: [
                   Text(
                     task.taskTotal.toStringAsFixed(1),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
                       height: 1.1,
                     ),
                   ),
-                  const Text(
+                  Text(
                     '任务分',
-                    style: TextStyle(fontSize: 11, color: DunesColors.text3),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
                   ),
                 ],
               ),
@@ -577,15 +630,24 @@ class _TaskEditorState extends State<_TaskEditor> {
                   child: LinearProgressIndicator(
                     value: share,
                     minHeight: 6,
-                    backgroundColor: const Color(0xFFEDEFF2),
-                    valueColor: const AlwaysStoppedAnimation<Color>(_accent),
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      const Color(0xFFEDEFF2),
+                      role: DunesColorRole.surface,
+                    ),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      DunesColors.resolve(context, _accent),
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
               Text(
                 '权重 ${task.weightPct.toStringAsFixed(2)}% · 贡献 ${contribution.toStringAsFixed(1)} 分',
-                style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
               ),
             ],
           ),
@@ -593,13 +655,19 @@ class _TaskEditorState extends State<_TaskEditor> {
             const SizedBox(height: 4),
             Text(
               '自动得分 ${(task.autoTaskTotal ?? task.taskTotal).toStringAsFixed(1)} → 现得分 ${task.taskTotal.toStringAsFixed(1)}（${formatKpiAdj(task.scoreAdj)}）',
-              style: const TextStyle(fontSize: 12, color: Color(0xFFB07A2B)),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolveNullable(context, Color(0xFFB07A2B)),
+              ),
             ),
           ],
           const SizedBox(height: 8),
           Text(
             '本月营收 ${kpiMoney(task.curRevenue)} · 上月 ${kpiMoney(task.prevRevenue)}',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
           const SizedBox(height: 8),
           KpiMetricList(metrics: task.metrics),
@@ -613,7 +681,10 @@ class _TaskEditorState extends State<_TaskEditor> {
                       onPressed: () => setState(() => _editing = false),
                       style: FilledButton.styleFrom(
                         backgroundColor: _accent,
-                        foregroundColor: Colors.white,
+                        foregroundColor: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                        ),
                         elevation: 0,
                         shape: const StadiumBorder(),
                         padding: const EdgeInsets.symmetric(
@@ -634,8 +705,18 @@ class _TaskEditorState extends State<_TaskEditor> {
                       onPressed: () => setState(() => _editing = true),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: _accent,
-                        backgroundColor: Colors.white,
-                        side: const BorderSide(color: Color(0xFFD5E3E7)),
+                        backgroundColor: DunesColors.resolve(
+                          context,
+                          Colors.white,
+                          role: DunesColorRole.surface,
+                        ),
+                        side: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            Color(0xFFD5E3E7),
+                            role: DunesColorRole.border,
+                          ),
+                        ),
                         shape: const StadiumBorder(),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -666,7 +747,10 @@ class _TaskEditorState extends State<_TaskEditor> {
             const SizedBox(height: 6),
             Text(
               '备注 ${task.remark}',
-              style: const TextStyle(fontSize: 12, color: Color(0xFFB07A2B)),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolveNullable(context, Color(0xFFB07A2B)),
+              ),
             ),
           ],
         ],
@@ -726,9 +810,19 @@ class _KpiAdjustPanel extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F8F9),
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF4F8F9),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFDCE8EB)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFDCE8EB),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -818,10 +912,10 @@ class _KpiAdjustField extends StatelessWidget {
           padding: const EdgeInsets.only(left: 4, bottom: 6),
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
         ),
@@ -835,7 +929,9 @@ class _KpiAdjustField extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: enabled ? DunesColors.text : DunesColors.text3,
+            color: enabled
+                ? DunesColors.resolve(context, DunesColors.text)
+                : DunesColors.resolve(context, DunesColors.text3),
           ),
           decoration: _kpiAdjustInputDecoration(hint: hint, suffix: suffix),
         ),
@@ -860,12 +956,12 @@ class _KpiSkipBar extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '本月不考核',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: DunesColors.text2,
+            color: DunesColors.resolve(context, DunesColors.text2),
           ),
         ),
         const SizedBox(height: 6),
@@ -886,20 +982,35 @@ class _KpiSkipBar extends StatelessWidget {
                             : option.key;
                         unawaited(onSkip(next));
                       },
-                selectedColor: DunesColors.brandPurpleSoft,
+                selectedColor: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurpleSoft,
+                ),
                 labelStyle: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: person.skipReason == option.key
-                      ? DunesColors.brandPurple
-                      : DunesColors.text2,
+                      ? DunesColors.resolve(context, DunesColors.brandPurple)
+                      : DunesColors.resolve(context, DunesColors.text2),
                 ),
                 side: BorderSide(
                   color: person.skipReason == option.key
-                      ? DunesColors.brandPurple.withValues(alpha: 0.35)
-                      : const Color(0xFFE8EAED),
+                      ? DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                          role: DunesColorRole.border,
+                        ).withValues(alpha: 0.35)
+                      : DunesColors.resolve(
+                          context,
+                          const Color(0xFFE8EAED),
+                          role: DunesColorRole.border,
+                        ),
                 ),
-                backgroundColor: Colors.white,
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 visualDensity: VisualDensity.compact,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -925,9 +1036,19 @@ class _ScoreHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -941,10 +1062,10 @@ class _ScoreHeader extends StatelessWidget {
                     : person.isPending
                     ? '未评分'
                     : person.mainScore.toStringAsFixed(2),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.w800,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                   height: 1.05,
                 ),
               ),
@@ -953,9 +1074,9 @@ class _ScoreHeader extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   person.isRubric ? '量表得分' : '主营得分',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
               ),
@@ -969,18 +1090,18 @@ class _ScoreHeader extends StatelessWidget {
                         : person.isPending
                         ? '未评分'
                         : grade.label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: _accent,
+                      color: DunesColors.resolveNullable(context, _accent),
                     ),
                   ),
                   if (!person.isPending && !person.isSkipped)
                     Text(
                       '系数 ${grade.coefficient}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
                       ),
                     ),
                 ],
@@ -991,7 +1112,10 @@ class _ScoreHeader extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               '含手工加减分 ${formatKpiAdj(person.bonus)}',
-              style: const TextStyle(fontSize: 12, color: Color(0xFFB07A2B)),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolveNullable(context, Color(0xFFB07A2B)),
+              ),
             ),
           ],
           const SizedBox(height: 10),
@@ -1007,7 +1131,10 @@ class _ScoreHeader extends StatelessWidget {
                 : hasEnergy
                 ? '只有能源任务，主营分就是能源分'
                 : '只有运营商任务，主营分就是运营商分',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
           ),
         ],
       ),
@@ -1035,9 +1162,19 @@ class _RubricCategoryEditor extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1055,18 +1192,21 @@ class _RubricCategoryEditor extends StatelessWidget {
               ),
               Text(
                 category.score.toStringAsFixed(2),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 2),
-          const Text(
+          Text(
             '对照档位录入分数；未填完必填项不算等级',
-            style: TextStyle(fontSize: 12, color: DunesColors.text3),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
           const SizedBox(height: 10),
           for (final task in category.tasks)
@@ -1130,19 +1270,22 @@ class _RubricItemEditor extends StatelessWidget {
                       task.bucketLabel.isEmpty
                           ? task.taskName
                           : '${task.taskName} · ${task.bucketLabel}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
                       ),
                     ),
                     if (task.matchSummary.trim().isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
                         task.matchSummary.trim(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ),
                     ],
@@ -1163,7 +1306,9 @@ class _RubricItemEditor extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: canEdit ? DunesColors.text : DunesColors.text3,
+                    color: canEdit
+                        ? DunesColors.resolve(context, DunesColors.text)
+                        : DunesColors.resolve(context, DunesColors.text3),
                   ),
                   decoration: _kpiAdjustInputDecoration(
                     hint: _rangeHint,
@@ -1205,7 +1350,10 @@ class _RubricItemEditor extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               task.remark,
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ],
         ],
@@ -1227,9 +1375,31 @@ class _RubricBandRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
-        color: selected ? const Color(0xFFE8F3F6) : const Color(0xFFF7F8FA),
+        color: selected
+            ? DunesColors.resolve(
+                context,
+                const Color(0xFFE8F3F6),
+                role: DunesColorRole.surface,
+              )
+            : DunesColors.resolve(
+                context,
+                const Color(0xFFF7F8FA),
+                role: DunesColorRole.surface,
+              ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: selected ? _accent : const Color(0xFFEDEFF2)),
+        border: Border.all(
+          color: selected
+              ? DunesColors.resolve(
+                  context,
+                  _accent,
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFFEDEFF2),
+                  role: DunesColorRole.border,
+                ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1239,14 +1409,19 @@ class _RubricBandRow extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: selected ? _accent : DunesColors.text2,
+              color: selected
+                  ? DunesColors.resolve(context, _accent)
+                  : DunesColors.resolve(context, DunesColors.text2),
             ),
           ),
           if (band.note.trim().isNotEmpty) ...[
             const SizedBox(height: 2),
             Text(
               band.note,
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
             ),
           ],
         ],

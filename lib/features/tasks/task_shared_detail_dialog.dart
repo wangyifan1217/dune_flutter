@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../auth/auth_session.dart';
 import 'native_task_detail_page.dart';
 import 'task_chat_share.dart';
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 Future<void> showTaskSharedDetailDialog({
   required BuildContext context,
@@ -73,7 +74,11 @@ class _TaskSharedDetailDialogState extends State<_TaskSharedDetailDialog> {
   Widget build(BuildContext context) {
     final taskId = _taskStack.last;
     return ColoredBox(
-      color: const Color(0xFFF5F4F8),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF5F4F8),
+        role: DunesColorRole.surface,
+      ),
       child: NativeTaskDetailView(
         key: ValueKey('shared-task-${widget.share.shareRef}-$taskId'),
         session: widget.session,

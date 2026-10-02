@@ -42,7 +42,8 @@ class _DunesMonthPickerDialog extends StatefulWidget {
   final Color accent;
 
   @override
-  State<_DunesMonthPickerDialog> createState() => _DunesMonthPickerDialogState();
+  State<_DunesMonthPickerDialog> createState() =>
+      _DunesMonthPickerDialogState();
 }
 
 class _DunesMonthPickerDialogState extends State<_DunesMonthPickerDialog> {
@@ -139,17 +140,21 @@ class _DunesMonthPickerDialogState extends State<_DunesMonthPickerDialog> {
               ? widget.accent
               : enabled
               ? widget.accent.withValues(alpha: 0.08)
-              : const Color(0xFFF3F4F6),
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFFF3F4F6),
+                  role: DunesColorRole.surface,
+                ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           '$month月',
           style: TextStyle(
             color: selected
-                ? Colors.white
+                ? DunesColors.resolve(context, Colors.white)
                 : enabled
-                ? DunesColors.text
-                : DunesColors.text3,
+                ? DunesColors.resolve(context, DunesColors.text)
+                : DunesColors.resolve(context, DunesColors.text3),
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
           ),
         ),

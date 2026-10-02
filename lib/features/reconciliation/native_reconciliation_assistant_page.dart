@@ -730,9 +730,17 @@ class _NativeReconciliationAssistantPageState
     final snap = _tag3Daily;
     final confirmable = snap?.confirmableRows ?? const <Tag3DailyRow>[];
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: DunesColors.bgApp,
+        backgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
@@ -746,7 +754,8 @@ class _NativeReconciliationAssistantPageState
           style: DunesTypography.sans(
             fontSize: 17,
             fontWeight: FontWeight.w600,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
+            context: context,
           ),
         ),
         actions: [
@@ -797,7 +806,11 @@ class _NativeReconciliationAssistantPageState
                             style: DunesTypography.sans(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
-                              color: DunesColors.text,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
+                              context: context,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -811,7 +824,11 @@ class _NativeReconciliationAssistantPageState
                             ].join(' · '),
                             style: DunesTypography.sans(
                               fontSize: 12.5,
-                              color: DunesColors.text2,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
+                              context: context,
                             ),
                           ),
                         ],
@@ -844,7 +861,8 @@ class _NativeReconciliationAssistantPageState
                   _error!,
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.coral,
+                    color: DunesColors.resolve(context, DunesColors.coral),
+                    context: context,
                   ),
                 ),
               ),
@@ -1200,7 +1218,11 @@ class _NativeReconciliationAssistantPageState
 
   Widget _buildConversationScaffold() {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -1259,7 +1281,8 @@ class _NativeReconciliationAssistantPageState
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
               const SizedBox(height: 12),
@@ -1273,7 +1296,11 @@ class _NativeReconciliationAssistantPageState
       return Center(
         child: Text(
           '暂无对账推送',
-          style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       );
     }
@@ -1440,7 +1467,8 @@ class _NativeReconciliationAssistantPageState
             '点击名片查看明细与确认状态',
             style: DunesTypography.sans(
               fontSize: 11.5,
-              color: DunesColors.text3,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
             ),
           ),
         ),
@@ -1570,7 +1598,10 @@ class _NativeReconciliationAssistantPageState
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFC44949),
+              foregroundColor: DunesColors.resolve(
+                ctx,
+                const Color(0xFFC44949),
+              ),
             ),
             child: const Text('清空'),
           ),
@@ -1604,7 +1635,9 @@ class _NativeReconciliationAssistantPageState
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('对账助手'),
-        content: const Text('对账助手推送标签三和标签二日清月结。点卡片打开对应的表：业务、运营各自确认，也可以提意见。没有驳回。'),
+        content: const Text(
+          '对账助手推送标签三和标签二日清月结。点卡片打开对应的表：业务、运营各自确认，也可以提意见。没有驳回。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -1626,9 +1659,17 @@ class _NativeReconciliationAssistantPageState
         ? (status?.confirmed == true ? 1.0 : 0.0)
         : (confirmed / expected).clamp(0.0, 1.0);
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: DunesColors.bgApp,
+        backgroundColor: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
@@ -1644,13 +1685,16 @@ class _NativeReconciliationAssistantPageState
               height: 30,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(9),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF5B6FC4), Color(0xFF7652B8)],
+                gradient: LinearGradient(
+                  colors: [
+                    DunesColors.resolve(context, Color(0xFF5B6FC4)),
+                    DunesColors.resolve(context, Color(0xFF7652B8)),
+                  ],
                 ),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.sync_alt_rounded,
-                color: Colors.white,
+                color: DunesColors.resolve(context, Colors.white),
                 size: 18,
               ),
             ),
@@ -1660,7 +1704,8 @@ class _NativeReconciliationAssistantPageState
               style: DunesTypography.sans(
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
           ],
@@ -1731,7 +1776,8 @@ class _NativeReconciliationAssistantPageState
                   status?.waitingReason ?? '请等待上一层确认完成后再确认',
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
                 ),
               ),
@@ -1771,10 +1817,13 @@ class _NativeReconciliationAssistantPageState
       padding: const EdgeInsets.fromLTRB(18, 17, 16, 17),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF2F5D62), Color(0xFF477E79)],
+          colors: [
+            DunesColors.resolve(context, Color(0xFF2F5D62)),
+            DunesColors.resolve(context, Color(0xFF477E79)),
+          ],
         ),
         boxShadow: const [
           BoxShadow(
@@ -1790,12 +1839,16 @@ class _NativeReconciliationAssistantPageState
             width: 45,
             height: 45,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
+              color: DunesColors.resolveNullable(
+                context,
+                Colors.white.withValues(alpha: 0.16),
+                role: DunesColorRole.surface,
+              ),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.receipt_long_outlined,
-              color: Colors.white,
+              color: DunesColors.resolve(context, Colors.white),
               size: 24,
             ),
           ),
@@ -1809,7 +1862,8 @@ class _NativeReconciliationAssistantPageState
                   style: DunesTypography.sans(
                     fontSize: 17,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 5),
@@ -1817,7 +1871,11 @@ class _NativeReconciliationAssistantPageState
                   subtitle,
                   style: DunesTypography.sans(
                     fontSize: 12.5,
-                    color: Colors.white.withValues(alpha: 0.82),
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                    ).withValues(alpha: 0.82),
+                    context: context,
                   ),
                 ),
               ],
@@ -1825,8 +1883,12 @@ class _NativeReconciliationAssistantPageState
           ),
           _StatusPill(
             label: pillLabel,
-            color: confirmed ? const Color(0xFFD7F3E1) : Colors.white,
-            textColor: confirmed ? const Color(0xFF267449) : DunesColors.accent,
+            color: confirmed
+                ? DunesColors.resolve(context, const Color(0xFFD7F3E1))
+                : DunesColors.resolve(context, Colors.white),
+            textColor: confirmed
+                ? DunesColors.resolve(context, const Color(0xFF267449))
+                : DunesColors.resolve(context, DunesColors.accent),
           ),
         ],
       ),
@@ -1841,13 +1903,18 @@ class _NativeReconciliationAssistantPageState
           style: DunesTypography.sans(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
+            context: context,
           ),
         ),
         const Spacer(),
         Text(
           trailing,
-          style: DunesTypography.sans(fontSize: 11.5, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 11.5,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       ],
     );
@@ -1883,7 +1950,11 @@ class _NativeReconciliationAssistantPageState
       return _CardSurface(
         child: Text(
           '暂无明细',
-          style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       );
     }
@@ -2046,7 +2117,8 @@ class _NativeReconciliationAssistantPageState
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
               ),
@@ -2055,7 +2127,8 @@ class _NativeReconciliationAssistantPageState
                 style: DunesTypography.mono(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.accent,
+                  color: DunesColors.resolve(context, DunesColors.accent),
+                  context: context,
                 ),
               ),
             ],
@@ -2066,9 +2139,13 @@ class _NativeReconciliationAssistantPageState
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 8,
-              backgroundColor: DunesColors.accentSoft,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                DunesColors.accent,
+              backgroundColor: DunesColors.resolve(
+                context,
+                DunesColors.accentSoft,
+                role: DunesColorRole.surface,
+              ),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                DunesColors.resolve(context, DunesColors.accent),
               ),
             ),
           ),
@@ -2082,7 +2159,8 @@ class _NativeReconciliationAssistantPageState
                   .join(' · '),
               style: DunesTypography.sans(
                 fontSize: 12,
-                color: DunesColors.text2,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
               ),
             ),
             const SizedBox(height: 8),
@@ -2095,7 +2173,11 @@ class _NativeReconciliationAssistantPageState
                       ? '本张名片无需你确认'
                       : (status?.confirmed == true ? '你已完成本次确认' : '请完成本次确认'))
                 : (remain == 0 ? '可见范围内已全部确认' : '还有 $remain 位参与人待确认'),
-            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ],
       ),
@@ -2178,7 +2260,11 @@ class _NativeReconciliationAssistantPageState
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
             '暂无核对人评价',
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ),
       );
@@ -2187,7 +2273,15 @@ class _NativeReconciliationAssistantPageState
     for (var i = 0; i < entries.length; i++) {
       if (i > 0) {
         children.add(
-          const Divider(height: 1, indent: 68, color: DunesColors.borderSoft),
+          Divider(
+            height: 1,
+            indent: 68,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
         );
       }
       final item = entries[i];
@@ -2205,15 +2299,17 @@ class _NativeReconciliationAssistantPageState
               : merged.roleLabel,
           comment: item.comment,
           status: item.confirmed ? '已确认' : '待确认',
-          statusColor: item.confirmed ? DunesColors.green : DunesColors.amber,
+          statusColor: item.confirmed
+              ? DunesColors.resolve(context, DunesColors.green)
+              : DunesColors.resolve(context, DunesColors.amber),
           avatarColor: item.isSelf
-              ? const Color(0xFFD7E8E6)
+              ? DunesColors.resolve(context, const Color(0xFFD7E8E6))
               : (item.confirmed
-                    ? const Color(0xFFE7DFF5)
-                    : const Color(0xFFDCEBEA)),
+                    ? DunesColors.resolve(context, const Color(0xFFE7DFF5))
+                    : DunesColors.resolve(context, const Color(0xFFDCEBEA))),
           avatarTextColor: item.isSelf || !item.confirmed
-              ? DunesColors.accent
-              : DunesColors.brandPurpleDeep,
+              ? DunesColors.resolve(context, DunesColors.accent)
+              : DunesColors.resolve(context, DunesColors.brandPurpleDeep),
           avatarPreset:
               item.isSelf && (selfSnap?.avatarPreset ?? '').trim().isNotEmpty
               ? selfSnap!.avatarPreset
@@ -2270,7 +2366,8 @@ class _NativeReconciliationAssistantPageState
                 style: DunesTypography.sans(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
                 ),
               ),
               const SizedBox(width: 6),
@@ -2278,7 +2375,8 @@ class _NativeReconciliationAssistantPageState
                 '本层与上一层可见',
                 style: DunesTypography.sans(
                   fontSize: 11,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ],
@@ -2289,15 +2387,24 @@ class _NativeReconciliationAssistantPageState
             enabled: !confirmed,
             maxLines: 3,
             onChanged: (_) => setState(() {}),
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
+            ),
             decoration: InputDecoration(
               hintText: '输入本次对账意见（可选）',
               hintStyle: DunesTypography.sans(
                 fontSize: 13,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
               filled: true,
-              fillColor: DunesColors.bgSoft,
+              fillColor: DunesColors.resolve(
+                context,
+                DunesColors.bgSoft,
+                role: DunesColorRole.surface,
+              ),
               contentPadding: const EdgeInsets.fromLTRB(13, 12, 13, 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -2309,7 +2416,13 @@ class _NativeReconciliationAssistantPageState
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: DunesColors.accentLine),
+                borderSide: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.accentLine,
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
             ),
           ),
@@ -2323,14 +2436,24 @@ class _NativeReconciliationAssistantPageState
                 icon: const Icon(Icons.undo_rounded, size: 19),
                 label: Text(_confirming ? '提交中…' : '驳回本次对账'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: DunesColors.coral,
-                  side: const BorderSide(color: DunesColors.coral),
+                  foregroundColor: DunesColors.resolve(
+                    context,
+                    DunesColors.coral,
+                  ),
+                  side: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.coral,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   textStyle: DunesTypography.sans(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
+                    context: context,
                   ),
                 ),
               ),
@@ -2360,15 +2483,27 @@ class _NativeReconciliationAssistantPageState
                                       : '确认本次对账'))),
               ),
               style: FilledButton.styleFrom(
-                backgroundColor: DunesColors.accent,
-                disabledBackgroundColor: DunesColors.greenSoft,
-                disabledForegroundColor: DunesColors.green,
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.accent,
+                  role: DunesColorRole.surface,
+                ),
+                disabledBackgroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.greenSoft,
+                  role: DunesColorRole.surface,
+                ),
+                disabledForegroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.green,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 textStyle: DunesTypography.sans(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
+                  context: context,
                 ),
               ),
             ),
@@ -2443,13 +2578,18 @@ class _RemindCard extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             lines.isEmpty ? '仍有核对人未确认' : lines.join('\n'),
-            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text2),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
+            ),
           ),
         ],
       ),
@@ -2469,15 +2609,18 @@ class _ReconciliationAssistantAvatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(size * .2),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF5B6FC4), Color(0xFF7652B8)],
+          colors: [
+            DunesColors.resolve(context, Color(0xFF5B6FC4)),
+            DunesColors.resolve(context, Color(0xFF7652B8)),
+          ],
         ),
       ),
       child: Icon(
         Icons.sync_alt_rounded,
-        color: Colors.white,
+        color: DunesColors.resolve(context, Colors.white),
         size: size * .44,
       ),
     );
@@ -2516,19 +2659,29 @@ class _ReconciliationMessageCard extends StatelessWidget {
             child: Ink(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFEAF3F1),
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFEAF3F1),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFC9DFDA)),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFC9DFDA),
+                    role: DunesColorRole.border,
+                  ),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.compare_arrows_rounded,
                         size: 16,
-                        color: DunesColors.accent,
+                        color: DunesColors.resolve(context, DunesColors.accent),
                       ),
                       const SizedBox(width: 6),
                       Expanded(
@@ -2537,7 +2690,11 @@ class _ReconciliationMessageCard extends StatelessWidget {
                           style: DunesTypography.sans(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                            context: context,
                           ),
                         ),
                       ),
@@ -2545,15 +2702,30 @@ class _ReconciliationMessageCard extends StatelessWidget {
                         compact: true,
                         label: viewerOnly ? '查阅' : (confirmed ? '已确认' : '待确认'),
                         color: viewerOnly
-                            ? const Color(0xFFE4EEEC)
+                            ? DunesColors.resolve(
+                                context,
+                                const Color(0xFFE4EEEC),
+                              )
                             : (confirmed
-                                  ? const Color(0xFFD7F3E1)
-                                  : const Color(0xFFFFF3DC)),
+                                  ? DunesColors.resolve(
+                                      context,
+                                      const Color(0xFFD7F3E1),
+                                    )
+                                  : DunesColors.resolve(
+                                      context,
+                                      const Color(0xFFFFF3DC),
+                                    )),
                         textColor: viewerOnly
-                            ? DunesColors.accent
+                            ? DunesColors.resolve(context, DunesColors.accent)
                             : (confirmed
-                                  ? const Color(0xFF267449)
-                                  : DunesColors.amber),
+                                  ? DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF267449),
+                                    )
+                                  : DunesColors.resolve(
+                                      context,
+                                      DunesColors.amber,
+                                    )),
                       ),
                     ],
                   ),
@@ -2564,7 +2736,8 @@ class _ReconciliationMessageCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: DunesTypography.sans(
                       fontSize: 11,
-                      color: DunesColors.text2,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                      context: context,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -2578,7 +2751,11 @@ class _ReconciliationMessageCard extends StatelessWidget {
                           style: DunesTypography.mono(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.green,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.green,
+                            ),
+                            context: context,
                           ),
                         ),
                       ),
@@ -2587,13 +2764,17 @@ class _ReconciliationMessageCard extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.accent,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.accent,
+                          ),
+                          context: context,
                         ),
                       ),
-                      const Icon(
+                      Icon(
                         Icons.chevron_right_rounded,
                         size: 16,
-                        color: DunesColors.accent,
+                        color: DunesColors.resolve(context, DunesColors.accent),
                       ),
                     ],
                   ),
@@ -2628,10 +2809,30 @@ class _ShucaiTabChip extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: selected ? DunesColors.accentSoft : Colors.white,
+            color: selected
+                ? DunesColors.resolve(
+                    context,
+                    DunesColors.accentSoft,
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: selected ? DunesColors.accentLine : DunesColors.borderSoft,
+              color: selected
+                  ? DunesColors.resolve(
+                      context,
+                      DunesColors.accentLine,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -2639,7 +2840,10 @@ class _ShucaiTabChip extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              color: selected ? DunesColors.accent : DunesColors.text,
+              color: selected
+                  ? DunesColors.resolve(context, DunesColors.accent)
+                  : DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
         ),
@@ -2662,9 +2866,19 @@ class _CardSurface extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: child,
     );
@@ -2692,7 +2906,11 @@ class _StatusPill extends StatelessWidget {
         vertical: compact ? 3 : 5,
       ),
       decoration: BoxDecoration(
-        color: color,
+        color: DunesColors.resolveNullable(
+          context,
+          color,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(99),
       ),
       child: Text(
@@ -2701,6 +2919,7 @@ class _StatusPill extends StatelessWidget {
           fontSize: compact ? 10 : 11,
           fontWeight: FontWeight.w600,
           color: textColor,
+          context: context,
         ),
       ),
     );
@@ -2719,7 +2938,11 @@ class _InfoLine extends StatelessWidget {
       children: [
         Text(
           label,
-          style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
         const Spacer(),
         Flexible(
@@ -2729,7 +2952,8 @@ class _InfoLine extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12.5,
               fontWeight: FontWeight.w500,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
         ),
@@ -2803,7 +3027,8 @@ class _ReviewRow extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
                       ),
                     ),
                     if (isSelf) ...[
@@ -2812,7 +3037,11 @@ class _ReviewRow extends StatelessWidget {
                         '本人',
                         style: DunesTypography.sans(
                           fontSize: 10,
-                          color: DunesColors.accent,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.accent,
+                          ),
+                          context: context,
                         ),
                       ),
                     ],
@@ -2829,7 +3058,8 @@ class _ReviewRow extends StatelessWidget {
                   role,
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -2840,8 +3070,9 @@ class _ReviewRow extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 12.5,
                     color: isSelf && comment == '等待你填写意见'
-                        ? DunesColors.text3
-                        : DunesColors.text2,
+                        ? DunesColors.resolve(context, DunesColors.text3)
+                        : DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
                 ),
               ],

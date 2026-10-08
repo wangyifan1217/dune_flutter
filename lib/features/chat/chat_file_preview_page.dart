@@ -460,6 +460,21 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
         role: DunesColorRole.surface,
       ),
       appBar: AppBar(
+        toolbarHeight: isDesktopCommOnly ? 68 : null,
+        title: isDesktopCommOnly
+            ? Tooltip(
+                message: widget.fileName,
+                child: Text(
+                  widget.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              )
+            : null,
         backgroundColor: DunesColors.resolve(
           context,
           Colors.white,
@@ -468,9 +483,12 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
+          tooltip: isDesktopCommOnly ? '关闭' : '返回',
           onPressed: () => Navigator.of(context).maybePop(),
           icon: Icon(
-            Icons.chevron_left_rounded,
+            isDesktopCommOnly
+                ? Icons.close_rounded
+                : Icons.chevron_left_rounded,
             color: DunesColors.resolveNullable(context, Color(0xFF191919)),
           ),
         ),

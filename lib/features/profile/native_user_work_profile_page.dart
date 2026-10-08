@@ -1042,7 +1042,10 @@ class WorkProfileRadarCard extends StatelessWidget {
                 child: SizedBox.square(
                   dimension: size,
                   child: CustomPaint(
-                    painter: _WorkProfileRadarPainter(dimensions),
+                    painter: _WorkProfileRadarPainter(
+                      dimensions,
+                      Theme.of(context).brightness,
+                    ),
                   ),
                 ),
               );
@@ -1095,7 +1098,9 @@ class WorkProfileRadarCard extends StatelessWidget {
 }
 
 class _WorkProfileRadarPainter extends CustomPainter {
-  _WorkProfileRadarPainter(this.dimensions);
+  _WorkProfileRadarPainter(this.dimensions, this.brightness);
+
+  final Brightness brightness;
 
   final List<UserWorkProfileDimension> dimensions;
 
@@ -1111,7 +1116,11 @@ class _WorkProfileRadarPainter extends CustomPainter {
     ];
 
     final gridPaint = Paint()
-      ..color = const Color(0xFFE8E1F0)
+      ..color = DunesColors.forBrightness(
+        brightness,
+        const Color(0xFFE8E1F0),
+        role: DunesColorRole.border,
+      )
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     for (var level = 1; level <= 4; level++) {
@@ -1120,7 +1129,11 @@ class _WorkProfileRadarPainter extends CustomPainter {
     }
 
     final axisPaint = Paint()
-      ..color = const Color(0xFFE8E1F0)
+      ..color = DunesColors.forBrightness(
+        brightness,
+        const Color(0xFFE8E1F0),
+        role: DunesColorRole.border,
+      )
       ..strokeWidth = 1;
     for (var index = 0; index < dimensions.length; index++) {
       final point = _radarPoint(center, radius, index, dimensions.length);
@@ -1147,13 +1160,17 @@ class _WorkProfileRadarPainter extends CustomPainter {
         ..color = const Color(0x407B5CD8)
         ..style = PaintingStyle.fill;
       final line = Paint()
-        ..color = const Color(0xFF7B5CD8)
+        ..color = DunesColors.forBrightness(brightness, const Color(0xFF7B5CD8))
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2;
       final path = Path()..addPolygon(values, true);
       canvas.drawPath(path, fill);
       canvas.drawPath(path, line);
-      final pointPaint = Paint()..color = const Color(0xFF7B5CD8);
+      final pointPaint = Paint()
+        ..color = DunesColors.forBrightness(
+          brightness,
+          const Color(0xFF7B5CD8),
+        );
       for (final point in values) {
         canvas.drawCircle(point, 3.2, pointPaint);
       }
@@ -1172,7 +1189,10 @@ class _WorkProfileRadarPainter extends CustomPainter {
     final painter = TextPainter(
       text: TextSpan(
         text: label,
-        style: const TextStyle(fontSize: 11, color: Color(0xFF6E637A)),
+        style: TextStyle(
+          fontSize: 11,
+          color: DunesColors.forBrightness(brightness, const Color(0xFF6E637A)),
+        ),
       ),
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
@@ -1189,7 +1209,8 @@ class _WorkProfileRadarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _WorkProfileRadarPainter oldDelegate) =>
-      oldDelegate.dimensions != dimensions;
+      oldDelegate.dimensions != dimensions ||
+      oldDelegate.brightness != brightness;
 }
 
 class WorkProfileTrendCard extends StatefulWidget {

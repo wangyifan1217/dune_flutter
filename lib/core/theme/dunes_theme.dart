@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../platform/desktop_features.dart';
+
 enum DunesColorRole { foreground, surface, border }
 
 /// 与 index.html :root CSS 变量一一对应的设计令牌。
@@ -111,7 +113,9 @@ abstract final class DunesColors {
     Color light, {
     DunesColorRole role = DunesColorRole.foreground,
   }) {
-    if (Theme.of(context).brightness != Brightness.dark) return light;
+    if (Theme.of(context).brightness != Brightness.dark) {
+      return isDesktopCommOnly ? _resolveDesktop(light) : light;
+    }
     final value = light.toARGB32();
     final key = (value, role);
     final cached = _nightColors[key];
@@ -121,6 +125,27 @@ abstract final class DunesColors {
     if (_nightColors.length >= 1024) _nightColors.clear();
     _nightColors[key] = resolved;
     return resolved;
+  }
+
+  /// Desktop-only neutral surfaces; semantic status and brand colors stay intact.
+  static Color _resolveDesktop(Color light) {
+    const colors = <int, Color>{
+      0xf4f1ea: Color(0xFFF5F5F7),
+      0xfbfaf6: Color(0xFFFFFFFF),
+      0xf2efe7: Color(0xFFF5F5F7),
+      0xedeae0: Color(0xFFEEEEF2),
+      0xf8f6f1: Color(0xFFF7F7F9),
+      0xe8e4dc: Color(0xFFF0F0F3),
+      0xdad5c7: Color(0xFFDADAE0),
+      0xe5e1d3: Color(0xFFE8E8ED),
+      0x1f2421: Color(0xFF1D1D1F),
+      0x5a5c56: Color(0xFF63636B),
+      0x94938a: Color(0xFF85858F),
+      0xe4eceb: Color(0xFFEEE9FA),
+      0xb8cecd: Color(0xFFD4C9EE),
+    };
+    final mapped = colors[light.toARGB32() & 0x00ffffff];
+    return mapped?.withValues(alpha: light.a) ?? light;
   }
 
   static Color _resolveNight(Color light, DunesColorRole role) {
@@ -235,7 +260,15 @@ abstract final class DunesTypography {
   ];
 
   static const monoFamily = 'Geist Mono';
-  static const monoFallback = ['SF Mono', 'Menlo', 'Consolas', 'monospace'];
+  static const monoFallback = [
+    'SF Mono',
+    'Menlo',
+    'Consolas',
+    'Noto Sans SC',
+    'PingFang SC',
+    'Microsoft YaHei',
+    'monospace',
+  ];
 
   static TextStyle sans({
     BuildContext? context,
@@ -246,8 +279,10 @@ abstract final class DunesTypography {
     double? height,
   }) {
     return TextStyle(
-      fontFamily: sansFamily,
-      fontFamilyFallback: sansFallback,
+      fontFamily: isDesktopCommOnly ? null : sansFamily,
+      fontFamilyFallback: isDesktopCommOnly
+          ? const ['PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', 'Arial']
+          : sansFallback,
       fontSize: fontSize,
       fontWeight: fontWeight,
       letterSpacing: letterSpacing,
@@ -349,6 +384,18 @@ class DunesPalette extends ThemeExtension<DunesPalette> {
     textMuted: DunesColors.text3,
   );
 
+  static const desktop = DunesPalette(
+    page: Color(0xFFF5F5F7),
+    app: Colors.white,
+    surface: Colors.white,
+    surfaceRaised: Color(0xFFF7F7F9),
+    border: Color(0xFFDADAE0),
+    borderSubtle: Color(0xFFE8E8ED),
+    text: Color(0xFF1D1D1F),
+    textSecondary: Color(0xFF63636B),
+    textMuted: Color(0xFF85858F),
+  );
+
   static const night = DunesPalette(
     page: Color(0xFF171722),
     app: Color(0xFF1D1D29),
@@ -432,6 +479,81 @@ abstract final class DunesTheme {
           fontWeight: FontWeight.w500,
           letterSpacing: -0.015 * 17,
           color: DunesColors.text,
+        ),
+      ),
+    );
+  }
+
+  /// Native desktop styling is separate from the existing mobile day theme.
+  static ThemeData desktop() {
+    const palette = DunesPalette.desktop;
+    final base = light();
+    return base.copyWith(
+      scaffoldBackgroundColor: palette.app,
+      extensions: const <ThemeExtension<dynamic>>[palette],
+      colorScheme: base.colorScheme.copyWith(
+        primary: DunesColors.brandPurple,
+        secondary: DunesColors.brandPurpleDeep,
+        surface: palette.surface,
+        onSurface: palette.text,
+        outline: palette.border,
+        outlineVariant: palette.borderSubtle,
+        surfaceTint: Colors.transparent,
+      ),
+      textTheme: _textTheme(base.textTheme, palette),
+      dividerColor: palette.borderSubtle,
+      hoverColor: const Color(0x0C7B5CD8),
+      highlightColor: const Color(0x147B5CD8),
+      focusColor: const Color(0x187B5CD8),
+      splashFactory: NoSplash.splashFactory,
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+          ),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return Colors.transparent;
+            }
+            if (states.contains(WidgetState.pressed)) {
+              return const Color(0x207B5CD8);
+            }
+            if (states.contains(WidgetState.focused)) {
+              return const Color(0x187B5CD8);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return const Color(0x0C7B5CD8);
+            }
+            return Colors.transparent;
+          }),
+        ),
+      ),
+      tooltipTheme: TooltipThemeData(
+        waitDuration: const Duration(milliseconds: 500),
+        textStyle: DunesTypography.sans(fontSize: 12, color: Colors.white),
+        decoration: BoxDecoration(
+          color: const Color(0xF02C2C30),
+          borderRadius: BorderRadius.circular(7),
+        ),
+      ),
+      appBarTheme: base.appBarTheme.copyWith(
+        backgroundColor: palette.app,
+        foregroundColor: palette.text,
+        surfaceTintColor: Colors.transparent,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: palette.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: palette.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: palette.borderSubtle),
         ),
       ),
     );

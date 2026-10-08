@@ -4054,27 +4054,82 @@ List<String> missingProposalReviewAssignees(
   return missing;
 }
 
+/// 本会话里点过「下一个」略过的提案。审批助手和协作提案共用，按略过顺序留在末尾。
+class ProposalSkipTail {
+  ProposalSkipTail._();
+
+  static final List<int> ids = <int>[];
+
+  static void reset() => ids.clear();
+
+  static ProposalIntakeRow? pick({
+    required List<ProposalIntakeRow> items,
+    required int currentId,
+    required bool afterDecision,
+  }) {
+    if (afterDecision) {
+      ids.remove(currentId);
+    }
+    final next = nextProposalIntake(
+      items: items,
+      currentId: currentId,
+      afterDecision: afterDecision,
+      deferredIds: ids,
+    );
+    if (!afterDecision && next != null) {
+      ids.remove(currentId);
+      ids.add(currentId);
+    }
+    return next;
+  }
+}
+
 ProposalIntakeRow? nextProposalIntake({
   required List<ProposalIntakeRow> items,
   required int currentId,
   bool afterDecision = false,
+  List<int> deferredIds = const [],
 }) {
   if (items.isEmpty) return null;
+  final ordered = _proposalIntakeWithDeferredTail(items, deferredIds);
   if (afterDecision) {
-    for (final item in items) {
+    for (final item in ordered) {
       if (item.id != currentId) return item;
     }
     return null;
   }
-  final index = items.indexWhere((item) => item.id == currentId);
+  final index = ordered.indexWhere((item) => item.id == currentId);
   if (index < 0) {
-    for (final item in items) {
+    for (final item in ordered) {
       if (item.id != currentId) return item;
     }
     return null;
   }
-  if (index + 1 >= items.length) return null;
-  return items[index + 1];
+  if (index + 1 >= ordered.length) return null;
+  return ordered[index + 1];
+}
+
+List<ProposalIntakeRow> _proposalIntakeWithDeferredTail(
+  List<ProposalIntakeRow> items,
+  List<int> deferredIds,
+) {
+  if (deferredIds.isEmpty || items.length < 2) return items;
+  final rank = <int, int>{
+    for (var i = 0; i < deferredIds.length; i++) deferredIds[i]: i,
+  };
+  final head = <ProposalIntakeRow>[];
+  final tail = <ProposalIntakeRow>[];
+  for (final item in items) {
+    if (rank.containsKey(item.id)) {
+      tail.add(item);
+    } else {
+      head.add(item);
+    }
+  }
+  if (tail.length > 1) {
+    tail.sort((a, b) => rank[a.id]!.compareTo(rank[b.id]!));
+  }
+  return [...head, ...tail];
 }
 
 CatalogRef? proposalIntakeFormRef(Map<String, dynamic> form, String key) =>

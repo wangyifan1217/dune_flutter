@@ -1,3 +1,6 @@
+import '../../core/platform/desktop_features.dart';
+import '../../core/widgets/desktop_status_surface.dart';
+import '../../core/widgets/desktop_adaptive_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -133,7 +136,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     final digits = phone.trim();
     if (digits.isEmpty || digits == '-') return;
 
-    final action = await showModalBottomSheet<String>(
+    final action = await showDesktopAdaptivePanel<String>(
       context: context,
       showDragHandle: true,
       builder: (_) => SafeArea(
@@ -262,11 +265,13 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
         : '联系人';
 
     return Scaffold(
-      backgroundColor: DunesColors.resolve(
-        context,
-        const Color(0xFFF2F2F2),
-        role: DunesColorRole.surface,
-      ),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? DunesPalette.night.page
+          : DunesColors.resolve(
+              context,
+              const Color(0xFFF2F2F2),
+              role: DunesColorRole.surface,
+            ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -285,28 +290,32 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
 
   Widget _buildBody() {
     if (_loading) {
-      return Center(
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: DunesColors.resolve(context, DunesColors.accent),
+      return DesktopStatusSurface(
+        child: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: DunesColors.resolve(context, DunesColors.accent),
+          ),
         ),
       );
     }
     if (_contact == null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _error ?? '联系人不存在',
-              style: TextStyle(
-                color: DunesColors.resolve(context, DunesColors.text3),
-                fontSize: 12,
+      return DesktopStatusSurface(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _error ?? '联系人不存在',
+                style: TextStyle(
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  fontSize: 12,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton(onPressed: widget.onBack, child: const Text('返回')),
-          ],
+              const SizedBox(height: 10),
+              OutlinedButton(onPressed: widget.onBack, child: const Text('返回')),
+            ],
+          ),
         ),
       );
     }
@@ -319,91 +328,115 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     final isSelf = c.userId == widget.session.userId;
     final convId = widget.conversationId;
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 32),
-      children: [
-        _ProfileHero(
-          name: name,
-          department: department,
-          roleTag: title,
-          seed: c.userId,
-          status: c.statusValue,
-          avatarPreset: c.avatarPreset,
-          avatarObjectKey: c.avatarObjectKey,
-          avatarService: _conversationService,
-          onAddToGroup: isSelf || widget.onCreateGroupWithContact == null
-              ? null
-              : () => widget.onCreateGroupWithContact!(c),
+    final nightApp =
+        !isDesktopCommOnly && Theme.of(context).brightness == Brightness.dark;
+    final content = <Widget>[
+      _ProfileHero(
+        name: name,
+        department: department,
+        roleTag: title,
+        seed: c.userId,
+        status: c.statusValue,
+        avatarPreset: c.avatarPreset,
+        avatarObjectKey: c.avatarObjectKey,
+        avatarService: _conversationService,
+        onAddToGroup: isSelf || widget.onCreateGroupWithContact == null
+            ? null
+            : () => widget.onCreateGroupWithContact!(c),
+      ),
+      const SizedBox(height: 10),
+      GroupInfoRow(
+        icon: Icons.phone_outlined,
+        title: '手机',
+        trailing: Text(
+          phone.isEmpty ? '-' : phone,
+          style: DunesTypography.sans(
+            fontSize: 15,
+            color: phone.isEmpty
+                ? DunesColors.resolve(context, const Color(0xFF888888))
+                : DunesColors.resolve(context, DunesColors.blue),
+            context: context,
+          ),
+        ),
+        onTap: phone.isEmpty ? null : () => _onPhoneTap(phone),
+      ),
+      GroupInfoRow(
+        icon: Icons.apartment_outlined,
+        title: '部门',
+        trailing: Text(
+          department.isEmpty ? '-' : department,
+          style: DunesTypography.sans(
+            fontSize: 15,
+            color: DunesColors.resolve(context, const Color(0xFF888888)),
+            context: context,
+          ),
+        ),
+      ),
+      GroupInfoRow(
+        icon: Icons.badge_outlined,
+        title: '职位',
+        trailing: Text(
+          title.isEmpty ? '-' : title,
+          style: DunesTypography.sans(
+            fontSize: 15,
+            color: DunesColors.resolve(context, const Color(0xFF888888)),
+            context: context,
+          ),
+        ),
+      ),
+      if (_showChatSettings && _settingsLoaded) ...[
+        const SizedBox(height: 10),
+        GroupInfoRow(
+          icon: Icons.notifications_off_outlined,
+          title: '消息免打扰',
+          trailing: GroupInfoToggle(value: _muted),
+          onTap: _toggleMuted,
+        ),
+        GroupInfoRow(
+          icon: Icons.push_pin_outlined,
+          title: '置顶聊天',
+          trailing: GroupInfoToggle(value: _pinned),
+          onTap: _togglePinned,
         ),
         const SizedBox(height: 10),
         GroupInfoRow(
-          icon: Icons.phone_outlined,
-          title: '手机',
-          trailing: Text(
-            phone.isEmpty ? '-' : phone,
-            style: DunesTypography.sans(
-              fontSize: 15,
-              color: phone.isEmpty
-                  ? DunesColors.resolve(context, const Color(0xFF888888))
-                  : DunesColors.resolve(context, DunesColors.blue),
-              context: context,
-            ),
-          ),
-          onTap: phone.isEmpty ? null : () => _onPhoneTap(phone),
+          icon: Icons.search,
+          title: '查找聊天内容',
+          trailing: const GroupInfoChevron(),
+          onTap: widget.onOpenSearch == null || convId == null
+              ? null
+              : () => widget.onOpenSearch!(convId),
         ),
-        GroupInfoRow(
-          icon: Icons.apartment_outlined,
-          title: '部门',
-          trailing: Text(
-            department.isEmpty ? '-' : department,
-            style: DunesTypography.sans(
-              fontSize: 15,
-              color: DunesColors.resolve(context, const Color(0xFF888888)),
-              context: context,
-            ),
-          ),
-        ),
-        GroupInfoRow(
-          icon: Icons.badge_outlined,
-          title: '职位',
-          trailing: Text(
-            title.isEmpty ? '-' : title,
-            style: DunesTypography.sans(
-              fontSize: 15,
-              color: DunesColors.resolve(context, const Color(0xFF888888)),
-              context: context,
-            ),
-          ),
-        ),
-        if (_showChatSettings && _settingsLoaded) ...[
-          const SizedBox(height: 10),
-          GroupInfoRow(
-            icon: Icons.notifications_off_outlined,
-            title: '消息免打扰',
-            trailing: GroupInfoToggle(value: _muted),
-            onTap: _toggleMuted,
-          ),
-          GroupInfoRow(
-            icon: Icons.push_pin_outlined,
-            title: '置顶聊天',
-            trailing: GroupInfoToggle(value: _pinned),
-            onTap: _togglePinned,
-          ),
-          const SizedBox(height: 10),
-          GroupInfoRow(
-            icon: Icons.search,
-            title: '查找聊天内容',
-            trailing: const GroupInfoChevron(),
-            onTap: widget.onOpenSearch == null || convId == null
-                ? null
-                : () => widget.onOpenSearch!(convId),
-          ),
-        ],
-        if (!isSelf)
-          _ProfileMessageAction(
-            onTap: () => widget.onOpenPrivateChat(c.userId),
-          ),
       ],
+      if (!isSelf)
+        _ProfileMessageAction(onTap: () => widget.onOpenPrivateChat(c.userId)),
+    ];
+    final sections = <Widget>[];
+    for (var index = 0; index < content.length;) {
+      if (!nightApp || content[index] is! GroupInfoRow) {
+        sections.add(content[index++]);
+        continue;
+      }
+      final rows = <Widget>[];
+      while (index < content.length && content[index] is GroupInfoRow) {
+        rows.add(content[index++]);
+      }
+      sections.add(
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Theme.of(context).dividerColor),
+          ),
+          child: Column(children: rows),
+        ),
+      );
+    }
+    return ListView(
+      padding: nightApp
+          ? const EdgeInsets.fromLTRB(16, 12, 16, 32)
+          : const EdgeInsets.only(bottom: 32),
+      children: sections,
     );
   }
 }
@@ -436,19 +469,28 @@ class _ProfileHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final nightApp =
+        !isDesktopCommOnly && Theme.of(context).brightness == Brightness.dark;
+    final avatarSize = nightApp ? 64.0 : _avatarSize;
     final initial = name.isNotEmpty ? name.substring(0, 1) : '?';
     final subtitleBits = <String>[
       if (department.isNotEmpty) department,
       if (roleTag.isNotEmpty) roleTag,
     ];
-    final avatarRadius = _avatarSize * 0.18;
+    final avatarRadius = avatarSize * 0.18;
 
     return Container(
       width: double.infinity,
-      color: DunesColors.resolve(
-        context,
-        Colors.white,
-        role: DunesColorRole.surface,
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: nightApp ? BorderRadius.circular(20) : null,
+        border: nightApp
+            ? Border.all(color: Theme.of(context).dividerColor)
+            : null,
       ),
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
       child: Row(
@@ -476,7 +518,7 @@ class _ProfileHero extends StatelessWidget {
                     child: ImUserAvatar(
                       initial: initial,
                       seed: seed,
-                      size: _avatarSize,
+                      size: avatarSize,
                       avatarPreset: avatarPreset,
                       avatarObjectKey: avatarObjectKey,
                       avatarService: avatarService,
@@ -487,9 +529,9 @@ class _ProfileHero extends StatelessWidget {
               ),
             ),
           ),
-          if (onAddToGroup != null) ...[
+          if (onAddToGroup != null && !nightApp) ...[
             const SizedBox(width: 12),
-            _ProfileAddCell(size: _avatarSize, onTap: onAddToGroup!),
+            _ProfileAddCell(size: avatarSize, onTap: onAddToGroup!),
           ],
           const SizedBox(width: 16),
           Expanded(
@@ -512,7 +554,36 @@ class _ProfileHero extends StatelessWidget {
                 ),
                 if (status.showsBadge) ...[
                   const SizedBox(height: 6),
-                  ImStatusBadge.fromValue(status, compact: false),
+                  nightApp
+                      ? Tooltip(
+                          message: status.def.label,
+                          child: Row(
+                            children: [
+                              Icon(
+                                status.def.icon,
+                                size: 14,
+                                color: DunesColors.resolve(
+                                  context,
+                                  status.def.color,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  status.def.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: DunesTypography.sans(
+                                    fontSize: 12,
+                                    color: status.def.color,
+                                    context: context,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ImStatusBadge.fromValue(status, compact: false),
                 ],
                 if (subtitleBits.isNotEmpty) ...[
                   const SizedBox(height: 6),
@@ -533,6 +604,10 @@ class _ProfileHero extends StatelessWidget {
               ],
             ),
           ),
+          if (nightApp && onAddToGroup != null) ...[
+            const SizedBox(width: 8),
+            _ProfileAddCell(size: 32, onTap: onAddToGroup!),
+          ],
         ],
       ),
     );
@@ -594,6 +669,29 @@ class _ProfileMessageAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final nightApp =
+        !isDesktopCommOnly && Theme.of(context).brightness == Brightness.dark;
+    if (nightApp) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 16),
+        child: FilledButton.icon(
+          onPressed: onTap,
+          style: FilledButton.styleFrom(
+            backgroundColor: DunesColors.brandPurple,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          icon: const Icon(Icons.chat_bubble_outline_rounded, size: 19),
+          label: const Text(
+            '发消息',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Material(

@@ -19,6 +19,7 @@ import '../contacts/contact_service.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'comm_unread_notifier.dart';
+import 'desktop_unread_edits.dart';
 import 'conversation_inbox_cache.dart';
 import 'conversation_inbox_merge.dart';
 import 'conversation_inbox_realtime.dart';
@@ -236,6 +237,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   String? _error;
   List<NativeConversation> _items = const <NativeConversation>[];
   Set<int> _markedUnreadIds = <int>{};
+  final _desktopUnreadEdits = DesktopUnreadEdits();
   AiSummaryItem? _aiSummaryPreview;
   int _aiSummaryUnread = 0;
   NativeNotificationSummary _notif = const NativeNotificationSummary(
@@ -467,6 +469,16 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
   void _onConversationReadSignal() {
     final id = widget.conversationReadSignal?.conversationId ?? 0;
+    // A late automatic read response must not erase a reminder just set by
+    // the user on the currently open desktop conversation.
+    final current = _items.where((item) => item.id == id).firstOrNull;
+    if (isDesktopCommOnly &&
+        widget.selectedConversationId == id &&
+        current != null &&
+        !current.isAdministrativeNotice &&
+        _desktopUnreadEdits.isManualReminder(id)) {
+      return;
+    }
     if (id > 0) _clearUnreadLocally(id);
   }
 
@@ -598,6 +610,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     bool marked,
   ) async {
     if (conversation.id <= 0) return;
+    final edit = isDesktopCommOnly
+        ? _desktopUnreadEdits.record(conversation.id, marked, pending: true)
+        : 0;
     _rememberMarkedUnread(conversation.id, marked);
     if (!mounted) return;
     setState(() {
@@ -615,14 +630,24 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     });
     try {
       await _service.patchMySettings(conversation.id, markedUnread: marked);
+      if (isDesktopCommOnly) {
+        _desktopUnreadEdits.finish(conversation.id, edit, synced: true);
+      }
     } catch (_) {
+      if (isDesktopCommOnly) {
+        _desktopUnreadEdits.finish(conversation.id, edit, synced: false);
+      }
       // 旧服务端不认这个字段时，本机记录仍然生效。
     }
   }
 
-  Future<void> _onInboxUnreadAction(NativeConversation conversation) async {
+  Future<void> _onInboxUnreadAction(
+    NativeConversation conversation, {
+    bool? markAsUnread,
+  }) async {
     final mark =
-        conversation.unreadCount <= 0 && !_showsMarkedUnreadDot(conversation);
+        markAsUnread ??
+        (conversation.unreadCount <= 0 && !_showsMarkedUnreadDot(conversation));
     if (mark) {
       await _setMarkedUnread(conversation, true);
       return;
@@ -654,7 +679,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         PopupMenuItem<bool>(value: true, child: Text(mark ? '标为未读' : '标为已读')),
       ],
     );
-    if (selected == true) await _onInboxUnreadAction(conversation);
+    if (selected != true || !mounted) return;
+    final current = _items
+        .where((item) => item.id == conversation.id)
+        .firstOrNull;
+    if (current != null) {
+      await _onInboxUnreadAction(current, markAsUnread: mark);
+    }
   }
 
   void _clearUnreadLocally(int conversationId) {
@@ -669,6 +700,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         !hadMark) {
       return;
     }
+    if (isDesktopCommOnly) _desktopUnreadEdits.record(conversationId, false);
     _forgetMarkedUnread(conversationId);
     setState(() {
       final copy = _items.toList(growable: true);
@@ -1094,6 +1126,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     } else if (!silent) {
       setState(() => _error = null);
     }
+    final unreadRefreshRevision = _desktopUnreadEdits.revision;
     try {
       var hidden = await _safeLoadHidden();
       final results = await Future.wait(<Future<Object?>>[
@@ -1245,9 +1278,23 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       final refreshedHidden = await _safeLoadHidden();
       if (!mounted) return;
       final selfAvatar = userAvatarRefresh.snapshotFor(widget.session.userId);
-      final merged = silent && !skipAvatarMerge
+      var merged = silent && !skipAvatarMerge
           ? mergeInboxConversations(_items, rows, selfAvatar: selfAvatar)
           : applySelfAvatarToConversations(rows, selfAvatar);
+      if (isDesktopCommOnly) {
+        merged = [
+          for (final item in merged)
+            ConversationInboxRealtime.copyConversation(
+              item,
+              updateMarkedUnread: true,
+              markedUnread: _desktopUnreadEdits.resolve(
+                item.id,
+                item.markedUnread,
+                unreadRefreshRevision,
+              ),
+            ),
+        ];
+      }
       warmConversationAvatarCache(merged);
       _reconcileMarkedUnread(merged);
       setState(() {
@@ -1739,7 +1786,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                     NovaBackgroundCoordinator.instance.hasUnreadReplyFor(c.id)
                 ? (c.unreadCount > 0 ? c.unreadCount : 1)
                 : widget.commUnread.effectiveUnreadCount(c)),
-      markedUnread: !selected && _showsMarkedUnreadDot(c),
+      markedUnread: showInboxManualUnread(
+        desktop: isDesktopCommOnly,
+        selected: selected,
+        marked: _showsMarkedUnreadDot(c),
+      ),
       muted: c.muted,
       pinned: c.pinned,
       showAiMark: c.isAiAssistant,
@@ -1782,7 +1833,16 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       imStatusIcon: c.isPrivate && !c.isSelfMemo ? c.peerImStatusIcon : null,
       imStatusColor: c.isPrivate && !c.isSelfMemo ? c.peerImStatusColor : null,
       showDivider: true,
-      onTap: onTap,
+      onTap: () {
+        if (isDesktopCommOnly &&
+            selected &&
+            !c.isAdministrativeNotice &&
+            _showsMarkedUnreadDot(c)) {
+          _clearUnreadLocally(c.id);
+          unawaited(_setMarkedUnread(c, false));
+        }
+        onTap();
+      },
     );
 
     final dropTitle = c.isAdministrativeNotice

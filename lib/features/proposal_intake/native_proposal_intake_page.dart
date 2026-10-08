@@ -728,7 +728,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       if (!mounted) return;
       final items = _scopedKindRows(result.items);
       setState(() => _actionQueue = items);
-      final next = nextProposalIntake(
+      final next = ProposalSkipTail.pick(
         items: items,
         currentId: fromId,
         afterDecision: afterDecision,

@@ -50,6 +50,8 @@ class DunesApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: mobile
           ? AppEggThemeController.instance.theme(DunesTheme.light())
+          : isDesktopCommOnly
+          ? DunesTheme.desktop()
           : DunesTheme.light(),
       locale: const Locale('zh', 'CN'),
       localizationsDelegates: const [

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/platform/desktop_features.dart';
 import 'windows_desktop_tray.dart';
+import 'desktop_popover_dismissals.dart';
 
 /// 根 Navigator，用来判断 Esc 时是否已有弹窗/预览可关闭。
 final GlobalKey<NavigatorState> dunesAppNavigatorKey =
@@ -39,6 +40,7 @@ class _DesktopEscMinimizeState extends State<DesktopEscMinimize> {
     if (event.logicalKey != LogicalKeyboardKey.escape) return false;
     if (_isImeComposing()) return false;
     if (_hasPoppableRoute()) return false;
+    if (DesktopPopoverDismissals.dismissTopmost()) return true;
     unawaited(windowsTrayMinimize());
     return true;
   }

@@ -1,3 +1,5 @@
+import 'desktop_message_menu.dart';
+import 'desktop_attachment_feedback.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -341,6 +343,8 @@ class _NativeChatViewState extends State<NativeChatView>
   /// PC 拖入文件/图片时的悬停高亮。
   bool _fileDropHovering = false;
   String? _uploadLabel;
+  String? _desktopAttachmentNotice;
+  bool _desktopAttachmentFailed = false;
   double _uploadProgress = 0;
   bool _recording = false;
 
@@ -805,6 +809,8 @@ class _NativeChatViewState extends State<NativeChatView>
       _restoringComposeDraft = false;
       _quoteDraft = null;
       _desktopComposerAttachments.clear();
+      _desktopAttachmentNotice = null;
+      _desktopAttachmentFailed = false;
       setState(() {
         _conversation = widget.conversationHint;
         _messages = hasCache ? cached : const <NativeChatMessage>[];
@@ -3766,69 +3772,77 @@ class _NativeChatViewState extends State<NativeChatView>
       payload['quote'] = quote.toPayloadMap();
     }
     final cancel = ChatUploadCancelToken();
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _desktopAttachmentNotice = null;
+      _desktopAttachmentFailed = false;
+    });
     try {
-      await _guardSend(() async {
-        final conversationId = _requireReadyConversationId();
-        // 文本先发，保证所有端都能以既有 TEXT/IMAGE/FILE 消息展示本次内容。
-        if (text.isNotEmpty) {
-          await _service.sendText(
-            conversationId,
-            text,
-            payload: payload.isEmpty ? null : payload,
-          );
-          if (mounted) {
-            setState(() {
-              _inputController.clear();
-              _clearComposeDraft();
-              _quoteDraft = null;
-              _emojiOpen = false;
-            });
+      await _guardSend(
+        () async {
+          final conversationId = _requireReadyConversationId();
+          // 文本先发，保证所有端都能以既有 TEXT/IMAGE/FILE 消息展示本次内容。
+          if (text.isNotEmpty) {
+            await _service.sendText(
+              conversationId,
+              text,
+              payload: payload.isEmpty ? null : payload,
+            );
+            if (mounted) {
+              setState(() {
+                _inputController.clear();
+                _clearComposeDraft();
+                _quoteDraft = null;
+                _emojiOpen = false;
+              });
+            }
           }
-        }
 
-        var completed = 0;
-        while (_desktopComposerAttachments.isNotEmpty) {
-          cancel.throwIfCancelled();
-          final attachment = _desktopComposerAttachments.first;
-          completed++;
-          final total = completed + _desktopComposerAttachments.length - 1;
-          _beginUpload(
-            attachment.isImage
-                ? '上传图片 ($completed/$total)'
-                : '上传文件 ($completed/$total)',
-            previewBytes: attachment.isImage ? attachment.bytes : null,
-            kind: attachment.isImage ? 'IMAGE' : 'FILE',
-            fileName: attachment.fileName,
-          );
-          if (attachment.isImage) {
-            await _service.sendImage(
-              conversationId: conversationId,
-              bytes: attachment.bytes,
+          var completed = 0;
+          while (_desktopComposerAttachments.isNotEmpty) {
+            cancel.throwIfCancelled();
+            final attachment = _desktopComposerAttachments.first;
+            completed++;
+            final total = completed + _desktopComposerAttachments.length - 1;
+            _beginUpload(
+              attachment.isImage
+                  ? '上传图片 ($completed/$total)'
+                  : '上传文件 ($completed/$total)',
+              previewBytes: attachment.isImage ? attachment.bytes : null,
+              kind: attachment.isImage ? 'IMAGE' : 'FILE',
               fileName: attachment.fileName,
-              mimeType: attachment.mimeType,
-              sourceLabel: attachment.sourceLabel,
-              preparePreview: () => _prepareChatImagePreview(
-                attachment.bytes,
-                attachment.fileName,
-              ),
-              onProgress: (p) => _setUploadProgress(p),
-              cancelToken: cancel,
             );
-          } else {
-            await _service.sendFile(
-              conversationId: conversationId,
-              bytes: attachment.bytes,
-              fileName: attachment.fileName,
-              mimeType: attachment.mimeType,
-              onProgress: _setUploadProgress,
-              cancelToken: cancel,
-            );
+            if (attachment.isImage) {
+              await _service.sendImage(
+                conversationId: conversationId,
+                bytes: attachment.bytes,
+                fileName: attachment.fileName,
+                mimeType: attachment.mimeType,
+                sourceLabel: attachment.sourceLabel,
+                preparePreview: () => _prepareChatImagePreview(
+                  attachment.bytes,
+                  attachment.fileName,
+                ),
+                onProgress: (p) => _setUploadProgress(p),
+                cancelToken: cancel,
+              );
+            } else {
+              await _service.sendFile(
+                conversationId: conversationId,
+                bytes: attachment.bytes,
+                fileName: attachment.fileName,
+                mimeType: attachment.mimeType,
+                onProgress: _setUploadProgress,
+                cancelToken: cancel,
+              );
+            }
+            if (!mounted) return;
+            setState(() => _desktopComposerAttachments.removeAt(0));
           }
-          if (!mounted) return;
-          setState(() => _desktopComposerAttachments.removeAt(0));
-        }
-      }, cancelToken: cancel);
+        },
+        cancelToken: cancel,
+        desktopAttachmentFeedback: true,
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -3861,7 +3875,13 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   void _removeDesktopComposerAttachment(_DesktopComposerAttachment attachment) {
-    setState(() => _desktopComposerAttachments.remove(attachment));
+    setState(() {
+      _desktopComposerAttachments.remove(attachment);
+      if (_desktopComposerAttachments.isEmpty) {
+        _desktopAttachmentNotice = null;
+        _desktopAttachmentFailed = false;
+      }
+    });
   }
 
   List<int> _parseMentionUserIds(String text) {
@@ -4977,6 +4997,7 @@ class _NativeChatViewState extends State<NativeChatView>
     Future<void> Function() task, {
     ChatUploadCancelToken? cancelToken,
     bool ensureCurrentConversation = true,
+    bool desktopAttachmentFeedback = false,
   }) async {
     _activeUploadCancel = cancelToken;
     setState(() => _uploading = true);
@@ -5003,11 +5024,40 @@ class _NativeChatViewState extends State<NativeChatView>
       setState(_clearPendingNewMessages);
       _scrollToPreferredAnchor(force: true);
     } on ChatUploadCancelledException {
-      if (mounted) _showToast('已取消上传');
+      if (mounted) {
+        if (desktopAttachmentFeedback &&
+            isDesktopCommOnly &&
+            _desktopComposerAttachments.isNotEmpty) {
+          setState(() {
+            _desktopAttachmentNotice = '已取消上传，未发送附件已保留';
+            _desktopAttachmentFailed = false;
+          });
+        }
+        _showToast('已取消上传');
+      }
     } catch (e) {
       if (cancelToken?.isCancelled == true) {
-        if (mounted) _showToast('已取消上传');
+        if (mounted) {
+          if (desktopAttachmentFeedback &&
+              isDesktopCommOnly &&
+              _desktopComposerAttachments.isNotEmpty) {
+            setState(() {
+              _desktopAttachmentNotice = '已取消上传，未发送附件已保留';
+              _desktopAttachmentFailed = false;
+            });
+          }
+          _showToast('已取消上传');
+        }
       } else {
+        if (mounted &&
+            desktopAttachmentFeedback &&
+            isDesktopCommOnly &&
+            _desktopComposerAttachments.isNotEmpty) {
+          setState(() {
+            _desktopAttachmentNotice = '发送未完成，未发送附件已保留';
+            _desktopAttachmentFailed = true;
+          });
+        }
         _showToast('发送失败：${friendlyErrorText(e)}');
       }
     } finally {
@@ -5037,6 +5087,22 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Widget _buildPendingUploadBubble() {
+    if (!isDesktopCommOnly) return _buildPendingUploadPreview();
+    final progress = _uploadProgress;
+    return DesktopAttachmentFeedback(
+      label:
+          '${_uploadLabel ?? '上传中'} · ${progress <= 0
+              ? '准备中'
+              : progress >= 1
+              ? '正在确认发送'
+              : '${(progress * 100).floor()}%'}',
+      fileName: _pendingUploadName,
+      progress: progress,
+      onCancel: _cancelPendingUpload,
+    );
+  }
+
+  Widget _buildPendingUploadPreview() {
     final progress = _uploadProgress;
     final kind = _pendingUploadKind;
     final name = _pendingUploadName.isNotEmpty
@@ -5507,6 +5573,21 @@ class _NativeChatViewState extends State<NativeChatView>
     Offset? anchor,
   }) async {
     if (actions.isEmpty) return null;
+    if (isDesktopCommOnly) {
+      return showDesktopMessageMenu(
+        context,
+        actions
+            .map(
+              (item) => DesktopMessageMenuItem(
+                id: item.id,
+                label: item.label,
+                icon: item.icon,
+              ),
+            )
+            .toList(growable: false),
+        anchor: anchor,
+      );
+    }
     return showGeneralDialog<String>(
       context: context,
       barrierLabel: 'message_actions',
@@ -6260,6 +6341,17 @@ class _NativeChatViewState extends State<NativeChatView>
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_uploadLabel != null) _buildPendingUploadBubble(),
+          if (wide &&
+              isDesktopCommOnly &&
+              !_sending &&
+              _desktopComposerAttachments.isNotEmpty &&
+              _desktopAttachmentNotice != null)
+            DesktopAttachmentFeedback(
+              label: _desktopAttachmentNotice!,
+              fileName: '可继续发送剩余附件，或从附件栏移除',
+              failed: _desktopAttachmentFailed,
+              onRetry: locked || _mediaBusy ? null : () => _send(),
+            ),
           // PC：工具栏常显在输入区上方；APP：点「+」后在下方展开宫格。
           if (wide)
             ChatQuickActions(
@@ -6430,106 +6522,115 @@ class _NativeChatViewState extends State<NativeChatView>
         ),
       ),
       child: SizedBox(
-        height: 66,
+        height:
+            66 +
+            (MediaQuery.textScalerOf(context).scale(11) - 11).clamp(0, 22) * 2,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: _desktopComposerAttachments.length,
           separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (context, index) {
             final attachment = _desktopComposerAttachments[index];
-            return SizedBox(
-              width: attachment.isImage ? 66 : 150,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: DunesColors.resolve(
-                          context,
-                          Colors.white,
-                          role: DunesColorRole.surface,
-                        ),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
+            return Tooltip(
+              message: attachment.fileName,
+              child: SizedBox(
+                width: attachment.isImage ? 66 : 190,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
                           color: DunesColors.resolve(
                             context,
-                            DunesColors.borderSoft,
-                            role: DunesColorRole.border,
+                            Colors.white,
+                            role: DunesColorRole.surface,
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.borderSoft,
+                              role: DunesColorRole.border,
+                            ),
                           ),
                         ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(5),
-                        child: attachment.isImage
-                            ? Image.memory(
-                                attachment.bytes,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => const Center(
-                                  child: Icon(Icons.broken_image_outlined),
-                                ),
-                              )
-                            : Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                ),
-                                child: Row(
-                                  children: [
-                                    ChatFileTypeIcon(
-                                      fileName: attachment.fileName,
-                                      size: 34,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        attachment.fileName,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: DunesTypography.sans(
-                                          fontSize: 11,
-                                          color: DunesColors.resolve(
-                                            context,
-                                            DunesColors.text2,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: attachment.isImage
+                              ? Image.memory(
+                                  attachment.bytes,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) => const Center(
+                                    child: Icon(Icons.broken_image_outlined),
+                                  ),
+                                )
+                              : Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    8,
+                                    8,
+                                    26,
+                                    8,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      ChatFileTypeIcon(
+                                        fileName: attachment.fileName,
+                                        size: 34,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          attachment.fileName,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: DunesTypography.sans(
+                                            fontSize: 11,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              DunesColors.text2,
+                                            ),
+                                            context: context,
                                           ),
-                                          context: context,
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
+                        ),
                       ),
                     ),
-                  ),
-                  Positioned(
-                    top: -6,
-                    right: -6,
-                    child: Material(
-                      color: DunesColors.resolve(
-                        context,
-                        const Color(0xFF625B6D),
-                        role: DunesColorRole.surface,
-                      ),
-                      shape: const CircleBorder(),
-                      child: InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: _sending
-                            ? null
-                            : () =>
-                                  _removeDesktopComposerAttachment(attachment),
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: Icon(
-                            Icons.close_rounded,
-                            color: DunesColors.resolve(context, Colors.white),
-                            size: 15,
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: Material(
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF625B6D),
+                          role: DunesColorRole.surface,
+                        ),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: _sending
+                              ? null
+                              : () => _removeDesktopComposerAttachment(
+                                  attachment,
+                                ),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: Icon(
+                              Icons.close_rounded,
+                              color: DunesColors.resolve(context, Colors.white),
+                              size: 15,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },

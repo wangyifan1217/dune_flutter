@@ -289,7 +289,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
       width: kDunesMainSideRailWidth,
       color: DunesColors.resolveNullable(
         context,
-        palette.app,
+        palette.surfaceRaised,
         role: DunesColorRole.surface,
       ),
       child: SafeArea(
@@ -300,7 +300,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
           decoration: BoxDecoration(
             color: DunesColors.resolveNullable(
               context,
-              palette.app,
+              palette.surfaceRaised,
               role: DunesColorRole.surface,
             ),
             border: Border(
@@ -313,22 +313,81 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
               ),
             ),
           ),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              ..._tabs,
-              const Spacer(),
-              _myTab,
-              if (settingsTap != null) ...[
-                _tab(
-                  icon: Icons.settings_outlined,
-                  screen: '__desktop_settings__',
-                  label: '设置',
-                  onTap: settingsTap,
-                ),
-              ],
-              const SizedBox(height: 10),
-            ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final tabs = _tabs;
+              final screens = [
+                'C1',
+                if (!_hideWorkbenchTabs) ...['QJ', 'LH', 'QJA'],
+              ];
+              final index = screens.indexOf(widget.activeScreen);
+              final double? top = index >= 0
+                  ? 12.0 + index * 64 + 5
+                  : widget.activeScreen == 'B2'
+                  ? constraints.maxHeight -
+                        10 -
+                        64 -
+                        (settingsTap == null ? 0 : 64) +
+                        5
+                  : null;
+              return Stack(
+                children: [
+                  if (isDesktopCommOnly && top != null)
+                    AnimatedPositioned(
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 180),
+                      curve: Curves.easeOutCubic,
+                      left: 8,
+                      right: 8,
+                      top: top,
+                      height: 54,
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: palette.surface,
+                            border: Border.all(color: palette.borderSubtle),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x08000000),
+                                blurRadius: 5,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (isDesktopCommOnly)
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 10 + 64.0 + (settingsTap == null ? 0 : 64),
+                      child: IgnorePointer(
+                        child: Divider(height: 1, color: palette.borderSubtle),
+                      ),
+                    ),
+                  Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      ...tabs,
+                      const Spacer(),
+                      _myTab,
+                      if (settingsTap != null) ...[
+                        _tab(
+                          icon: Icons.settings_outlined,
+                          screen: '__desktop_settings__',
+                          label: '设置',
+                          onTap: settingsTap,
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -356,7 +415,11 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
         ? SizedBox(width: 24, height: 24, child: iconBuilder(color))
         : Icon(
             icon,
-            size: _isVertical ? 24 : 23,
+            size: _isVertical && isDesktopCommOnly
+                ? 22
+                : _isVertical
+                ? 24
+                : 23,
             color: DunesColors.resolveNullable(context, color),
           );
 
@@ -364,7 +427,11 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
       selected: active,
       button: true,
       child: InkWell(
-        borderRadius: _isVertical ? null : BorderRadius.circular(28),
+        borderRadius: _isVertical && isDesktopCommOnly
+            ? BorderRadius.circular(12)
+            : _isVertical
+            ? null
+            : BorderRadius.circular(28),
         onTap:
             onTap ??
             () {
@@ -421,9 +488,10 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                       label,
                       maxLines: 1,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: _isVertical && isDesktopCommOnly ? 10.5 : 11,
                         height: 1.05,
-                        fontWeight: !_isVertical && active
+                        fontWeight:
+                            active && (!_isVertical || isDesktopCommOnly)
                             ? FontWeight.w600
                             : FontWeight.w400,
                         color: DunesColors.resolveNullable(context, color),
@@ -439,7 +507,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     );
 
     if (_isVertical) {
-      return body;
+      return isDesktopCommOnly ? Tooltip(message: label, child: body) : body;
     }
     return Expanded(child: body);
   }

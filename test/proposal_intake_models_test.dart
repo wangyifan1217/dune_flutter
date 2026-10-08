@@ -3231,6 +3231,15 @@ void main() {
       nextProposalIntake(items: [row(1)], currentId: 1, afterDecision: true),
       isNull,
     );
+    expect(
+      nextProposalIntake(
+        items: items,
+        currentId: 2,
+        afterDecision: true,
+        deferredIds: const [1],
+      )?.id,
+      3,
+    );
   });
 
   test('proposal list time converts utc to local without Z', () {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/layout/chat_layout.dart';
+import '../../core/platform/desktop_features.dart';
+import '../../core/widgets/desktop_feedback_surface.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
@@ -18,19 +20,35 @@ const double kGroupInfoWidePadding = 24;
 
 /// 群信息页壳：宽屏全宽铺平，窄屏保持原样。
 Widget groupInfoPageShell({required Widget child}) {
-  return ColoredBox(
-    color: _bgPage,
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = isWideChatLayout(context);
-        if (!wide) return child;
-        return Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: kGroupInfoWidePadding,
-          ),
-          child: child,
-        );
-      },
+  return Builder(
+    builder: (context) => ColoredBox(
+      color: Theme.of(context).brightness == Brightness.dark
+          ? DunesPalette.night.page
+          : DunesColors.resolve(context, _bgPage, role: DunesColorRole.surface),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (isDesktopCommOnly) {
+            return Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 820),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: child,
+                ),
+              ),
+            );
+          }
+          final wide = isWideChatLayout(context);
+          if (!wide) return child;
+          return Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: kGroupInfoWidePadding,
+            ),
+            child: child,
+          );
+        },
+      ),
     ),
   );
 }
@@ -66,7 +84,9 @@ class GroupInfoHero extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 17,
               fontWeight: FontWeight.w600,
-              color: _textPrimary,
+              color: isDesktopCommOnly
+                  ? DunesColors.resolve(context, DunesColors.text)
+                  : _textPrimary,
               context: context,
             ),
           ),
@@ -76,7 +96,9 @@ class GroupInfoHero extends StatelessWidget {
             textAlign: TextAlign.center,
             style: DunesTypography.sans(
               fontSize: 12,
-              color: _textSecondary,
+              color: isDesktopCommOnly
+                  ? DunesColors.resolve(context, DunesColors.text3)
+                  : _textSecondary,
               context: context,
             ),
           ),
@@ -103,7 +125,9 @@ class GroupInfoSectionLabel extends StatelessWidget {
         label,
         style: DunesTypography.sans(
           fontSize: 13,
-          color: _textSecondary,
+          color: isDesktopCommOnly
+              ? DunesColors.resolve(context, DunesColors.text3)
+              : _textSecondary,
           context: context,
         ),
       ),
@@ -133,11 +157,13 @@ class GroupInfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = Container(
-      color: DunesColors.resolveNullable(
-        context,
-        _bgCard,
-        role: DunesColorRole.surface,
-      ),
+      color: isDesktopCommOnly
+          ? Colors.transparent
+          : DunesColors.resolveNullable(
+              context,
+              _bgCard,
+              role: DunesColorRole.surface,
+            ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
@@ -148,9 +174,11 @@ class GroupInfoRow extends StatelessWidget {
                 Text(
                   title,
                   style: DunesTypography.sans(
-                    fontSize: 16,
+                    fontSize: isDesktopCommOnly ? 14.5 : 16,
                     fontWeight: FontWeight.w400,
-                    color: _textPrimary,
+                    color: isDesktopCommOnly
+                        ? DunesColors.resolve(context, DunesColors.text)
+                        : _textPrimary,
                     context: context,
                   ),
                 ),
@@ -160,7 +188,9 @@ class GroupInfoRow extends StatelessWidget {
                     subtitle!,
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: _textSecondary,
+                      color: isDesktopCommOnly
+                          ? DunesColors.resolve(context, DunesColors.text3)
+                          : _textSecondary,
                       context: context,
                     ),
                   ),
@@ -168,7 +198,10 @@ class GroupInfoRow extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) trailing!,
+          if (trailing != null) ...[
+            const SizedBox(width: 12),
+            Flexible(child: trailing!),
+          ],
         ],
       ),
     );
@@ -192,6 +225,17 @@ class GroupInfoRow extends StatelessWidget {
       ),
       child: row,
     );
+    if (isDesktopCommOnly && onTap != null) {
+      return DesktopFeedbackSurface(
+        onTap: onTap,
+        backgroundColor: DunesColors.resolve(
+          context,
+          _bgCard,
+          role: DunesColorRole.surface,
+        ),
+        child: row,
+      );
+    }
     if (onTap == null) return bordered;
     return Material(
       color: DunesColors.resolveNullable(
@@ -237,11 +281,7 @@ class GroupInfoToggle extends StatelessWidget {
           width: 24,
           height: 24,
           decoration: BoxDecoration(
-            color: DunesColors.resolve(
-              context,
-              Colors.white,
-              role: DunesColorRole.surface,
-            ),
+            color: Colors.white,
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
@@ -429,7 +469,9 @@ class _MemberCell extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: DunesTypography.sans(
               fontSize: 12,
-              color: _textPrimary,
+              color: isDesktopCommOnly
+                  ? DunesColors.resolve(context, DunesColors.text)
+                  : _textPrimary,
               context: context,
             ),
           ),
@@ -491,7 +533,9 @@ class _ActionMemberCell extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: DunesTypography.sans(
               fontSize: 12,
-              color: _textPrimary,
+              color: isDesktopCommOnly
+                  ? DunesColors.resolve(context, DunesColors.text)
+                  : _textPrimary,
               context: context,
             ),
           ),

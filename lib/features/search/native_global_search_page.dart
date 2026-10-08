@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/desktop_feedback_surface.dart';
+import '../../core/widgets/desktop_status_surface.dart';
 import '../auth/auth_session.dart';
 import '../chat/group_composite_avatar.dart';
 import '../chat/user_avatar_widget.dart';
@@ -417,7 +419,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                   Colors.white,
                   role: DunesColorRole.surface,
                 ),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(_desktop ? 10 : 14),
                 border: Border.all(
                   color: _focus.hasFocus
                       ? DunesColors.resolve(
@@ -981,7 +983,10 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: SizedBox(
-        height: 34,
+        height: isDesktopCommOnly
+            ? 34 +
+                  (MediaQuery.textScalerOf(context).scale(13) - 13).clamp(0, 20)
+            : 34,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: kinds.length,
@@ -1008,7 +1013,10 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: SizedBox(
-        height: 34,
+        height: isDesktopCommOnly
+            ? 34 +
+                  (MediaQuery.textScalerOf(context).scale(13) - 13).clamp(0, 20)
+            : 34,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: filters.length,
@@ -1026,48 +1034,55 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
   }
 
   Widget _emptyAll() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 28),
-      child: Column(
-        children: [
-          Text(
-            '没有找到相关结果',
-            style: DunesTypography.sans(
-              fontSize: 15,
-              color: DunesColors.resolve(context, DunesColors.text2),
-              context: context,
+    return DesktopStatusSurface(
+      child: Padding(
+        padding: const EdgeInsets.only(top: 28),
+        child: Column(
+          children: [
+            Text(
+              '没有找到相关结果',
+              style: DunesTypography.sans(
+                fontSize: 15,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: [
-              _chip('换个词', () {
-                _controller.clear();
-                _runSearch('');
-                _focus.requestFocus();
-              }),
-              _chip('去智能搜索', () => widget.onOpenNova(_controller.text.trim())),
-              _chip('去通讯录', () => widget.onOpenContacts?.call()),
-            ],
-          ),
-        ],
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                _chip('换个词', () {
+                  _controller.clear();
+                  _runSearch('');
+                  _focus.requestFocus();
+                }),
+                _chip(
+                  '去智能搜索',
+                  () => widget.onOpenNova(_controller.text.trim()),
+                ),
+                _chip('去通讯录', () => widget.onOpenContacts?.call()),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _emptyCategory(GlobalSearchCategory cat) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 28),
-      child: Text(
-        '没有找到${cat.label}',
-        textAlign: TextAlign.center,
-        style: DunesTypography.sans(
-          fontSize: 14,
-          color: DunesColors.resolve(context, DunesColors.text3),
-          context: context,
+    return DesktopStatusSurface(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        child: Text(
+          '没有找到${cat.label}',
+          textAlign: TextAlign.center,
+          style: DunesTypography.sans(
+            fontSize: 14,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       ),
     );
@@ -1714,6 +1729,13 @@ class _HoverSurfaceState extends State<_HoverSurface> {
 
   @override
   Widget build(BuildContext context) {
+    if (isDesktopCommOnly) {
+      return DesktopFeedbackSurface(
+        onTap: widget.onTap,
+        borderRadius: widget.radius ?? BorderRadius.circular(8),
+        child: widget.child,
+      );
+    }
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),

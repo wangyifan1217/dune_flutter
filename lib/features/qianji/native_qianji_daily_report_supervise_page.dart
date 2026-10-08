@@ -1282,7 +1282,7 @@ Future<void> showQianjiDailyReportDetail({
               padding: const EdgeInsets.all(15),
               children: [
                 if (report.summary.trim().isNotEmpty)
-                  _reportSection('今日总结', report.summary),
+                  _reportSection(context, '今日总结', report.summary),
                 if (report.items.isNotEmpty) ...[
                   const Padding(
                     padding: EdgeInsets.fromLTRB(2, 12, 2, 8),
@@ -1293,14 +1293,15 @@ Future<void> showQianjiDailyReportDetail({
                   ),
                   for (final item in report.items)
                     _reportSection(
+                      context,
                       item.taskTitle.isEmpty ? '工作事项' : item.taskTitle,
                       item.workDone.isEmpty ? item.nextAction : item.workDone,
                     ),
                 ],
                 if (report.blockers.trim().isNotEmpty)
-                  _reportSection('困难与阻塞', report.blockers),
+                  _reportSection(context, '困难与阻塞', report.blockers),
                 if (report.nextPlan.trim().isNotEmpty)
-                  _reportSection('明日计划', report.nextPlan),
+                  _reportSection(context, '明日计划', report.nextPlan),
                 if (report.summary.trim().isEmpty &&
                     report.items.isEmpty &&
                     report.blockers.trim().isEmpty &&
@@ -1322,36 +1323,41 @@ Future<void> showQianjiDailyReportDetail({
   ),
 );
 
-Widget _reportSection(String title, String body) => Container(
-  margin: const EdgeInsets.only(bottom: 8),
-  padding: const EdgeInsets.all(13),
-  decoration: BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(14),
-  ),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        title,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: _purple,
+Widget _reportSection(BuildContext context, String title, String body) =>
+    Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
         ),
+        borderRadius: BorderRadius.circular(14),
       ),
-      const SizedBox(height: 6),
-      Text(
-        body,
-        style: const TextStyle(
-          fontSize: 13,
-          height: 1.5,
-          color: DunesColors.text2,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: DunesColors.resolve(context, _purple),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            body,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.5,
+              color: DunesColors.resolve(context, DunesColors.text2),
+            ),
+          ),
+        ],
       ),
-    ],
-  ),
-);
+    );
 
 class QianjiDailyReportShareCard extends StatelessWidget {
   const QianjiDailyReportShareCard({

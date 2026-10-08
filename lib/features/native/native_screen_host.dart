@@ -12,6 +12,7 @@ import '../../core/layout/chat_layout.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/navigation/generated/screen_registry.dart';
 import '../../core/platform/desktop_features.dart';
+import '../../core/widgets/desktop_section_transition.dart';
 import '../../core/theme/app_text_scale.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/cached_network_image.dart';
@@ -3626,6 +3627,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   Widget _buildChatDualPane() {
     return ChatDualPaneShell(
+      transitionToken: _desktopSectionTransitionToken,
       listPane: _buildConversationListPage(
         selectedConversationId: _dualPaneSelectedConversationId,
       ),
@@ -5769,7 +5771,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             tabBar,
-            Expanded(child: content),
+            Expanded(
+              child: DesktopSectionTransition(
+                token: _desktopSectionTransitionToken,
+                child: content,
+              ),
+            ),
           ],
         ),
       );
@@ -5865,6 +5872,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   /// 主 Tab 在板块之间切换时，保留「我的 / NOVA」最后打开的子页面。
+  int _desktopSectionTransitionToken = 0;
+
   void _switchMainTab(String screen) {
     if (_desktopSettingsOpen ||
         _desktopSettingsChildReturnPending ||
@@ -5877,6 +5886,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     final current = widget.navigation.currentScreen;
     final currentTab = _mainTabScreenFor(current);
+    if (isDesktopCommOnly && currentTab != screen) {
+      setState(() => _desktopSectionTransitionToken++);
+    }
 
     if (_isMyRoute(current)) {
       _lastMyScreen = current;

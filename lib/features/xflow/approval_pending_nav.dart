@@ -41,6 +41,103 @@ class MyOpenApprovalQueue {
   XflowProposalItem? get firstOrNull => items.isEmpty ? null : items.first;
 }
 
+/// 本会话里点过「下一个」略过的待审批。按略过先后排到队列末尾，
+/// 避免批完下一条后又跳回优先级最前、还得再点一次略过。
+class ApprovalSkipTail {
+  ApprovalSkipTail._();
+
+  static final List<String> _keys = <String>[];
+
+  static String keyOf(String businessType, int businessId) =>
+      '${businessType.trim().toUpperCase()}:$businessId';
+
+  static String itemKey(XflowProposalItem item) {
+    final businessId = item.todoHint?.businessId ?? item.id;
+    return keyOf(item.businessType, businessId);
+  }
+
+  static void reset() => _keys.clear();
+
+  static XflowProposalItem? pick({
+    required List<XflowProposalItem> items,
+    required String businessType,
+    required int businessId,
+    required bool afterDecision,
+  }) {
+    final key = _resolvedKey(items, businessType, businessId);
+    if (afterDecision) {
+      _keys.remove(key);
+    }
+    final ordered = orderOpenApprovalsBySkip(items, _keys);
+    final next = afterDecision
+        ? _firstExcept(ordered, key)
+        : MyOpenApprovalQueue(items: ordered).nextAfter(
+            businessType: businessType,
+            businessId: businessId,
+          );
+    if (!afterDecision && next != null) {
+      _keys.remove(key);
+      _keys.add(key);
+    }
+    final live = items.map(itemKey).toSet();
+    _keys.removeWhere((item) => !live.contains(item));
+    return next;
+  }
+
+  static XflowProposalItem? _firstExcept(
+    List<XflowProposalItem> items,
+    String key,
+  ) {
+    for (final item in items) {
+      if (itemKey(item) != key) return item;
+    }
+    return null;
+  }
+
+  static String _resolvedKey(
+    List<XflowProposalItem> items,
+    String businessType,
+    int businessId,
+  ) {
+    final bt = businessType.trim().toUpperCase();
+    for (final item in items) {
+      final bid = item.todoHint?.businessId ?? item.id;
+      if (item.businessType.toUpperCase() == bt && bid == businessId) {
+        return itemKey(item);
+      }
+    }
+    return keyOf(businessType, businessId);
+  }
+}
+
+/// 未略过的保持原顺序；略过的按 [deferredKeys] 的先后接到末尾。
+List<XflowProposalItem> orderOpenApprovalsBySkip(
+  List<XflowProposalItem> items,
+  List<String> deferredKeys,
+) {
+  if (deferredKeys.isEmpty || items.length < 2) return items;
+  final rank = <String, int>{
+    for (var i = 0; i < deferredKeys.length; i++) deferredKeys[i]: i,
+  };
+  final head = <XflowProposalItem>[];
+  final tail = <XflowProposalItem>[];
+  for (final item in items) {
+    if (rank.containsKey(ApprovalSkipTail.itemKey(item))) {
+      tail.add(item);
+    } else {
+      head.add(item);
+    }
+  }
+  if (tail.length > 1) {
+    tail.sort(
+      (a, b) => rank[ApprovalSkipTail.itemKey(a)]!.compareTo(
+        rank[ApprovalSkipTail.itemKey(b)]!,
+      ),
+    );
+  }
+  return [...head, ...tail];
+}
+
 Future<MyOpenApprovalQueue> loadMyOpenApprovalQueue(
   XflowService service,
 ) async {

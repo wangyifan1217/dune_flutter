@@ -1431,6 +1431,7 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                       top: 4 + topInset,
                       right: 4,
                       child: IconButton(
+                        tooltip: '关闭',
                         onPressed: _close,
                         icon: Icon(
                           Icons.close_rounded,
@@ -1644,14 +1645,17 @@ class _ChatImagePopupBodyState extends State<_ChatImagePopupBody> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    widget.fileName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.resolve(context, DunesColors.text),
+                  child: Tooltip(
+                    message: widget.fileName,
+                    child: Text(
+                      widget.fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                      ),
                     ),
                   ),
                 ),

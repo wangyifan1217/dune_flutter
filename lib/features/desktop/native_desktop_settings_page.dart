@@ -4,6 +4,8 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/desktop_feedback_surface.dart';
+import '../../core/platform/desktop_features.dart';
 import '../chat/desktop_image_preview_pref.dart';
 import '../chat/file_download.dart' as file_dl;
 import '../chat/im_file_save_dir.dart';
@@ -120,7 +122,7 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: DunesTheme.light(),
+      data: isDesktopCommOnly ? DunesTheme.desktop() : DunesTheme.light(),
       child: Scaffold(
         backgroundColor: DunesColors.resolve(
           context,
@@ -128,6 +130,7 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
           role: DunesColorRole.surface,
         ),
         appBar: AppBar(
+          toolbarHeight: isDesktopCommOnly ? 68 : null,
           backgroundColor: DunesColors.resolve(
             context,
             Colors.white,
@@ -147,36 +150,56 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
             ),
           ),
           leading: IconButton(
+            tooltip: '返回',
             onPressed: widget.onBack,
             icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-            color: DunesColors.resolve(context, const Color(0xFF2C1E3F)),
+            color: DunesColors.resolve(
+              context,
+              isDesktopCommOnly ? DunesColors.text : const Color(0xFF2C1E3F),
+            ),
           ),
           title: Text(
             '系统设置',
             style: DunesTypography.sans(
               fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: DunesColors.resolve(context, const Color(0xFF2C1E3F)),
+              fontWeight: isDesktopCommOnly ? FontWeight.w600 : FontWeight.w700,
+              color: DunesColors.resolve(
+                context,
+                isDesktopCommOnly ? DunesColors.text : const Color(0xFF2C1E3F),
+              ),
               context: context,
             ),
           ),
-          centerTitle: true,
+          centerTitle: !isDesktopCommOnly,
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-          children: [
-            _buildFlatGroups(),
-            const SizedBox(height: 14),
-            Text(
-              '聊天附件按会话分文件夹保存在上述指定目录中，同一会话的文件直接保存在对应子文件夹下。系统设置将实时自动保存并生效。',
-              style: DunesTypography.sans(
-                fontSize: 12,
-                height: 1.5,
-                color: DunesColors.resolve(context, const Color(0xFF9E8EAF)),
-                context: context,
-              ),
+        body: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: isDesktopCommOnly ? 820 : double.infinity,
             ),
-          ],
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              children: [
+                _buildFlatGroups(),
+                const SizedBox(height: 14),
+                Text(
+                  '聊天附件按会话分文件夹保存在上述指定目录中，同一会话的文件直接保存在对应子文件夹下。系统设置将实时自动保存并生效。',
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    height: 1.5,
+                    color: DunesColors.resolve(
+                      context,
+                      isDesktopCommOnly
+                          ? DunesColors.text3
+                          : const Color(0xFF9E8EAF),
+                    ),
+                    context: context,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -318,6 +341,17 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
         ),
     ];
 
+    if (isDesktopCommOnly) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < groups.length; i++) ...[
+            if (i > 0) const SizedBox(height: 24),
+            groups[i],
+          ],
+        ],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -342,8 +376,11 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
             title,
             style: TextStyle(
               fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: DunesColors.resolveNullable(context, Color(0xFF5D4B72)),
+              fontWeight: isDesktopCommOnly ? FontWeight.w600 : FontWeight.w700,
+              color: DunesColors.resolveNullable(
+                context,
+                isDesktopCommOnly ? DunesColors.text2 : Color(0xFF5D4B72),
+              ),
             ),
           ),
         ),
@@ -354,7 +391,7 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
               Colors.white,
               role: DunesColorRole.surface,
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(isDesktopCommOnly ? 12 : 16),
             border: Border.all(
               color: DunesColors.resolve(
                 context,
@@ -363,16 +400,18 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
               ),
               width: 0.8,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF552D8E).withValues(alpha: .04),
-                blurRadius: 12,
-                offset: const Offset(0, 3),
-              ),
-            ],
+            boxShadow: isDesktopCommOnly
+                ? const []
+                : [
+                    BoxShadow(
+                      color: const Color(0xFF552D8E).withValues(alpha: .04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(isDesktopCommOnly ? 12 : 16),
             child: ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -406,7 +445,7 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
   }) {
     return Material(
       color: Colors.transparent,
-      child: InkWell(
+      child: DesktopFeedbackSurface(
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
@@ -443,7 +482,9 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
                             ? DunesColors.resolve(context, DunesColors.coral)
                             : DunesColors.resolve(
                                 context,
-                                const Color(0xFF2C1E3F),
+                                isDesktopCommOnly
+                                    ? DunesColors.text
+                                    : const Color(0xFF2C1E3F),
                               ),
                       ),
                     ),
@@ -460,7 +501,9 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
                                 ).withValues(alpha: .8)
                               : DunesColors.resolve(
                                   context,
-                                  const Color(0xFF8A7A9E),
+                                  isDesktopCommOnly
+                                      ? DunesColors.text3
+                                      : const Color(0xFF8A7A9E),
                                 ),
                         ),
                       ),

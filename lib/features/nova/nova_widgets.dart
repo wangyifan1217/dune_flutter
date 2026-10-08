@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/desktop_feedback_surface.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
@@ -100,7 +101,9 @@ class NovaPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final actionOpacity = actionsEnabled ? 1.0 : 0.40;
     return Container(
-      height: 52,
+      height: isDesktopCommOnly
+          ? 68 + (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(0, 28)
+          : 52,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
@@ -160,7 +163,13 @@ class _NovaSegmentedTabs extends StatelessWidget {
             .clamp(0.0, 1.0);
         return Container(
           width: 156,
-          height: 32,
+          height: isDesktopCommOnly
+              ? 32 +
+                    (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(
+                      0,
+                      28,
+                    )
+              : 32,
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             color: DunesColors.resolve(
@@ -202,8 +211,8 @@ class _NovaSegmentedTabs extends StatelessWidget {
                     children: [
                       for (var i = 0; i < NovaPageHeader.tabLabels.length; i++)
                         Expanded(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
+                          child: DesktopTapTarget(
+                            selected: controller.index == i,
                             onTap: () {
                               if (controller.index != i) {
                                 controller.animateTo(i);
@@ -263,6 +272,24 @@ class _HeaderCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (isDesktopCommOnly) {
+      return IconButton(
+        tooltip: tooltip,
+        onPressed: enabled && onTap != null
+            ? () {
+                Tooltip.dismissAllToolTips();
+                onTap!();
+              }
+            : null,
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+        padding: const EdgeInsets.all(8),
+        icon: Transform.translate(
+          offset: iconOffset,
+          child: Icon(icon, size: iconSize),
+        ),
+        color: DunesColors.resolve(context, DunesColors.text2),
+      );
+    }
     final button = Material(
       color: Colors.transparent,
       child: Ink(

@@ -198,7 +198,7 @@ class _ProposalIntakeOverlayHostState
       final result = await _service.fetchList(actionable: true, pageSize: 100);
       if (!mounted) return;
       setState(() => _actionQueue = result.items);
-      final next = nextProposalIntake(
+      final next = ProposalSkipTail.pick(
         items: result.items,
         currentId: _proposalId,
         afterDecision: afterDecision,

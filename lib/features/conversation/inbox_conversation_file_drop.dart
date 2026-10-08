@@ -164,16 +164,22 @@ class _InboxConversationFileDropTargetState
       child: Stack(
         children: [
           widget.child,
-          if (_hovering)
-            Positioned.fill(
-              child: IgnorePointer(
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: _hovering && _dropEnabled ? 1 : 0,
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 140),
+                curve: Curves.easeOutCubic,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
                     color:
                         (widget.acceptsFiles
                                 ? DunesColors.resolve(
                                     context,
-                                    DunesColors.accent,
+                                    DunesColors.brandPurple,
                                     role: DunesColorRole.surface,
                                   )
                                 : DunesColors.resolve(
@@ -182,26 +188,25 @@ class _InboxConversationFileDropTargetState
                                     role: DunesColorRole.surface,
                                   ))
                             .withValues(alpha: 0.12),
-                    border: Border(
-                      left: BorderSide(
-                        color: widget.acceptsFiles
-                            ? DunesColors.resolve(
-                                context,
-                                DunesColors.accent,
-                                role: DunesColorRole.border,
-                              )
-                            : DunesColors.resolve(
-                                context,
-                                DunesColors.coral,
-                                role: DunesColorRole.border,
-                              ),
-                        width: 3,
-                      ),
+                    border: Border.all(
+                      color: widget.acceptsFiles
+                          ? DunesColors.resolve(
+                              context,
+                              DunesColors.brandPurple,
+                              role: DunesColorRole.border,
+                            )
+                          : DunesColors.resolve(
+                              context,
+                              DunesColors.coral,
+                              role: DunesColorRole.border,
+                            ),
+                      width: 1.5,
                     ),
                   ),
                 ),
               ),
             ),
+          ),
         ],
       ),
     );

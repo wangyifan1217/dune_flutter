@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/platform/desktop_features.dart';
+import '../../core/widgets/desktop_feedback_surface.dart';
+import '../../core/widgets/desktop_entrance.dart';
 import '../ai_summary/ai_summary_sparkle_icon.dart';
 import '../chat/group_composite_avatar.dart';
 import '../chat/user_avatar_widget.dart';
@@ -10,6 +13,7 @@ import '../conversation/conversation_service.dart';
 import '../nova/nova_icon.dart';
 import 'im_user_status.dart';
 import 'inbox_format.dart';
+import '../desktop/desktop_popover_dismissals.dart';
 import '../meeting/meeting_live_controller.dart';
 
 class ChatInboxHeader extends StatelessWidget {
@@ -49,6 +53,108 @@ class ChatInboxHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showStatusBadge = selfImStatus.showsBadge;
+    if (isDesktopCommOnly) {
+      return Container(
+        constraints: BoxConstraints(
+          minHeight:
+              68 +
+              (MediaQuery.textScalerOf(context).scale(16) - 16).clamp(0, 24),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
+        child: Row(
+          children: [
+            if (showNovaLeading && onOpenNova != null) ...[
+              Tooltip(
+                message: novaThinking ? '小饕正在思考' : '打开小饕',
+                child: _NovaEyesButton(onTap: onOpenNova!, unread: novaUnread),
+              ),
+              const SizedBox(width: 8),
+            ] else if (onQuickMeeting != null) ...[
+              _QuickMeetingButton(onTap: onQuickMeeting!),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '消息',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
+                    ),
+                  ),
+                  if (novaThinking)
+                    Text(
+                      '小饕正在思考',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: DunesTypography.sans(
+                        fontSize: 10.5,
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF07A957),
+                        ),
+                        context: context,
+                      ),
+                    ),
+                  if (showStatusBadge) ...[
+                    const SizedBox(height: 3),
+                    Tooltip(
+                      message: selfImStatus.def.label,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            selfImStatus.def.icon,
+                            size: 12,
+                            color: selfImStatus.def.color,
+                          ),
+                          const SizedBox(width: 3),
+                          Flexible(
+                            child: Text(
+                              selfImStatus.def.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: DunesTypography.sans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: selfImStatus.def.color,
+                                context: context,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            _InboxHeaderActions(
+              onOpenContacts: onOpenContacts,
+              onNewChat: onNewChat,
+              onOpenAiSummary: onOpenAiSummary,
+              onOpenDailyReport: onOpenDailyReport,
+              onOpenFavorites: onOpenFavorites,
+              onSelectImStatus: onSelectImStatus,
+              selfImStatus: selfImStatus,
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       color: Colors.transparent,
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
@@ -250,13 +356,17 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlay;
   bool _expanded = false;
+  final _triggerFocus = FocusNode(debugLabel: 'Inbox menu trigger');
+  final _menuFocus = FocusScopeNode(debugLabel: 'Inbox menu');
 
   /// APP / PC 统一用「···」下拉，避免手机右上角图标挤在一起。
   bool get _useCluster => true;
 
   @override
   void dispose() {
-    _removeOverlay();
+    _removeOverlay(restoreFocus: false, updateState: false);
+    _menuFocus.dispose();
+    _triggerFocus.dispose();
     super.dispose();
   }
 
@@ -268,18 +378,28 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
     }
   }
 
-  void _removeOverlay() {
+  void _removeOverlay({bool restoreFocus = true, bool updateState = true}) {
+    DesktopPopoverDismissals.remove(_dismissWithEscape);
     _overlay?.remove();
     _overlay = null;
-    if (_expanded && mounted) {
+    if (_expanded && mounted && updateState) {
       setState(() => _expanded = false);
     } else {
       _expanded = false;
     }
+    if (restoreFocus && isDesktopCommOnly && _triggerFocus.context != null) {
+      _triggerFocus.requestFocus();
+    }
   }
 
+  void _dismissWithEscape() => _removeOverlay();
+
+  Widget _focusMenu(Widget child) => isDesktopCommOnly
+      ? FocusScope(node: _menuFocus, autofocus: true, child: child)
+      : child;
+
   void _runAndClose(VoidCallback action) {
-    _removeOverlay();
+    _removeOverlay(restoreFocus: false);
     action();
   }
 
@@ -302,29 +422,31 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
               targetAnchor: Alignment.bottomRight,
               followerAnchor: Alignment.topRight,
               offset: const Offset(0, 6),
-              child: _InboxActionsDropdown(
-                showAiSummary: widget.onOpenAiSummary != null,
-                showDailyReport: widget.onOpenDailyReport != null,
-                showNewChat: widget.onNewChat != null,
-                showFavorites: widget.onOpenFavorites != null,
-                showSetStatus: widget.onSelectImStatus != null,
-                selfImStatus: widget.selfImStatus,
-                onAiSummary: widget.onOpenAiSummary == null
-                    ? null
-                    : () => _runAndClose(widget.onOpenAiSummary!),
-                onDailyReport: widget.onOpenDailyReport == null
-                    ? null
-                    : () => _runAndClose(widget.onOpenDailyReport!),
-                onContacts: () => _runAndClose(widget.onOpenContacts),
-                onNewChat: widget.onNewChat == null
-                    ? null
-                    : () => _runAndClose(widget.onNewChat!),
-                onFavorites: widget.onOpenFavorites == null
-                    ? null
-                    : () => _runAndClose(widget.onOpenFavorites!),
-                onSetStatus: widget.onSelectImStatus == null
-                    ? null
-                    : _openStatusPicker,
+              child: _focusMenu(
+                _InboxActionsDropdown(
+                  showAiSummary: widget.onOpenAiSummary != null,
+                  showDailyReport: widget.onOpenDailyReport != null,
+                  showNewChat: widget.onNewChat != null,
+                  showFavorites: widget.onOpenFavorites != null,
+                  showSetStatus: widget.onSelectImStatus != null,
+                  selfImStatus: widget.selfImStatus,
+                  onAiSummary: widget.onOpenAiSummary == null
+                      ? null
+                      : () => _runAndClose(widget.onOpenAiSummary!),
+                  onDailyReport: widget.onOpenDailyReport == null
+                      ? null
+                      : () => _runAndClose(widget.onOpenDailyReport!),
+                  onContacts: () => _runAndClose(widget.onOpenContacts),
+                  onNewChat: widget.onNewChat == null
+                      ? null
+                      : () => _runAndClose(widget.onNewChat!),
+                  onFavorites: widget.onOpenFavorites == null
+                      ? null
+                      : () => _runAndClose(widget.onOpenFavorites!),
+                  onSetStatus: widget.onSelectImStatus == null
+                      ? null
+                      : _openStatusPicker,
+                ),
               ),
             ),
           ],
@@ -332,6 +454,7 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
       },
     );
     overlay.insert(_overlay!);
+    if (isDesktopCommOnly) DesktopPopoverDismissals.add(_dismissWithEscape);
     setState(() => _expanded = true);
   }
 
@@ -362,12 +485,14 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
               targetAnchor: Alignment.bottomRight,
               followerAnchor: Alignment.topRight,
               offset: const Offset(0, 6),
-              child: _InboxStatusPicker(
-                currentStatus: widget.selfImStatus,
-                onSelect: (status) {
-                  _removeOverlay();
-                  widget.onSelectImStatus?.call(status);
-                },
+              child: _focusMenu(
+                _InboxStatusPicker(
+                  currentStatus: widget.selfImStatus,
+                  onSelect: (status) {
+                    _removeOverlay();
+                    widget.onSelectImStatus?.call(status);
+                  },
+                ),
               ),
             ),
           ],
@@ -375,6 +500,7 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
       },
     );
     overlay.insert(_overlay!);
+    if (isDesktopCommOnly) DesktopPopoverDismissals.add(_dismissWithEscape);
     setState(() => _expanded = true);
   }
 
@@ -388,10 +514,15 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
             AiSummarySparkleIcon(onTap: widget.onOpenAiSummary!),
           _IconBtn(
             icon: Icons.people_outline_rounded,
+            tooltip: '联系人',
             onTap: widget.onOpenContacts,
           ),
           if (widget.onNewChat != null)
-            _IconBtn(icon: Icons.edit_outlined, onTap: widget.onNewChat!),
+            _IconBtn(
+              icon: Icons.edit_outlined,
+              tooltip: '新建会话',
+              onTap: widget.onNewChat!,
+            ),
         ],
       );
     }
@@ -400,6 +531,8 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
       link: _layerLink,
       child: _IconBtn(
         icon: _expanded ? Icons.close_rounded : Icons.more_horiz_rounded,
+        tooltip: _expanded ? '关闭菜单' : '更多操作',
+        focusNode: isDesktopCommOnly ? _triggerFocus : null,
         onTap: _toggle,
       ),
     );
@@ -928,32 +1061,34 @@ class _InboxMenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: DunesColors.resolve(
-            context,
-            Colors.white,
-            role: DunesColorRole.surface,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x28000000),
-              blurRadius: 18,
-              offset: Offset(0, 8),
-            ),
-          ],
-          border: Border.all(
+    return DesktopEntrance(
+      child: Material(
+        color: Colors.transparent,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
             color: DunesColors.resolve(
               context,
-              const Color(0xFFECECEC),
-              role: DunesColorRole.border,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x28000000),
+                blurRadius: 18,
+                offset: Offset(0, 8),
+              ),
+            ],
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFECECEC),
+                role: DunesColorRole.border,
+              ),
             ),
           ),
+          child: IntrinsicWidth(child: child),
         ),
-        child: IntrinsicWidth(child: child),
       ),
     );
   }
@@ -1024,21 +1159,13 @@ class ChatInboxSearchBar extends StatelessWidget {
       child: Container(
         color: DunesColors.resolve(
           context,
-          const Color(0xFFF5F5F5),
+          isDesktopCommOnly ? Colors.white : const Color(0xFFF5F5F5),
           role: DunesColorRole.surface,
         ),
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        child: Container(
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: DunesColors.resolve(
-              context,
-              Colors.white,
-              role: DunesColorRole.surface,
-            ),
-            borderRadius: BorderRadius.circular(6),
-          ),
+        padding: isDesktopCommOnly
+            ? const EdgeInsets.fromLTRB(12, 4, 12, 10)
+            : const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: _InboxSearchChrome(
           child: onTap != null
               ? _InboxSearchTapTarget(hint: hint, onTap: onTap!)
               : Row(
@@ -1126,6 +1253,82 @@ class ChatInboxSearchBar extends StatelessWidget {
   }
 }
 
+class _InboxSearchChrome extends StatefulWidget {
+  const _InboxSearchChrome({required this.child});
+  final Widget child;
+  @override
+  State<_InboxSearchChrome> createState() => _InboxSearchChromeState();
+}
+
+class _InboxSearchChromeState extends State<_InboxSearchChrome> {
+  bool _hovered = false;
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isDesktopCommOnly) {
+      return Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: widget.child,
+      );
+    }
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (focused) => setState(() => _focused = focused),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: AnimatedContainer(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          height:
+              34 +
+              (MediaQuery.textScalerOf(context).scale(13) - 13).clamp(
+                0.0,
+                20.0,
+              ),
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          decoration: BoxDecoration(
+            color: _focused
+                ? Colors.white
+                : _hovered
+                ? const Color(0xFFEDEDED)
+                : const Color(0xFFF2F2F2),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _focused
+                  ? DunesColors.brandPurple.withValues(alpha: .55)
+                  : Colors.transparent,
+            ),
+            boxShadow: _focused
+                ? [
+                    BoxShadow(
+                      color: DunesColors.brandPurple.withValues(alpha: .08),
+                      blurRadius: 0,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : const [],
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
 class _InboxSearchTapTarget extends StatelessWidget {
   const _InboxSearchTapTarget({required this.hint, required this.onTap});
 
@@ -1136,23 +1339,33 @@ class _InboxSearchTapTarget extends StatelessWidget {
   Widget build(BuildContext context) {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: DesktopTapTarget(
+        showFeedback: false,
         onTap: onTap,
         child: Row(
           children: [
             Icon(
               Icons.search,
-              size: 17,
-              color: DunesColors.resolveNullable(context, Color(0xFFB2B2B2)),
+              size: isDesktopCommOnly ? 16 : 17,
+              color: DunesColors.resolveNullable(
+                context,
+                isDesktopCommOnly
+                    ? const Color(0xFF808080)
+                    : const Color(0xFFB2B2B2),
+              ),
             ),
-            const SizedBox(width: 6),
+            SizedBox(width: isDesktopCommOnly ? 8 : 6),
             Expanded(
               child: Text(
                 hint,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.resolve(context, const Color(0xFFB2B2B2)),
+                  color: DunesColors.resolve(
+                    context,
+                    isDesktopCommOnly
+                        ? const Color(0xFF808080)
+                        : const Color(0xFFB2B2B2),
+                  ),
                   context: context,
                 ),
               ),
@@ -1373,216 +1586,216 @@ class ChatInboxRow extends StatelessWidget {
         : DunesColors.resolve(context, DunesColors.coral);
     return Column(
       children: [
-        Material(
-          color: DunesColors.resolveNullable(
+        DesktopFeedbackSurface(
+          onTap: onTap,
+          selected: selected,
+          visualInset: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          backgroundColor: DunesColors.resolve(
             context,
             _rowBg,
             role: DunesColorRole.surface,
           ),
-          child: InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 52,
-                    height: 52,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        RepaintBoundary(
-                          child: OverflowBox(
-                            alignment: Alignment.center,
-                            maxWidth: 56,
-                            maxHeight: 56,
-                            child:
-                                robotAvatar ??
-                                _Avatar(
-                                  kind: kind,
-                                  initial: avatarInitial,
-                                  seed: avatarSeed,
-                                  showOnlineDot: showOnlineDot,
-                                  avatarPreset: avatarPreset,
-                                  avatarObjectKey: avatarObjectKey,
-                                  avatarUrl: avatarUrl,
-                                  avatarService: avatarService,
-                                  groupAvatarMembers: groupAvatarMembers,
-                                ),
-                          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 52,
+                  height: 52,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      RepaintBoundary(
+                        child: OverflowBox(
+                          alignment: Alignment.center,
+                          maxWidth: 56,
+                          maxHeight: 56,
+                          child:
+                              robotAvatar ??
+                              _Avatar(
+                                kind: kind,
+                                initial: avatarInitial,
+                                seed: avatarSeed,
+                                showOnlineDot: showOnlineDot,
+                                avatarPreset: avatarPreset,
+                                avatarObjectKey: avatarObjectKey,
+                                avatarUrl: avatarUrl,
+                                avatarService: avatarService,
+                                groupAvatarMembers: groupAvatarMembers,
+                              ),
                         ),
-                        if (unreadCount > 0)
-                          Positioned(
-                            right: -4,
-                            top: -5,
-                            child: _UnreadBadge(
-                              text: unreadText,
-                              color: unreadColor,
-                              mini: true,
-                            ),
-                          )
-                        else if (chatInboxMarkedUnreadDot(
-                          unreadCount: unreadCount,
-                          markedUnread: markedUnread,
-                        ))
-                          const Positioned(
-                            right: -1,
-                            top: -1,
-                            child: _MarkedUnreadDot(),
+                      ),
+                      if (unreadCount > 0)
+                        Positioned(
+                          right: -4,
+                          top: -5,
+                          child: _UnreadBadge(
+                            text: unreadText,
+                            color: unreadColor,
+                            mini: true,
                           ),
-                      ],
-                    ),
+                        )
+                      else if (chatInboxMarkedUnreadDot(
+                        unreadCount: unreadCount,
+                        markedUnread: markedUnread,
+                      ))
+                        const Positioned(
+                          right: -1,
+                          top: -1,
+                          child: _MarkedUnreadDot(),
+                        ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: DunesTypography.sans(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
-                                        letterSpacing: -0.01 * 15,
-                                        color: DunesColors.resolve(
-                                          context,
-                                          DunesColors.text,
-                                        ),
-                                        context: context,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: DunesTypography.sans(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: -0.01 * 15,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text,
                                       ),
+                                      context: context,
                                     ),
                                   ),
-                                  if (workgroupTag) ...[
-                                    const SizedBox(width: 6),
-                                    const WorkgroupTag(),
-                                  ],
-                                  if (ImUserStatusCatalog.showsBadge(
-                                    imStatus,
-                                  )) ...[
-                                    const SizedBox(width: 6),
-                                    ImStatusBadge(
-                                      status: imStatus!,
-                                      text: imStatusText ?? '',
-                                      iconKey: imStatusIcon ?? '',
-                                      color: imStatusColor ?? '',
+                                ),
+                                if (workgroupTag) ...[
+                                  const SizedBox(width: 6),
+                                  const WorkgroupTag(),
+                                ],
+                                if (ImUserStatusCatalog.showsBadge(
+                                  imStatus,
+                                )) ...[
+                                  const SizedBox(width: 6),
+                                  ImStatusBadge(
+                                    status: imStatus!,
+                                    text: imStatusText ?? '',
+                                    iconKey: imStatusIcon ?? '',
+                                    color: imStatusColor ?? '',
+                                  ),
+                                ],
+                                if (showAiMark) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 5,
+                                      vertical: 1,
                                     ),
-                                  ],
-                                  if (showAiMark) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
-                                        vertical: 1,
+                                    decoration: BoxDecoration(
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.accent,
+                                        role: DunesColorRole.surface,
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: DunesColors.resolve(
-                                          context,
-                                          DunesColors.accent,
-                                          role: DunesColorRole.surface,
-                                        ),
-                                        borderRadius: BorderRadius.circular(3),
-                                      ),
-                                      child: Text(
-                                        'AI',
-                                        style: DunesTypography.mono(
-                                          fontSize: 8.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: DunesColors.resolve(
-                                            context,
-                                            Colors.white,
-                                          ),
-                                          letterSpacing: 0.04 * 8.5,
-                                          context: context,
-                                        ),
-                                      ),
+                                      borderRadius: BorderRadius.circular(3),
                                     ),
-                                  ],
-                                  if (memberCount != null &&
-                                      memberCount! > 0) ...[
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '($memberCount)',
-                                      style: DunesTypography.sans(
-                                        fontSize: 11,
-                                        color: DunesColors.resolve(
-                                          context,
-                                          DunesColors.text3,
-                                        ),
-                                        context: context,
-                                      ),
-                                    ),
-                                  ],
-                                  if (subtitle != null &&
-                                      subtitle!.isNotEmpty) ...[
-                                    Text(
-                                      ' · ${subtitle!.toUpperCase()}',
+                                    child: Text(
+                                      'AI',
                                       style: DunesTypography.mono(
                                         fontSize: 8.5,
-                                        fontWeight: FontWeight.w500,
-                                        letterSpacing: 0.06 * 8.5,
+                                        fontWeight: FontWeight.w700,
                                         color: DunesColors.resolve(
                                           context,
-                                          DunesColors.text3,
+                                          Colors.white,
                                         ),
+                                        letterSpacing: 0.04 * 8.5,
                                         context: context,
                                       ),
                                     ),
-                                  ],
+                                  ),
                                 ],
+                                if (memberCount != null &&
+                                    memberCount! > 0) ...[
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '($memberCount)',
+                                    style: DunesTypography.sans(
+                                      fontSize: 11,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text3,
+                                      ),
+                                      context: context,
+                                    ),
+                                  ),
+                                ],
+                                if (subtitle != null &&
+                                    subtitle!.isNotEmpty) ...[
+                                  Text(
+                                    ' · ${subtitle!.toUpperCase()}',
+                                    style: DunesTypography.mono(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.06 * 8.5,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text3,
+                                      ),
+                                      context: context,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          if (timeLabel.isNotEmpty)
+                            Text(
+                              timeLabel,
+                              style: DunesTypography.sans(
+                                fontSize: 11,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                                context: context,
                               ),
                             ),
-                            if (timeLabel.isNotEmpty)
-                              Text(
-                                timeLabel,
-                                style: DunesTypography.sans(
-                                  fontSize: 11,
-                                  color: DunesColors.resolve(
-                                    context,
-                                    DunesColors.text3,
-                                  ),
-                                  context: context,
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        _PreviewLine(
-                          preview: preview,
-                          sysTag: sysTag,
-                          generating: previewGenerating,
-                          mentionLabel: mentionLabel,
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      _PreviewLine(
+                        preview: preview,
+                        sysTag: sysTag,
+                        generating: previewGenerating,
+                        mentionLabel: mentionLabel,
+                      ),
+                    ],
+                  ),
+                ),
+                if (muted)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Icon(
+                          Icons.notifications_off_outlined,
+                          size: 14,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  if (muted)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Icon(
-                            Icons.notifications_off_outlined,
-                            size: 14,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text3,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
+              ],
             ),
           ),
         ),
@@ -1590,7 +1803,7 @@ class ChatInboxRow extends StatelessWidget {
           ColoredBox(
             color: DunesColors.resolve(
               context,
-              _rowBg,
+              isDesktopCommOnly ? DunesColors.bgApp : _rowBg,
               role: DunesColorRole.surface,
             ),
             child: Padding(
@@ -2277,29 +2490,37 @@ class _Avatar extends StatelessWidget {
 }
 
 class _IconBtn extends StatelessWidget {
-  const _IconBtn({required this.icon, required this.onTap});
+  const _IconBtn({
+    required this.icon,
+    required this.onTap,
+    required this.tooltip,
+    this.focusNode,
+  });
 
   final IconData icon;
   final VoidCallback onTap;
+  final String tooltip;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 36,
-          height: 36,
-          child: Icon(
-            icon,
-            size: 20,
-            color: DunesColors.resolve(context, DunesColors.text2),
-          ),
+    final button = DesktopFeedbackSurface(
+      onTap: onTap,
+      focusNode: focusNode,
+      mobileBorder: const CircleBorder(),
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: Icon(
+          icon,
+          size: 20,
+          color: DunesColors.resolve(context, DunesColors.text2),
         ),
       ),
     );
+    return isDesktopCommOnly
+        ? Tooltip(message: tooltip, child: button)
+        : button;
   }
 }
 

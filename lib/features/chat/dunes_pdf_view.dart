@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
 
 import '../../core/platform/desktop_features.dart';
+import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 
 /// 跨平台 PDF 预览。
@@ -14,11 +15,7 @@ import '../../core/util/friendly_error.dart';
 /// Windows 不支持 [PdfViewPinch]。桌面端改为按 DPR/缩放倍率栅格化 PNG，
 /// 并提供放大缩小；移动端继续用 pinch。
 class DunesPdfView extends StatefulWidget {
-  const DunesPdfView({
-    super.key,
-    required this.bytes,
-    this.padding = 8,
-  });
+  const DunesPdfView({super.key, required this.bytes, this.padding = 8});
 
   final Uint8List bytes;
   final double padding;
@@ -76,8 +73,7 @@ class _DunesPdfViewState extends State<DunesPdfView> {
     if (oldDoc != null) unawaited(oldDoc.close());
     try {
       final bytes = Uint8List.fromList(widget.bytes);
-      if (bytes.length < 5 ||
-          String.fromCharCodes(bytes.take(5)) != '%PDF-') {
+      if (bytes.length < 5 || String.fromCharCodes(bytes.take(5)) != '%PDF-') {
         throw Exception('文件不是有效的 PDF');
       }
       final document = await PdfDocument.openData(bytes);
@@ -147,73 +143,80 @@ class _DunesPdfViewState extends State<DunesPdfView> {
   Widget _buildDesktopReader(PdfDocument document) {
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.equal, control: true):
-            () => _nudgeZoom(_zoomStep),
-        const SingleActivator(LogicalKeyboardKey.minus, control: true):
-            () => _nudgeZoom(-_zoomStep),
-        const SingleActivator(LogicalKeyboardKey.digit0, control: true):
-            () => _setZoom(1),
-        const SingleActivator(LogicalKeyboardKey.numpadAdd, control: true):
-            () => _nudgeZoom(_zoomStep),
-        const SingleActivator(LogicalKeyboardKey.numpadSubtract, control: true):
-            () => _nudgeZoom(-_zoomStep),
+        const SingleActivator(LogicalKeyboardKey.equal, control: true): () =>
+            _nudgeZoom(_zoomStep),
+        const SingleActivator(LogicalKeyboardKey.minus, control: true): () =>
+            _nudgeZoom(-_zoomStep),
+        const SingleActivator(LogicalKeyboardKey.digit0, control: true): () =>
+            _setZoom(1),
+        const SingleActivator(
+          LogicalKeyboardKey.numpadAdd,
+          control: true,
+        ): () =>
+            _nudgeZoom(_zoomStep),
+        const SingleActivator(
+          LogicalKeyboardKey.numpadSubtract,
+          control: true,
+        ): () =>
+            _nudgeZoom(-_zoomStep),
       },
       child: Focus(
         autofocus: true,
         child: Listener(
-      onPointerSignal: (signal) {
-        if (signal is! PointerScrollEvent) return;
-        if (!HardwareKeyboard.instance.isControlPressed) return;
-        _nudgeZoom(signal.scrollDelta.dy > 0 ? -_zoomStep : _zoomStep);
-      },
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final viewWidth = math.max(120.0, constraints.maxWidth);
-                final pageWidth = viewWidth * _zoom;
-                return Scrollbar(
-                  child: ListView.separated(
-                    padding: EdgeInsets.all(widget.padding),
-                    itemCount: _pageCount,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      return Align(
-                        alignment: Alignment.topCenter,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: _DesktopPdfPage(
-                            document: document,
-                            pageNumber: index + 1,
-                            aspect: _pageAspect,
-                            displayWidth: pageWidth,
-                            devicePixelRatio:
-                                MediaQuery.devicePixelRatioOf(context),
-                            renderLock: _enqueueRender,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
+          onPointerSignal: (signal) {
+            if (signal is! PointerScrollEvent) return;
+            if (!HardwareKeyboard.instance.isControlPressed) return;
+            _nudgeZoom(signal.scrollDelta.dy > 0 ? -_zoomStep : _zoomStep);
+          },
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final viewWidth = math.max(120.0, constraints.maxWidth);
+                    final pageWidth = viewWidth * _zoom;
+                    return Scrollbar(
+                      child: ListView.separated(
+                        padding: EdgeInsets.all(widget.padding),
+                        itemCount: _pageCount,
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          return Align(
+                            alignment: Alignment.topCenter,
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: _DesktopPdfPage(
+                                document: document,
+                                pageNumber: index + 1,
+                                aspect: _pageAspect,
+                                displayWidth: pageWidth,
+                                devicePixelRatio: MediaQuery.devicePixelRatioOf(
+                                  context,
+                                ),
+                                renderLock: _enqueueRender,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: _ZoomBar(
+                  zoom: _zoom,
+                  minZoom: _minZoom,
+                  maxZoom: _maxZoom,
+                  onZoomOut: () => _nudgeZoom(-_zoomStep),
+                  onZoomIn: () => _nudgeZoom(_zoomStep),
+                  onReset: () => _setZoom(1),
+                ),
+              ),
+            ],
           ),
-          Positioned(
-            right: 12,
-            bottom: 12,
-            child: _ZoomBar(
-              zoom: _zoom,
-              minZoom: _minZoom,
-              maxZoom: _maxZoom,
-              onZoomOut: () => _nudgeZoom(-_zoomStep),
-              onZoomIn: () => _nudgeZoom(_zoomStep),
-              onReset: () => _setZoom(1),
-            ),
-          ),
-        ],
-      ),
         ),
       ),
     );
@@ -247,7 +250,11 @@ class _ZoomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       elevation: 3,
-      color: Colors.white,
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(20),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -382,7 +389,10 @@ class _DesktopPdfPageState extends State<_DesktopPdfPage> {
             ? Center(
                 child: _loading
                     ? const CircularProgressIndicator(strokeWidth: 2)
-                    : Text('第 ${widget.pageNumber} 页加载失败'),
+                    : Text(
+                        '第 ${widget.pageNumber} 页加载失败',
+                        style: const TextStyle(color: Color(0xFF333333)),
+                      ),
               )
             : Image.memory(
                 bytes,

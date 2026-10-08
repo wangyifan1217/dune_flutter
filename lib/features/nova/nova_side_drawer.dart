@@ -1,3 +1,7 @@
+import '../../core/widgets/desktop_status_surface.dart';
+import '../../core/platform/desktop_features.dart';
+import '../../core/widgets/desktop_feedback_surface.dart';
+import '../../core/widgets/desktop_adaptive_panel.dart';
 import 'package:flutter/material.dart';
 
 import '../auth/auth_session.dart';
@@ -241,7 +245,7 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                     width: 44,
                     height: 44,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
+                    errorBuilder: (_, _, _) =>
                         _buildAvatarFallback(displayName),
                   )
                 : _buildAvatarFallback(displayName),
@@ -251,7 +255,7 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
 
         // 名字 + 向右细箭头
         Expanded(
-          child: InkWell(
+          child: _DrawerFeedback(
             onTap: () {},
             borderRadius: BorderRadius.circular(8),
             child: Column(
@@ -309,7 +313,7 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
         // 六角形齿轮/设置图标（图 2 右上角）
         Material(
           color: Colors.transparent,
-          child: InkWell(
+          child: _DrawerFeedback(
             onTap: () {
               _safeCloseDrawer();
               widget.onOpenKb?.call();
@@ -355,7 +359,7 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
     final affinity = _affinity;
     return Material(
       color: Colors.transparent,
-      child: InkWell(
+      child: _DrawerFeedback(
         onTap: () => _showAffinitySheet(affinity),
         borderRadius: BorderRadius.circular(16),
         child: Container(
@@ -534,7 +538,7 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
   }
 
   void _showAffinitySheet(NovaAffinitySnapshot affinity) {
-    showModalBottomSheet<void>(
+    showDesktopAdaptivePanel<void>(
       context: context,
       backgroundColor: DunesColors.resolve(
         context,
@@ -654,7 +658,7 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
             // 新建对话图标按钮（带加号的对话气泡图标）
             Material(
               color: Colors.transparent,
-              child: InkWell(
+              child: _DrawerFeedback(
                 onTap: () {
                   _safeCloseDrawer();
                   widget.onNewChat();
@@ -706,28 +710,35 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
         const SizedBox(height: 12),
 
         if (_loading)
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: DunesColors.resolve(context, Color(0xFF6B3FE2)),
+          DesktopStatusSurface(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: DunesColors.resolve(context, Color(0xFF6B3FE2)),
+                  ),
                 ),
               ),
             ),
           )
         else if (_historyItems.isEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            alignment: Alignment.center,
-            child: Text(
-              '暂无历史对话',
-              style: TextStyle(
-                fontSize: 12.5,
-                color: DunesColors.resolveNullable(context, Color(0xFF86909C)),
+          DesktopStatusSurface(
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              alignment: Alignment.center,
+              child: Text(
+                '暂无历史对话',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF86909C),
+                  ),
+                ),
               ),
             ),
           )
@@ -783,7 +794,8 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                 )
               : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
-          child: InkWell(
+          child: _DrawerFeedback(
+            selected: isNewCurrent,
             onTap: () {
               _safeCloseDrawer();
               widget.onNewChat();
@@ -893,7 +905,8 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                   )
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
-            child: InkWell(
+            child: _DrawerFeedback(
+              selected: isCurrent,
               onTap: () {
                 _safeCloseDrawer();
                 widget.onOpenConversation(
@@ -962,4 +975,26 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
 
     return widgets;
   }
+}
+
+class _DrawerFeedback extends StatelessWidget {
+  const _DrawerFeedback({
+    required this.child,
+    required this.onTap,
+    required this.borderRadius,
+    this.selected = false,
+  });
+  final Widget child;
+  final VoidCallback? onTap;
+  final BorderRadius borderRadius;
+  final bool selected;
+  @override
+  Widget build(BuildContext context) => isDesktopCommOnly
+      ? DesktopFeedbackSurface(
+          onTap: onTap,
+          selected: selected,
+          borderRadius: borderRadius,
+          child: child,
+        )
+      : InkWell(onTap: onTap, borderRadius: borderRadius, child: child);
 }

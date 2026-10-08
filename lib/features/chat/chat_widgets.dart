@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/layout/chat_layout.dart';
+import '../../core/platform/desktop_features.dart';
+import '../../core/widgets/desktop_feedback_surface.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import 'chat_file_type_icon.dart';
@@ -48,8 +50,18 @@ class ChatConvHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final nightApp =
+        !isDesktopCommOnly && Theme.of(context).brightness == Brightness.dark;
+    final subtitleTypography = nightApp
+        ? DunesTypography.sans
+        : DunesTypography.mono;
     return Container(
-      padding: EdgeInsets.fromLTRB(showBackButton ? 4 : 12, 8, 8, 10),
+      constraints: isDesktopCommOnly
+          ? const BoxConstraints(minHeight: 68)
+          : null,
+      padding: isDesktopCommOnly
+          ? EdgeInsets.fromLTRB(showBackButton ? 8 : 20, 11, 16, 11)
+          : EdgeInsets.fromLTRB(showBackButton ? 4 : 12, 8, 8, 10),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
@@ -76,7 +88,7 @@ class ChatConvHeader extends StatelessWidget {
             ),
           if (leadingAvatar != null) ...[
             GestureDetector(onTap: onTapTitle, child: leadingAvatar!),
-            const SizedBox(width: 8),
+            SizedBox(width: isDesktopCommOnly ? 12 : 8),
           ],
           Expanded(
             child: GestureDetector(
@@ -93,7 +105,7 @@ class ChatConvHeader extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: DunesTypography.sans(
-                            fontSize: 15.5,
+                            fontSize: isDesktopCommOnly ? 16 : 15.5,
                             fontWeight: FontWeight.w600,
                             letterSpacing: -0.01 * 15.5,
                             color: DunesColors.resolve(
@@ -138,13 +150,13 @@ class ChatConvHeader extends StatelessWidget {
                           subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: DunesTypography.mono(
-                            fontSize: 9.5,
+                          style: subtitleTypography(
+                            fontSize: isDesktopCommOnly || nightApp ? 11 : 9.5,
                             color: DunesColors.resolve(
                               context,
                               DunesColors.text3,
                             ),
-                            letterSpacing: 0.04 * 9.5,
+                            letterSpacing: isDesktopCommOnly ? 0 : 0.04 * 9.5,
                             context: context,
                           ),
                         ),
@@ -155,7 +167,15 @@ class ChatConvHeader extends StatelessWidget {
               ),
             ),
           ),
-          ...actions,
+          if (isDesktopCommOnly) const SizedBox(width: 12),
+          ...actions.map(
+            (action) => isDesktopCommOnly
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: action,
+                  )
+                : action,
+          ),
         ],
       ),
     );
@@ -266,11 +286,16 @@ class ChatQuickActions extends StatelessWidget {
                         ? '${c.label}（${c.hint}）'
                         : c.label,
                     waitDuration: const Duration(milliseconds: 400),
-                    child: InkWell(
+                    child: DesktopFeedbackSurface(
                       borderRadius: BorderRadius.circular(10),
                       onTap: c.onTap,
                       child: SizedBox(
-                        height: 46,
+                        height: isDesktopCommOnly
+                            ? 46 +
+                                  (MediaQuery.textScalerOf(context).scale(9.5) -
+                                          9.5)
+                                      .clamp(0, 20)
+                            : 46,
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -806,22 +831,7 @@ class _PcComposerBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: height,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: DunesColors.resolve(
-            context,
-            const Color(0xFFFFFEFF),
-            role: DunesColorRole.surface,
-          ),
-          borderRadius: BorderRadius.circular(7),
-          border: Border.all(
-            color: DunesColors.resolve(
-              context,
-              const Color(0xFFE3DCEE),
-              role: DunesColorRole.border,
-            ),
-          ),
-        ),
+      child: _ComposerChrome(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -845,7 +855,9 @@ class _PcComposerBox extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              padding: isDesktopCommOnly
+                  ? const EdgeInsets.fromLTRB(12, 0, 12, 10)
+                  : const EdgeInsets.fromLTRB(8, 0, 8, 8),
               child: Align(
                 alignment: Alignment.centerRight,
                 child: Material(
@@ -856,8 +868,13 @@ class _PcComposerBox extends StatelessWidget {
                         ? onStop
                         : (interactionLocked ? null : onSend),
                     child: Ink(
-                      width: 56,
-                      height: 32,
+                      width: isDesktopCommOnly ? 64 : 56,
+                      height: isDesktopCommOnly
+                          ? 32 +
+                                (MediaQuery.textScalerOf(context).scale(13) -
+                                        13)
+                                    .clamp(0, 20)
+                          : 32,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(6),
                         color: showStop
@@ -919,6 +936,67 @@ class _PcComposerBox extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Observe descendant focus without replacing the text field's focus node.
+class _ComposerChrome extends StatefulWidget {
+  const _ComposerChrome({required this.child});
+  final Widget child;
+
+  @override
+  State<_ComposerChrome> createState() => _ComposerChromeState();
+}
+
+class _ComposerChromeState extends State<_ComposerChrome> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final desktop = isDesktopCommOnly;
+    final border = DunesColors.resolve(
+      context,
+      desktop ? DunesColors.borderSoft : const Color(0xFFE3DCEE),
+      role: DunesColorRole.border,
+    );
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (value) {
+        if (_focused != value) setState(() => _focused = value);
+      },
+      child: AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFFFFEFF),
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(desktop ? 12 : 7),
+          border: Border.all(
+            color: desktop && _focused
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: .45)
+                : border,
+          ),
+          boxShadow: desktop && _focused
+              ? [
+                  BoxShadow(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: .06),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : const [],
+        ),
+        child: widget.child,
       ),
     );
   }

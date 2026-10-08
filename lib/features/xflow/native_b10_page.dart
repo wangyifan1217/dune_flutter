@@ -208,12 +208,12 @@ class _NativeB10PageState extends State<NativeB10Page> {
       if (!mounted) return;
       setState(() => _pendingTotal = queue.total);
 
-      final XflowProposalItem? next = afterDecision
-          ? queue.firstOrNull
-          : queue.nextAfter(
-              businessType: 'PROPOSAL',
-              businessId: widget.proposalId,
-            );
+      final XflowProposalItem? next = ApprovalSkipTail.pick(
+        items: queue.items,
+        businessType: 'PROPOSAL',
+        businessId: widget.proposalId,
+        afterDecision: afterDecision,
+      );
 
       if (next == null) {
         showDunesToast(context, '没有未审批的内容了');

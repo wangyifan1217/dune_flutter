@@ -160,12 +160,12 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
       if (!mounted) return;
       setState(() => _pendingTotal = queue.total);
 
-      final XflowProposalItem? next = afterDecision
-          ? queue.firstOrNull
-          : queue.nextAfter(
-              businessType: widget.businessType,
-              businessId: widget.businessId,
-            );
+      final XflowProposalItem? next = ApprovalSkipTail.pick(
+        items: queue.items,
+        businessType: widget.businessType,
+        businessId: widget.businessId,
+        afterDecision: afterDecision,
+      );
 
       if (next == null) {
         showDunesToast(context, '没有未审批的内容了');

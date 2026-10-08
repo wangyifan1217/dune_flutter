@@ -1398,9 +1398,10 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
               compact ? 10 : 16,
               compact ? 10 : 14,
             ),
+            // PC 列表默认铺满整个内容区（和灯塔一样），不再限宽 1180 居中。
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1180),
+                constraints: const BoxConstraints(maxWidth: double.infinity),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

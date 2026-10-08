@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../lighthouse/lighthouse_theme.dart' show LhColors, LhTypography;
 import 'proposal_cost_estimate.dart';
 import 'proposal_intake_models.dart';
 import 'proposal_intake_ui.dart';
@@ -89,7 +90,27 @@ class ProposalEstimateSummaryData {
     this.turnoverTimes,
     this.skuCount = 0,
     this.faceRange = '',
+    this.product = '',
+    this.channel = '',
+    this.channelFromSku = false,
+    this.channelKey = 'skuDetails',
+    this.platform = '',
   });
+
+  /// 科技部「τ-标签一」的简称（如 三桶油），放在年化利润下面。
+  final String platform;
+
+  /// 渠道取自各产品的渠道分类 / 渠道名（科技部 SKU），点它跳科技部 SKU 清单。
+  final bool channelFromSku;
+
+  /// 点「渠道 · 标签三」跳到科技部的哪一行：所有产品渠道分类相同 → SKU 共同项；否则 → SKU 清单（自动展开）。
+  final String channelKey;
+
+  /// 市场部「产品（标签一）」。
+  final String product;
+
+  /// 渠道（标签三）：市场部渠道，没有时取各产品的渠道分类 / 渠道名。
+  final String channel;
 
   /// 任务评级 S/A/B/C，没有年化规模时为「—」。
   final String rating;
@@ -195,11 +216,18 @@ class ProposalEstimateSummary extends StatelessWidget {
       'productSalesSettle',
       '财务部 · 产品结算',
     ),
-    '收入': (
+    '收入': (ProposalIntakeNavSection.finance, 'revenue', '财务部 · 收入'),
+    '月均规模': (ProposalIntakeNavSection.market, 'salesScale', '市场部 · 规模'),
+    '利润': (ProposalIntakeNavSection.finance, 'profit', '财务部 · 利润'),
+    '月均利润': (ProposalIntakeNavSection.finance, 'profit', '财务部 · 利润'),
+    '毛利率': (ProposalIntakeNavSection.finance, 'margin', '财务部 · 毛利率'),
+    '电子券采购': (
       ProposalIntakeNavSection.finance,
-      'productSalesSettle',
-      '财务部 · 产品结算',
+      'couponProcurementCost',
+      '财务部 · 电子券采购成本',
     ),
+    '成本合计': (ProposalIntakeNavSection.finance, 'costItems', '财务部 · 项目成本'),
+    '成本率': (ProposalIntakeNavSection.finance, 'costItems', '财务部 · 项目成本'),
     '售价': (
       ProposalIntakeNavSection.finance,
       'productSalesSettle',
@@ -208,8 +236,8 @@ class ProposalEstimateSummary extends StatelessWidget {
     '项目成本': (ProposalIntakeNavSection.finance, 'costItems', '财务部 · 项目成本'),
     '业务成本': (
       ProposalIntakeNavSection.finance,
-      'operatingCost',
-      '财务部 · 其他成本',
+      'businessCost',
+      '财务部 · 业务成本',
     ),
     '周转资金': (
       ProposalIntakeNavSection.finance,
@@ -654,7 +682,7 @@ class ProposalFlowCard extends StatelessWidget {
     final note = current.isNotEmpty
         ? '卡 · ${current.map((s) => s.name.isEmpty ? s.role : s.name).join('、')}'
         : (allDone ? '${visible.length}/${visible.length} 已通过' : '');
-    final noteColor = current.isNotEmpty ? const Color(0xFFB4570F) : _C.green;
+    final noteColor = current.isNotEmpty ? const Color(0xFF6B4FD8) : _C.green;
     TextStyle style(double size, Color color, {FontWeight? weight, bool mono = false}) =>
         TextStyle(
           fontSize: size,
@@ -681,13 +709,11 @@ class ProposalFlowCard extends StatelessWidget {
           false,
         ),
         // 原型格子里只放短值（✓ / 18/21 / 待你 / —）；长提示放到悬停里。
+        // 进行中：浅紫底 + 细紫边 + 「● 进行中」小字，不再用橙色粗框。
         ProposalIntakeProgressState.current => (
-          const Color(0xFFFDF2E6),
-          step.statusText.trim().isNotEmpty &&
-                  step.statusText.trim().runes.length <= 5
-              ? step.statusText.trim()
-              : '进行中',
-          const Color(0xFFB4570F),
+          const Color(0xFFF7F5FD),
+          '● ${step.statusText.trim().isNotEmpty && step.statusText.trim().runes.length <= 5 ? step.statusText.trim() : '进行中'}',
+          const Color(0xFF6B4FD8),
           true,
         ),
         ProposalIntakeProgressState.rejected => (
@@ -719,10 +745,9 @@ class ProposalFlowCard extends StatelessWidget {
               ? Border.all(
                   color: DunesColors.resolve(
                     context,
-                    const Color(0xFFE8A866),
+                    const Color(0xFFDCD3F5),
                     role: DunesColorRole.border,
                   ),
-                  width: 1.5,
                 )
               : null,
         ),
@@ -731,7 +756,14 @@ class ProposalFlowCard extends StatelessWidget {
           children: [
             rich(labels[step.id] ?? step.role, style(11, _C.label)),
             const SizedBox(height: 1),
-            rich(value, style(14, color, weight: FontWeight.w700, mono: true)),
+            rich(
+              value,
+              ring
+                  // 行高对齐其他格子（14 × 1.3），格子一样高。
+                  ? style(12, color, weight: FontWeight.w600)
+                        .copyWith(height: 14 * 1.3 / 12)
+                  : style(14, color, weight: FontWeight.w700, mono: true),
+            ),
             const SizedBox(height: 1),
             rich(sub.isEmpty ? ' ' : sub, style(10, _C.text2)),
           ],
@@ -829,6 +861,27 @@ class _Bar {
 class _CompactEstimateState extends State<_CompactEstimate> {
   String _selected = '收入（利差）';
 
+  /// 下面规模 / 成本 / 利润里被点中的那一格（同灯塔：点格子，上面的图跟着换）。
+  String? _activeCell;
+
+  /// 每一格对应「测算合计」里的哪张图。
+  static const _cellMetric = {
+    '年化规模': '年化规模',
+    '月均规模': '月均规模',
+    '售价': '收入（利差）',
+    'SKU': '年化规模',
+    '成本合计': '项目成本',
+    '项目成本': '项目成本',
+    '业务成本': '项目成本',
+    '周转资金': '周转资金',
+    '利润': '利润',
+    '月均利润': '月均规模',
+    '收入': '收入（利差）',
+    '电子券采购': '收入（利差）',
+    '毛利率': '利润',
+    '成本率': '项目成本',
+  };
+
   ProposalEstimateSummary get _s => widget.summary;
   ProposalEstimateSummaryData get _d => widget.summary.data;
 
@@ -874,10 +927,118 @@ class _CompactEstimateState extends State<_CompactEstimate> {
 
   // ---------- 上左：年化利润（小） ----------
 
+  /// 年化利润卡上方的一行标签：「产品」小灰字在上，值在下（最多两行，放不下缩小）。
+  /// 一行标签：左边实心色块图标，右边小字名称 + 粗体值；能点时整行可点，跳到出处。
+  Widget _tagRow({
+    required IconData icon,
+    required Color accent,
+    required String label,
+    required String value,
+    VoidCallback? onTap,
+    Key? key,
+  }) {
+    // 手机（小屏如 iPhone 14 约 110 宽的卡）：图标 16、名称 8.5、值 11，值最多两行。
+    final chip = _compact ? 16.0 : 22.0;
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: chip,
+          height: chip,
+          margin: const EdgeInsets.only(top: 1),
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              context,
+              accent,
+              role: DunesColorRole.surface,
+            ),
+            borderRadius: BorderRadius.circular(_compact ? 5 : 6),
+          ),
+          child: Icon(
+            icon,
+            size: _compact ? 10 : 13,
+            color: DunesColors.resolve(context, Colors.white),
+          ),
+        ),
+        SizedBox(width: _compact ? 5 : 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: _t(label, size: _compact ? 8.5 : 10, color: _C.grey),
+              ),
+              const SizedBox(height: 1),
+              _t(
+                value.isEmpty ? '未填写' : value,
+                size: _compact ? 11 : 13.5,
+                weight: FontWeight.w700,
+                color: value.isEmpty ? _C.grey : const Color(0xFF2A2638),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (onTap == null) return row;
+    return Tooltip(
+      message: '点一下跳到填报内容里的出处',
+      child: InkWell(
+        key: key,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: row,
+      ),
+    );
+  }
+
+  /// 白底小卡（同之前的「产品 / 渠道」样式），里面一行或几行标签，行间一根细线。
+  Widget _tagCard(List<Widget> rows) {
+    return Container(
+      padding: EdgeInsets.all(_compact ? 6 : 9),
+      decoration: BoxDecoration(
+        color: _bg(Colors.white),
+        border: Border.all(color: _ln(_C.heroBorder)),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F3C2878),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0)
+              Container(
+                height: 1,
+                margin: EdgeInsets.symmetric(vertical: _compact ? 5 : 8),
+                color: _ln(const Color(0xFFEFECF6)),
+              ),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+
+  VoidCallback? _jump(ProposalIntakeNavSection section, String key) {
+    final open = _s.onOpenField;
+    return open == null ? null : () => open(section, key);
+  }
+
   Widget _hero({required bool stretch}) {
     final d = _d;
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(_compact ? 7 : 10),
       decoration: BoxDecoration(
         color: _bg(_C.heroBg),
         border: Border.all(color: _ln(_C.heroBorder)),
@@ -886,33 +1047,58 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            height: 26,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: _bg(_C.heroPill),
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.show_chart,
-                  size: 13,
-                  color: DunesColors.resolve(context, _C.heroInk),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _t(
+          // 上：产品（标签一）、渠道（标签三）白底小卡，点一行跳到出处；
+          // 中：「年化利润」+ 利润、毛利率、算式，靠左；底：评级。
+          if (d.product.isNotEmpty || d.channel.isNotEmpty)
+            _tagCard([
+              _tagRow(
+                key: const ValueKey('proposal-estimate-product'),
+                icon: Icons.sell_rounded,
+                accent: _C.purple,
+                label: '产品 · 标签一',
+                value: d.product,
+                onTap: _jump(ProposalIntakeNavSection.market, 'product'),
+              ),
+              _tagRow(
+                key: const ValueKey('proposal-estimate-channel'),
+                icon: Icons.hub_rounded,
+                accent: const Color(0xFF4A83C4),
+                label: '渠道 · 标签三',
+                value: d.channel,
+                // 标签三（渠道分类）填在科技部各产品里。
+                onTap: _jump(ProposalIntakeNavSection.tech, d.channelKey),
+              ),
+            ]),
+          if (stretch) const Spacer() else const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              height: _compact ? 22 : 26,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: _bg(_C.heroPill),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.show_chart,
+                    size: _compact ? 12 : 13,
+                    color: DunesColors.resolve(context, _C.heroInk),
+                  ),
+                  const SizedBox(width: 5),
+                  _t(
                     _compact ? '年化利润' : '年化利润 · 测算',
                     size: _compact ? 11 : 12,
                     weight: FontWeight.w700,
                     color: _C.heroInk,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           _t(
             proposalEstimateWan(d.profit),
             // 手机上大数长了（如 12,345.0）收一档，免得被省略。
@@ -1048,14 +1234,19 @@ class _CompactEstimateState extends State<_CompactEstimate> {
 
   Widget _metricRow((String, String, String, Color) m, {bool tight = false}) {
     final active = m.$1 == _selected;
+    // 手机（tight）：和 PC 一样一行写全「名称 · 数值 · 小注」，不省略名称，只把字号整体调小；
+    // 名称再放不下就按比例缩小，不出现「…」。
     return InkWell(
       key: ValueKey('proposal-estimate-metric-${m.$1}'),
-      onTap: () => setState(() => _selected = m.$1),
+      onTap: () => setState(() {
+        _selected = m.$1;
+        _activeCell = null;
+      }),
       borderRadius: BorderRadius.circular(6),
       child: Container(
         padding: EdgeInsets.symmetric(
           horizontal: tight ? 5 : 8,
-          vertical: tight ? 5 : 6,
+          vertical: tight ? 4 : 6,
         ),
         decoration: BoxDecoration(
           color: active ? _bg(const Color(0xFFF1ECFF)) : null,
@@ -1064,35 +1255,58 @@ class _CompactEstimateState extends State<_CompactEstimate> {
         child: Row(
           children: [
             Container(
-              width: 10,
+              width: tight ? 8 : 10,
               height: 2,
               color: DunesColors.resolve(context, active ? _C.purple : m.$4),
             ),
-            const SizedBox(width: 6),
+            SizedBox(width: tight ? 4 : 6),
             Expanded(
-              child: _t(
-                tight && m.$1 == '收入（利差）' ? '收入' : m.$1,
-                size: tight ? 10 : 12,
-                weight: active ? FontWeight.w700 : FontWeight.w400,
-                color: active ? const Color(0xFF3F2A9A) : _C.ink,
-              ),
+              child: tight
+                  ? FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: _t(
+                        m.$1,
+                        size: 10,
+                        weight: active ? FontWeight.w700 : FontWeight.w400,
+                        color: active ? const Color(0xFF3F2A9A) : _C.ink,
+                      ),
+                    )
+                  : _t(
+                      m.$1,
+                      size: 12,
+                      weight: active ? FontWeight.w700 : FontWeight.w400,
+                      color: active ? const Color(0xFF3F2A9A) : _C.ink,
+                    ),
             ),
+            const SizedBox(width: 4),
             _t(
               m.$2,
-              size: tight ? 11 : 12,
+              size: tight ? 10.5 : 12,
               weight: FontWeight.w700,
               mono: true,
               color: m.$1 == '利润' ? _C.red : _C.ink,
             ),
             SizedBox(
-              width: tight ? 34 : 50,
-              child: _t(
-                m.$3,
-                size: tight ? 8.5 : 10,
-                color: _C.grey,
-                mono: true,
-                align: TextAlign.right,
-              ),
+              width: tight ? 40 : 50,
+              child: tight
+                  ? FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: _t(
+                        m.$3,
+                        size: 8.5,
+                        color: _C.grey,
+                        mono: true,
+                      ),
+                    )
+                  : _t(
+                      m.$3,
+                      size: 10,
+                      color: _C.grey,
+                      mono: true,
+                      align: TextAlign.right,
+                    ),
             ),
           ],
         ),
@@ -1154,7 +1368,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (var i = 0; i < bars.length; i++) ...[
-                if (i > 0) const SizedBox(width: 18),
+                if (i > 0) SizedBox(width: _compact ? 10 : 18),
                 Expanded(child: column(bars[i])),
               ],
             ],
@@ -1164,14 +1378,18 @@ class _CompactEstimateState extends State<_CompactEstimate> {
         Row(
           children: [
             for (var i = 0; i < bars.length; i++) ...[
-              if (i > 0) const SizedBox(width: 18),
+              if (i > 0) SizedBox(width: _compact ? 10 : 18),
               Expanded(
-                child: _t(
-                  bars[i].label,
-                  size: 10,
-                  color: _C.text2,
-                  mono: true,
-                  align: TextAlign.center,
+                // 名称写全，放不下就缩小字号，不省略。
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: _t(
+                    bars[i].label,
+                    size: 10,
+                    color: _C.text2,
+                    mono: true,
+                    align: TextAlign.center,
+                  ),
                 ),
               ),
             ],
@@ -1189,30 +1407,24 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       (m) => m.$1 == _selected,
       orElse: () => metrics[1],
     );
-    final open = _s._openerFor(selected.$1, null);
-    final source = ProposalEstimateSummary._sources[selected.$1];
+    // 「来自 xx ›」：点了下面某一格就指向那一格的出处，否则指向选中的指标。
+    final sourceKey =
+        _activeCell != null &&
+            ProposalEstimateSummary._sources.containsKey(_activeCell)
+        ? _activeCell!
+        : selected.$1;
+    final open = _s._openerFor(sourceKey, null);
+    final source = ProposalEstimateSummary._sources[sourceKey];
     final (bars, caption) = _barsFor(selected.$1);
     final list = sideBySide
         ? Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [for (final m in metrics) _metricRow(m)],
           )
+        // 窄（手机）：同样一列六行，字号小一档，放在柱状图上面。
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < metrics.length; i += 2)
-                Row(
-                  children: [
-                    Expanded(child: _metricRow(metrics[i], tight: true)),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: i + 1 < metrics.length
-                          ? _metricRow(metrics[i + 1], tight: true)
-                          : const SizedBox.shrink(),
-                    ),
-                  ],
-                ),
-            ],
+            children: [for (final m in metrics) _metricRow(m, tight: true)],
           );
     final chart = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1301,6 +1513,9 @@ class _CompactEstimateState extends State<_CompactEstimate> {
 
   // ---------- 下：规模 / 成本 / 利润（灯塔产品汇总样式） ----------
 
+  /// 一格：照灯塔 Hero 卡片格 —— 名称 + 灰箭头 / 数字 + 单位 / 小注，三行。
+  /// 字体、字号、颜色直接用灯塔的 LhTypography / LhColors。
+  /// 放不下的字按比例缩小，不省略。
   Widget _cell(
     String label,
     String value,
@@ -1309,62 +1524,167 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     Color color = _C.ink,
     bool divider = true,
   }) {
-    final open = _s._openerFor(label, null);
-    final body = Container(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
-        border: divider
-            ? Border(bottom: BorderSide(color: _ln(_C.cellLine)))
-            : null,
-      ),
+    final mute = DunesColors.resolve(context, LhColors.mute);
+    final mute2 = DunesColors.resolve(context, LhColors.mute2);
+    final empty = value == '—';
+    // 来自填报内容的格子有出处，可以跳下去。
+    final source = ProposalEstimateSummary._sources[label];
+    final jump = source == null ? null : _s._openerFor(label, null);
+    Widget fit(Widget child) => FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: child,
+    );
+    final body = Padding(
+      padding: const EdgeInsets.fromLTRB(4, 3, 2, 3),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _t(
-            label,
-            size: _compact ? 10 : 11,
-            color: _C.text2,
-            tail: [
-              TextSpan(
-                text: ' →',
-                style: _st(
-                  size: _compact ? 10 : 11,
-                  color: open == null ? _C.grey : _C.link,
-                  weight: open == null ? FontWeight.w400 : FontWeight.w700,
+          // 名称行：点格子 = 上面柱状图切过去；右边紫色小圆钮 = 跳到填报内容里的出处。
+          Row(
+            children: [
+              Expanded(
+                child: fit(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        style: LhTypography.sans(
+                          size: 10,
+                          color: mute,
+                          weight: FontWeight.w500,
+                          letterSpacing: 0,
+                          height: 1.1,
+                          context: context,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 11,
+                        color: _cellMetric.containsKey(label)
+                            ? mute2
+                            : mute2.withAlpha(120),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          _t(
-            value,
-            size: _compact ? 13 : 15,
-            weight: FontWeight.w700,
-            mono: true,
-            color: value == '—' ? _C.grey : color,
-            tail: [
-              if (unit.isNotEmpty && value != '—')
-                TextSpan(
-                  text: unit,
-                  style: _st(size: _compact ? 8.5 : 9, color: _C.text2),
+              if (jump != null)
+                Tooltip(
+                  message: '跳到填报内容：${source!.$3}',
+                  child: InkWell(
+                    key: ValueKey('proposal-estimate-jump-$label'),
+                    onTap: jump,
+                    customBorder: const CircleBorder(),
+                    child: Container(
+                      width: _compact ? 16 : 18,
+                      height: _compact ? 16 : 18,
+                      decoration: BoxDecoration(
+                        color: _bg(const Color(0xFFF1ECFF)),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.south_east_rounded,
+                        size: _compact ? 10 : 11,
+                        color: DunesColors.resolve(context, _C.purple),
+                      ),
+                    ),
+                  ),
                 ),
             ],
           ),
-          if (sub.isNotEmpty) ...[
-            const SizedBox(height: 1),
-            _t(sub, size: _compact ? 9 : 10, color: _C.grey, mono: true, maxLines: 2),
-          ],
+          const SizedBox(height: 3),
+          fit(
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: value,
+                    style: LhTypography.number(
+                      size: 13,
+                      color: DunesColors.resolve(
+                        context,
+                        empty ? LhColors.mute2 : color,
+                      ),
+                      context: context,
+                    ),
+                  ),
+                  if (unit.isNotEmpty && !empty)
+                    TextSpan(
+                      text: unit,
+                      style: LhTypography.sans(
+                        size: 8.5,
+                        color: mute,
+                        weight: FontWeight.w500,
+                        context: context,
+                      ),
+                    ),
+                ],
+              ),
+              maxLines: 1,
+            ),
+          ),
+          const SizedBox(height: 3),
+          fit(
+            Text(
+              sub.isEmpty ? '—' : sub,
+              maxLines: 1,
+              style: LhTypography.mono(
+                size: 9,
+                color: sub.isEmpty ? mute2 : mute,
+                weight: FontWeight.w600,
+                height: 1.0,
+                letterSpacing: 0.2,
+                context: context,
+              ),
+            ),
+          ),
         ],
       ),
     );
-    if (open == null) return body;
-    final source = ProposalEstimateSummary._sources[label];
-    return Tooltip(
-      message: source == null ? '点击查看出处' : '来自 ${source.$3}，点击查看',
-      child: InkWell(onTap: open, child: body),
+    // 同灯塔：点一格，上面「测算合计」切到对应的图，这一格浮起（白底 + 淡紫边）；
+    // 出处在图上方的「来自 xx ›」里点。
+    final metric = _cellMetric[label];
+    if (metric == null) return body;
+    final active = _activeCell == label;
+    return InkWell(
+      key: ValueKey('proposal-estimate-cell-$label'),
+      onTap: () => setState(() {
+        _selected = metric;
+        _activeCell = label;
+      }),
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        decoration: BoxDecoration(
+          color: active ? _bg(Colors.white) : Colors.transparent,
+          border: Border.all(
+            color: active
+                ? _ln(const Color(0xFF6B4FD8)).withAlpha(46)
+                : Colors.transparent,
+          ),
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: active
+              ? const [
+                  BoxShadow(
+                    color: Color(0x1C3F2A9A),
+                    blurRadius: 6,
+                    offset: Offset(0, 1.5),
+                  ),
+                ]
+              : null,
+        ),
+        child: body,
+      ),
     );
   }
 
+  /// 一块：照灯塔「产品汇总」面板 —— 规模 / 成本 灰白底，利润 淡蓝底；
+  /// 标题是线条图标 + 深灰字（利润的图标用结果蓝）；格子之间一根内缩发丝线。
   Widget _section(
     String title,
     IconData icon,
@@ -1372,20 +1692,45 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     int columns = 1,
     bool result = false,
   }) {
-    // 灯塔：规模 / 成本 灰白面板，利润 淡蓝面板；细边、圆角 12。
     const resultAccent = Color(0xFF4A83C4);
+    final blue = DunesColors.resolve(context, resultAccent);
+    final rows = <Widget>[];
+    for (var i = 0; i < cells.length; i += columns) {
+      if (i > 0) {
+        rows.add(
+          Container(
+            height: 0.6,
+            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            color: result
+                ? blue.withAlpha(46)
+                : DunesColors.resolve(context, LhColors.line2),
+          ),
+        );
+      }
+      rows.add(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var j = 0; j < columns; j++) ...[
+              if (j > 0) const SizedBox(width: 4),
+              Expanded(
+                child: i + j < cells.length
+                    ? cells[i + j]
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
     return Container(
-      padding: _compact
-          ? const EdgeInsets.fromLTRB(7, 7, 7, 3)
-          : const EdgeInsets.fromLTRB(10, 9, 10, 4),
+      padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
         color: result
-            ? DunesColors.resolve(context, resultAccent).withAlpha(24)
+            ? blue.withAlpha(24)
             : _bg(const Color(0xFFF7F6FA)),
         border: Border.all(
-          color: result
-              ? DunesColors.resolve(context, resultAccent).withAlpha(58)
-              : _ln(const Color(0xFFE7E3EF)),
+          color: result ? blue.withAlpha(58) : _ln(const Color(0xFFE7E3EF)),
           width: .8,
         ),
         borderRadius: BorderRadius.circular(12),
@@ -1393,33 +1738,38 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Icon(
-                icon,
-                size: _compact ? 12 : 14,
-                color: DunesColors.resolve(context, _C.text2),
-              ),
-              SizedBox(width: _compact ? 4 : 6),
-              Expanded(
-                child: _t(title, size: _compact ? 12 : 13, weight: FontWeight.w700),
-              ),
-              if (!_compact) _t('年化', size: 10, color: _C.grey, mono: true),
-            ],
-          ),
-          const SizedBox(height: 4),
-          for (var i = 0; i < cells.length; i += columns)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          SizedBox(
+            height: 24,
+            child: Row(
               children: [
-                for (var j = 0; j < columns; j++) ...[
-                  if (j > 0) SizedBox(width: _compact ? 8 : 16),
-                  Expanded(
-                    child: i + j < cells.length ? cells[i + j] : const SizedBox.shrink(),
+                const SizedBox(width: 2),
+                Icon(
+                  icon,
+                  size: 14,
+                  color: result
+                      ? blue
+                      : DunesColors.resolve(context, const Color(0xFF8A84A0)),
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    style: LhTypography.sans(
+                      size: 11.5,
+                      color: DunesColors.resolve(context, LhColors.ink2),
+                      weight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                      height: 1.3,
+                      context: context,
+                    ),
                   ),
-                ],
+                ),
               ],
             ),
+          ),
+          const SizedBox(height: 6),
+          ...rows,
         ],
       ),
     );
@@ -1429,7 +1779,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     final d = _d;
     final spread = d.spread;
     final price = d.pctOfScale(d.revenue);
-    final scale = _section('规模', Icons.trending_up, [
+    final scale = _section('规模', Icons.trending_up_rounded, [
       _cell('年化规模', proposalEstimateWan(d.scale), '万', d.rating == '—' ? '' : '${d.rating} 级'),
       _cell('月均规模', proposalEstimateWan(d.monthlyScale), '万', '÷12'),
       _cell('售价', price == null ? '—' : price.toStringAsFixed(1), '%', '收入 ÷ 规模'),
@@ -1478,7 +1828,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
         divider: false,
       ),
     ];
-    final profit = _section('利润', Icons.show_chart, profitCells, columns: 2, result: true);
+    final profit = _section('利润', Icons.trending_up_rounded, profitCells, columns: 2, result: true);
     if (_stacked) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

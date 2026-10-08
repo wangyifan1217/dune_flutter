@@ -46,27 +46,19 @@ class LighthouseFeedback {
     if (soundEnabled && sound && !_playing) unawaited(_tone(kind));
   }
 
+  /// 每次只震一下（原来收起 / 转发 / 成功是连震两下，太吵）。
   Future<void> _haptic(LighthouseFeedbackKind kind) async {
     try {
       switch (kind) {
         case LighthouseFeedbackKind.select:
-          await HapticFeedback.selectionClick();
         case LighthouseFeedbackKind.collapse:
           await HapticFeedback.selectionClick();
-          await Future<void>.delayed(const Duration(milliseconds: 35));
-          if (hapticsEnabled) await HapticFeedback.selectionClick();
         case LighthouseFeedbackKind.expand:
-          await HapticFeedback.lightImpact();
-        case LighthouseFeedbackKind.navigate:
-          await HapticFeedback.mediumImpact();
         case LighthouseFeedbackKind.share:
           await HapticFeedback.lightImpact();
-          await Future<void>.delayed(const Duration(milliseconds: 55));
-          if (hapticsEnabled) await HapticFeedback.selectionClick();
+        case LighthouseFeedbackKind.navigate:
         case LighthouseFeedbackKind.success:
           await HapticFeedback.mediumImpact();
-          await Future<void>.delayed(const Duration(milliseconds: 75));
-          if (hapticsEnabled) await HapticFeedback.lightImpact();
       }
     } catch (_) {
       // Unsupported hardware must never prevent a business action.
@@ -116,7 +108,7 @@ class LighthouseFeedback {
               children: [
                 const ListTile(
                   title: Text('灯塔 · 触感与声音'),
-                  subtitle: Text('切换轻点 · 展开上扬 · 收起下落 · 转发双音'),
+                  subtitle: Text('每次轻点只响一声、震一下'),
                 ),
                 SwitchListTile(
                   title: const Text('轻提示音'),
@@ -146,15 +138,16 @@ class LighthouseFeedback {
   }
 }
 
-/// PCM WAV avoids network assets and gives each action an identifiable contour.
+/// PCM WAV avoids network assets. 每个动作只响一声（不再两个音连着响），
+/// 用音高区分：展开偏高、收起偏低。
 Uint8List lighthouseFeedbackWav(LighthouseFeedbackKind kind) {
   final notes = switch (kind) {
     LighthouseFeedbackKind.select => [760.0],
-    LighthouseFeedbackKind.expand => [600.0, 900.0],
-    LighthouseFeedbackKind.collapse => [800.0, 520.0],
-    LighthouseFeedbackKind.navigate => [660.0, 780.0],
-    LighthouseFeedbackKind.share => [740.0, 1100.0],
-    LighthouseFeedbackKind.success => [880.0, 1320.0],
+    LighthouseFeedbackKind.expand => [880.0],
+    LighthouseFeedbackKind.collapse => [560.0],
+    LighthouseFeedbackKind.navigate => [700.0],
+    LighthouseFeedbackKind.share => [960.0],
+    LighthouseFeedbackKind.success => [1040.0],
   };
   const sampleRate = 22050;
   const noteSamples = 1102; // 50 ms per note, including a soft attack/release.

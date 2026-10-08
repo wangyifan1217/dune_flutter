@@ -125,6 +125,16 @@ class ProposalSimpleViewScope extends InheritedWidget {
       oldWidget.readOnly != readOnly || oldWidget.textRows != textRows;
 }
 
+/// 账号打码：连续 8 位以上的数字只留前 4 位和后 4 位，中间写 ****。
+/// 如「416230100100002564」→「4162 **** 2564」；账户名等文字原样保留。
+String proposalMaskAccount(String raw) => raw.replaceAllMapped(
+  RegExp(r'\d{8,}'),
+  (m) {
+    final digits = m[0]!;
+    return '${digits.substring(0, 4)} **** ${digits.substring(digits.length - 4)}';
+  },
+);
+
 /// 简单行多列排布时，分隔线由整排统一画（同一排对齐成一条线），格子自己不再画。
 class ProposalGridRowScope extends InheritedWidget {
   const ProposalGridRowScope({super.key, required super.child});
@@ -577,25 +587,28 @@ class ProposalFormulaQuestionMark extends StatelessWidget {
           ),
         ),
         borderRadius: BorderRadius.circular(10),
+        // 小一号的问号：12px 浅紫细圈，不抢名称的位置。
         child: Container(
-          width: 16,
-          height: 16,
+          width: 12,
+          height: 12,
+          margin: const EdgeInsets.only(left: 3),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
               color: DunesColors.resolve(
                 context,
-                ProposalPalette.purpleDeep,
+                const Color(0xFFB9ABEB),
                 role: DunesColorRole.border,
               ),
+              width: .8,
             ),
           ),
           child: Text(
             '?',
             style: TextStyle(
-              color: DunesColors.resolve(context, ProposalPalette.purpleDeep),
-              fontSize: 11,
+              color: DunesColors.resolve(context, const Color(0xFF6B4FD8)),
+              fontSize: 8.5,
               fontWeight: FontWeight.w700,
               height: 1,
             ),
@@ -738,6 +751,29 @@ class ProposalField extends StatelessWidget {
     final shown = narrow ? compactLabel(label) : label;
     final inGridRow = ProposalGridRowScope.of(context);
     const line = kProposalSimpleLineHeight;
+    final labelSpan = TextSpan(
+      text: shown,
+      children: [
+        if (required)
+          TextSpan(text: ' *', style: TextStyle(color: c(0xFFC0563F))),
+      ],
+    );
+    final baseSize = narrow ? 11.5 : 12.0;
+    var labelSize = baseSize;
+    final hasFormula = (formula ?? '').trim().isNotEmpty;
+    final available = labelWidth - (hasFormula ? 15 : 0);
+    final painter = TextPainter(
+      text: TextSpan(style: TextStyle(fontSize: baseSize), children: [labelSpan]),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    if (painter.width > available && available > 0) {
+      labelSize = (baseSize * available / painter.width)
+          .clamp(9.5, baseSize)
+          .toDouble();
+    }
+    painter.dispose();
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(vertical: narrow ? 3 : 4),
@@ -760,22 +796,16 @@ class ProposalField extends StatelessWidget {
                   child: Tooltip(
                     message: label,
                     waitDuration: const Duration(milliseconds: 600),
+                    // 名称放不下时先缩小字号（最小 9.5），还放不下才省略。
+                    // 不用 LayoutBuilder：完整表单里这一行可能在 IntrinsicHeight 里，
+                    // LayoutBuilder 不支持算固有高度，会让整块排版错乱。
                     child: Text.rich(
-                      TextSpan(
-                        text: shown,
-                        children: [
-                          if (required)
-                            TextSpan(
-                              text: ' *',
-                              style: TextStyle(color: c(0xFFC0563F)),
-                            ),
-                        ],
-                      ),
+                      labelSpan,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: c(0xFF5B556A),
-                        fontSize: narrow ? 11.5 : 12,
+                        fontSize: labelSize,
                         height: 1.3,
                       ),
                     ),
@@ -966,10 +996,11 @@ class ProposalReviewToggle extends StatelessWidget {
     if (onPressed == null) {
       if (reviewed) return done;
       if (rejected) return pill('已驳回', 0xFFFBE9E7, 0xFFB42318);
+      // 待复核：淡紫胶囊（不再用橙色）。
       return pill(
         narrow ? '待核' : '待复核',
-        0xFFFDF2E6,
-        0xFF9A4A0C,
+        0xFFF1ECFF,
+        0xFF5B3FD0,
         tip: pendingLabel.startsWith('待') ? pendingLabel : '待$pendingLabel',
       );
     }
@@ -2887,6 +2918,22 @@ class ProposalSettleRatioFormatter extends TextInputFormatter {
 
 
 /// 原型简单行的值：默认一行，放不下时末尾给「展开」，点开看全文、可复制，再点「收起」。
+/// 长文本拆成条目：先按「 · 」拆；只有一段时按「；」「;」、再按「。」分句（标点留在句尾）。
+List<String> proposalBulletItems(String text) {
+  List<String> clean(Iterable<String> parts) => [
+    for (final part in parts)
+      if (part.trim().isNotEmpty) part.trim(),
+  ];
+  final byDot = clean(text.split(' · '));
+  if (byDot.length > 1) return byDot;
+  final bySemi = clean(text.split(RegExp(r'[；;]')));
+  if (bySemi.length > 1) return bySemi;
+  final bySentence = clean(
+    RegExp(r'[^。！？!?]+[。！？!?]?').allMatches(text).map((m) => m[0]!),
+  );
+  return bySentence.isEmpty ? [text] : bySentence;
+}
+
 class ProposalOneLineText extends StatefulWidget {
   const ProposalOneLineText(this.text, {super.key, required this.style});
 
@@ -2941,17 +2988,72 @@ class _ProposalOneLineTextState extends State<ProposalOneLineText> {
           return Text(widget.text, maxLines: 1, style: style);
         }
         if (_open) {
-          return Text.rich(
-            TextSpan(
-              text: widget.text,
-              style: style,
-              children: [
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.middle,
-                  child: _toggle('收起'),
+          // 展开后按条目排成「• 一条一行」：先按「 · 」分，只有一段时再按「；」「。」分句。
+          final items = proposalBulletItems(widget.text);
+          if (items.length <= 1) {
+            return Text.rich(
+              TextSpan(
+                text: widget.text,
+                style: style,
+                children: [
+                  WidgetSpan(
+                    alignment: PlaceholderAlignment.middle,
+                    child: _toggle('收起'),
+                  ),
+                ],
+              ),
+            );
+          }
+          final dotColor = DunesColors.resolve(
+            context,
+            const Color(0xFF8E7BE0),
+          );
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < items.length; i++)
+                Padding(
+                  padding: EdgeInsets.only(top: i == 0 ? 0 : 3),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 小圆点：4px，和第一行文字垂直居中。
+                      SizedBox(
+                        width: 10,
+                        height: (style.fontSize ?? 13) * (style.height ?? 1.35),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            width: 4,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: dotColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: i == items.length - 1
+                            ? Text.rich(
+                                TextSpan(
+                                  text: items[i],
+                                  style: style,
+                                  children: [
+                                    WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: _toggle('收起'),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : Text(items[i], style: style),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
+            ],
           );
         }
         return Row(

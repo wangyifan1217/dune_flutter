@@ -2971,3 +2971,72 @@ class _ProposalOneLineTextState extends State<ProposalOneLineText> {
     );
   }
 }
+
+/// 对照合同抓取原文和改后内容。原文可能很长，内容区必须能滚动，否则会溢出黄条。
+class ProposalContractDiffDialog extends StatelessWidget {
+  const ProposalContractDiffDialog({
+    super.key,
+    required this.label,
+    required this.original,
+    required this.current,
+  });
+
+  final String label;
+  final String original;
+  final String current;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('查看「$label」改动'),
+      content: SizedBox(
+        width: 640,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '合同匹配原文',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, ProposalPalette.text3),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                original.isEmpty ? '（空）' : original,
+                style: const TextStyle(fontSize: 13, height: 1.45),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '确认后的内容',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, ProposalPalette.text3),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                current.isEmpty ? '（空）' : current,
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.45,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
+  }
+}

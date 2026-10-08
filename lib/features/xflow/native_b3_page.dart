@@ -46,6 +46,7 @@ class _NativeB3PageState extends State<NativeB3Page> {
   String? _error;
   List<XflowTemplateCard> _bizTemplates = const <XflowTemplateCard>[];
   List<XflowTemplateCard> _admTemplates = const <XflowTemplateCard>[];
+  List<XflowApprovalGroup>? _approvalCatalog;
 
   @override
   void initState() {
@@ -83,10 +84,17 @@ class _NativeB3PageState extends State<NativeB3Page> {
         _service.fetchTemplatesByCategory('biz'),
         _service.fetchTemplatesByCategory('adm'),
       ]);
+      List<XflowApprovalGroup>? catalog = _approvalCatalog;
+      try {
+        catalog = await _service.fetchApprovalGroups();
+      } catch (_) {
+        catalog = _approvalCatalog;
+      }
       if (!mounted) return;
       setState(() {
         _bizTemplates = results[0];
         _admTemplates = results[1];
+        _approvalCatalog = catalog;
         _loading = false;
       });
     } catch (e) {
@@ -103,7 +111,11 @@ class _NativeB3PageState extends State<NativeB3Page> {
   );
 
   List<XflowPopulatedApprovalGroup> get _activeGroups =>
-      xflowPopulatedApprovalGroups(_activeTemplates, category: _category);
+      xflowPopulatedApprovalGroups(
+        _activeTemplates,
+        category: _category,
+        catalog: _approvalCatalog,
+      );
 
   String _resolvedSelectedGroupId(List<XflowPopulatedApprovalGroup> groups) {
     final selectedGroupId = _selectedGroupIds[_category] ?? '';
@@ -123,7 +135,11 @@ class _NativeB3PageState extends State<NativeB3Page> {
       }
       return const <XflowTemplateCard>[];
     }
-    return xflowSearchApprovalTemplates(_activeTemplates, query);
+    return xflowSearchApprovalTemplates(
+      _activeTemplates,
+      query,
+      catalog: _approvalCatalog,
+    );
   }
 
   void _setCategory(String category) {
@@ -255,6 +271,7 @@ class _NativeB3PageState extends State<NativeB3Page> {
                               groupLabelFor: searching
                                   ? (template) => xflowApprovalGroupForTemplate(
                                       template.templateKey,
+                                      catalog: _approvalCatalog,
                                     ).title
                                   : null,
                               onOpen: _openTemplate,

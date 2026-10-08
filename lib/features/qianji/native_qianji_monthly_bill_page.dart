@@ -12,6 +12,8 @@ const _pageBg = Color(0xFFF5F6F8);
 
 enum _BillFilter { all, channel, supply, overdue }
 
+enum _BillLens { bills, project, entity }
+
 /// τ管理 · 月结老板看板。取数走 qianji-go → sel-mg。
 class NativeQianjiMonthlyBillPage extends StatefulWidget {
   const NativeQianjiMonthlyBillPage({
@@ -36,6 +38,10 @@ class _NativeQianjiMonthlyBillPageState
   late String _month;
   String _side = 'receivable';
   _BillFilter _filter = _BillFilter.all;
+  _BillLens _lens = _BillLens.bills;
+  String? _focusBucket;
+  final _searchCtrl = TextEditingController();
+  String _query = '';
   MonthlyBillBoard? _board;
   List<MonthlyBillRow> _items = const [];
   int _itemTotal = 0;
@@ -56,6 +62,12 @@ class _NativeQianjiMonthlyBillPageState
     _reload();
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   MonthlyBillBoard get _safeBoard =>
       _board ??
       MonthlyBillBoard(
@@ -66,7 +78,25 @@ class _NativeQianjiMonthlyBillPageState
         payable: monthlyBillKpiEmpty,
       );
 
-  List<MonthlyBillRow> get _visibleRows => _items;
+  List<MonthlyBillRow> get _matchedRows => [
+    for (final row in _items)
+      if (monthlyBillMatchesQuery(row, _query))
+        if (_focusBucket == null ||
+            monthlyBillBucketName(
+                  row,
+                  byEntity: _lens == _BillLens.entity,
+                ) ==
+                _focusBucket)
+          row,
+  ];
+
+  List<MonthlyBillBucket> get _buckets => monthlyBillBuckets(
+    [
+      for (final row in _items)
+        if (monthlyBillMatchesQuery(row, _query)) row,
+    ],
+    byEntity: _lens == _BillLens.entity,
+  );
 
   Future<void> _reload() async {
     final seq = ++_loadSeq;
@@ -128,16 +158,28 @@ class _NativeQianjiMonthlyBillPageState
         _BillFilter.supply => 'supply',
         _ => '',
       };
-      final page = await QianjiMonthlyBillApi(widget.session!).items(
-        month: _month,
-        side: _side,
-        kind: kind,
-        overdue: _filter == _BillFilter.overdue,
-      );
+      final api = QianjiMonthlyBillApi(widget.session!);
+      final all = <MonthlyBillRow>[];
+      var pageNo = 1;
+      var total = 0;
+      while (pageNo <= 20) {
+        final page = await api.items(
+          month: _month,
+          side: _side,
+          kind: kind,
+          overdue: _filter == _BillFilter.overdue,
+          page: pageNo,
+          pageSize: 2000,
+        );
+        all.addAll(page.items);
+        total = page.total;
+        if (all.length >= total || page.items.isEmpty) break;
+        pageNo++;
+      }
       if (!mounted || seq != _itemSeq) return;
       setState(() {
-        _items = page.items;
-        _itemTotal = page.total;
+        _items = all;
+        _itemTotal = total;
         _itemsLoading = false;
       });
     } catch (e) {
@@ -156,6 +198,7 @@ class _NativeQianjiMonthlyBillPageState
     setState(() {
       _month = _months[next];
       _filter = _BillFilter.all;
+      _focusBucket = null;
     });
     _reload();
   }
@@ -181,6 +224,7 @@ class _NativeQianjiMonthlyBillPageState
               const LinearProgressIndicator(minHeight: 2),
             Expanded(
               child: ListView(
+                key: const Key('monthly-bill-list'),
                 padding: EdgeInsets.fromLTRB(
                   16,
                   4,
@@ -204,12 +248,31 @@ class _NativeQianjiMonthlyBillPageState
                   const SizedBox(height: 8),
                   _buildFilterChips(payable: payable),
                   const SizedBox(height: 8),
-                  if (_loading && _visibleRows.isEmpty)
+                  _buildSearch(),
+                  const SizedBox(height: 8),
+                  _buildLens(),
+                  if (_focusBucket != null) ...[
+                    const SizedBox(height: 8),
+                    _buildFocusBar(),
+                  ],
+                  const SizedBox(height: 8),
+                  if (_loading && _items.isEmpty)
                     const SizedBox(height: 24)
-                  else if (_visibleRows.isEmpty)
-                    _emptyHint()
+                  else if (_showingBuckets && _buckets.isEmpty)
+                    _emptyHint(_query.trim().isEmpty ? '这一筛选项下没有账单。' : '没有匹配的账单。')
+                  else if (_showingBuckets)
+                    for (final bucket in _buckets) ...[
+                      _BucketCard(
+                        bucket: bucket,
+                        payable: payable,
+                        onTap: () => setState(() => _focusBucket = bucket.name),
+                      ),
+                      const SizedBox(height: 8),
+                    ]
+                  else if (_matchedRows.isEmpty)
+                    _emptyHint(_query.trim().isEmpty ? '这一筛选项下没有账单。' : '没有匹配的账单。')
                   else ...[
-                    for (final row in _visibleRows) ...[
+                    for (final row in _matchedRows) ...[
                       _BillCard(
                         row: row,
                         payable: payable,
@@ -217,11 +280,13 @@ class _NativeQianjiMonthlyBillPageState
                       ),
                       const SizedBox(height: 8),
                     ],
-                    if (_itemTotal > _items.length)
+                    if (_query.trim().isEmpty &&
+                        _focusBucket == null &&
+                        _itemTotal > _items.length)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
-                          '仅列出前 ${_items.length} 张，其余 ${_itemTotal - _items.length} 张按逾期靠前省略。',
+                          '已列出 ${_items.length} 张，还有 ${_itemTotal - _items.length} 张未加载。',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 12,
@@ -454,6 +519,7 @@ class _NativeQianjiMonthlyBillPageState
           setState(() {
             _side = side;
             _filter = _BillFilter.all;
+            _focusBucket = null;
           });
           _reloadItems();
         },
@@ -676,17 +742,36 @@ class _NativeQianjiMonthlyBillPageState
           ),
         ),
         const SizedBox(width: 8),
-        Text(
-          _itemTotal > 0
-              ? '共 $_itemTotal 张 · 逾期靠前 · 点开看 14 列'
-              : '逾期靠前 · 点开看 14 列',
-          style: TextStyle(
-            fontSize: 12,
-            color: DunesColors.resolve(context, DunesColors.text3),
+        Expanded(
+          child: Text(
+            _listSubtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
           ),
         ),
       ],
     );
+  }
+
+  bool get _showingBuckets =>
+      _lens != _BillLens.bills && _focusBucket == null;
+
+  String get _listSubtitle {
+    if (_showingBuckets) {
+      final unit = _lens == _BillLens.project ? '个项目' : '个主体';
+      final n = _buckets.length;
+      return _query.trim().isEmpty ? '共 $n $unit' : '匹配 $n $unit';
+    }
+    final n = _matchedRows.length;
+    if (_query.trim().isNotEmpty || _focusBucket != null) {
+      return '当前 $n 张';
+    }
+    if (_itemTotal > 0) return '共 $_itemTotal 张 · 逾期靠前 · 点开看 14 列';
+    return '逾期靠前 · 点开看 14 列';
   }
 
   Widget _buildFilterChips({required bool payable}) {
@@ -728,7 +813,10 @@ class _NativeQianjiMonthlyBillPageState
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: () {
-          setState(() => _filter = value);
+          setState(() {
+            _filter = value;
+            _focusBucket = null;
+          });
           _reloadItems();
         },
         borderRadius: BorderRadius.circular(16),
@@ -765,7 +853,7 @@ class _NativeQianjiMonthlyBillPageState
     );
   }
 
-  Widget _emptyHint() {
+  Widget _emptyHint(String text) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -784,11 +872,201 @@ class _NativeQianjiMonthlyBillPageState
         ),
       ),
       child: Text(
-        '这一筛选项下没有账单。',
+        text,
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: 13,
           color: DunesColors.resolve(context, DunesColors.text3),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearch() {
+    return TextField(
+      key: const Key('monthly-bill-search'),
+      controller: _searchCtrl,
+      onChanged: (value) => setState(() {
+        _query = value;
+        _focusBucket = null;
+      }),
+      style: TextStyle(
+        fontSize: 14,
+        color: DunesColors.resolve(context, DunesColors.text),
+      ),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: '搜账单号、对方、项目、主体',
+        hintStyle: TextStyle(
+          fontSize: 13,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
+        prefixIcon: Icon(
+          Icons.search,
+          size: 18,
+          color: DunesColors.resolve(context, DunesColors.text3),
+        ),
+        suffixIcon: _query.isEmpty
+            ? null
+            : IconButton(
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() {
+                    _query = '';
+                    _focusBucket = null;
+                  });
+                },
+                icon: Icon(
+                  Icons.close,
+                  size: 16,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
+              ),
+        filled: true,
+        fillColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _cardBorder,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _cardBorder,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              _themePurple,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLens() {
+    return Row(
+      children: [
+        _lensChip(_BillLens.bills, '明细', const Key('monthly-bill-lens-bills')),
+        const SizedBox(width: 6),
+        _lensChip(_BillLens.project, '项目', const Key('monthly-bill-lens-project')),
+        const SizedBox(width: 6),
+        _lensChip(_BillLens.entity, '主体', const Key('monthly-bill-lens-entity')),
+      ],
+    );
+  }
+
+  Widget _lensChip(_BillLens lens, String label, Key key) {
+    final on = _lens == lens;
+    return Material(
+      key: key,
+      color: on
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF0EEF7),
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: () => setState(() {
+          _lens = lens;
+          _focusBucket = null;
+        }),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                on ? _themePurple : _cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+              color: on
+                  ? DunesColors.resolveNullable(context, _themePurple)
+                  : DunesColors.resolve(context, DunesColors.text2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFocusBar() {
+    final kind = _lens == _BillLens.entity ? '主体' : '项目';
+    return Material(
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF0EEF7),
+        role: DunesColorRole.surface,
+      ),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: () => setState(() => _focusBucket = null),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$kind · $_focusBucket',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolveNullable(context, _themePurple),
+                  ),
+                ),
+              ),
+              Text(
+                '返回',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.resolveNullable(context, _themePurple),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: DunesColors.resolveNullable(context, _themePurple),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -987,6 +1265,85 @@ class _SplitStat extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _BucketCard extends StatelessWidget {
+  const _BucketCard({
+    required this.bucket,
+    required this.payable,
+    required this.onTap,
+  });
+
+  final MonthlyBillBucket bucket;
+  final bool payable;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                _cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      bucket.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    monthlyBillFmtYuan(bucket.amountYuan),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: DunesColors.resolveNullable(context, _themePurple),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${bucket.count} 张 · ${payable ? '已付' : '已回'} ${monthlyBillFmtYuan(bucket.paidYuan)} · ${payable ? '未付' : '未回'} ${monthlyBillFmtYuan(bucket.unpaidYuan)}'
+                '${bucket.overdueCount > 0 ? ' · 逾期 ${bucket.overdueCount} 张' : ''}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

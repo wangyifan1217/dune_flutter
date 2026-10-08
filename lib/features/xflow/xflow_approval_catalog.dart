@@ -209,13 +209,18 @@ List<String> get xflowApprovalCatalogKeys => _xflowApprovalGroups
     .expand((group) => group.templateKeys)
     .toList(growable: false);
 
-List<XflowApprovalGroup> xflowApprovalGroupsForCategory(String category) =>
-    _xflowApprovalGroups
-        .where((group) => group.category == category)
-        .toList(growable: false);
+List<XflowApprovalGroup> xflowApprovalGroupsForCategory(
+  String category, {
+  List<XflowApprovalGroup>? catalog,
+}) => (catalog ?? _xflowApprovalGroups)
+    .where((group) => group.category == category)
+    .toList(growable: false);
 
-XflowApprovalGroup xflowApprovalGroupForTemplate(String templateKey) {
-  for (final group in _xflowApprovalGroups) {
+XflowApprovalGroup xflowApprovalGroupForTemplate(
+  String templateKey, {
+  List<XflowApprovalGroup>? catalog,
+}) {
+  for (final group in catalog ?? _xflowApprovalGroups) {
     if (group.templateKeys.contains(templateKey)) return group;
   }
   return _otherApprovalGroup;
@@ -223,14 +228,18 @@ XflowApprovalGroup xflowApprovalGroupForTemplate(String templateKey) {
 
 List<XflowTemplateCard> xflowSearchApprovalTemplates(
   List<XflowTemplateCard> templates,
-  String query,
-) {
+  String query, {
+  List<XflowApprovalGroup>? catalog,
+}) {
   final normalized = query.trim().toLowerCase();
   final visible = xflowVisibleApprovalTemplates(templates);
   if (normalized.isEmpty) return visible;
   return visible
       .where((template) {
-        final group = xflowApprovalGroupForTemplate(template.templateKey);
+        final group = xflowApprovalGroupForTemplate(
+          template.templateKey,
+          catalog: catalog,
+        );
         final text =
             '${template.title} ${template.subtitle} ${template.tagLabel} '
                     '${template.templateKey} ${group.title} ${group.description}'
@@ -243,15 +252,25 @@ List<XflowTemplateCard> xflowSearchApprovalTemplates(
 List<XflowPopulatedApprovalGroup> xflowPopulatedApprovalGroups(
   List<XflowTemplateCard> templates, {
   required String category,
+  List<XflowApprovalGroup>? catalog,
 }) {
   final groups = <XflowPopulatedApprovalGroup>[];
   final knownKeys = <String>{};
   final visible = xflowVisibleApprovalTemplates(templates);
 
-  for (final group in xflowApprovalGroupsForCategory(category)) {
+  for (final group in xflowApprovalGroupsForCategory(category, catalog: catalog)) {
+    final order = <String, int>{
+      for (var i = 0; i < group.templateKeys.length; i++)
+        group.templateKeys[i]: i,
+    };
     final rows = visible
         .where((template) => group.templateKeys.contains(template.templateKey))
-        .toList(growable: false);
+        .toList();
+    rows.sort(
+      (a, b) => (order[a.templateKey] ?? 1 << 20).compareTo(
+        order[b.templateKey] ?? 1 << 20,
+      ),
+    );
     if (rows.isEmpty) continue;
     knownKeys.addAll(rows.map((template) => template.templateKey));
     groups.add(XflowPopulatedApprovalGroup(group: group, templates: rows));
@@ -276,4 +295,55 @@ List<XflowPopulatedApprovalGroup> xflowPopulatedApprovalGroups(
     );
   }
   return groups;
+}
+
+IconData xflowApprovalIcon(String name) {
+  switch (name.trim().toLowerCase()) {
+    case 'rocket':
+      return Icons.rocket_launch_outlined;
+    case 'handshake':
+      return Icons.handshake_outlined;
+    case 'wallet':
+      return Icons.account_balance_wallet_outlined;
+    case 'groups':
+      return Icons.groups_outlined;
+    case 'receipt':
+      return Icons.receipt_long_outlined;
+    case 'luggage':
+      return Icons.luggage_outlined;
+    case 'bank':
+      return Icons.account_balance_outlined;
+    case 'dataset':
+      return Icons.dataset_outlined;
+    case 'verified':
+      return Icons.verified_user_outlined;
+    case 'apartment':
+      return Icons.apartment_outlined;
+    default:
+      return Icons.folder_outlined;
+  }
+}
+
+XflowApprovalGroup? xflowApprovalGroupFromMap(Map<String, dynamic> json) {
+  final id = (json['groupKey'] ?? '').toString().trim();
+  final title = (json['title'] ?? '').toString().trim();
+  final category = (json['category'] ?? '').toString().trim().toLowerCase();
+  if (id.isEmpty || title.isEmpty) return null;
+  if (category != 'biz' && category != 'adm') return null;
+  final keys = <String>[];
+  final raw = json['templateKeys'];
+  if (raw is List) {
+    for (final item in raw) {
+      final key = item.toString().trim();
+      if (key.isNotEmpty) keys.add(key);
+    }
+  }
+  return XflowApprovalGroup(
+    id: id,
+    category: category,
+    title: title,
+    description: (json['description'] ?? '').toString(),
+    icon: xflowApprovalIcon((json['icon'] ?? '').toString()),
+    templateKeys: keys,
+  );
 }

@@ -28,6 +28,49 @@ void main() {
     expect(xflowApprovalGroupForTemplate('unknown-template').title, '其他');
   });
 
+  test('后台目录覆盖内置子分类，未分配单据进入其他', () {
+    XflowTemplateCard template(String key) => XflowTemplateCard(
+      templateKey: key,
+      title: key,
+      subtitle: '',
+      endpoint: '',
+      tagLabel: '',
+      category: 'biz',
+    );
+    final catalog = [
+      const XflowApprovalGroup(
+        id: 'biz-custom',
+        category: 'biz',
+        title: '自定义付款',
+        description: '后台配置',
+        icon: Icons.folder_outlined,
+        templateKeys: ['finance-contract-payment', 'finance-deposit'],
+      ),
+    ];
+    final groups = xflowPopulatedApprovalGroups(
+      [
+        template('finance-contract-payment'),
+        template('finance-deposit'),
+        template('finance-invoice-request'),
+      ],
+      category: 'biz',
+      catalog: catalog,
+    );
+    expect(groups.map((group) => group.title), ['自定义付款', '其他']);
+    expect(
+      groups.first.templates.map((item) => item.templateKey),
+      ['finance-contract-payment', 'finance-deposit'],
+    );
+    expect(
+      xflowSearchApprovalTemplates(
+        [template('finance-deposit')],
+        '自定义付款',
+        catalog: catalog,
+      ).single.templateKey,
+      'finance-deposit',
+    );
+  });
+
   test('二级目录按接口实际模板计算数量并过滤空组', () {
     XflowTemplateCard template(String key, String category) =>
         XflowTemplateCard(

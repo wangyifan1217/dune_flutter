@@ -59,11 +59,17 @@ bool taskTodoIsAdminProcurement(XflowProposalItem item) {
   return text.contains('行政采购');
 }
 
+bool taskTodoSkipsPaymentVoucher(XflowProposalItem item) {
+  if (taskTodoIsAdminProcurement(item)) return true;
+  return _isLoanRequestItem(item) &&
+      (item.primaryAction ?? '').trim().toUpperCase() == 'MARK_PAID';
+}
+
 List<String> taskTodoCompleteKeys(XflowProposalItem item) {
   return [
     for (final key in item.requiredFields)
       if (key != 'verifyResult' &&
-          !(key == 'paymentVoucher' && taskTodoIsAdminProcurement(item)))
+          !(key == 'paymentVoucher' && taskTodoSkipsPaymentVoucher(item)))
         key,
   ];
 }
@@ -127,7 +133,7 @@ TaskTodoConfirmCopy taskTodoConfirmCopy(
           : '确认后进入「已付款」待办（填实付金额和凭证）。不重审。',
     'MARK_PAID' =>
       loan
-          ? '提交实付金额和支付凭证后进入资金借调，借出金额以实付为准。不重审。'
+          ? '提交实付金额后进入资金借调，借出金额以实付为准。不重审。'
           : adminProc
           ? '提交实付金额后，按先票/先款进入核验或补票。不重审。'
           : '提交实付金额和支付凭证后，按先票/先款进入核验或补票。不重审。',

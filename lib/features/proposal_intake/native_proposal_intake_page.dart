@@ -18303,51 +18303,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('查看「$label」改动'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '合同匹配原文',
-              style: TextStyle(
-                fontSize: 12,
-                color: DunesColors.resolve(ctx, ProposalPalette.text3),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 4),
-            SelectableText(
-              edit.original.isEmpty ? '（空）' : edit.original,
-              style: const TextStyle(fontSize: 13, height: 1.45),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '确认后的内容',
-              style: TextStyle(
-                fontSize: 12,
-                color: DunesColors.resolve(ctx, ProposalPalette.text3),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 4),
-            SelectableText(
-              edit.current.isEmpty ? '（空）' : edit.current,
-              style: const TextStyle(
-                fontSize: 13,
-                height: 1.45,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭'),
-          ),
-        ],
+      builder: (ctx) => ProposalContractDiffDialog(
+        label: label,
+        original: edit.original,
+        current: edit.current,
       ),
     );
   }

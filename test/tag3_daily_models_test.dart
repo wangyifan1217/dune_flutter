@@ -374,6 +374,44 @@ void main() {
     );
     expect(place.channel, '运营商');
     expect(place.project, '上海移动');
+    expect(
+      tag3DailyOpinionCycleDay(
+        const Tag3DailyComment(
+          id: 4,
+          rowKey: '运营商|上海移动',
+          period: 'PREV_MONTH',
+          statDate: '2026-08',
+          periodLabel: '2026-08',
+          projectName: '上海移动',
+          userId: 4,
+          userName: '陆青',
+          kind: 'COMMENT',
+          body: '建议改口径',
+          createdAt: '2026-09-30T01:06:00Z',
+        ),
+        const [],
+      ),
+      '2026-08-31',
+    );
+    expect(
+      tag3DailyOpinionCycleDay(
+        const Tag3DailyComment(
+          id: 5,
+          rowKey: '运营商|上海移动',
+          period: 'DAY',
+          statDate: '2026-10-07',
+          periodLabel: '10.07',
+          projectName: '上海移动',
+          userId: 5,
+          userName: '陆青',
+          kind: 'COMMENT',
+          body: '日行意见',
+          createdAt: '2026-10-08T01:06:00Z',
+        ),
+        const [],
+      ),
+      '2026-10-07',
+    );
     expect(padded.first.asOfDate, '2026-09-17');
     expect(
       padded.map((e) => e.asOfDate),

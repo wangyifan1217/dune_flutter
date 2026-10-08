@@ -77,6 +77,10 @@ class ApprovalChatShare {
     return '审批待办';
   }
 
+  /// 名片上已有可读提案名时直接用；只有「协作提案」这类类型名时要再去拉标题。
+  bool get proposalTitleNeedsLookup =>
+      isProposalIntake && approvalCardTitleIsWeak(title);
+
   /// 协作提案名片副标题：谁提交的 + 需要填写/复核/最终确认。
   String get proposalCardLine {
     final parts = <String>[
@@ -232,4 +236,41 @@ String _normalizeApprovalTitle(String value) {
     return parts.skip(1).join(' - ');
   }
   return value.trim();
+}
+
+bool approvalCardTitleIsWeak(String title) {
+  final t = title.trim();
+  if (t.isEmpty) return true;
+  const kinds = {
+    '协作提案',
+    '销售提案',
+    '未命名提案',
+    '未命名销售业务提案',
+    '审批单',
+    '审批单据',
+  };
+  if (kinds.contains(t)) return true;
+  if (RegExp(r'^审批单\s*#?\d+$').hasMatch(t)) return true;
+  if (RegExp(r'^(NY|YYS)-[A-Z0-9]+-\d{8}$', caseSensitive: false).hasMatch(t)) {
+    return true;
+  }
+  if (RegExp(r'^(UNNUMBERED-[A-Z0-9]+|P-\d+|#?\d+)$', caseSensitive: false)
+      .hasMatch(t)) {
+    return true;
+  }
+  final parts = t.split(' - ');
+  if (parts.length >= 2 && kinds.contains(parts.last.trim())) return true;
+  return false;
+}
+
+String proposalIntakeCardTitle({
+  required String storedTitle,
+  String? fetchedTitle,
+}) {
+  final fetched = (fetchedTitle ?? '').trim();
+  if (fetched.isNotEmpty && !approvalCardTitleIsWeak(fetched)) return fetched;
+  final stored = storedTitle.trim();
+  if (!approvalCardTitleIsWeak(stored)) return stored;
+  if (fetched.isNotEmpty) return fetched;
+  return stored.isEmpty ? '协作提案' : stored;
 }

@@ -2311,6 +2311,7 @@ void main() {
       actionLabel: '请复核',
     );
     expect(card.proposalCardLine, '王奕凡 提交 · 请复核');
+    expect(card.proposalTitleNeedsLookup, isFalse);
     expect(
       ApprovalChatShare(
         businessType: 'PROPOSAL_INTAKE',
@@ -2320,6 +2321,19 @@ void main() {
       ).proposalCardLine,
       '协作提案 · 复核中',
     );
+    expect(
+      proposalIntakeCardTitle(
+        storedTitle: '协作提案',
+        fetchedTitle: '广西卡品提案',
+      ),
+      '广西卡品提案',
+    );
+    expect(
+      proposalIntakeCardTitle(storedTitle: '广西卡品提案'),
+      '广西卡品提案',
+    );
+    expect(approvalCardTitleIsWeak('李博睿 - 协作提案'), isTrue);
+    expect(approvalCardTitleIsWeak('广西卡品提案'), isFalse);
   });
 
   test('proposal intake share card payload is IM-ready', () {

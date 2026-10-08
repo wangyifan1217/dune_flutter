@@ -244,6 +244,71 @@ String monthlyBillKindLabel(String kind, {required bool payable}) {
 
 String monthlyBillSideLabel(String side) => side == 'payable' ? '应付' : '应收';
 
+bool monthlyBillMatchesQuery(MonthlyBillRow row, String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return true;
+  final text =
+      '${row.billNo} ${row.typeName} ${row.counterparty} ${row.ourEntity} ${row.projectName} ${row.province}'
+          .toLowerCase();
+  return text.contains(q);
+}
+
+String monthlyBillBucketName(MonthlyBillRow row, {required bool byEntity}) {
+  if (byEntity) {
+    final name = row.ourEntity.trim();
+    return name.isEmpty ? '未填主体' : name;
+  }
+  final name = row.projectName.trim();
+  return name.isEmpty ? '未填项目' : name;
+}
+
+class MonthlyBillBucket {
+  const MonthlyBillBucket({
+    required this.name,
+    required this.count,
+    required this.amountYuan,
+    required this.paidYuan,
+    required this.unpaidYuan,
+    required this.overdueCount,
+  });
+
+  final String name;
+  final int count;
+  final double amountYuan;
+  final double paidYuan;
+  final double unpaidYuan;
+  final int overdueCount;
+}
+
+List<MonthlyBillBucket> monthlyBillBuckets(
+  Iterable<MonthlyBillRow> rows, {
+  required bool byEntity,
+}) {
+  final order = <String>[];
+  final byName = <String, List<MonthlyBillRow>>{};
+  for (final row in rows) {
+    final name = monthlyBillBucketName(row, byEntity: byEntity);
+    final bucket = byName.putIfAbsent(name, () {
+      order.add(name);
+      return <MonthlyBillRow>[];
+    });
+    bucket.add(row);
+  }
+  final out = <MonthlyBillBucket>[
+    for (final name in order)
+      MonthlyBillBucket(
+        name: name,
+        count: byName[name]!.length,
+        amountYuan: byName[name]!.fold<double>(0, (sum, row) => sum + row.amountYuan),
+        paidYuan: byName[name]!.fold<double>(0, (sum, row) => sum + row.paidYuan),
+        unpaidYuan: byName[name]!.fold<double>(0, (sum, row) => sum + row.unpaidYuan),
+        overdueCount: byName[name]!.where((row) => row.isOverdue).length,
+      ),
+  ];
+  out.sort((a, b) => b.amountYuan.compareTo(a.amountYuan));
+  return out;
+}
+
 String monthlyBillFmtYuan(double yuan) {
   final wan = yuan / 10000;
   if (wan.abs() >= 10000) {

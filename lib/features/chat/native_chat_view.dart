@@ -55,6 +55,7 @@ import '../weekly_summary/native_weekly_summary_page.dart';
 import '../weekly_summary/weekly_summary_card.dart';
 import '../weekly_summary/weekly_summary_models.dart';
 import '../xflow/approval_chat_share.dart';
+import '../xflow/proposal_intake_share_card.dart';
 import '../tasks/task_chat_share.dart';
 import '../tasks/task_chat_share_card.dart';
 import '../tasks/task_chat_share_bundle_card.dart';
@@ -8931,6 +8932,17 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     final approvalShare = ApprovalChatShare.fromPayload(m.payload);
     if (approvalShare != null) {
+      if (approvalShare.isProposalIntake) {
+        return ProposalIntakeShareCard(
+          session: widget.session,
+          share: approvalShare,
+          onTap: () => _openApprovalShare(approvalShare),
+          onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
+              ? (details) =>
+                    _onMessageActions(m, mine, anchor: details.globalPosition)
+              : null,
+        );
+      }
       return ChatApprovalCard(
         title: approvalShare.title,
         statusLabel: approvalShare.isProposalIntake

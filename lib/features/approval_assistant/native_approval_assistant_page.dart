@@ -16,6 +16,7 @@ import '../conversation/inbox_format.dart';
 import '../desktop/windows_desktop_tray.dart';
 import '../shell/dunes_toast.dart';
 import '../xflow/approval_chat_share.dart';
+import '../xflow/proposal_intake_share_card.dart';
 import '../xflow/proposal_upload_config.dart';
 import '../xflow/xflow_detail_logic.dart';
 import 'approval_urge_send_sheet.dart';
@@ -727,6 +728,13 @@ class _NativeApprovalAssistantPageState
   }
 
   Widget _approvalCardWidget(ApprovalChatShare share) {
+    if (share.isProposalIntake) {
+      return ProposalIntakeShareCard(
+        session: widget.session,
+        share: share,
+        onTap: () => widget.onOpenApproval?.call(share),
+      );
+    }
     return ChatApprovalCard(
       title: _approvalCardTitle(share),
       statusLabel: share.isProposalIntake || share.isTaskTodo

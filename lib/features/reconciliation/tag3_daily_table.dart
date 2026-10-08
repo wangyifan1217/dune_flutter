@@ -1207,9 +1207,9 @@ Future<void> showTag3DailyOpinionList({
                       final where = [
                         if (place.channel.isNotEmpty) '渠道 ${place.channel}',
                         if (place.project.isNotEmpty) '项目 ${place.project}',
-                        if (item.periodLabel.trim().isNotEmpty)
-                          item.periodLabel.trim(),
                       ].join(' · ');
+                      final cycle = tag3DailyOpinionCycleDay(item, rows);
+                      final written = tag3DailyCommentTime(item.createdAt);
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1222,9 +1222,24 @@ Future<void> showTag3DailyOpinionList({
                               context: ctx,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          if (cycle.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              '统计周期 $cycle',
+                              style: DunesTypography.sans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: DunesColors.resolve(
+                                  ctx,
+                                  DunesColors.text2,
+                                ),
+                                context: ctx,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 2),
                           Text(
-                            '$name · ${tag3DailyCommentTime(item.createdAt)}',
+                            written.isEmpty ? name : '$name · 填写于 $written',
                             style: DunesTypography.sans(
                               fontSize: 12,
                               color: DunesColors.resolve(
@@ -1239,10 +1254,9 @@ Future<void> showTag3DailyOpinionList({
                             item.body.trim(),
                             style: DunesTypography.sans(
                               fontSize: 13,
-                              color: DunesColors.resolve(
-                                ctx,
-                                DunesColors.text2,
-                              ),
+                              fontWeight: FontWeight.w500,
+                              height: 1.45,
+                              color: DunesColors.resolve(ctx, DunesColors.text),
                               context: ctx,
                             ),
                           ),
@@ -1276,7 +1290,7 @@ Future<void> showTag3DailyCommentHistory({
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${row.projectName} · ${row.periodLabel} · 意见记录',
+                '${row.projectName} · 统计周期 ${tag3DailyRowCycleDay(row)} · 意见记录',
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -1322,7 +1336,7 @@ Future<void> showTag3DailyCommentHistory({
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '$name · ${item.kindLabel} · ${tag3DailyCommentTime(item.createdAt)}',
+                            '$name · ${item.kindLabel} · 填写于 ${tag3DailyCommentTime(item.createdAt)}',
                             style: DunesTypography.sans(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -1335,10 +1349,9 @@ Future<void> showTag3DailyCommentHistory({
                             item.displayBody,
                             style: DunesTypography.sans(
                               fontSize: 13,
-                              color: DunesColors.resolve(
-                                ctx,
-                                DunesColors.text2,
-                              ),
+                              fontWeight: FontWeight.w500,
+                              height: 1.45,
+                              color: DunesColors.resolve(ctx, DunesColors.text),
                               context: ctx,
                             ),
                           ),

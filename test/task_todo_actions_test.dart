@@ -50,6 +50,42 @@ void main() {
     expect(taskTodoConfirmCopy(item).body, isNot(contains('支付凭证')));
   });
 
+  test('loan mark paid drops payment voucher', () {
+    final item = XflowProposalItem(
+      id: 729,
+      businessType: 'LOAN_REQUEST',
+      code: 'S-729',
+      title: '匡乐 - 借款申请单',
+      status: 'OPEN',
+      createdByName: '匡乐',
+      createdAt: DateTime(2026, 9, 24),
+      primaryAction: 'MARK_PAID',
+      actionTitle: '已付款',
+      templateKey: 'loan-request',
+      requiredFields: const ['actualPayAmount', 'paymentVoucher'],
+    );
+    expect(taskTodoCompleteKeys(item), ['actualPayAmount']);
+    expect(taskTodoConfirmCopy(item).body, contains('实付金额'));
+    expect(taskTodoConfirmCopy(item).body, isNot(contains('支付凭证')));
+  });
+
+  test('loan repay still asks for payment voucher', () {
+    final item = XflowProposalItem(
+      id: 730,
+      businessType: 'LOAN_REQUEST',
+      code: 'S-730',
+      title: '匡乐 - 借款申请单',
+      status: 'OPEN',
+      createdByName: '匡乐',
+      createdAt: DateTime(2026, 9, 24),
+      primaryAction: 'REPAY',
+      actionTitle: '已还款',
+      templateKey: 'loan-request',
+      requiredFields: const ['repayAmount', 'paymentVoucher'],
+    );
+    expect(taskTodoCompleteKeys(item), ['repayAmount', 'paymentVoucher']);
+  });
+
   test('requiredFieldDefs treat payment voucher as upload on complete', () {
     final item = XflowProposalItem(
       id: 1,

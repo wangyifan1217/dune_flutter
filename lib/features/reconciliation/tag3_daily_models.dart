@@ -178,6 +178,47 @@ List<Tag3DailyComment> tag3DailyOpinionComments(
   return (channel: channel, project: project);
 }
 
+final _tag3DailyYmd = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+final _tag3DailyYm = RegExp(r'^(\d{4})-(\d{2})$');
+
+/// 意见上的统计周期显示到日。日行用统计日；只有月份时用该月最后一天。
+String tag3DailyOpinionCycleDay(
+  Tag3DailyComment comment,
+  List<Tag3DailyRow> rows,
+) {
+  final own = tag3DailyStatDateDay(comment.statDate);
+  if (_tag3DailyYmd.hasMatch(own)) return own;
+  for (final row in rows) {
+    if (row.rowKey != comment.rowKey) continue;
+    if (comment.period.isNotEmpty &&
+        row.period.toUpperCase() != comment.period.toUpperCase()) {
+      continue;
+    }
+    final day = row.statDateDay;
+    if (_tag3DailyYmd.hasMatch(day)) return day;
+  }
+  return _tag3DailyMonthEnd(comment.periodLabel) ??
+      _tag3DailyMonthEnd(own) ??
+      comment.periodLabel.trim();
+}
+
+String? _tag3DailyMonthEnd(String raw) {
+  final match = _tag3DailyYm.firstMatch(raw.trim());
+  if (match == null) return null;
+  final year = int.tryParse(match.group(1)!);
+  final month = int.tryParse(match.group(2)!);
+  if (year == null || month == null || month < 1 || month > 12) return null;
+  final end = DateTime(year, month + 1, 0);
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${end.year}-${two(end.month)}-${two(end.day)}';
+}
+
+String tag3DailyRowCycleDay(Tag3DailyRow row) {
+  final day = row.statDateDay;
+  if (_tag3DailyYmd.hasMatch(day)) return day;
+  return _tag3DailyMonthEnd(row.periodLabel) ?? row.periodLabel.trim();
+}
+
 String tag3DailyCommentTime(String raw) {
   final dt = DateTime.tryParse(raw.trim());
   if (dt == null) return raw.trim();

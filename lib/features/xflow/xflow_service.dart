@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/auth_session.dart';
 import 'electronic_reimbursement_form.dart';
+import 'xflow_approval_catalog.dart';
 import 'xflow_models.dart';
 import 'xflow_template_runtime.dart';
 
@@ -603,6 +604,16 @@ class XflowService {
     }
     if (out.isNotEmpty) {
       unawaited(_persistTemplateCache(cat, out));
+    }
+    return out;
+  }
+
+  Future<List<XflowApprovalGroup>> fetchApprovalGroups() async {
+    final rows = await _requestList('/xflow/approval-groups');
+    final out = <XflowApprovalGroup>[];
+    for (final row in rows.whereType<Map>()) {
+      final item = xflowApprovalGroupFromMap(Map<String, dynamic>.from(row));
+      if (item != null) out.add(item);
     }
     return out;
   }

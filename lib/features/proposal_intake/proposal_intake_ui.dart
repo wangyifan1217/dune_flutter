@@ -94,11 +94,21 @@ class ProposalSimpleViewScope extends InheritedWidget {
     super.key,
     required super.child,
     this.readOnly = false,
+    this.textRows = false,
   });
 
   /// 只读整单（待最终确认、已完成）：板块大标题也不再重复。
   /// 填写、复核时保留大标题，只把字段、输入框、复核按钮换成原型样式。
   final bool readOnly;
+
+  /// 值都以文字展示（复核简单行、查看）：行固定一行高，名称不换行。
+  final bool textRows;
+
+  static bool textRowsOf(BuildContext context) {
+    final scope =
+        context.dependOnInheritedWidgetOfExactType<ProposalSimpleViewScope>();
+    return scope != null && (scope.readOnly || scope.textRows);
+  }
 
   static bool of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<ProposalSimpleViewScope>() !=
@@ -112,8 +122,23 @@ class ProposalSimpleViewScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(ProposalSimpleViewScope oldWidget) =>
-      oldWidget.readOnly != readOnly;
+      oldWidget.readOnly != readOnly || oldWidget.textRows != textRows;
 }
+
+/// 简单行多列排布时，分隔线由整排统一画（同一排对齐成一条线），格子自己不再画。
+class ProposalGridRowScope extends InheritedWidget {
+  const ProposalGridRowScope({super.key, required super.child});
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ProposalGridRowScope>() !=
+      null;
+
+  @override
+  bool updateShouldNotify(ProposalGridRowScope oldWidget) => false;
+}
+
+/// 简单行一行的标准高度：名称、值、复核标记都在这一条里垂直居中。
+const double kProposalSimpleLineHeight = 22;
 
 /// 原型的输入框：无外框，底部一条紫色虚线；聚焦时变成实线。
 class ProposalDashedUnderlineBorder extends InputBorder {
@@ -613,25 +638,29 @@ class ProposalField extends StatelessWidget {
   /// 行距比原型略紧（上下 4），复核、查看时一屏能多看几行。
   Widget _simpleRow(BuildContext context) {
     final narrow = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
-    // 只读简单行（复核、查看）：名称 118px 一行写完，放不下省略；手机 84px 可换行。
-    final readOnly = ProposalSimpleViewScope.readOnlyOf(context);
-    final labelWidth = readOnly ? (narrow ? 84.0 : 118.0) : (narrow ? 76.0 : 104.0);
-    if (readOnly && !narrow) {
-      return _readOnlyRow(context, labelWidth);
+    // 只读简单行（复核、查看）：名称一行写完，放不下省略（悬停看全称）。
+    // 手机名称列 68px，用短名称（去掉括号说明、「合同核心条款」→「条款」），不再折成两三行。
+    final readOnly = ProposalSimpleViewScope.textRowsOf(context);
+    final labelWidth = readOnly ? (narrow ? 68.0 : 118.0) : (narrow ? 76.0 : 104.0);
+    if (readOnly) {
+      return _readOnlyRow(context, labelWidth, narrow: narrow);
     }
+    final inGridRow = ProposalGridRowScope.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              const Color(0xFFF3F0F8),
-              role: DunesColorRole.border,
-            ),
-          ),
-        ),
+        border: inGridRow
+            ? null
+            : Border(
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFF3F0F8),
+                    role: DunesColorRole.border,
+                  ),
+                ),
+              ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -690,72 +719,100 @@ class ProposalField extends StatelessWidget {
     );
   }
 
-  /// 宽屏只读行：名称不换行，值顶对齐（值可能展开成多行），复核标记靠右。
-  Widget _readOnlyRow(BuildContext context, double labelWidth) {
+  /// 手机上的短名称：「项目（标签一二级）」→「项目」，「采购合同核心条款」→「采购条款」。
+  static String compactLabel(String label) {
+    var text = label.replaceAll(RegExp(r'[（(][^）)]*[）)]'), '').trim();
+    text = text.replaceAll('合同核心条款', '条款').replaceAll('核心条款', '条款');
+    return text.isEmpty ? label : text;
+  }
+
+  /// 只读行：名称、值、复核标记都在一条 22px 的线上垂直居中，默认一行；
+  /// 值展开（长文本、详情）时往下长，名称和复核标记仍贴顶。
+  Widget _readOnlyRow(
+    BuildContext context,
+    double labelWidth, {
+    bool narrow = false,
+  }) {
     Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
         DunesColors.resolve(context, Color(v), role: role);
+    final shown = narrow ? compactLabel(label) : label;
+    final inGridRow = ProposalGridRowScope.of(context);
+    const line = kProposalSimpleLineHeight;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: narrow ? 3 : 4),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: c(0xFFF3F0F8, DunesColorRole.border)),
-        ),
+        border: inGridRow
+            ? null
+            : Border(
+                bottom: BorderSide(color: c(0xFFF3F0F8, DunesColorRole.border)),
+              ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
             width: labelWidth,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Row(
-                children: [
-              Flexible(child: Tooltip(
-                message: label,
-                waitDuration: const Duration(milliseconds: 600),
-                child: Text.rich(
-                  TextSpan(
-                    text: label,
-                    children: [
-                      if (required)
-                        TextSpan(
-                          text: ' *',
-                          style: TextStyle(color: c(0xFFC0563F)),
-                        ),
-                    ],
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: c(0xFF5B556A),
-                    fontSize: 12,
-                    height: 1.5,
+            height: line,
+            child: Row(
+              children: [
+                Flexible(
+                  child: Tooltip(
+                    message: label,
+                    waitDuration: const Duration(milliseconds: 600),
+                    child: Text.rich(
+                      TextSpan(
+                        text: shown,
+                        children: [
+                          if (required)
+                            TextSpan(
+                              text: ' *',
+                              style: TextStyle(color: c(0xFFC0563F)),
+                            ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: c(0xFF5B556A),
+                        fontSize: narrow ? 11.5 : 12,
+                        height: 1.3,
+                      ),
+                    ),
                   ),
                 ),
-              )),
-                  if ((formula ?? '').trim().isNotEmpty)
-                    ProposalFormulaQuestionMark(
-                      title: label,
-                      formula: formula!.trim(),
-                      detail: formulaDetail ?? '',
-                    ),
+                if ((formula ?? '').trim().isNotEmpty)
+                  ProposalFormulaQuestionMark(
+                    title: label,
+                    formula: formula!.trim(),
+                    detail: formulaDetail ?? '',
+                  ),
+              ],
+            ),
+          ),
+          SizedBox(width: narrow ? 6 : 8),
+          Expanded(
+            child: Container(
+              constraints: const BoxConstraints(minHeight: line),
+              alignment: Alignment.centerLeft,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  child,
+                  if (footer != null) ...[const SizedBox(height: 6), footer!],
                 ],
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                child,
-                if (footer != null) ...[const SizedBox(height: 6), footer!],
-              ],
+          if (trailing != null) ...[
+            SizedBox(width: narrow ? 4 : 8),
+            Container(
+              constraints: const BoxConstraints(minHeight: line),
+              alignment: Alignment.centerRight,
+              child: trailing,
             ),
-          ),
-          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+          ],
         ],
       ),
     );
@@ -881,9 +938,11 @@ class ProposalReviewToggle extends StatelessWidget {
   Widget _prototype(BuildContext context) {
     Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
         DunesColors.resolve(context, Color(v), role: role);
+    // 手机上胶囊、按钮都收窄，给值多留位置。
+    final narrow = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
     Widget pill(String text, int bg, int fg, {String? tip}) {
       final chip = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        padding: EdgeInsets.symmetric(horizontal: narrow ? 6 : 8, vertical: 2),
         decoration: BoxDecoration(
           color: c(bg, DunesColorRole.surface),
           borderRadius: BorderRadius.circular(999),
@@ -891,7 +950,7 @@ class ProposalReviewToggle extends StatelessWidget {
         child: Text(
           text,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: narrow ? 10.5 : 11,
             height: 1.3,
             fontWeight: FontWeight.w500,
             color: c(fg),
@@ -903,20 +962,20 @@ class ProposalReviewToggle extends StatelessWidget {
           : Tooltip(message: tip, child: chip);
     }
 
-    final done = pill('✓ 已复核', 0xFFE6F3EB, 0xFF2D6E47);
+    final done = pill(narrow ? '✓ 已核' : '✓ 已复核', 0xFFE6F3EB, 0xFF2D6E47);
     if (onPressed == null) {
       if (reviewed) return done;
       if (rejected) return pill('已驳回', 0xFFFBE9E7, 0xFFB42318);
       return pill(
-        '待复核',
+        narrow ? '待核' : '待复核',
         0xFFFDF2E6,
         0xFF9A4A0C,
         tip: pendingLabel.startsWith('待') ? pendingLabel : '待$pendingLabel',
       );
     }
     ButtonStyle small({required bool primary}) => OutlinedButton.styleFrom(
-      minimumSize: const Size(0, 26),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      minimumSize: const Size(0, kProposalSimpleLineHeight),
+      padding: EdgeInsets.symmetric(horizontal: narrow ? 7 : 10),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
       foregroundColor: c(primary ? 0xFFFFFFFF : 0xFF9A4A0C),
@@ -928,7 +987,10 @@ class ProposalReviewToggle extends StatelessWidget {
           ? BorderSide.none
           : BorderSide(color: c(0xFFF0C9A0, DunesColorRole.border)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      textStyle: TextStyle(
+        fontSize: narrow ? 11 : 12,
+        fontWeight: FontWeight.w700,
+      ),
     );
     if (reviewed) {
       return Row(
@@ -938,7 +1000,7 @@ class ProposalReviewToggle extends StatelessWidget {
           TextButton(
             onPressed: onPressed,
             style: TextButton.styleFrom(
-              minimumSize: const Size(0, 26),
+              minimumSize: const Size(0, kProposalSimpleLineHeight),
               padding: const EdgeInsets.symmetric(horizontal: 6),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               visualDensity: VisualDensity.compact,
@@ -951,8 +1013,8 @@ class ProposalReviewToggle extends StatelessWidget {
       );
     }
     return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+      spacing: narrow ? 4 : 6,
+      runSpacing: 4,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (rejected) pill('已驳回', 0xFFFBE9E7, 0xFFB42318),

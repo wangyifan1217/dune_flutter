@@ -5391,7 +5391,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final open = _contentOpen;
     final frozen = _isContentFrozen;
     final showComments = widget.enableComments && _row.id > 0;
-    final scoped = ProposalSimpleViewScope(readOnly: frozen, child: panes);
+    final scoped = ProposalSimpleViewScope(
+      readOnly: frozen,
+      textRows: _simpleView,
+      child: panes,
+    );
     return KeyedSubtree(
       key: _contentBoxKey,
       child: Container(
@@ -5820,20 +5824,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   /// 合同合成一行：「编号 名称 · 对方签约主体 … · 有效期 … · 已签署」。
   /// 对方和有效期始终保留，没填写「未填写」。
   String _contractSimpleText(String prefix) {
+    // 只写填了的部分，未填的不再逐项写「未填写」（点「详情」能看全部字段）。
     String t(String field) => _text('$prefix$field').trim();
-    String labeled(String label, String value) =>
-        '$label ${value.isEmpty ? '未填写' : value}';
     final mode = switch (t('Mode')) {
       '已签署合同' => '已签署',
       '未签署合同' => '未签署',
       final other => other,
     };
-    return [
+    final parts = [
       [t('No'), t('Name')].where((item) => item.isNotEmpty).join(' '),
-      labeled('对方签约主体', t('Counterparty')),
-      labeled('有效期', t('ValidPeriod')),
+      t('Counterparty'),
+      t('ValidPeriod'),
       mode,
-    ].where((item) => item.isNotEmpty).join(' · ');
+    ].where((item) => item.isNotEmpty).toList();
+    return parts.isEmpty ? '未填写' : parts.join(' · ');
   }
 
   /// 合同一行：「编号 名称 · 对方 · 有效期 · 已签署」+「详情 ▾」，
@@ -19880,18 +19884,34 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               row.length == 1 &&
                       (resolved <= 1 || _isFullWidthWidget(row.first))
                   ? row.first
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (var i = 0; i < resolved; i++) ...[
-                          if (i > 0) const SizedBox(width: 24),
-                          Expanded(
-                            child: i < row.length
-                                ? row[i]
-                                : const SizedBox.shrink(),
+                  // 多列一排：分隔线由整排统一画，几格高度不一样时线也对齐成一条。
+                  : Container(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: DunesColors.resolve(
+                              gridContext,
+                              const Color(0xFFF3F0F8),
+                              role: DunesColorRole.border,
+                            ),
                           ),
-                        ],
-                      ],
+                        ),
+                      ),
+                      child: ProposalGridRowScope(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (var i = 0; i < resolved; i++) ...[
+                              if (i > 0) const SizedBox(width: 24),
+                              Expanded(
+                                child: i < row.length
+                                    ? row[i]
+                                    : const SizedBox.shrink(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
           ],
         );

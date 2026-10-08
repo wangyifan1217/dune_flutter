@@ -1,10 +1,28 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'proposal_intake_models.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
+
+/// 提案页原型样式的字体：中文 Noto Sans SC（带真粗体），数字 JetBrains Mono。
+/// 两个字体族只在原型样式里用，不影响 App 其他页面。
+const kProposalProtoSans = 'Noto Sans SC Proposal';
+const kProposalProtoSansFallback = [
+  'Noto Sans SC',
+  'PingFang SC',
+  'Microsoft YaHei',
+  'sans-serif',
+];
+const kProposalProtoMono = 'JetBrains Mono';
+const kProposalProtoMonoFallback = [
+  'Geist Mono',
+  'Noto Sans SC Proposal',
+  'Noto Sans SC',
+  'monospace',
+];
 
 abstract final class ProposalPalette {
   static const page = Color(0xFFF3F0F7);
@@ -67,6 +85,105 @@ const kProposalCaptionStyle = TextStyle(
   fontSize: 11,
   height: 1.45,
 );
+
+/// 原型「填报内容」简单行：只读整单（待最终确认、已完成）时，字段改成
+/// 「名称在左、值在右」一行一条，卡片去掉外框，板块大标题不再重复。
+/// 不包这一层时所有组件与原来完全一样。
+class ProposalSimpleViewScope extends InheritedWidget {
+  const ProposalSimpleViewScope({
+    super.key,
+    required super.child,
+    this.readOnly = false,
+  });
+
+  /// 只读整单（待最终确认、已完成）：板块大标题也不再重复。
+  /// 填写、复核时保留大标题，只把字段、输入框、复核按钮换成原型样式。
+  final bool readOnly;
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ProposalSimpleViewScope>() !=
+      null;
+
+  static bool readOnlyOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<ProposalSimpleViewScope>()
+          ?.readOnly ==
+      true;
+
+  @override
+  bool updateShouldNotify(ProposalSimpleViewScope oldWidget) =>
+      oldWidget.readOnly != readOnly;
+}
+
+/// 原型的输入框：无外框，底部一条紫色虚线；聚焦时变成实线。
+class ProposalDashedUnderlineBorder extends InputBorder {
+  const ProposalDashedUnderlineBorder({
+    super.borderSide = const BorderSide(color: Color(0xFFCFC2F5)),
+    this.dashed = true,
+  });
+
+  final bool dashed;
+
+  @override
+  ProposalDashedUnderlineBorder copyWith({BorderSide? borderSide, bool? dashed}) =>
+      ProposalDashedUnderlineBorder(
+        borderSide: borderSide ?? this.borderSide,
+        dashed: dashed ?? this.dashed,
+      );
+
+  @override
+  bool get isOutline => false;
+
+  @override
+  EdgeInsetsGeometry get dimensions =>
+      EdgeInsets.only(bottom: borderSide.width);
+
+  @override
+  ProposalDashedUnderlineBorder scale(double t) =>
+      ProposalDashedUnderlineBorder(borderSide: borderSide.scale(t), dashed: dashed);
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => Path()
+    ..addRect(
+      Rect.fromLTWH(
+        rect.left,
+        rect.top,
+        rect.width,
+        math.max(0.0, rect.height - borderSide.width),
+      ),
+    );
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) =>
+      Path()..addRect(rect);
+
+  @override
+  void paint(
+    Canvas canvas,
+    Rect rect, {
+    double? gapStart,
+    double gapExtent = 0.0,
+    double gapPercentage = 0.0,
+    TextDirection? textDirection,
+  }) {
+    if (borderSide.style == BorderStyle.none) return;
+    final paint = borderSide.toPaint();
+    final y = rect.bottom - borderSide.width / 2;
+    if (!dashed) {
+      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
+      return;
+    }
+    const dash = 4.0;
+    const gap = 3.0;
+    for (var x = rect.left; x < rect.right; x += dash + gap) {
+      canvas.drawLine(
+        Offset(x, y),
+        Offset(math.min(x + dash, rect.right), y),
+        paint,
+      );
+    }
+  }
+}
 
 /// 提案页统一断点与栅格尺寸。
 ///
@@ -212,6 +329,13 @@ class ProposalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (ProposalSimpleViewScope.of(context)) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 8),
+        child: child,
+      );
+    }
     final narrow = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
     final resolvedPadding =
         padding ??
@@ -265,7 +389,9 @@ class ProposalSectionTitle extends StatelessWidget {
   final bool lighthouse;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) => ProposalSimpleViewScope.readOnlyOf(context)
+      ? const SizedBox.shrink()
+      : Padding(
     padding: const EdgeInsets.only(bottom: 12, top: 4),
     child: LayoutBuilder(
       builder: (context, constraints) {
@@ -483,8 +609,161 @@ class ProposalField extends StatelessWidget {
   /// 字段下方补充信息，例如合同改动对照。
   final Widget? footer;
 
+  /// 原型简单行：名称 104px（手机 76px）在左，值在右，行底一条细线。
+  /// 行距比原型略紧（上下 4），复核、查看时一屏能多看几行。
+  Widget _simpleRow(BuildContext context) {
+    final narrow = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
+    // 只读简单行（复核、查看）：名称 118px 一行写完，放不下省略；手机 84px 可换行。
+    final readOnly = ProposalSimpleViewScope.readOnlyOf(context);
+    final labelWidth = readOnly ? (narrow ? 84.0 : 118.0) : (narrow ? 76.0 : 104.0);
+    if (readOnly && !narrow) {
+      return _readOnlyRow(context, labelWidth);
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF3F0F8),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: labelWidth,
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF5B556A),
+                    ),
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+                if (required)
+                  Text(
+                    ' *',
+                    style: TextStyle(
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFC0563F),
+                      ),
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                if ((formula ?? '').trim().isNotEmpty)
+                  ProposalFormulaQuestionMark(
+                    title: label,
+                    formula: formula!.trim(),
+                    detail: formulaDetail ?? '',
+                  ),
+              ],
+            ),
+          ),
+          SizedBox(width: narrow ? 8 : 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                child,
+                if (footer != null) ...[const SizedBox(height: 6), footer!],
+              ],
+            ),
+          ),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+        ],
+      ),
+    );
+  }
+
+  /// 宽屏只读行：名称不换行，值顶对齐（值可能展开成多行），复核标记靠右。
+  Widget _readOnlyRow(BuildContext context, double labelWidth) {
+    Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, Color(v), role: role);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: c(0xFFF3F0F8, DunesColorRole.border)),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: labelWidth,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                children: [
+              Flexible(child: Tooltip(
+                message: label,
+                waitDuration: const Duration(milliseconds: 600),
+                child: Text.rich(
+                  TextSpan(
+                    text: label,
+                    children: [
+                      if (required)
+                        TextSpan(
+                          text: ' *',
+                          style: TextStyle(color: c(0xFFC0563F)),
+                        ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: c(0xFF5B556A),
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+              )),
+                  if ((formula ?? '').trim().isNotEmpty)
+                    ProposalFormulaQuestionMark(
+                      title: label,
+                      formula: formula!.trim(),
+                      detail: formulaDetail ?? '',
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                child,
+                if (footer != null) ...[const SizedBox(height: 6), footer!],
+              ],
+            ),
+          ),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (ProposalSimpleViewScope.of(context)) return _simpleRow(context);
     final resolved = tone ?? proposalFieldTone(enabled: true, source: source);
     final (bg, border, chipKind) = switch (resolved) {
       ProposalFieldTone.auto => (
@@ -596,8 +875,105 @@ class ProposalReviewToggle extends StatelessWidget {
   final String pendingLabel;
   final bool subtle;
 
+  /// 原型右侧的复核标记，做成小胶囊：
+  /// 只看时「待复核」橙色胶囊（悬停看谁来复核）、「✓ 已复核」绿色胶囊、「已驳回」红色胶囊；
+  /// 轮到你复核时「有问题」描边小按钮 +「通过」紫色实心小按钮；复核后「✓ 已复核 · 撤销」。
+  Widget _prototype(BuildContext context) {
+    Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, Color(v), role: role);
+    Widget pill(String text, int bg, int fg, {String? tip}) {
+      final chip = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: c(bg, DunesColorRole.surface),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 11,
+            height: 1.3,
+            fontWeight: FontWeight.w500,
+            color: c(fg),
+          ),
+        ),
+      );
+      return tip == null || tip.isEmpty
+          ? chip
+          : Tooltip(message: tip, child: chip);
+    }
+
+    final done = pill('✓ 已复核', 0xFFE6F3EB, 0xFF2D6E47);
+    if (onPressed == null) {
+      if (reviewed) return done;
+      if (rejected) return pill('已驳回', 0xFFFBE9E7, 0xFFB42318);
+      return pill(
+        '待复核',
+        0xFFFDF2E6,
+        0xFF9A4A0C,
+        tip: pendingLabel.startsWith('待') ? pendingLabel : '待$pendingLabel',
+      );
+    }
+    ButtonStyle small({required bool primary}) => OutlinedButton.styleFrom(
+      minimumSize: const Size(0, 26),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      foregroundColor: c(primary ? 0xFFFFFFFF : 0xFF9A4A0C),
+      backgroundColor: c(
+        primary ? 0xFF6B4FD8 : 0xFFFFFFFF,
+        DunesColorRole.surface,
+      ),
+      side: primary
+          ? BorderSide.none
+          : BorderSide(color: c(0xFFF0C9A0, DunesColorRole.border)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+    );
+    if (reviewed) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          done,
+          TextButton(
+            onPressed: onPressed,
+            style: TextButton.styleFrom(
+              minimumSize: const Size(0, 26),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+              foregroundColor: c(0xFF8A8499),
+              textStyle: const TextStyle(fontSize: 11),
+            ),
+            child: const Text('撤销'),
+          ),
+        ],
+      );
+    }
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (rejected) pill('已驳回', 0xFFFBE9E7, 0xFFB42318),
+        if (onReject != null)
+          OutlinedButton(
+            onPressed: onReject,
+            style: small(primary: false),
+            child: const Text('有问题'),
+          ),
+        OutlinedButton(
+          onPressed: onPressed,
+          style: small(primary: true),
+          child: const Text('通过'),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (ProposalSimpleViewScope.of(context)) return _prototype(context);
     final canAct = onPressed != null;
     if (!canAct) {
       final label = reviewed
@@ -984,6 +1360,33 @@ InputDecoration proposalInputDecoration({
   bool readOnly = false,
   ProposalFieldTone tone = ProposalFieldTone.fill,
 }) {
+  if (context != null && ProposalSimpleViewScope.of(context)) {
+    // 原型：无外框，底部紫色虚线；聚焦变紫色实线。
+    return DunesColors.inputDecoration(
+      context,
+      InputDecoration(
+        hintText: hint,
+        hintMaxLines: 1,
+        hintStyle: const TextStyle(
+          fontSize: 12,
+          height: 1.2,
+          color: ProposalPalette.text3,
+        ),
+        filled: false,
+        isDense: true,
+        contentPadding: const EdgeInsets.fromLTRB(2, 6, 2, 6),
+        enabledBorder: const ProposalDashedUnderlineBorder(),
+        disabledBorder: const ProposalDashedUnderlineBorder(
+          borderSide: BorderSide(color: Color(0xFFE7E3F2)),
+        ),
+        focusedBorder: const ProposalDashedUnderlineBorder(
+          borderSide: BorderSide(color: Color(0xFF6B4FD8), width: 1.5),
+          dashed: false,
+        ),
+        border: const ProposalDashedUnderlineBorder(),
+      ),
+    );
+  }
   final fillColor = switch (tone) {
     ProposalFieldTone.auto =>
       readOnly ? ProposalPalette.app : ProposalPalette.card,
@@ -1181,13 +1584,129 @@ class ProposalPresidentDecisionBar extends StatelessWidget {
     super.key,
     required this.onApprove,
     required this.onReject,
+    this.prototype = false,
   });
 
   final VoidCallback onApprove;
   final VoidCallback onReject;
 
+  /// 原型样式：白底、左边一句提示，右边「驳回」（橙框）与「确认通过」（紫色，宽一倍）。
+  final bool prototype;
+
+  Widget _prototypeBar(BuildContext context) {
+    const height = 48.0;
+    Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, Color(v), role: role);
+    final reject = OutlinedButton(
+      key: const ValueKey('proposal-president-reject'),
+      onPressed: onReject,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: c(0xFF9A3412),
+        backgroundColor: c(0xFFFFFFFF, DunesColorRole.surface),
+        side: BorderSide(color: c(0xFFF0C9A0, DunesColorRole.border)),
+        minimumSize: const Size(0, height),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+      ),
+      child: const Text(
+        '驳回',
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      ),
+    );
+    final approve = FilledButton(
+      key: const ValueKey('proposal-president-approve'),
+      onPressed: onApprove,
+      style: FilledButton.styleFrom(
+        backgroundColor: c(0xFF6B4FD8, DunesColorRole.surface),
+        foregroundColor: c(0xFFFFFFFF),
+        minimumSize: const Size(0, height),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+      ),
+      child: const Text(
+        '确认通过',
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      ),
+    );
+    final hint = Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '待你最终确认',
+            style: TextStyle(color: c(0xFF3F2A9A), fontWeight: FontWeight.w700),
+          ),
+          const TextSpan(text: ' · 各板块已复核完，内容已锁定'),
+        ],
+      ),
+      style: TextStyle(color: c(0xFF5B556A), fontSize: 12),
+    );
+    return SafeArea(
+      top: false,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: c(0xFFFFFFFF, DunesColorRole.surface),
+          border: Border(
+            top: BorderSide(color: c(0xFFE7E3F2, DunesColorRole.border)),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0F3C2878),
+              blurRadius: 16,
+              offset: Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1180),
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  final buttons = Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(width: 160, child: reject),
+                      const SizedBox(width: 10),
+                      SizedBox(width: 260, child: approve),
+                    ],
+                  );
+                  if (box.maxWidth >= 680) {
+                    return Row(
+                      children: [
+                        Expanded(child: hint),
+                        const SizedBox(width: 10),
+                        buttons,
+                      ],
+                    );
+                  }
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      hint,
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(child: reject),
+                          const SizedBox(width: 10),
+                          Expanded(flex: 2, child: approve),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (prototype) return _prototypeBar(context);
     const height = 48.0;
     return SafeArea(
       top: false,
@@ -1297,15 +1816,85 @@ class ProposalModuleConfirmBar extends StatelessWidget {
     this.title = '逐条已完成，还差最后一步',
     this.message = '点「确认本板块通过」才算科技复核结束。保存只是存内容，不会过关。',
     this.confirmLabel = '确认本板块通过',
+    this.prototype = false,
   });
+
+  /// 原型复核页底部条：左边提示，右边紫色「确认本板块通过」。
+  final bool prototype;
 
   final VoidCallback onConfirm;
   final String title;
   final String message;
   final String confirmLabel;
 
+  Widget _prototypeBar(BuildContext context) {
+    Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, Color(v), role: role);
+    final button = FilledButton(
+      key: const ValueKey('proposal-module-confirm-bar'),
+      onPressed: onConfirm,
+      style: FilledButton.styleFrom(
+        backgroundColor: c(0xFF6B4FD8, DunesColorRole.surface),
+        foregroundColor: c(0xFFFFFFFF),
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+      child: Text(confirmLabel),
+    );
+    final hint = Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: title,
+            style: TextStyle(color: c(0xFF2D6E47), fontWeight: FontWeight.w700),
+          ),
+          TextSpan(text: ' · $message'),
+        ],
+      ),
+      style: TextStyle(color: c(0xFF5B556A), fontSize: 12),
+    );
+    return SafeArea(
+      top: false,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: c(0xFFFFFFFF, DunesColorRole.surface),
+          border: Border(top: BorderSide(color: c(0xFFE7E3F2, DunesColorRole.border))),
+          boxShadow: const [
+            BoxShadow(color: Color(0x0F3C2878), blurRadius: 16, offset: Offset(0, -4)),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1180),
+              child: LayoutBuilder(
+                builder: (context, box) => box.maxWidth >= 640
+                    ? Row(
+                        children: [
+                          Expanded(child: hint),
+                          const SizedBox(width: 10),
+                          button,
+                        ],
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [hint, const SizedBox(height: 8), button],
+                      ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (prototype) return _prototypeBar(context);
     return SafeArea(
       top: false,
       child: DecoratedBox(
@@ -2230,6 +2819,93 @@ class ProposalSettleRatioFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}
+
+
+/// 原型简单行的值：默认一行，放不下时末尾给「展开」，点开看全文、可复制，再点「收起」。
+class ProposalOneLineText extends StatefulWidget {
+  const ProposalOneLineText(this.text, {super.key, required this.style});
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  State<ProposalOneLineText> createState() => _ProposalOneLineTextState();
+}
+
+class _ProposalOneLineTextState extends State<ProposalOneLineText> {
+  bool _open = false;
+
+  @override
+  void didUpdateWidget(covariant ProposalOneLineText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) _open = false;
+  }
+
+  Widget _toggle(String label) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _open = !_open),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: DunesColors.resolve(context, const Color(0xFF5B3FD0)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final style = DefaultTextStyle.of(context).style.merge(widget.style);
+    return LayoutBuilder(
+      builder: (context, box) {
+        final painter = TextPainter(
+          text: TextSpan(text: widget.text, style: style),
+          maxLines: 1,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: box.maxWidth.isFinite ? box.maxWidth : 10000);
+        final overflow = painter.didExceedMaxLines;
+        painter.dispose();
+        if (!overflow) {
+          return Text(widget.text, maxLines: 1, style: style);
+        }
+        if (_open) {
+          return Text.rich(
+            TextSpan(
+              text: widget.text,
+              style: style,
+              children: [
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: _toggle('收起'),
+                ),
+              ],
+            ),
+          );
+        }
+        return Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style,
+              ),
+            ),
+            _toggle('展开'),
+          ],
+        );
+      },
     );
   }
 }

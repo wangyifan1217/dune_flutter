@@ -26,6 +26,18 @@ void main() {
         );
         await tester.pump();
 
+        expect(
+          find.byKey(const ValueKey('proposal-lighthouse-list')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('proposal-status-strip')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('proposal-period-strip')),
+          findsOneWidget,
+        );
         expect(find.byType(DropdownButton<String>), findsNothing);
         expect(find.widgetWithText(ChoiceChip, '全部'), findsOneWidget);
         expect(find.widgetWithText(ChoiceChip, '草稿'), findsOneWidget);

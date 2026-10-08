@@ -134,3 +134,20 @@ flutter:
         - asset: assets/fonts/NotoSansSC-Regular.ttf
         - asset: assets/fonts/NotoSansSC-Medium.ttf
           weight: 500
+    # 提案测算格子的数字字体，与原型一致（SIL OFL，见 assets/fonts/JetBrainsMono-OFL.txt）。
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
+          weight: 700
+    # 提案页原型样式专用的中文字体：比 Noto Sans SC 多一个真粗体（700），
+    # 单独起名，避免改变 App 其他页面的字体。
+    # 常规字重（400）也用 Medium：Flutter web 画出来的中文比浏览器细、发灰，
+    # 用 Medium 才和原型 HTML 里 Noto Sans SC 常规体的黑度一致。
+    - family: Noto Sans SC Proposal
+      fonts:
+        - asset: assets/fonts/NotoSansSC-Medium.ttf
+        - asset: assets/fonts/NotoSansSC-Bold.otf
+          weight: 700

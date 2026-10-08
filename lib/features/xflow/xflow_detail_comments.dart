@@ -23,6 +23,21 @@ const _kMaxCommentAttachments = 6;
 const _kMaxCommentAttachmentBytes = 20 * 1024 * 1024;
 
 /// 审批进度上方的讨论评论区（支持 @ 与楼中楼回复）。
+/// 评论区的强调色、浅底色。各业务页可以传自己的配色，不传用默认。
+class XfCommentsPalette {
+  const XfCommentsPalette({
+    required this.accent,
+    required this.accentSoft,
+    required this.accentDeep,
+    required this.soft,
+  });
+
+  final Color accent;
+  final Color accentSoft;
+  final Color accentDeep;
+  final Color soft;
+}
+
 class XfDetCommentsSection extends StatefulWidget {
   const XfDetCommentsSection({
     super.key,
@@ -30,7 +45,11 @@ class XfDetCommentsSection extends StatefulWidget {
     required this.businessType,
     required this.businessId,
     this.fallbackPeople = const [],
+    this.palette,
   });
+
+  /// 可选配色；不传时与原来完全一样。
+  final XfCommentsPalette? palette;
 
   final XflowService service;
   final String businessType;
@@ -42,6 +61,12 @@ class XfDetCommentsSection extends StatefulWidget {
 }
 
 class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
+  // 默认与原来完全一样；调用方传 palette 时换成自己的强调色（如提案的紫色）。
+  Color get _accent => widget.palette?.accent ?? DunesColors.accent;
+  Color get _accentSoft => widget.palette?.accentSoft ?? DunesColors.accentSoft;
+  Color get _accentDeep => widget.palette?.accentDeep ?? DunesColors.accentDeep;
+  Color get _soft => widget.palette?.soft ?? DunesColors.bgSoft;
+
   final _input = TextEditingController();
   final _focus = FocusNode();
   late final ConversationService _avatarService = ConversationService(
@@ -617,7 +642,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
               decoration: BoxDecoration(
                 color: DunesColors.resolve(
                   context,
-                  DunesColors.bgSoft,
+                  _soft,
                   role: DunesColorRole.surface,
                 ),
                 borderRadius: BorderRadius.circular(10),
@@ -655,7 +680,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
               decoration: BoxDecoration(
                 color: DunesColors.resolve(
                   context,
-                  DunesColors.accentSoft,
+                  _accentSoft,
                   role: DunesColorRole.surface,
                 ),
                 borderRadius: BorderRadius.circular(8),
@@ -665,7 +690,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                   Icon(
                     Icons.reply_rounded,
                     size: 14,
-                    color: DunesColors.resolve(context, DunesColors.accent),
+                    color: DunesColors.resolve(context, _accent),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -675,7 +700,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                         fontSize: 12,
                         color: DunesColors.resolve(
                           context,
-                          DunesColors.accentDeep,
+                          _accentDeep,
                         ),
                         fontWeight: FontWeight.w600,
                         context: context,
@@ -703,12 +728,12 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                 color: _dragging
                     ? DunesColors.resolve(
                         context,
-                        DunesColors.accentSoft,
+                        _accentSoft,
                         role: DunesColorRole.surface,
                       )
                     : DunesColors.resolve(
                         context,
-                        DunesColors.bgSoft,
+                        _soft,
                         role: DunesColorRole.surface,
                       ),
                 borderRadius: BorderRadius.circular(12),
@@ -716,7 +741,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                   color: _dragging
                       ? DunesColors.resolve(
                           context,
-                          DunesColors.accent,
+                          _accent,
                           role: DunesColorRole.border,
                         )
                       : DunesColors.resolve(
@@ -739,7 +764,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                           fontSize: 11.5,
                           color: DunesColors.resolve(
                             context,
-                            DunesColors.accentDeep,
+                            _accentDeep,
                           ),
                           fontWeight: FontWeight.w600,
                           context: context,
@@ -828,7 +853,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                           size: 18,
                           color: DunesColors.resolve(
                             context,
-                            DunesColors.accent,
+                            _accent,
                           ),
                         ),
                       ),
@@ -841,7 +866,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                           size: 18,
                           color: DunesColors.resolve(
                             context,
-                            DunesColors.accent,
+                            _accent,
                           ),
                         ),
                       ),
@@ -851,7 +876,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                           style: FilledButton.styleFrom(
                             backgroundColor: DunesColors.resolve(
                               context,
-                              DunesColors.accent,
+                              _accent,
                               role: DunesColorRole.surface,
                             ),
                             padding: const EdgeInsets.symmetric(
@@ -928,7 +953,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
               decoration: BoxDecoration(
                 color: DunesColors.resolve(
                   context,
-                  DunesColors.bgSoft,
+                  _soft,
                   role: DunesColorRole.surface,
                 ),
                 borderRadius: BorderRadius.circular(10),
@@ -1002,12 +1027,12 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
           avatarService: _avatarService,
           fallbackBackground: DunesColors.resolve(
             context,
-            DunesColors.accentSoft,
+            _accentSoft,
             role: DunesColorRole.surface,
           ),
           fallbackForeground: DunesColors.resolve(
             context,
-            DunesColors.accentDeep,
+            _accentDeep,
           ),
         ),
         const SizedBox(width: 8),
@@ -1070,7 +1095,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                     style: DunesTypography.sans(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.resolve(context, DunesColors.accent),
+                      color: DunesColors.resolve(context, _accent),
                       context: context,
                     ),
                   ),

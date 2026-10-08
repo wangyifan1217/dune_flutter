@@ -5,6 +5,7 @@ import 'package:dunes_app/features/proposal_intake/proposal_intake_models.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_select.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_service.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_ui.dart';
+import 'package:dunes_app/features/proposal_intake/proposal_view_style.dart';
 import 'package:dunes_app/features/proposal_intake/settlement_catalog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -148,6 +149,10 @@ Future<void> _scrollUntil(WidgetTester tester, String label) async {
     await tester.pump();
   }
 }
+
+/// 字段复核按钮：原型样式下叫「通过 / 有问题」，关掉原型样式时是原来的「点此复核 / 驳回」。
+final _approveLabel = kProposalPrototypeFormEnabled ? '通过' : '点此复核';
+final _rejectLabel = kProposalPrototypeFormEnabled ? '有问题' : '驳回';
 
 Finder _fieldOf(String label) =>
     find.ancestor(of: find.text(label), matching: find.byType(ProposalField));
@@ -1779,7 +1784,7 @@ void main() {
             .widget<OutlinedButton>(
               find.descendant(
                 of: interfaceCard.first,
-                matching: find.widgetWithText(OutlinedButton, '点此复核'),
+                matching: find.widgetWithText(OutlinedButton, _approveLabel),
               ),
             )
             .onPressed,
@@ -1935,7 +1940,7 @@ void main() {
           .widget<OutlinedButton>(
             find.descendant(
               of: _fieldOf('合同编号').first,
-              matching: find.widgetWithText(OutlinedButton, '点此复核'),
+              matching: find.widgetWithText(OutlinedButton, _approveLabel),
             ),
           )
           .onPressed,
@@ -2506,7 +2511,7 @@ void main() {
           .widget<OutlinedButton>(
             find.descendant(
               of: header,
-              matching: find.widgetWithText(OutlinedButton, '点此复核'),
+              matching: find.widgetWithText(OutlinedButton, _approveLabel),
             ),
           )
           .onPressed,
@@ -2948,7 +2953,7 @@ void main() {
     await tester.tap(find.text('开始逐条复核'));
     await tester.pump();
     await _scrollUntil(tester, '产品结算');
-    expect(find.text('点此复核'), findsWidgets);
+    expect(find.text(_approveLabel), findsWidgets);
     await _tapVisible(tester, find.text('填写结算').last);
     final settleDialog = find.byType(AlertDialog);
     expect(
@@ -3921,7 +3926,7 @@ void main() {
     );
     expect(find.textContaining('驳回所选'), findsNothing);
     expect(find.textContaining('填一份意见即可一次驳回'), findsNothing);
-    expect(find.text('驳回'), findsWidgets);
+    expect(find.text(_rejectLabel), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 

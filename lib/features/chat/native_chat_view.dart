@@ -3937,11 +3937,11 @@ class _NativeChatViewState extends State<NativeChatView>
   /// 单张图片原图大小上限（压缩后仍超过则拒绝）。
   static const int _maxImageBytes = 30 * 1024 * 1024;
 
-  /// 普通文件大小上限。
-  static int get _maxFileBytes => chatCurrentFileLimitBytes;
+  /// 普通文件大小上限。桌面端为 null，表示不按大小拒绝。
+  static int? get _maxFileBytes => chatCurrentFileLimitBytes;
 
-  bool _checkSizeLimit(int length, int maxBytes, String fileName) {
-    if (length <= maxBytes) return true;
+  bool _checkSizeLimit(int length, int? maxBytes, String fileName) {
+    if (maxBytes == null || length <= maxBytes) return true;
     final mb = (maxBytes / (1024 * 1024)).round();
     _showToast('$fileName 超过 ${mb}MB 上限，无法发送');
     return false;

@@ -1495,7 +1495,6 @@ class ChatInboxRow extends StatelessWidget {
     required this.timeLabel,
     required this.onTap,
     this.subtitle,
-    this.memberCount,
     this.unreadCount = 0,
     this.markedUnread = false,
     this.muted = false,
@@ -1528,7 +1527,6 @@ class ChatInboxRow extends StatelessWidget {
   final String timeLabel;
   final VoidCallback onTap;
   final String? subtitle;
-  final int? memberCount;
   final int unreadCount;
   final bool markedUnread;
   final bool muted;
@@ -1719,22 +1717,6 @@ class ChatInboxRow extends StatelessWidget {
                                         letterSpacing: 0.04 * 8.5,
                                         context: context,
                                       ),
-                                    ),
-                                  ),
-                                ],
-                                if (!workgroupTag &&
-                                    memberCount != null &&
-                                    memberCount! > 0) ...[
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '($memberCount)',
-                                    style: DunesTypography.sans(
-                                      fontSize: 11,
-                                      color: DunesColors.resolve(
-                                        context,
-                                        DunesColors.text3,
-                                      ),
-                                      context: context,
                                     ),
                                   ),
                                 ],

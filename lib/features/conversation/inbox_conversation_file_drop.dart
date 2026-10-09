@@ -16,7 +16,6 @@ import '../shell/dunes_toast.dart';
 
 const _maxDropFiles = 20;
 const _maxImageBytes = 30 * 1024 * 1024;
-const _maxFileBytes = chatMaxFileBytes;
 
 var _inboxFileDropBusy = false;
 
@@ -223,11 +222,8 @@ Future<List<DesktopComposerPendingFile>> _readDroppedFiles(
     final fileName = _fileNameOf(file);
     if (!_isChatImageFileName(fileName)) {
       final source = await ChatFileUploadSource.fromFile(file);
-      if (source.length == 0 || source.length > _maxFileBytes) {
-        toast(
-          source.length == 0 ? '$fileName 无法读取' : '$fileName 超过 100MB 上限，无法添加',
-          error: true,
-        );
+      if (source.length == 0) {
+        toast('$fileName 无法读取', error: true);
         continue;
       }
       out.add(
@@ -247,9 +243,8 @@ Future<List<DesktopComposerPendingFile>> _readDroppedFiles(
       continue;
     }
     final isImage = _isChatImageFileName(fileName);
-    final limit = isImage ? _maxImageBytes : _maxFileBytes;
-    final limitMb = (limit / (1024 * 1024)).round();
-    if (bytes.length > limit) {
+    final limitMb = (_maxImageBytes / (1024 * 1024)).round();
+    if (bytes.length > _maxImageBytes) {
       toast('$fileName 超过 ${limitMb}MB 上限，无法添加', error: true);
       continue;
     }

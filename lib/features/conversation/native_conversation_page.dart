@@ -1764,22 +1764,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ? '每周五 18:00 送达'
           : c.preview,
       timeLabel: InboxFormat.formatTime(c.updatedAt, withClock: c.isPrivate),
-      memberCount:
-          c.isPrivate ||
-              c.isSelfMemo ||
-              c.isRobot ||
-              c.isApprovalAssistant ||
-              c.isTaskAssistant ||
-              c.isKpiAssistant ||
-              c.isDriveAssistant ||
-              c.isXrxsAssistant ||
-              c.isWeeklySummary ||
-              c.isAdministrativeNotice ||
-              c.isReconciliationAssistant ||
-              kind == 'AI_ASSISTANT' ||
-              kind == 'BROADCAST'
-          ? null
-          : c.memberCount,
       unreadCount: selected && !c.isAdministrativeNotice
           ? 0
           : (c.isAiAssistant &&

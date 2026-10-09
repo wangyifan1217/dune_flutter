@@ -7,6 +7,7 @@ import 'package:dunes_app/features/auth/auth_session.dart';
 import 'package:dunes_app/features/chat/chat_file_upload_source.dart';
 import 'package:dunes_app/features/conversation/conversation_service.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -20,6 +21,18 @@ const session = AuthSession(
 );
 
 void main() {
+  test('desktop clients do not cap ordinary file size', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    expect(chatCurrentFileLimitBytes, isNull);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    expect(chatCurrentFileLimitBytes, isNull);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    expect(chatCurrentFileLimitBytes, chatAppMaxFileBytes);
+  });
+
   test(
     'cancelling an active file upload stops before message publication',
     () async {

@@ -4,14 +4,16 @@ import 'package:flutter/foundation.dart';
 const chatMaxFileBytes = 100 * 1024 * 1024;
 const chatAppMaxFileBytes = 500 * 1024 * 1024;
 
-/// Only Android/iOS APP uploads use the larger limit. Desktop and Web keep
-/// their existing limit, including macOS byte-backed attachment staging.
-int get chatCurrentFileLimitBytes =>
-    !kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.android ||
-            defaultTargetPlatform == TargetPlatform.iOS)
-    ? chatAppMaxFileBytes
-    : chatMaxFileBytes;
+/// Web stays at 100MB and Android/iOS at 500MB. Desktop has no client cap.
+/// Returns null when the current platform does not reject by size.
+int? get chatCurrentFileLimitBytes {
+  if (kIsWeb) return chatMaxFileBytes;
+  if (defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS) {
+    return chatAppMaxFileBytes;
+  }
+  return null;
+}
 
 /// A replayable file source. Each retry validates the size and opens a new stream.
 /// Keep XFile itself (including Web blobs), rather than reconstructing its path.
@@ -29,8 +31,8 @@ class ChatFileUploadSource {
   static Future<ChatFileUploadSource> fromFile(XFile file) async {
     final length = await file.length();
     // macOS drag/picker security scopes may expire before staged files send.
-    // Preserve the existing byte-backed lifetime until durable scoped access
-    // is implemented. Oversized files are rejected without reading them.
+    // Keep modest files in memory until durable scoped access exists. Larger
+    // desktop files stay on the file stream and are not size-rejected.
     if (!kIsWeb &&
         defaultTargetPlatform == TargetPlatform.macOS &&
         length <= chatMaxFileBytes) {

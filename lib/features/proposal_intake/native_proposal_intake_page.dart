@@ -6463,7 +6463,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       proposalIntakeHasChildProducts(_form)
           ? '$kProposalMainProductLabel结算'
           : '产品结算',
-      rows.isEmpty ? '' : '${rows.length} 个产品 · 共 $settleCount 条结算',
+      rows.isEmpty
+          ? ''
+          : [
+              '${rows.length} 个产品 · 共 $settleCount 条结算',
+              if (proposalIntakeChildProducts(_form).isNotEmpty)
+                '关联产品 ${proposalIntakeChildProducts(_form).length} 个',
+            ].join(' · '),
       required: true,
       fullWidth: true,
       trailing: Row(
@@ -6528,6 +6534,72 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
       ),
       child: Text(label),
+    );
+  }
+
+  /// 财务部简单行里，业务产品下面直接列出关联产品。不放进「展开 N 个」里，
+  /// 那一层只展开业务产品自己的结算。
+  Widget _simpleRelatedProductsSummary() {
+    final lines = [
+      for (final parent in proposalIntakeSkuDetails(_form))
+        if (proposalIntakeChildProducts(
+          _form,
+        ).any((item) => item.parentSkuId == parent.id))
+          _simpleRelatedProductLines(parent),
+    ];
+    if (lines.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: lines,
+      ),
+    );
+  }
+
+  Widget _simpleRelatedProductLines(ProposalSkuDetailRow parent) {
+    if (parent.id.isEmpty) return const SizedBox.shrink();
+    final children = [
+      for (final item in proposalIntakeChildProducts(_form))
+        if (item.parentSkuId == parent.id) item,
+    ];
+    if (children.isEmpty) return const SizedBox.shrink();
+    final parentName = parent.displayName.trim().isEmpty
+        ? kProposalMainProductLabel
+        : parent.displayName.trim();
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$parentName 的关联产品',
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text3),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          for (final child in children)
+            Text(
+              [
+                child.displayName.trim().isEmpty
+                    ? '未命名关联产品'
+                    : child.displayName.trim(),
+                if (child.faceValue.trim().isNotEmpty)
+                  '面值 ${child.faceValue.trim()}',
+                '数量 ${proposalIntakeChildProductQuantity(_form, child.id)}',
+              ].join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: DunesColors.resolve(context, ProposalPalette.text),
+                fontSize: 12,
+                height: 1.45,
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -7046,6 +7118,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   ],
                 ),
               ),
+            _simpleRelatedProductLines(sku),
           ],
         ),
       );
@@ -12298,6 +12371,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         else ...[
           // 简单行：产品结算先收成一行「30 个产品 · 共 30 条结算」，点展开再看每个产品。
           if (simple) _skuSettleSimpleLine(),
+          if (simple) _simpleRelatedProductsSummary(),
           if (!simple || _simpleSkuOpen) _skuSettlementsBlock(wide),
         ],
         if (!children)
@@ -12443,10 +12517,39 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   columns: columns,
                 ),
                 const SizedBox(height: 10),
-                // 简单行：供给侧、渠道侧各合成一行（结算模式 · 周期 · 主体 · 账户）。
+                // 简单行：供给侧、渠道侧、结算账户各合成一行。
+                // 账户不能再走 _financeFieldRows：那里用 IntrinsicHeight 包只读值，
+                // 只读值内部是 LayoutBuilder，测量高度会直接失败，上面的产品结算和
+                // 收入行就会叠在同一条线上。
                 if (_simpleView) ...[
                   _financeSideSimpleLine('供给侧', _financeSupplyFields),
                   _financeSideSimpleLine('渠道侧', _financeChannelFields),
+                  _simpleLine(
+                    '结算账户',
+                    [
+                      if (_text('generalBusinessAccount').trim().isNotEmpty)
+                        '一：${_text('generalBusinessAccount').trim()}',
+                      if (_text('prepaidAccount').trim().isNotEmpty)
+                        '二：${_text('prepaidAccount').trim()}',
+                    ].join(' · '),
+                    anchorKey: 'generalBusinessAccount',
+                    required: true,
+                    fullWidth: true,
+                    trailing: _mergedReviewToggle(const [
+                      'financeItem:generalBusinessAccount',
+                      'financeItem:prepaidAccount',
+                    ]),
+                  ),
+                  _simpleLine(
+                    '财务备注',
+                    _text('financeRemark'),
+                    anchorKey: 'financeRemark',
+                    fullWidth: true,
+                    trailing: _rowReviewToggle(
+                      'financeItem:financeRemark',
+                      '待复核',
+                    ),
+                  ),
                 ] else ...[
                   _financeSideGroup(
                     title: '供给侧',
@@ -12457,9 +12560,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     title: '渠道侧',
                     child: _financeFieldRows(_financeChannelFields, columns),
                   ),
+                  const SizedBox(height: 10),
+                  _financeFieldRows(_financeAccountFields, columns),
                 ],
-                const SizedBox(height: 10),
-                _financeFieldRows(_financeAccountFields, columns),
               ],
             );
           },
@@ -19882,19 +19985,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final row in rows)
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var index = 0; index < row.length; index++) ...[
-                  if (index > 0) const SizedBox(width: 12),
-                  Expanded(child: _financeItem(row[index])),
-                ],
-                if (row.length < columns &&
-                    (row.length != 1 || !_isFinanceLongTextKey(row.first.$1)))
-                  const Expanded(child: SizedBox.shrink()),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var index = 0; index < row.length; index++) ...[
+                if (index > 0) const SizedBox(width: 12),
+                Expanded(child: _financeItem(row[index])),
               ],
-            ),
+              if (row.length < columns &&
+                  (row.length != 1 || !_isFinanceLongTextKey(row.first.$1)))
+                const Expanded(child: SizedBox.shrink()),
+            ],
           ),
       ],
     );

@@ -822,16 +822,18 @@ class ProposalField extends StatelessWidget {
           ),
           SizedBox(width: narrow ? 6 : 8),
           Expanded(
-            child: Container(
-              constraints: const BoxConstraints(minHeight: line),
-              alignment: Alignment.centerLeft,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  child,
-                  if (footer != null) ...[const SizedBox(height: 6), footer!],
-                ],
+            child: ClipRect(
+              child: Container(
+                constraints: const BoxConstraints(minHeight: line),
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    child,
+                    if (footer != null) ...[const SizedBox(height: 6), footer!],
+                  ],
+                ),
               ),
             ),
           ),

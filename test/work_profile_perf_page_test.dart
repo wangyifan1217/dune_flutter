@@ -109,10 +109,7 @@ void main() {
       ],
     );
     expect(task.isRubric, isTrue);
-    expect(
-      kpiLighthouseSliceSubtitle(task),
-      '所负责产品/项目的核心业务指标（OKR/KPI）达成情况',
-    );
+    expect(kpiLighthouseSliceSubtitle(task), '所负责产品/项目的核心业务指标（OKR/KPI）达成情况');
   });
 
   test('builds markdown summary of final scores and grades', () {
@@ -864,10 +861,7 @@ void main() {
     expect(find.textContaining('本月营收'), findsNothing);
     expect(find.textContaining('上期为 0'), findsNothing);
     expect(find.textContaining('全国'), findsNothing);
-    expect(
-      find.text('所负责产品/项目的核心业务指标（OKR/KPI）达成情况'),
-      findsWidgets,
-    );
+    expect(find.text('所负责产品/项目的核心业务指标（OKR/KPI）达成情况'), findsWidgets);
     expect(find.text('100%达成所有目标，成果符合预期。'), findsOneWidget);
     expect(find.textContaining('34.0 / 40'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
@@ -1018,5 +1012,112 @@ void main() {
     expect(find.text('申诉评价结果'), findsOneWidget);
     expect(find.textContaining('某档打错、等级不服'), findsNothing);
     expect(find.textContaining('不改灯塔流水'), findsNothing);
+  });
+
+  testWidgets('业务本人填写分省折扣', (tester) async {
+    int? savedTask;
+    double? savedPoints;
+    var cleared = false;
+    const pending = WorkProfileKpiMetric(
+      key: 'discount',
+      label: '折扣（分省）',
+      status: 'manual',
+      maxPoints: 20,
+      weight: 20,
+    );
+    const filled = WorkProfileKpiMetric(
+      key: 'discount',
+      label: '折扣（分省）',
+      status: 'ok',
+      maxPoints: 20,
+      weight: 20,
+      points: 16,
+      note: '本人填写',
+    );
+    WorkProfileKpiScore scoreWith(WorkProfileKpiMetric metric) {
+      return WorkProfileKpiScore(
+        month: '2026-09',
+        prevMonth: '2026-08',
+        people: [
+          WorkProfileKpiPerson(
+            userId: 1,
+            userName: '王一凡',
+            mainScore: 88.05,
+            bonus: 0,
+            telecomWeight: 0,
+            energyWeight: 1,
+            telecomScore: 0,
+            energyScore: 88.05,
+            categories: [
+              WorkProfileKpiCategory(
+                category: 'energy',
+                categoryLabel: '能源',
+                categoryWeight: 1,
+                score: 88.05,
+                tasks: [
+                  WorkProfileKpiTask(
+                    taskId: 42,
+                    taskName: '中石油普惠现金券（交易）',
+                    province: '内蒙古',
+                    bucketLabel: '能源',
+                    weightPct: 15.34,
+                    taskTotal: 35,
+                    curRevenue: 38000,
+                    prevRevenue: 157900,
+                    curProfit: 0,
+                    prevProfit: 0,
+                    productName: '中石油普惠现金券（交易）',
+                    metrics: [metric],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeWorkProfilePerfPage(
+          session: session,
+          onBack: () {},
+          score: scoreWith(pending),
+          saveDiscount:
+              ({required month, required taskId, points, clear = false}) async {
+                savedTask = taskId;
+                savedPoints = points;
+                cleared = clear;
+                return scoreWith(clear ? pending : filled);
+              },
+        ),
+      ),
+    );
+    expect(find.text('不自动打分，由本人填写'), findsOneWidget);
+    expect(find.text('分省折扣由本人填写，满分 20'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('work-profile-perf-discount-42')),
+      '16',
+    );
+    await tester.tap(
+      find.byKey(const Key('work-profile-perf-discount-save-42')),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(savedTask, 42);
+    expect(savedPoints, 16);
+    expect(cleared, isFalse);
+    expect(find.text('本人填写'), findsOneWidget);
+    expect(find.text('16.0'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+
+    await tester.tap(
+      find.byKey(const Key('work-profile-perf-discount-clear-42')),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(cleared, isTrue);
+    expect(find.text('不自动打分，由本人填写'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
   });
 }

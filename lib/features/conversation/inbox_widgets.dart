@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -1545,7 +1547,7 @@ class ChatInboxRow extends StatelessWidget {
   final bool previewGenerating;
   final bool selected;
 
-  /// 已读不回工作群（reply_sla）：标题旁「工作群」文字标签。
+  /// 已读不回工作群（reply_sla）：标题旁显示工作群图标，不显示人数。
   final bool workgroupTag;
   final Widget? robotAvatar;
 
@@ -1720,7 +1722,8 @@ class ChatInboxRow extends StatelessWidget {
                                     ),
                                   ),
                                 ],
-                                if (memberCount != null &&
+                                if (!workgroupTag &&
+                                    memberCount != null &&
                                     memberCount! > 0) ...[
                                   const SizedBox(width: 4),
                                   Text(
@@ -2752,38 +2755,50 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
   }
 }
 
-/// 已读不回工作群的文字标识（列表 / 顶栏共用）。只给 reply_sla 新工作群用。
+/// 已读不回工作群：群组图标本身用磨砂玻璃质感，不是一块玻璃图形。
 class WorkgroupTag extends StatelessWidget {
-  const WorkgroupTag({super.key, this.fontSize = 9.5});
-
-  final double fontSize;
+  const WorkgroupTag({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            DunesColors.accent,
-            role: DunesColorRole.border,
-          ).withValues(alpha: 0.5),
-        ),
-        color: DunesColors.resolve(
-          context,
-          DunesColors.accentSoft,
-          role: DunesColorRole.surface,
-        ),
-      ),
-      child: Text(
-        '工作群',
-        style: DunesTypography.sans(
-          fontSize: fontSize,
-          fontWeight: FontWeight.w600,
-          color: DunesColors.resolve(context, DunesColors.accent),
-          context: context,
+    final deep = DunesColors.resolve(context, DunesColors.brandPurpleDeep);
+    final tint = DunesColors.resolve(context, DunesColors.brandPurple);
+    const icon = Icon(Icons.groups_rounded, size: 16, color: Colors.white);
+    return Tooltip(
+      message: '工作群',
+      child: SizedBox(
+        width: 18,
+        height: 18,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 1.4, sigmaY: 1.4),
+              child: Icon(
+                Icons.groups_rounded,
+                size: 16,
+                color: tint.withValues(alpha: 0.38),
+              ),
+            ),
+            ShaderMask(
+              blendMode: BlendMode.srcIn,
+              shaderCallback: (bounds) {
+                return LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.96),
+                    Color.lerp(Colors.white, tint, 0.45)!.withValues(
+                      alpha: 0.9,
+                    ),
+                    deep.withValues(alpha: 0.82),
+                  ],
+                  stops: const [0, 0.42, 1],
+                ).createShader(bounds);
+              },
+              child: icon,
+            ),
+          ],
         ),
       ),
     );

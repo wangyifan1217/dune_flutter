@@ -1703,15 +1703,15 @@ class XflowFormCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(17),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
           XfProposalUi.card,
           role: DunesColorRole.surface,
         ),
-        borderRadius: BorderRadius.circular(21),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: DunesColors.resolve(
             context,
@@ -1729,7 +1729,7 @@ class XflowFormCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: DunesTypography.sans(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: DunesColors.resolve(context, XfProposalUi.ink),
                     context: context,
@@ -1772,7 +1772,7 @@ class XflowFormCard extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           child,
         ],
       ),

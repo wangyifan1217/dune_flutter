@@ -629,7 +629,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                         child: ListView(
                           keyboardDismissBehavior:
                               ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
                           children: [
                             if (hero != null) XfDetHero(detail: hero),
                             if (bundle != null) ...[
@@ -666,7 +666,6 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                                 },
                               ),
                             ),
-                            const SizedBox(height: 12),
                             XfDetTaskCompletionCard(
                               form:
                                   detail?.formData ?? const <String, dynamic>{},
@@ -679,7 +678,6 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                               businessId: widget.businessId,
                               fallbackPeople: _fallbackStakeholders(bundle),
                             ),
-                            const SizedBox(height: 12),
                             XflowFormCard(
                               title: '审批进度',
                               tag: _trail == null ? '待同步' : '流程追踪',

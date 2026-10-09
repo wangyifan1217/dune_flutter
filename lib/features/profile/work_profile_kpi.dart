@@ -186,6 +186,7 @@ class WorkProfileKpiTask {
     this.remark = '',
     this.matchSummary = '',
     this.productName = '',
+    this.productL3 = '',
     this.productGroup = '',
     this.channelName = '',
     this.channelGroup = '',
@@ -214,6 +215,7 @@ class WorkProfileKpiTask {
   final String remark;
   final String matchSummary;
   final String productName;
+  final String productL3;
   final String productGroup;
   final String channelName;
   final String channelGroup;
@@ -236,6 +238,7 @@ class WorkProfileKpiTask {
       taskName: '${json['taskName'] ?? ''}',
       province: '${json['province'] ?? ''}',
       productName: '${json['productName'] ?? ''}',
+      productL3: '${json['productL3'] ?? ''}',
       productGroup: '${json['productGroup'] ?? ''}',
       channelName: '${json['channelName'] ?? ''}',
       channelGroup: '${json['channelGroup'] ?? ''}',
@@ -537,6 +540,7 @@ Map<String, String> parseKpiLighthouseDims(WorkProfileKpiTask task) {
   }
 
   put('product', task.productName);
+  put('productL3', task.productL3);
   put('group', task.productGroup);
   put('province', task.province, keepNationwide: true);
   put('channel', task.channelName);
@@ -554,6 +558,8 @@ Map<String, String> parseKpiLighthouseDims(WorkProfileKpiTask task) {
     final value = part.substring(idx + 1).trim();
     if (key.startsWith('产品分组') || key == '分组') {
       put('group', value);
+    } else if (key.startsWith('三级') || key.startsWith('产品三级')) {
+      put('productL3', value, overwrite: true);
     } else if (key.startsWith('产品')) {
       put('product', value, overwrite: true);
     } else if (key.startsWith('省份')) {
@@ -569,7 +575,15 @@ Map<String, String> parseKpiLighthouseDims(WorkProfileKpiTask task) {
 
 String kpiLighthouseSliceTitle(WorkProfileKpiTask task) {
   final dims = parseKpiLighthouseDims(task);
-  for (final key in ['product', 'group', 'channel', 'supply']) {
+  final product = (dims['product'] ?? '').trim();
+  final l3 = (dims['productL3'] ?? '').trim();
+  if (product.isNotEmpty) {
+    if (l3.isNotEmpty && !product.contains(l3)) {
+      return '$product › $l3';
+    }
+    return product;
+  }
+  for (final key in ['group', 'channel', 'supply']) {
     final value = dims[key]?.trim() ?? '';
     if (value.isEmpty) continue;
     if (key == 'group' && kpiLighthouseBucketDim(value)) continue;
@@ -657,8 +671,6 @@ const kKpiTelecomLeaders = ['石淼', '徐峥', '李同池'];
 /// 能源领导层置顶顺序。
 const kKpiEnergyLeaders = ['王一凡', '吕宙'];
 
-const kKpiTelecomGroupOrder = ['出行会员', '加油会员', '出行金', '明星来电', '加油权益'];
-
 const kKpiEnergyGroupOrder = ['中石油', '中石化', '民营加油', '平安', '石油科技'];
 
 const kKpiOfficeGroupOrder = ['行政', '财务'];
@@ -686,12 +698,16 @@ String kpiCanonicalMarketGroup(WorkProfileKpiTask task) {
   if (product.contains('中石化')) return '中石化';
   if (product.contains('民营')) return '民营加油';
   if (product.contains('石油科技')) return '石油科技';
+  final group = (dims['group'] ?? '').trim();
+  final isTelecom = group.contains('运营商') || group.contains('通信');
+  if (isTelecom || product.contains('出行会员') || product.contains('加油会员') || product.contains('明星来电') || product.contains('出行金') || product.contains('点播')) {
+    final l3 = (dims['productL3'] ?? '').trim();
+    if (l3.isNotEmpty) return l3;
+    final title = kpiLighthouseSliceTitle(task).trim();
+    if (title.isEmpty || kpiLighthouseBucketDim(title)) return '未分组';
+    return title;
+  }
   if (product.contains('中石油')) return '中石油';
-  if (product.contains('出行会员')) return '出行会员';
-  if (product.contains('加油会员')) return '加油会员';
-  if (product.contains('明星来电')) return '明星来电';
-  if (product.contains('出行金')) return '出行金';
-  if (product.contains('加油权益') || product.contains('点播')) return '加油权益';
   final title = kpiLighthouseSliceTitle(task).trim();
   if (title.isEmpty || kpiLighthouseBucketDim(title)) return '未分组';
   return title;
@@ -898,7 +914,7 @@ List<MapEntry<String, List<WorkProfileKpiPerson>>> kpiPeopleByProjectGroup(
     _ => _kpiBucketPeople(
       people,
       groupOf: (person) => kpiPersonProjectGroup(person, sector),
-      order: sector == 'telecom' ? kKpiTelecomGroupOrder : kKpiEnergyGroupOrder,
+      order: sector == 'telecom' ? const <String>[] : kKpiEnergyGroupOrder,
     ),
   };
   return [
@@ -1221,6 +1237,31 @@ class WorkProfileKpiService {
     final resp = await dunesHttpGet(
       session,
       '/kpi/my-score$q',
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return WorkProfileKpiScore.fromJson(map);
+  }
+
+  /// 能源分省折扣由业务本人填写。[clear] 为 true 时清空，恢复待填。
+  Future<WorkProfileKpiScore> saveMyDiscount({
+    required String month,
+    required int taskId,
+    double? points,
+    bool clear = false,
+  }) async {
+    final resp = await dunesHttpPut(
+      session,
+      '/kpi/my-discount',
+      body: jsonEncode({
+        'month': month.trim(),
+        'taskId': taskId,
+        if (!clear && points != null) 'points': points,
+        if (clear) 'clear': true,
+      }),
       client: _client,
     );
     final data = _unwrap(resp);

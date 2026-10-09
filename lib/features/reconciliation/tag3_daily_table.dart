@@ -7,10 +7,14 @@ import '../../core/theme/dunes_theme.dart';
 import 'recon_pinned_table.dart';
 import 'tag3_daily_models.dart';
 
-const _kTag3DailyHeaderH = 48.0;
-const _kTag3DailyActionWidth = 148.0;
-const _kTag3DailyRowMin = 64.0;
-const _kTag3DailyProjectGap = 12.0;
+const _kTag3DailyHeaderH = 26.0;
+const _kTag3DailyAuditWidth = 148.0;
+const _kTag3DailyActionWidth = 88.0;
+const _kTag3DailyRowMin = 20.0;
+const _kTag3AuditLaneH = 13.0;
+const _kTag3AuditPadV = 1.0;
+const _kTag3ChipH = 20.0;
+const _kTag3DailyProjectGap = 0.0;
 const _kTag3DailyDataColWidths = <double>[
   100,
   156,
@@ -24,12 +28,11 @@ const _kTag3DailyDataColWidths = <double>[
   124,
   124,
   108,
-  200,
 ];
-const _kTag3DailyDataWidth = 1636.0;
-const _kProjectFillA = Color(0xFFF3F0F8);
-const _kProjectFillB = Color(0xFFFFFCF8);
-const _kProjectEdge = Color(0xFFD4CCE3);
+const _kTag3DailyDataWidth = 1436.0;
+const _kProjectFillA = Color(0xFFFFFFFF);
+const _kProjectFillB = Color(0xFFF4F6F8);
+const _kProjectEdge = Color(0xFFE6E8EC);
 const _kTag3DailyDataLabels = <String>[
   '渠道',
   '项目',
@@ -43,7 +46,6 @@ const _kTag3DailyDataLabels = <String>[
   '现金实收',
   '现金应收差额',
   '补贴应收',
-  '审核记录',
 ];
 
 class _ProjectBand {
@@ -122,12 +124,18 @@ class Tag3DailyTable extends StatelessWidget {
               context,
               _kTag3DailyDataLabels[c],
               _kTag3DailyDataColWidths[c],
+              alignRight: c >= 4,
             ),
         ],
       ),
       trailingHeader: _actionHeaderChrome(
         context,
-        child: _head(context, '操作', _kTag3DailyActionWidth),
+        child: Row(
+          children: [
+            _head(context, '审核记录', _kTag3DailyAuditWidth),
+            _head(context, '操作', _kTag3DailyActionWidth),
+          ],
+        ),
       ),
       rowCount: sorted.length,
       rowHeight: (i) => heights[i],
@@ -138,9 +146,19 @@ class Tag3DailyTable extends StatelessWidget {
         band: bands[i],
         height: heights[i],
         action: true,
-        child: SizedBox(
-          width: _kTag3DailyActionWidth,
-          child: _actionCell(context, sorted[i]),
+        child: Row(
+          children: [
+            _auditCell(
+              context,
+              sorted[i],
+              _kTag3DailyAuditWidth,
+              heights[i],
+            ),
+            SizedBox(
+              width: _kTag3DailyActionWidth,
+              child: _actionCell(context, sorted[i]),
+            ),
+          ],
         ),
       ),
     );
@@ -179,18 +197,14 @@ class Tag3DailyTable extends StatelessWidget {
             _kTag3DailyDataColWidths[0],
             contentHeight,
           ),
-          _projectMark(
+          _tappable(
             context,
-            band,
-            _tappable(
-              context,
-              showProject ? row.projectName : '',
-              _kTag3DailyDataColWidths[1],
-              contentHeight,
-              onTap: showProject && onProjectTap != null
-                  ? () => onProjectTap!(row)
-                  : null,
-            ),
+            showProject ? row.projectName : '',
+            _kTag3DailyDataColWidths[1],
+            contentHeight,
+            onTap: showProject && onProjectTap != null
+                ? () => onProjectTap!(row)
+                : null,
           ),
           _cell(
             context,
@@ -269,7 +283,6 @@ class Tag3DailyTable extends StatelessWidget {
             alignRight: true,
             maxLines: 1,
           ),
-          _auditCell(context, row, _kTag3DailyDataColWidths[12], contentHeight),
         ],
       ),
     );
@@ -283,9 +296,7 @@ class Tag3DailyTable extends StatelessWidget {
       out.add(
         _ProjectBand(
           fill: group.isEven ? _kProjectFillA : _kProjectFillB,
-          accent: group.isEven
-              ? const Color(0xFF8B7BA8)
-              : const Color(0xFF2F5D62),
+          accent: _kProjectEdge,
           start: i == 0 || sorted[i].rowKey != sorted[i - 1].rowKey,
           end:
               i == sorted.length - 1 ||
@@ -351,24 +362,6 @@ class Tag3DailyTable extends StatelessWidget {
     );
   }
 
-  Widget _projectMark(BuildContext context, _ProjectBand band, Widget child) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              band.accent,
-              role: DunesColorRole.border,
-            ),
-            width: 3,
-          ),
-        ),
-      ),
-      child: child,
-    );
-  }
-
   Widget _actionHeaderChrome(BuildContext context, {required Widget child}) {
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -419,7 +412,7 @@ class Tag3DailyTable extends StatelessWidget {
     if (showChannel) {
       height = math.max(
         height,
-        28 +
+        2 +
             _measureText(
               row.channelCategoryL1Name,
               _kTag3DailyDataColWidths[0],
@@ -429,12 +422,12 @@ class Tag3DailyTable extends StatelessWidget {
     if (showProject) {
       height = math.max(
         height,
-        28 + _measureText(row.projectName, _kTag3DailyDataColWidths[1]),
+        2 + _measureText(row.projectName, _kTag3DailyDataColWidths[1]),
       );
     }
     height = math.max(
       height,
-      28 + _measureText(row.paymentTerm, _kTag3DailyDataColWidths[3]),
+      2 + _measureText(row.paymentTerm, _kTag3DailyDataColWidths[3]),
     );
     height = math.max(height, math.max(_auditHeight(row), _actionHeight(row)));
     if (projectEnd) height += _kTag3DailyProjectGap;
@@ -443,7 +436,11 @@ class Tag3DailyTable extends StatelessWidget {
 
   double _actionHeight(Tag3DailyRow row) {
     if (row.isMonthCumulative) return _kTag3DailyRowMin;
-    return _commentsFor(row).isEmpty ? 68.0 : 108.0;
+    final opinions = [
+      for (final item in _commentsFor(row))
+        if (item.isOpinion || item.isReject) item,
+    ];
+    return opinions.isEmpty ? 22.0 : 36.0;
   }
 
   double _auditHeight(Tag3DailyRow row) {
@@ -453,7 +450,7 @@ class Tag3DailyTable extends StatelessWidget {
       comments: _commentsFor(row),
     );
     if (lanes.isEmpty) return 0;
-    return 20 + lanes.length * 26 + (lanes.length - 1) * 8;
+    return _kTag3AuditPadV * 2 + lanes.length * _kTag3AuditLaneH;
   }
 
   double _measureText(String text, double colWidth) {
@@ -462,15 +459,15 @@ class Tag3DailyTable extends StatelessWidget {
       text: TextSpan(
         text: text,
         style: DunesTypography.sans(
-          fontSize: 13,
-          height: 1.35,
+          fontSize: 12,
+          height: 1.05,
           color: DunesColors.text,
         ),
       ),
       maxLines: 2,
       ellipsis: '…',
       textDirection: TextDirection.ltr,
-    )..layout(maxWidth: (colWidth - 24).clamp(24.0, colWidth));
+      )..layout(maxWidth: (colWidth - 16).clamp(24.0, colWidth));
     return painter.height;
   }
 
@@ -491,16 +488,13 @@ class Tag3DailyTable extends StatelessWidget {
       width: width,
       height: height,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        padding: const EdgeInsets.fromLTRB(6, _kTag3AuditPadV, 6, _kTag3AuditPadV),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (var i = 0; i < lanes.length; i++) ...[
-              if (i > 0) const SizedBox(height: 8),
-              _auditLane(context, lanes[i]),
-            ],
+            for (final lane in lanes) _auditLane(context, lane),
           ],
         ),
       ),
@@ -514,30 +508,39 @@ class Tag3DailyTable extends StatelessWidget {
     final icon = lane.done ? Icons.check_circle : Icons.schedule;
     return Semantics(
       label: '${lane.role} ${lane.names} ${lane.statusLabel}',
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: DunesColors.resolveNullable(context, color),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              '${lane.role} ${lane.names}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: DunesTypography.sans(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: lane.done
-                    ? DunesColors.resolve(context, DunesColors.green)
-                    : DunesColors.resolve(context, DunesColors.text),
-                context: context,
+      child: SizedBox(
+        height: _kTag3AuditLaneH,
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 11,
+              color: DunesColors.resolveNullable(context, color),
+            ),
+            const SizedBox(width: 3),
+            Expanded(
+              child: Text(
+                '${lane.role} ${lane.names}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                strutStyle: const StrutStyle(
+                  fontSize: 11,
+                  height: 1,
+                  forceStrutHeight: true,
+                ),
+                style: DunesTypography.sans(
+                  fontSize: 11,
+                  height: 1,
+                  fontWeight: FontWeight.w600,
+                  color: lane.done
+                      ? DunesColors.resolve(context, DunesColors.green)
+                      : DunesColors.resolve(context, DunesColors.text),
+                  context: context,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -561,20 +564,25 @@ class Tag3DailyTable extends StatelessWidget {
     }
     final busy = busyKeys.contains(row.actionId);
     final history = _commentsFor(row);
+    final opinions = [
+      for (final item in history)
+        if (item.isOpinion || item.isReject) item,
+    ];
     final mineConfirmed =
         myUserId > 0 &&
         history.any((item) => item.isConfirm && item.userId == myUserId);
     final showConfirm = row.showConfirmAction && !mineConfirmed;
     final showComment = row.showCommentAction;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (history.isNotEmpty) ...[
-            _commentEntry(context, row, history),
-            const SizedBox(height: 6),
+          if (opinions.isNotEmpty) ...[
+            _commentEntry(context, row, opinions),
+            const SizedBox(height: 1),
           ],
           Row(
             children: [
@@ -641,18 +649,18 @@ class Tag3DailyTable extends StatelessWidget {
       child: InkWell(
         onTap: onViewComments == null ? null : () => onViewComments!(row),
         borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
+        child: SizedBox(
+          height: 14,
           child: Row(
             children: [
               Expanded(
                 child: Text(
                   text,
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: DunesTypography.sans(
-                    fontSize: 11.5,
-                    height: 1.25,
+                    fontSize: 11,
+                    height: 1,
                     fontWeight: FontWeight.w600,
                     color: DunesColors.resolve(context, DunesColors.accent),
                     context: context,
@@ -699,7 +707,7 @@ class Tag3DailyTable extends StatelessWidget {
         onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(8),
         child: Ink(
-          height: 34,
+          height: _kTag3ChipH,
           decoration: BoxDecoration(
             color: DunesColors.resolveNullable(
               context,
@@ -717,7 +725,8 @@ class Tag3DailyTable extends StatelessWidget {
             child: Text(
               label,
               style: DunesTypography.sans(
-                fontSize: 12,
+                fontSize: 11,
+                height: 1,
                 fontWeight: FontWeight.w700,
                 color: filled
                     ? DunesColors.resolve(context, Colors.white)
@@ -731,21 +740,27 @@ class Tag3DailyTable extends StatelessWidget {
     );
   }
 
-  Widget _head(BuildContext context, String text, double width) {
+  Widget _head(
+    BuildContext context,
+    String text,
+    double width, {
+    bool alignRight = false,
+  }) {
     return SizedBox(
       width: width,
       height: _kTag3DailyHeaderH,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Align(
-          alignment: Alignment.centerLeft,
+          alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
           child: Text(
             text,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
+            textAlign: alignRight ? TextAlign.right : TextAlign.left,
             style: DunesTypography.sans(
-              fontSize: 12,
-              height: 1.3,
+              fontSize: 11,
+              height: 1.1,
               fontWeight: FontWeight.w600,
               color: DunesColors.resolve(context, DunesColors.text2),
               context: context,
@@ -768,7 +783,7 @@ class Tag3DailyTable extends StatelessWidget {
       width: width,
       height: height,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Align(
           alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
           child: Text(
@@ -777,8 +792,8 @@ class Tag3DailyTable extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             textAlign: alignRight ? TextAlign.right : TextAlign.left,
             style: DunesTypography.sans(
-              fontSize: 13,
-              height: 1.35,
+              fontSize: 12,
+              height: 1.05,
               color: DunesColors.resolve(context, DunesColors.text),
               context: context,
             ),
@@ -1101,7 +1116,7 @@ class Tag3DailyOpinionEntry extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: DunesColors.resolve(
               context,

@@ -54,6 +54,10 @@ class _NativeDailyReconciliationPageState
   bool _loading = true;
   String? _error;
   int _loadGen = 0;
+  String _tag3Channel = '';
+  String _tag3Project = '';
+  String _tag2Province = '';
+  String _tag2Entity = '';
 
   @override
   void initState() {
@@ -112,6 +116,10 @@ class _NativeDailyReconciliationPageState
         _tag3DailyPreview = false;
         _tag3ConfirmingKeys.clear();
         _tag2Busy.clear();
+        _tag3Channel = '';
+        _tag3Project = '';
+        _tag2Province = '';
+        _tag2Entity = '';
       });
       _publishChrome();
     }
@@ -189,6 +197,10 @@ class _NativeDailyReconciliationPageState
       _tag3Daily = null;
       _tag2 = null;
       _tag3DailyPreview = false;
+      _tag3Channel = '';
+      _tag3Project = '';
+      _tag2Province = '';
+      _tag2Entity = '';
     });
     _publishChrome();
     if (card == 'TAG2_ENTITY') {
@@ -669,26 +681,95 @@ class _NativeDailyReconciliationPageState
     );
   }
 
+  bool get _tag3Filtering =>
+      _tag3Channel.isNotEmpty || _tag3Project.isNotEmpty;
+
+  bool get _tag2Filtering =>
+      _tag2Province.isNotEmpty || _tag2Entity.isNotEmpty;
+
+  List<String> _tag3Channels(List<Tag3DailyRow> rows) {
+    return _reconFilterOptions([
+      for (final row in rows) row.channelCategoryL1Name,
+    ]);
+  }
+
+  List<String> _tag3Projects(List<Tag3DailyRow> rows) {
+    return _reconFilterOptions([
+      for (final row in rows)
+        if (_tag3Channel.isEmpty || row.channelCategoryL1Name == _tag3Channel)
+          row.projectName,
+    ]);
+  }
+
+  List<Tag3DailyRow> _filterTag3(List<Tag3DailyRow> rows) {
+    if (!_tag3Filtering) return rows;
+    return [
+      for (final row in rows)
+        if ((_tag3Channel.isEmpty ||
+                row.channelCategoryL1Name == _tag3Channel) &&
+            (_tag3Project.isEmpty || row.projectName == _tag3Project))
+          row,
+    ];
+  }
+
+  List<String> _tag2Provinces(List<Tag2EntityRow> rows) {
+    return _reconFilterOptions([
+      for (final row in rows)
+        if (!row.isTotal) row.provinceName,
+    ]);
+  }
+
+  List<String> _tag2Entities(List<Tag2EntityRow> rows) {
+    return _reconFilterOptions([
+      for (final row in rows)
+        if (!row.isTotal &&
+            (_tag2Province.isEmpty || row.provinceName == _tag2Province)) ...[
+          row.counterpartyName,
+          row.ourEntityName,
+        ],
+    ]);
+  }
+
+  List<Tag2EntityRow> _filterTag2(List<Tag2EntityRow> rows) {
+    if (!_tag2Filtering) return rows;
+    return [
+      for (final row in rows)
+        if (!row.isTotal &&
+            (_tag2Province.isEmpty || row.provinceName == _tag2Province) &&
+            (_tag2Entity.isEmpty ||
+                row.counterpartyName == _tag2Entity ||
+                row.ourEntityName == _tag2Entity))
+          row,
+    ];
+  }
+
   Widget _buildTable() {
     if (_cardKind == 'TAG2_ENTITY') return _buildTag2Table();
     final snap = _tag3Daily;
     if (_loading && snap == null) {
       return const Center(child: CircularProgressIndicator());
     }
+    final rows = snap == null ? const <Tag3DailyRow>[] : _filterTag3(snap.rows);
+    final status = snap == null
+        ? '右侧可直接确认，意见选填。'
+        : tag3DailySnapshotStatusLine(
+            rows,
+            snapshotHint: snap.snapshotHint,
+          );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
           child: Material(
             color: DunesColors.resolve(
               context,
               Colors.white,
               role: DunesColorRole.surface,
             ),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+              padding: const EdgeInsets.fromLTRB(10, 4, 6, 4),
               child: Row(
                 children: [
                   Expanded(
@@ -698,7 +779,7 @@ class _NativeDailyReconciliationPageState
                         Text(
                           '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG3_DAILY')}',
                           style: DunesTypography.sans(
-                            fontSize: 15,
+                            fontSize: 13,
                             fontWeight: FontWeight.w700,
                             color: DunesColors.resolve(
                               context,
@@ -707,14 +788,9 @@ class _NativeDailyReconciliationPageState
                             context: context,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 1),
                         Text(
-                          snap == null
-                              ? '右侧可直接确认，意见选填。'
-                              : tag3DailySnapshotStatusLine(
-                                  snap.rows,
-                                  snapshotHint: snap.snapshotHint,
-                                ),
+                          _tag3Filtering ? '筛选后 $status' : status,
                           style: DunesTypography.sans(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
@@ -749,6 +825,38 @@ class _NativeDailyReconciliationPageState
             ),
           ),
         ),
+        if (snap != null)
+          _ReconFilterBar(
+            filters: [
+              _ReconFilter(
+                field: '渠道',
+                value: _tag3Channel,
+                options: _tag3Channels(snap.rows),
+                onChanged: (value) {
+                  setState(() {
+                    _tag3Channel = value;
+                    if (value.isNotEmpty &&
+                        _tag3Project.isNotEmpty &&
+                        !_tag3Projects(snap.rows).contains(_tag3Project)) {
+                      _tag3Project = '';
+                    }
+                  });
+                },
+              ),
+              _ReconFilter(
+                field: '项目',
+                value: _tag3Project,
+                options: _tag3Projects(snap.rows),
+                onChanged: (value) => setState(() => _tag3Project = value),
+              ),
+            ],
+            onClear: _tag3Filtering
+                ? () => setState(() {
+                    _tag3Channel = '';
+                    _tag3Project = '';
+                  })
+                : null,
+          ),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -764,10 +872,12 @@ class _NativeDailyReconciliationPageState
         Expanded(
           child: snap == null
               ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              : rows.isEmpty
+              ? const _ReconFilterEmpty()
               : Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+                  padding: const EdgeInsets.fromLTRB(2, 2, 2, 0),
                   child: Tag3DailyTable(
-                    rows: snap.rows,
+                    rows: rows,
                     assignees: snap.assignees,
                     comments: snap.comments,
                     myUserId: widget.session.userId,
@@ -810,20 +920,25 @@ class _NativeDailyReconciliationPageState
       return const Center(child: CircularProgressIndicator());
     }
     final hint = (snap?.snapshotHint ?? '').trim();
+    final rows = snap == null
+        ? const <Tag2EntityRow>[]
+        : _filterTag2(snap.rows);
+    final baseHint = hint.isEmpty ? '按主体核对。右侧可直接确认，意见选填。合计行只展示。' : hint;
+    final shown = rows.where((row) => !row.isTotal).length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
           child: Material(
             color: DunesColors.resolve(
               context,
               Colors.white,
               role: DunesColorRole.surface,
             ),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+              padding: const EdgeInsets.fromLTRB(10, 4, 6, 4),
               child: Row(
                 children: [
                   Expanded(
@@ -833,7 +948,7 @@ class _NativeDailyReconciliationPageState
                         Text(
                           '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG2_ENTITY')}',
                           style: DunesTypography.sans(
-                            fontSize: 15,
+                            fontSize: 13,
                             fontWeight: FontWeight.w700,
                             color: DunesColors.resolve(
                               context,
@@ -842,9 +957,9 @@ class _NativeDailyReconciliationPageState
                             context: context,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 1),
                         Text(
-                          hint.isEmpty ? '按主体核对。右侧可直接确认，意见选填。合计行只展示。' : hint,
+                          _tag2Filtering ? '筛选后 $shown 条 · $baseHint' : baseHint,
                           style: DunesTypography.sans(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
@@ -879,6 +994,38 @@ class _NativeDailyReconciliationPageState
             ),
           ),
         ),
+        if (snap != null)
+          _ReconFilterBar(
+            filters: [
+              _ReconFilter(
+                field: '省份',
+                value: _tag2Province,
+                options: _tag2Provinces(snap.rows),
+                onChanged: (value) {
+                  setState(() {
+                    _tag2Province = value;
+                    if (value.isNotEmpty &&
+                        _tag2Entity.isNotEmpty &&
+                        !_tag2Entities(snap.rows).contains(_tag2Entity)) {
+                      _tag2Entity = '';
+                    }
+                  });
+                },
+              ),
+              _ReconFilter(
+                field: '主体',
+                value: _tag2Entity,
+                options: _tag2Entities(snap.rows),
+                onChanged: (value) => setState(() => _tag2Entity = value),
+              ),
+            ],
+            onClear: _tag2Filtering
+                ? () => setState(() {
+                    _tag2Province = '';
+                    _tag2Entity = '';
+                  })
+                : null,
+          ),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -894,10 +1041,12 @@ class _NativeDailyReconciliationPageState
         Expanded(
           child: snap == null
               ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              : rows.isEmpty
+              ? const _ReconFilterEmpty()
               : Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+                  padding: const EdgeInsets.fromLTRB(2, 2, 2, 0),
                   child: Tag2EntityTable(
-                    rows: snap.rows,
+                    rows: rows,
                     comments: snap.comments,
                     busyKeys: _tag2Busy,
                     onDrill: (row, amount) =>
@@ -1052,6 +1201,296 @@ class _Tag3DailyDateStatusPill extends StatelessWidget {
           color: done
               ? DunesColors.resolve(context, DunesColors.green)
               : DunesColors.resolve(context, DunesColors.amber),
+          context: context,
+        ),
+      ),
+    );
+  }
+}
+
+List<String> _reconFilterOptions(Iterable<String> values) {
+  final unique = <String>{};
+  for (final value in values) {
+    final text = value.trim();
+    if (text.isNotEmpty) unique.add(text);
+  }
+  final out = unique.toList()..sort();
+  return out;
+}
+
+class _ReconFilter {
+  const _ReconFilter({
+    required this.field,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String field;
+  final String value;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+}
+
+class _ReconFilterBar extends StatelessWidget {
+  const _ReconFilterBar({required this.filters, this.onClear});
+
+  final List<_ReconFilter> filters;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final filter in filters) _ReconFilterButton(filter: filter),
+          if (onClear != null)
+            TextButton(
+              onPressed: onClear,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 26),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                '清除',
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReconFilterButton extends StatelessWidget {
+  const _ReconFilterButton({required this.filter});
+
+  final _ReconFilter filter;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = filter.value.trim().isNotEmpty;
+    final label = selected ? '${filter.field}：${filter.value}' : filter.field;
+    final accent = DunesColors.resolve(context, DunesColors.accent);
+    return Material(
+      color: selected
+          ? accent.withValues(alpha: 0.08)
+          : const Color(0xFFF4F6F8),
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: () async {
+          final picked = await showDialog<String>(
+            context: context,
+            builder: (context) => _ReconFilterDialog(
+              field: filter.field,
+              value: filter.value,
+              options: filter.options,
+            ),
+          );
+          if (picked == null) return;
+          filter.onChanged(picked);
+        },
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 240),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: selected
+                          ? accent
+                          : DunesColors.resolve(context, DunesColors.text),
+                      context: context,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.expand_more,
+                  size: 16,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReconFilterDialog extends StatefulWidget {
+  const _ReconFilterDialog({
+    required this.field,
+    required this.value,
+    required this.options,
+  });
+
+  final String field;
+  final String value;
+  final List<String> options;
+
+  @override
+  State<_ReconFilterDialog> createState() => _ReconFilterDialogState();
+}
+
+class _ReconFilterDialogState extends State<_ReconFilterDialog> {
+  final TextEditingController _query = TextEditingController();
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _query.text.trim();
+    final shown = [
+      for (final item in widget.options)
+        if (query.isEmpty || item.contains(query)) item,
+    ];
+    return Dialog(
+      child: SizedBox(
+        width: 340,
+        height: 420,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '筛选${widget.field}',
+                style: DunesTypography.sans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _query,
+                autofocus: true,
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: '搜索${widget.field}',
+                  filled: true,
+                  fillColor: const Color(0xFFF5F6F8),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 6),
+              Expanded(
+                child: ListView(
+                  children: [
+                    _option(context, '', '全部${widget.field}'),
+                    for (final item in shown) _option(context, item, item),
+                    if (shown.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+                        child: Text(
+                          '没有匹配的${widget.field}',
+                          style: DunesTypography.sans(
+                            fontSize: 12,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _option(BuildContext context, String value, String label) {
+    final selected = value == widget.value;
+    return InkWell(
+      onTap: () => Navigator.pop(context, value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected
+                      ? DunesColors.resolve(context, DunesColors.accent)
+                      : DunesColors.resolve(context, DunesColors.text),
+                  context: context,
+                ),
+              ),
+            ),
+            if (selected)
+              Icon(
+                Icons.check,
+                size: 16,
+                color: DunesColors.resolve(context, DunesColors.accent),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReconFilterEmpty extends StatelessWidget {
+  const _ReconFilterEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        '没有符合筛选的行',
+        style: DunesTypography.sans(
+          fontSize: 13,
+          color: DunesColors.resolve(context, DunesColors.text3),
           context: context,
         ),
       ),

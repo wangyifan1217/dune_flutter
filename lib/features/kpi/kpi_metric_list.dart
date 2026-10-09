@@ -164,7 +164,7 @@ class _MetricRow extends StatelessWidget {
       return m.note.trim();
     }
     if (m.status == 'manual') {
-      return '不自动打分，需人工填写';
+      return m.key == 'discount' ? '不自动打分，由本人填写' : '不自动打分，需人工填写';
     }
     if (m.status == 'none') {
       return m.kind == 'users' || m.kind == 'newUsers'

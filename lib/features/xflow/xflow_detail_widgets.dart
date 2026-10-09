@@ -27,8 +27,8 @@ class XfDetCard extends StatelessWidget {
     required this.child,
     this.title,
     this.icon,
-    this.marginBottom = 10,
-    this.padding = const EdgeInsets.all(17),
+    this.marginBottom = 8,
+    this.padding = const EdgeInsets.fromLTRB(12, 10, 12, 4),
     this.decoration,
   });
 
@@ -52,7 +52,7 @@ class XfDetCard extends StatelessWidget {
               Colors.white,
               role: DunesColorRole.surface,
             ),
-            borderRadius: BorderRadius.circular(21),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: DunesColors.resolve(
                 context,
@@ -66,7 +66,7 @@ class XfDetCard extends StatelessWidget {
         children: [
           if (title != null)
             Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.only(bottom: 6),
               child: Row(
                 children: [
                   if (icon != null) ...[
@@ -161,8 +161,8 @@ class XfDetHero extends StatelessWidget {
     ];
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(20, 19, 20, 18),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -185,7 +185,7 @@ class XfDetHero extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: const [
           BoxShadow(
             color: Color(0x2630235F),
@@ -215,19 +215,19 @@ class XfDetHero extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           Text(
             detail.title.isEmpty ? '销售提案' : detail.title,
             style: DunesTypography.sans(
-              fontSize: 20,
+              fontSize: 17,
               fontWeight: FontWeight.w700,
-              height: 1.35,
+              height: 1.3,
               color: DunesColors.resolve(context, Colors.white),
               context: context,
             ),
           ),
           if (amount.isNotEmpty) ...[
-            const SizedBox(height: 18),
+            const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -237,7 +237,7 @@ class XfDetHero extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: DunesTypography.sans(
-                      fontSize: 30,
+                      fontSize: 22,
                       fontWeight: FontWeight.w700,
                       color: DunesColors.resolve(context, Colors.white),
                       letterSpacing: -0.8,
@@ -264,11 +264,11 @@ class XfDetHero extends StatelessWidget {
             ),
           ],
           if (chips.isNotEmpty) ...[
-            const SizedBox(height: 13),
-            Wrap(spacing: 7, runSpacing: 6, children: chips),
+            const SizedBox(height: 8),
+            Wrap(spacing: 6, runSpacing: 4, children: chips),
           ],
           if (owner.isNotEmpty || createdAt.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             Container(
               height: 1,
               color: DunesColors.resolveNullable(
@@ -277,7 +277,7 @@ class XfDetHero extends StatelessWidget {
                 role: DunesColorRole.surface,
               ),
             ),
-            const SizedBox(height: 13),
+            const SizedBox(height: 8),
             Row(
               children: [
                 if (owner.isNotEmpty) ...[
@@ -1216,7 +1216,7 @@ class _SectionBlockState extends State<_SectionBlock> {
     final hiddenCount = _expanded ? 0 : items.length - visible.length;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1224,7 +1224,7 @@ class _SectionBlockState extends State<_SectionBlock> {
             children: [
               Container(
                 width: 3,
-                height: 16,
+                height: 13,
                 decoration: BoxDecoration(
                   color: DunesColors.resolve(
                     context,
@@ -1239,7 +1239,7 @@ class _SectionBlockState extends State<_SectionBlock> {
                 child: Text(
                   widget.section.title,
                   style: DunesTypography.sans(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: DunesColors.resolve(
                       context,
@@ -1250,7 +1250,7 @@ class _SectionBlockState extends State<_SectionBlock> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
                   color: DunesColors.resolve(
                     context,
@@ -1274,7 +1274,7 @@ class _SectionBlockState extends State<_SectionBlock> {
               ),
             ],
           ),
-          const SizedBox(height: 13),
+          const SizedBox(height: 6),
           for (final item in visible)
             item.expandable
                 ? XfDetKvExpand(item: item, service: widget.service)
@@ -1354,52 +1354,47 @@ class XfDetKv extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = formatDetailPlainText(value);
     final long = !linkStyle && isLongDetailPlainText(text);
+    final accent = DunesColors.resolve(context, const Color(0xFF7054D8));
     final valueStyle =
         DunesTypography.sans(
           fontSize: 13,
-          height: long ? 1.65 : 1.45,
-          fontWeight: long ? FontWeight.w400 : FontWeight.w600,
+          height: long ? 1.45 : 1.35,
+          fontWeight: long ? FontWeight.w500 : FontWeight.w600,
           color: linkStyle
-              ? DunesColors.resolve(context, const Color(0xFF7054D8))
+              ? accent
               : DunesColors.resolve(context, DunesColors.text),
           context: context,
         ).copyWith(
           decoration: linkStyle
               ? TextDecoration.underline
               : TextDecoration.none,
-          decorationColor: linkStyle
-              ? DunesColors.resolve(context, const Color(0xFF7054D8))
-              : null,
+          decorationColor: linkStyle ? accent : null,
         );
+    final labelStyle = DunesTypography.sans(
+      fontSize: 12,
+      color: DunesColors.resolve(context, const Color(0xFF8D879A)),
+      context: context,
+    );
     final body = Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.fromLTRB(13, 11, 13, 12),
+      padding: EdgeInsets.fromLTRB(0, long ? 8 : 7, 0, long ? 10 : 7),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          const Color(0xFFF8F7FB),
-          role: DunesColorRole.surface,
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF1EEF6),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
-        borderRadius: BorderRadius.circular(14),
       ),
       child: long
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  label,
-                  style: DunesTypography.sans(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFF8D879A),
-                    ),
-                    context: context,
-                  ),
-                ),
-                const SizedBox(height: 7),
+                Text(label, style: labelStyle),
+                const SizedBox(height: 2),
                 SelectableText(
                   text,
                   textAlign: TextAlign.left,
@@ -1407,34 +1402,25 @@ class XfDetKv extends StatelessWidget {
                 ),
               ],
             )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: DunesTypography.sans(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFF8D879A),
-                    ),
-                    context: context,
+                SizedBox(width: 72, child: Text(label, style: labelStyle)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    text,
+                    textAlign: TextAlign.right,
+                    style: valueStyle,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(text, textAlign: TextAlign.left, style: valueStyle),
               ],
             ),
     );
     if (onTap == null) return body;
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: body,
-      ),
+      child: InkWell(onTap: onTap, child: body),
     );
   }
 }
@@ -1456,68 +1442,67 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          const Color(0xFFF8F7FB),
-          role: DunesColorRole.surface,
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF1EEF6),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
-        borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         children: [
           InkWell(
             onTap: () => setState(() => _open = !_open),
-            borderRadius: BorderRadius.circular(14),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(13, 11, 13, 11),
+              padding: const EdgeInsets.symmetric(vertical: 7),
               child: Row(
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.item.label,
-                          style: DunesTypography.sans(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.resolve(
-                              context,
-                              const Color(0xFF8D879A),
-                            ),
-                            context: context,
-                          ),
+                  SizedBox(
+                    width: 72,
+                    child: Text(
+                      widget.item.label,
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF8D879A),
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          widget.item.value,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: DunesTypography.sans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.resolve(
-                              context,
-                              const Color(0xFF292531),
-                            ),
-                            context: context,
-                          ),
-                        ),
-                      ],
+                        context: context,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      widget.item.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: DunesTypography.sans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF292531),
+                        ),
+                        context: context,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   AnimatedRotation(
                     turns: _open ? 0.5 : 0,
                     duration: const Duration(milliseconds: 200),
                     child: Icon(
                       Icons.expand_more,
-                      size: 18,
+                      size: 16,
                       color: DunesColors.resolveNullable(
                         context,
-                        Color(0xFF8D879A),
+                        const Color(0xFF8D879A),
                       ),
                     ),
                   ),
@@ -1527,7 +1512,7 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
           ),
           if (_open)
             Padding(
-              padding: const EdgeInsets.fromLTRB(13, 0, 13, 12),
+              padding: const EdgeInsets.only(bottom: 6),
               child: _ExpandBody(item: widget.item, service: widget.service),
             ),
         ],
@@ -2102,6 +2087,13 @@ class _FileItemState extends State<_FileItem> {
     return _downloaded ? '重新下载' : '下载';
   }
 
+  ButtonStyle get _fileActionStyle => TextButton.styleFrom(
+    minimumSize: Size.zero,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    visualDensity: VisualDensity.compact,
+  );
+
   @override
   Widget build(BuildContext context) {
     final name = _fileName;
@@ -2112,29 +2104,17 @@ class _FileItemState extends State<_FileItem> {
       if (_statusChecked && _downloaded) '已下载',
     ];
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
-        ),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            DunesColors.borderSoft,
-            role: DunesColorRole.border,
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF1EEF6),
+              role: DunesColorRole.border,
+            ),
           ),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
       ),
       child: Row(
         children: [
@@ -2176,6 +2156,7 @@ class _FileItemState extends State<_FileItem> {
               onPressed: _busy
                   ? null
                   : () => _open(context, preferPreview: true),
+              style: _fileActionStyle,
               child: const Text('预览', style: TextStyle(fontSize: 11)),
             ),
           if (!kIsWeb)
@@ -2183,6 +2164,7 @@ class _FileItemState extends State<_FileItem> {
               onPressed: _busy
                   ? null
                   : () => _open(context, preferPreview: false),
+              style: _fileActionStyle,
               child: Text(
                 _openActionLabel,
                 style: const TextStyle(fontSize: 11),
@@ -2190,6 +2172,7 @@ class _FileItemState extends State<_FileItem> {
             ),
           TextButton(
             onPressed: _busy ? null : () => _download(context),
+            style: _fileActionStyle,
             child: Text(
               _downloadActionLabel,
               style: const TextStyle(fontSize: 11),
@@ -2352,7 +2335,7 @@ class XfDetTrackTimeline extends StatelessWidget {
       );
     }
 
-    return XflowApprovalFlowTrackSection(rows: rows);
+    return XflowApprovalFlowTrackSection(rows: rows, embedded: true);
   }
 }
 

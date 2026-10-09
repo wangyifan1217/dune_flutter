@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../auth/auth_session.dart';
 import '../conversation/conversation_service.dart';
+import 'chat_file_upload_source.dart';
 
 /// 不依赖聊天页面生命周期的文件上传任务。
 ///
@@ -62,7 +63,8 @@ class ChatFileUploadCoordinator extends ChangeNotifier {
   Future<void> sendFile({
     required AuthSession session,
     required int conversationId,
-    required Uint8List bytes,
+    Uint8List? bytes,
+    ChatFileUploadSource? source,
     required String fileName,
     required String mimeType,
     ChatUploadCancelToken? cancelToken,
@@ -82,6 +84,7 @@ class ChatFileUploadCoordinator extends ChangeNotifier {
       await service.sendFile(
         conversationId: conversationId,
         bytes: bytes,
+        source: source,
         fileName: fileName,
         mimeType: mimeType,
         cancelToken: job.cancelToken,

@@ -39,6 +39,10 @@ class ConversationRealtimeService {
   final Set<String> _tokenChannels = <String>{};
   final Set<String> _serverChannels = <String>{};
 
+  /// 本人已被移出 / 已退出的群。建连时订阅的群频道要到重连才失效，
+  /// 期间这些群的消息一律丢弃，否则会继续弹桌面和安卓本地通知。
+  final Set<int> _detachedConvIds = <int>{};
+
   centrifuge.Client? _ws;
   bool _connecting = false;
   bool _closed = false;
@@ -178,8 +182,25 @@ class ConversationRealtimeService {
 
   Future<void> ensureConversationSubscription(int conversationId) async {
     if (conversationId <= 0) return;
+    _detachedConvIds.remove(conversationId);
     await connect();
     _subscribeChannel(_conversationChannel(conversationId));
+  }
+
+  void _detachConversation(int conversationId) {
+    if (conversationId <= 0) return;
+    _detachedConvIds.add(conversationId);
+    final channel = _conversationChannel(conversationId);
+    _serverChannels.remove(channel);
+    _tokenChannels.remove(channel);
+    if (_presenceConvId == conversationId) {
+      _presenceConvId = 0;
+      _presencePeerUserId = 0;
+    }
+    final sub = _subs.remove(channel);
+    if (sub != null) {
+      unawaited(sub.unsubscribe().catchError((_) {}));
+    }
   }
 
   void setPresenceContext({
@@ -380,6 +401,16 @@ class ConversationRealtimeService {
               ? fromMessage
               : (fromChannel > 0 ? fromChannel : null));
     final type = (payload['type'] ?? '').toString();
+    if (type == 'conversation_member_removed') {
+      if (_asInt(payload['userId']) == _session.userId) {
+        _detachConversation(convId ?? 0);
+      }
+    } else if (fromChannel > 0 && _detachedConvIds.contains(fromChannel)) {
+      return;
+    } else if (convId != null && channel.startsWith('dunes_u_')) {
+      // 个人频道只给群成员转发该群事件；能收到说明又被拉回群里了。
+      _detachedConvIds.remove(convId);
+    }
     if (channel == 'online' || _isPresenceLikeType(type)) {
       unawaited(refreshOnlinePresence());
     }

@@ -188,6 +188,16 @@ const _proposalStatusFilters = <(String, String)>[
   ('done', '已完成'),
 ];
 
+/// 总裁许正阳的列表视角，与后端写死的范围一致。
+const _presidentDeskName = '许正阳';
+const _presidentDeskStatuses = {'reviewing', 'pending_president', 'done'};
+const _presidentDeskFilters = <(String, String)>[
+  ('', '全部'),
+  ('reviewing', '复核中'),
+  ('pending_president', '待最终确认'),
+  ('done', '已完成'),
+];
+
 const _showTechnologyHandoffRecords = false;
 
 class NativeProposalIntakePage extends StatefulWidget {
@@ -234,6 +244,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   bool _formDirty = false;
   String? _error;
   String _statusFilter = '';
+
+  bool get _presidentDesk =>
+      (widget.session.displayName ?? '').trim() == _presidentDeskName;
   String _sectorFilter = '';
   String _periodFilter = '';
   ProposalIntakeLibraryStats _libraryStats = const ProposalIntakeLibraryStats();
@@ -307,6 +320,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       if (!mounted) return;
       var list = result[0] as ProposalIntakeListResult;
       var items = _scopedKindRows(list.items);
+      if (_presidentDesk) {
+        items = items
+            .where((row) => _presidentDeskStatuses.contains(row.status))
+            .toList(growable: false);
+      }
       if (widget.assistantMode) {
         final q = _search.text.trim().toLowerCase();
         if (q.isNotEmpty) {
@@ -1292,7 +1310,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         : null;
     final statusFilter = _filterChips(
       value: _statusFilter,
-      items: _proposalStatusFilters,
+      items: _presidentDesk ? _presidentDeskFilters : _proposalStatusFilters,
       onChanged: (value) => unawaited(_setStatusFilter(value)),
     );
     if (_protoList) {
@@ -5687,7 +5705,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             // 手机：全部塞进一行，放不下左右滑。
             _contentHeaderRow(open: open, showComments: showComments),
             if (open) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text.rich(
                 TextSpan(
                   children: [
@@ -5707,9 +5725,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 style: TextStyle(
                   color: DunesColors.resolve(context, const Color(0xFF5B556A)),
                   fontSize: 11,
+                  height: 1.4,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF3F0F8),
+                  role: DunesColorRole.border,
+                ),
+              ),
               if (_commentsTab && showComments) ...[
                 _commentsSection(),
                 // 评论时各板块仍在树里（不显示），定位、跳转逻辑不受影响。
@@ -11136,6 +11164,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ], extra: _simplePresidentText),
             anchorKey: 'marketOwner1',
             required: true,
+            fullWidth: true,
           ),
           _contractSimpleLine('采购合同', 'purchase'),
           _contractTermsLine('采购合同核心条款', 'purchase'),
@@ -16462,7 +16491,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
               TextButton.icon(
                 onPressed: () => _jumpToSkuSettlement(row, child: child),
-                icon: const Icon(Icons.arrow_downward_rounded, size: 15),
+                icon: const Icon(Icons.keyboard_return_rounded, size: 15),
                 label: const Text('填写结算'),
               ),
             ],
@@ -20275,11 +20304,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     builder: (gridContext, constraints) {
       final simple = ProposalSimpleViewScope.of(gridContext);
       final requested = simple
-          // 原型：auto-fit minmax(340px, 1fr)。只读简单行最多三列，填写时最多两列。
+          // 原型：auto-fit minmax(340px, 1fr)。只读简单行最多两列，
+          // 三列会把「提案类型 / 子标题」这类成对字段拆开，宽屏上看着错位。
           ? (_simpleView
                 ? ((constraints.maxWidth + 22) / (340 + 22))
                       .floor()
-                      .clamp(1, 3)
+                      .clamp(1, 2)
                       .toInt()
                 : (constraints.maxWidth >= 700 ? 2 : 1))
           : columns ??
@@ -21832,6 +21862,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ], extra: _simplePresidentText),
             anchorKey: 'marketOwner1',
             required: true,
+            fullWidth: true,
           ),
           _contractSimpleLine('采购合同', 'purchase'),
           _contractTermsLine('采购合同核心条款', 'purchase'),

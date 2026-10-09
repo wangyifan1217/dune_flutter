@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import 'proposal_intake_models.dart';
@@ -105,8 +106,8 @@ class ProposalSimpleViewScope extends InheritedWidget {
   final bool textRows;
 
   static bool textRowsOf(BuildContext context) {
-    final scope =
-        context.dependOnInheritedWidgetOfExactType<ProposalSimpleViewScope>();
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<ProposalSimpleViewScope>();
     return scope != null && (scope.readOnly || scope.textRows);
   }
 
@@ -127,13 +128,12 @@ class ProposalSimpleViewScope extends InheritedWidget {
 
 /// 账号打码：连续 8 位以上的数字只留前 4 位和后 4 位，中间写 ****。
 /// 如「416230100100002564」→「4162 **** 2564」；账户名等文字原样保留。
-String proposalMaskAccount(String raw) => raw.replaceAllMapped(
-  RegExp(r'\d{8,}'),
-  (m) {
-    final digits = m[0]!;
-    return '${digits.substring(0, 4)} **** ${digits.substring(digits.length - 4)}';
-  },
-);
+String proposalMaskAccount(
+  String raw,
+) => raw.replaceAllMapped(RegExp(r'\d{8,}'), (m) {
+  final digits = m[0]!;
+  return '${digits.substring(0, 4)} **** ${digits.substring(digits.length - 4)}';
+});
 
 /// 简单行多列排布时，分隔线由整排统一画（同一排对齐成一条线），格子自己不再画。
 class ProposalGridRowScope extends InheritedWidget {
@@ -160,11 +160,13 @@ class ProposalDashedUnderlineBorder extends InputBorder {
   final bool dashed;
 
   @override
-  ProposalDashedUnderlineBorder copyWith({BorderSide? borderSide, bool? dashed}) =>
-      ProposalDashedUnderlineBorder(
-        borderSide: borderSide ?? this.borderSide,
-        dashed: dashed ?? this.dashed,
-      );
+  ProposalDashedUnderlineBorder copyWith({
+    BorderSide? borderSide,
+    bool? dashed,
+  }) => ProposalDashedUnderlineBorder(
+    borderSide: borderSide ?? this.borderSide,
+    dashed: dashed ?? this.dashed,
+  );
 
   @override
   bool get isOutline => false;
@@ -175,18 +177,21 @@ class ProposalDashedUnderlineBorder extends InputBorder {
 
   @override
   ProposalDashedUnderlineBorder scale(double t) =>
-      ProposalDashedUnderlineBorder(borderSide: borderSide.scale(t), dashed: dashed);
+      ProposalDashedUnderlineBorder(
+        borderSide: borderSide.scale(t),
+        dashed: dashed,
+      );
 
   @override
-  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => Path()
-    ..addRect(
-      Rect.fromLTWH(
-        rect.left,
-        rect.top,
-        rect.width,
-        math.max(0.0, rect.height - borderSide.width),
-      ),
-    );
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      Path()..addRect(
+        Rect.fromLTWH(
+          rect.left,
+          rect.top,
+          rect.width,
+          math.max(0.0, rect.height - borderSide.width),
+        ),
+      );
 
   @override
   Path getOuterPath(Rect rect, {TextDirection? textDirection}) =>
@@ -424,84 +429,93 @@ class ProposalSectionTitle extends StatelessWidget {
   final bool lighthouse;
 
   @override
-  Widget build(BuildContext context) => ProposalSimpleViewScope.readOnlyOf(context)
+  Widget build(BuildContext context) =>
+      ProposalSimpleViewScope.readOnlyOf(context)
       ? const SizedBox.shrink()
       : Padding(
-    padding: const EdgeInsets.only(bottom: 12, top: 4),
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final stacked = ProposalLayout.isCompact(constraints.maxWidth);
-        final heading = Wrap(
-          spacing: 10,
-          runSpacing: 5,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                color: DunesColors.resolve(context, ProposalPalette.text),
-                fontSize: stacked ? 17 : 19,
-                fontWeight: lighthouse ? FontWeight.w600 : FontWeight.w700,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  ProposalPalette.purpleSoft,
-                  role: DunesColorRole.surface,
-                ),
-                border: lighthouse
-                    ? null
-                    : Border.all(
+          padding: const EdgeInsets.only(bottom: 12, top: 4),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final stacked = ProposalLayout.isCompact(constraints.maxWidth);
+              final heading = Wrap(
+                spacing: 10,
+                runSpacing: 5,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: DunesColors.resolve(context, ProposalPalette.text),
+                      fontSize: stacked ? 17 : 19,
+                      fontWeight: lighthouse
+                          ? FontWeight.w600
+                          : FontWeight.w700,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.purpleSoft,
+                        role: DunesColorRole.surface,
+                      ),
+                      border: lighthouse
+                          ? null
+                          : Border.all(
+                              color: DunesColors.resolve(
+                                context,
+                                ProposalPalette.borderStrong,
+                                role: DunesColorRole.border,
+                              ),
+                            ),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      tag.toUpperCase(),
+                      style: TextStyle(
                         color: DunesColors.resolve(
                           context,
-                          ProposalPalette.borderStrong,
-                          role: DunesColorRole.border,
+                          ProposalPalette.purple,
                         ),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: .6,
                       ),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                tag.toUpperCase(),
-                style: TextStyle(
-                  color: DunesColors.resolve(context, ProposalPalette.purple),
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: .6,
+                    ),
+                  ),
+                ],
+              );
+              final caption = Text(
+                description,
+                textAlign: stacked ? TextAlign.left : TextAlign.right,
+                style: kProposalCaptionStyle.copyWith(
+                  color: DunesColors.resolveNullable(
+                    context,
+                    kProposalCaptionStyle.color,
+                  ),
                 ),
-              ),
-            ),
-          ],
-        );
-        final caption = Text(
-          description,
-          textAlign: stacked ? TextAlign.left : TextAlign.right,
-          style: kProposalCaptionStyle.copyWith(
-            color: DunesColors.resolveNullable(
-              context,
-              kProposalCaptionStyle.color,
-            ),
+              );
+              if (stacked) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [heading, const SizedBox(height: 6), caption],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(child: heading),
+                  const SizedBox(width: 12),
+                  Flexible(child: caption),
+                ],
+              );
+            },
           ),
         );
-        if (stacked) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [heading, const SizedBox(height: 6), caption],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(child: heading),
-            const SizedBox(width: 12),
-            Flexible(child: caption),
-          ],
-        );
-      },
-    ),
-  );
 }
 
 enum ProposalFieldTone { fill, auto, locked }
@@ -654,7 +668,9 @@ class ProposalField extends StatelessWidget {
     // 只读简单行（复核、查看）：名称一行写完，放不下省略（悬停看全称）。
     // 手机名称列 68px，用短名称（去掉括号说明、「合同核心条款」→「条款」），不再折成两三行。
     final readOnly = ProposalSimpleViewScope.textRowsOf(context);
-    final labelWidth = readOnly ? (narrow ? 68.0 : 118.0) : (narrow ? 76.0 : 104.0);
+    final labelWidth = readOnly
+        ? (narrow ? 68.0 : 118.0)
+        : (narrow ? 76.0 : 104.0);
     if (readOnly) {
       return _readOnlyRow(context, labelWidth, narrow: narrow);
     }
@@ -755,7 +771,10 @@ class ProposalField extends StatelessWidget {
       text: shown,
       children: [
         if (required)
-          TextSpan(text: ' *', style: TextStyle(color: c(0xFFC0563F))),
+          TextSpan(
+            text: ' *',
+            style: TextStyle(color: c(0xFFC0563F)),
+          ),
       ],
     );
     final baseSize = narrow ? 11.5 : 12.0;
@@ -763,7 +782,10 @@ class ProposalField extends StatelessWidget {
     final hasFormula = (formula ?? '').trim().isNotEmpty;
     final available = labelWidth - (hasFormula ? 15 : 0);
     final painter = TextPainter(
-      text: TextSpan(style: TextStyle(fontSize: baseSize), children: [labelSpan]),
+      text: TextSpan(
+        style: TextStyle(fontSize: baseSize),
+        children: [labelSpan],
+      ),
       maxLines: 1,
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
@@ -1955,9 +1977,15 @@ class ProposalModuleConfirmBar extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: c(0xFFFFFFFF, DunesColorRole.surface),
-          border: Border(top: BorderSide(color: c(0xFFE7E3F2, DunesColorRole.border))),
+          border: Border(
+            top: BorderSide(color: c(0xFFE7E3F2, DunesColorRole.border)),
+          ),
           boxShadow: const [
-            BoxShadow(color: Color(0x0F3C2878), blurRadius: 16, offset: Offset(0, -4)),
+            BoxShadow(
+              color: Color(0x0F3C2878),
+              blurRadius: 16,
+              offset: Offset(0, -4),
+            ),
           ],
         ),
         child: Padding(
@@ -2918,7 +2946,6 @@ class ProposalSettleRatioFormatter extends TextInputFormatter {
   }
 }
 
-
 /// 原型简单行的值：默认一行，放不下时末尾给「展开」，点开看全文、可复制，再点「收起」。
 /// 长文本拆成条目：先按「 · 」拆；只有一段时按「；」「;」、再按「。」分句（标点留在句尾）。
 List<String> proposalBulletItems(String text) {
@@ -2976,104 +3003,152 @@ class _ProposalOneLineTextState extends State<ProposalOneLineText> {
   @override
   Widget build(BuildContext context) {
     final style = DefaultTextStyle.of(context).style.merge(widget.style);
-    return LayoutBuilder(
-      builder: (context, box) {
-        final painter = TextPainter(
-          text: TextSpan(text: widget.text, style: style),
-          maxLines: 1,
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout(maxWidth: box.maxWidth.isFinite ? box.maxWidth : 10000);
-        final overflow = painter.didExceedMaxLines;
-        painter.dispose();
-        if (!overflow) {
-          return Text(widget.text, maxLines: 1, style: style);
-        }
-        if (_open) {
-          // 展开后按条目排成「• 一条一行」：先按「 · 」分，只有一段时再按「；」「。」分句。
-          final items = proposalBulletItems(widget.text);
-          if (items.length <= 1) {
-            return Text.rich(
-              TextSpan(
-                text: widget.text,
-                style: style,
-                children: [
-                  WidgetSpan(
-                    alignment: PlaceholderAlignment.middle,
-                    child: _toggle('收起'),
-                  ),
-                ],
-              ),
-            );
+    final line = (style.fontSize ?? 13) * (style.height ?? 1.35);
+    // 结算对照等处用 IntrinsicHeight 对齐左右列。LayoutBuilder 不能参与固有高度，
+    // 否则整段填报内容排版失败，第一行会叠到标题上。
+    final fallback = _open
+        ? line * math.max(1, proposalBulletItems(widget.text).length) + 8
+        : line + 4;
+    return _IntrinsicHeightFallback(
+      height: fallback,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final painter = TextPainter(
+            text: TextSpan(text: widget.text, style: style),
+            maxLines: 1,
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+          )..layout(maxWidth: box.maxWidth.isFinite ? box.maxWidth : 10000);
+          final overflow = painter.didExceedMaxLines;
+          painter.dispose();
+          if (!overflow) {
+            return Text(widget.text, maxLines: 1, style: style);
           }
-          final dotColor = DunesColors.resolve(
-            context,
-            const Color(0xFF8E7BE0),
-          );
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < items.length; i++)
-                Padding(
-                  padding: EdgeInsets.only(top: i == 0 ? 0 : 3),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 小圆点：4px，和第一行文字垂直居中。
-                      SizedBox(
-                        width: 10,
-                        height: (style.fontSize ?? 13) * (style.height ?? 1.35),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                            width: 4,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: dotColor,
-                              shape: BoxShape.circle,
+          if (_open) {
+            // 展开后按条目排成「• 一条一行」：先按「 · 」分，只有一段时再按「；」「。」分句。
+            final items = proposalBulletItems(widget.text);
+            if (items.length <= 1) {
+              return Text.rich(
+                TextSpan(
+                  text: widget.text,
+                  style: style,
+                  children: [
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: _toggle('收起'),
+                    ),
+                  ],
+                ),
+              );
+            }
+            final dotColor = DunesColors.resolve(
+              context,
+              const Color(0xFF8E7BE0),
+            );
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < items.length; i++)
+                  Padding(
+                    padding: EdgeInsets.only(top: i == 0 ? 0 : 3),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 小圆点：4px，和第一行文字垂直居中。
+                        SizedBox(
+                          width: 10,
+                          height:
+                              (style.fontSize ?? 13) * (style.height ?? 1.35),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              width: 4,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: dotColor,
+                                shape: BoxShape.circle,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: i == items.length - 1
-                            ? Text.rich(
-                                TextSpan(
-                                  text: items[i],
-                                  style: style,
-                                  children: [
-                                    WidgetSpan(
-                                      alignment: PlaceholderAlignment.middle,
-                                      child: _toggle('收起'),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : Text(items[i], style: style),
-                      ),
-                    ],
+                        Expanded(
+                          child: i == items.length - 1
+                              ? Text.rich(
+                                  TextSpan(
+                                    text: items[i],
+                                    style: style,
+                                    children: [
+                                      WidgetSpan(
+                                        alignment: PlaceholderAlignment.middle,
+                                        child: _toggle('收起'),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : Text(items[i], style: style),
+                        ),
+                      ],
+                    ),
                   ),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: style,
                 ),
+              ),
+              _toggle('展开'),
             ],
           );
-        }
-        return Row(
-          children: [
-            Expanded(
-              child: Text(
-                widget.text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: style,
-              ),
-            ),
-            _toggle('展开'),
-          ],
-        );
-      },
+        },
+      ),
     );
   }
+}
+
+/// 挡住子组件的固有高度计算，避免 [LayoutBuilder] 在 [IntrinsicHeight] 里把排版打断。
+class _IntrinsicHeightFallback extends SingleChildRenderObjectWidget {
+  const _IntrinsicHeightFallback({required this.height, required super.child});
+
+  final double height;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderIntrinsicHeightFallback(height);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderIntrinsicHeightFallback renderObject,
+  ) {
+    renderObject.height = height;
+  }
+}
+
+class _RenderIntrinsicHeightFallback extends RenderProxyBox {
+  _RenderIntrinsicHeightFallback(this._height);
+
+  double _height;
+
+  set height(double value) {
+    if (_height == value) return;
+    _height = value;
+    markNeedsLayout();
+  }
+
+  @override
+  double computeMinIntrinsicHeight(double width) => _height;
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => _height;
 }
 
 /// 对照合同抓取原文和改后内容。原文可能很长，内容区必须能滚动，否则会溢出黄条。

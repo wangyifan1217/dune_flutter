@@ -1,5 +1,6 @@
 import 'desktop_message_menu.dart';
 import 'desktop_attachment_feedback.dart';
+import 'chat_file_upload_source.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -224,6 +225,7 @@ class _ForwardEntry {
 class _DesktopComposerAttachment {
   const _DesktopComposerAttachment({
     required this.bytes,
+    this.uploadSource,
     required this.fileName,
     required this.mimeType,
     required this.isImage,
@@ -231,6 +233,7 @@ class _DesktopComposerAttachment {
   });
 
   final Uint8List bytes;
+  final ChatFileUploadSource? uploadSource;
   final String fileName;
   final String mimeType;
   final bool isImage;
@@ -638,6 +641,7 @@ class _NativeChatViewState extends State<NativeChatView>
     for (final file in pending) {
       _stageDesktopAttachment(
         bytes: file.bytes,
+        uploadSource: file.uploadSource,
         fileName: file.fileName,
         mimeType: file.mimeType,
         isImage: file.isImage,
@@ -665,7 +669,7 @@ class _NativeChatViewState extends State<NativeChatView>
       setState(() {
         _showingBackgroundFileUpload = true;
         _uploading = true;
-        _uploadLabel = '上传文件';
+        _uploadLabel = job.progress >= 0.99 ? '正在完成发送' : '上传文件';
         _uploadProgress = job.progress;
         _pendingUploadBytes = null;
         _pendingUploadKind = 'FILE';
@@ -3830,7 +3834,10 @@ class _NativeChatViewState extends State<NativeChatView>
             } else {
               await _service.sendFile(
                 conversationId: conversationId,
-                bytes: attachment.bytes,
+                bytes: attachment.uploadSource == null
+                    ? attachment.bytes
+                    : null,
+                source: attachment.uploadSource,
                 fileName: attachment.fileName,
                 mimeType: attachment.mimeType,
                 onProgress: _setUploadProgress,
@@ -3851,6 +3858,7 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _stageDesktopAttachment({
     required Uint8List bytes,
+    ChatFileUploadSource? uploadSource,
     required String fileName,
     required String mimeType,
     required bool isImage,
@@ -3865,6 +3873,7 @@ class _NativeChatViewState extends State<NativeChatView>
       _desktopComposerAttachments.add(
         _DesktopComposerAttachment(
           bytes: bytes,
+          uploadSource: uploadSource,
           fileName: fileName,
           mimeType: mimeType,
           isImage: isImage,
@@ -3929,7 +3938,7 @@ class _NativeChatViewState extends State<NativeChatView>
   static const int _maxImageBytes = 30 * 1024 * 1024;
 
   /// 普通文件大小上限。
-  static const int _maxFileBytes = 100 * 1024 * 1024;
+  static int get _maxFileBytes => chatCurrentFileLimitBytes;
 
   bool _checkSizeLimit(int length, int maxBytes, String fileName) {
     if (length <= maxBytes) return true;
@@ -4120,6 +4129,18 @@ class _NativeChatViewState extends State<NativeChatView>
       if (isDesktopCommOnly) {
         final memFile = ChatFileClipboard.peek();
         if (memFile != null) {
+          final localPath = (memFile.localPath ?? '').trim();
+          if (memFile.bytes.isEmpty &&
+              localPath.isNotEmpty &&
+              !_isChatImageFileName(memFile.fileName) &&
+              !isChatVideoFileName(memFile.fileName)) {
+            await _sendFileSource(
+              await ChatFileUploadSource.fromFile(XFile(localPath)),
+              fileName: memFile.fileName,
+              sourceLabel: '粘贴',
+            );
+            return true;
+          }
           Uint8List bytes = memFile.bytes;
           if (bytes.isEmpty && (memFile.localPath ?? '').trim().isNotEmpty) {
             bytes = await XFile(memFile.localPath!.trim()).readAsBytes();
@@ -4188,6 +4209,18 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       final fileName = path.replaceAll('\\', '/').split('/').last;
       try {
+        if (isDesktopCommOnly &&
+            !_isChatImageFileName(fileName) &&
+            !isChatVideoFileName(fileName) &&
+            !isChatVideoXFile(XFile(path, name: fileName))) {
+          await _sendFileSource(
+            await ChatFileUploadSource.fromFile(XFile(path)),
+            fileName: fileName,
+            sourceLabel: sourceLabel,
+          );
+          handled = true;
+          continue;
+        }
         final bytes = await XFile(path).readAsBytes();
         if (bytes.isEmpty) {
           _showToast('$fileName 无法读取');
@@ -4600,22 +4633,49 @@ class _NativeChatViewState extends State<NativeChatView>
       );
       return;
     }
-    final bytes = await file.readAsBytes();
+    await _sendFileSource(
+      await ChatFileUploadSource.fromFile(file),
+      fileName: fileName,
+      sourceLabel: '文件',
+      declaredMimeType: _useDesktopAttachmentStaging ? file.mimeType : null,
+    );
+  }
+
+  Future<void> _sendFileSource(
+    ChatFileUploadSource source, {
+    required String fileName,
+    String sourceLabel = '拖入',
+    String? declaredMimeType,
+  }) async {
+    if (!mounted || _conversation == null || _mediaBusy) return;
+    if (!_checkSizeLimit(source.length, _maxFileBytes, fileName)) return;
+    final mimeType =
+        declaredMimeType ??
+        lookupMimeType(fileName) ??
+        'application/octet-stream';
     if (_useDesktopAttachmentStaging) {
-      if (!_checkSizeLimit(bytes.length, _maxFileBytes, fileName)) return;
       _stageDesktopAttachment(
-        bytes: bytes,
+        bytes: Uint8List(0),
+        uploadSource: source,
         fileName: fileName,
-        mimeType:
-            file.mimeType ??
-            lookupMimeType(fileName) ??
-            'application/octet-stream',
+        mimeType: mimeType,
         isImage: false,
-        sourceLabel: '文件',
+        sourceLabel: sourceLabel,
       );
       return;
     }
-    await _sendFileBytes(bytes, fileName: fileName);
+    final cancel = ChatUploadCancelToken();
+    await _guardSend(() async {
+      _beginUpload('上传文件', kind: 'FILE', fileName: fileName);
+      await ChatFileUploadCoordinator.instance.sendFile(
+        session: widget.session,
+        conversationId: _requireReadyConversationId(),
+        source: source,
+        fileName: fileName,
+        mimeType: mimeType,
+        cancelToken: cancel,
+      );
+    }, cancelToken: cancel);
   }
 
   Future<void> _sendFileBytes(
@@ -4715,6 +4775,15 @@ class _NativeChatViewState extends State<NativeChatView>
         final fileName = file.name.isNotEmpty
             ? file.name
             : file.path.replaceAll('\\', '/').split('/').last;
+        if (!_isChatImageFileName(fileName) &&
+            !isChatVideoXFile(file) &&
+            !isChatVideoFileName(fileName)) {
+          await _sendFileSource(
+            await ChatFileUploadSource.fromFile(file),
+            fileName: fileName,
+          );
+          continue;
+        }
         final bytes = await file.readAsBytes();
         if (bytes.isEmpty) {
           _showToast('$fileName 无法读取');
@@ -4982,6 +5051,13 @@ class _NativeChatViewState extends State<NativeChatView>
     setState(() {
       _uploadProgress = progress.clamp(0.0, 1.0);
       if (label != null) _uploadLabel = label;
+      if (label == null && _pendingUploadKind == 'FILE') {
+        if (progress >= 0.99) {
+          _uploadLabel = '正在完成发送';
+        } else if (_uploadLabel == '正在完成发送') {
+          _uploadLabel = '上传文件';
+        }
+      }
     });
   }
 

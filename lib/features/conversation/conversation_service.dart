@@ -10,6 +10,7 @@ import '../auth/auth_session.dart';
 import '../nova/nova_history_utils.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../chat/chat_media_cache.dart';
+import '../chat/chat_file_upload_source.dart';
 import '../search/global_search_models.dart';
 import '../xflow/approval_chat_share.dart';
 import 'conversation_inbox_cache.dart';
@@ -96,7 +97,7 @@ http.MultipartFile _progressMultipartFile(
       final end = (offset + _uploadChunkSize < total)
           ? offset + _uploadChunkSize
           : total;
-      yield bytes.sublist(offset, end);
+      yield Uint8List.sublistView(bytes, offset, end);
       offset = end;
       onProgress?.call(offset, total);
     }
@@ -110,6 +111,49 @@ http.MultipartFile _progressMultipartFile(
     contentType: mimeType != null && mimeType.contains('/')
         ? MediaType.parse(mimeType)
         : null,
+  );
+}
+
+class _ChatUploadRejected implements Exception {
+  const _ChatUploadRejected(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+http.MultipartFile _sourceMultipartFile(
+  ChatFileUploadSource source,
+  String filename,
+  String mimeType,
+  void Function(double)? onProgress,
+  ChatUploadCancelToken? cancelToken,
+) {
+  Stream<List<int>> stream() async* {
+    var sent = 0;
+    final clock = Stopwatch()..start();
+    var lastUpdate = -150;
+    onProgress?.call(0);
+    await for (final chunk in source.openRead()) {
+      cancelToken?.throwIfCancelled();
+      yield chunk;
+      sent += chunk.length;
+      if (clock.elapsedMilliseconds - lastUpdate >= 150 ||
+          sent == source.length) {
+        lastUpdate = clock.elapsedMilliseconds;
+        if (source.length > 0) {
+          onProgress?.call((sent / source.length).clamp(0.0, 0.99));
+        }
+      }
+    }
+    cancelToken?.throwIfCancelled();
+  }
+
+  return http.MultipartFile(
+    'file',
+    stream(),
+    source.length,
+    filename: filename,
+    contentType: mimeType.contains('/') ? MediaType.parse(mimeType) : null,
   );
 }
 
@@ -1285,17 +1329,22 @@ class ConversationService {
 
   Future<void> sendFile({
     required int conversationId,
-    required Uint8List bytes,
+    Uint8List? bytes,
+    ChatFileUploadSource? source,
     required String fileName,
     required String mimeType,
     Map<String, dynamic>? extraPayload,
     void Function(double progress)? onProgress,
     ChatUploadCancelToken? cancelToken,
   }) async {
+    if ((bytes == null) == (source == null)) {
+      throw ArgumentError('Provide exactly one file source');
+    }
+    final fileSource = source ?? ChatFileUploadSource.bytes(bytes!);
     cancelToken?.throwIfCancelled();
     final uploaded = await uploadAttachment(
       conversationId: conversationId,
-      bytes: bytes,
+      source: fileSource,
       fileName: fileName,
       mimeType: mimeType,
       onProgress: onProgress,
@@ -1309,7 +1358,7 @@ class ConversationService {
       'objectKey': objectKey,
       'mimeType': mimeType,
       'fileName': fileName,
-      'size': bytes.length,
+      'size': fileSource.length,
       if (extraPayload != null) ...extraPayload,
     };
     await _sendAttachment(
@@ -1318,6 +1367,7 @@ class ConversationService {
       bodyText: fileName,
       payload: payload,
     );
+    onProgress?.call(1);
   }
 
   /// 发送小视频（kind=VIDEO），传输进度与文件一致。
@@ -1420,12 +1470,16 @@ class ConversationService {
 
   Future<UploadedAttachment> uploadAttachment({
     required int conversationId,
-    required Uint8List bytes,
+    Uint8List? bytes,
+    ChatFileUploadSource? source,
     required String fileName,
     required String mimeType,
     void Function(double progress)? onProgress,
     ChatUploadCancelToken? cancelToken,
   }) async {
+    if ((bytes == null) == (source == null)) {
+      throw ArgumentError('Provide exactly one attachment source');
+    }
     // 可取消上传使用独立 Client，避免 close 影响会话页其它请求。
     final ownsClient = cancelToken != null;
     final client = ownsClient ? http.Client() : _client;
@@ -1434,25 +1488,39 @@ class ConversationService {
       for (var attempt = 1; attempt <= _maxSendAttempts; attempt++) {
         cancelToken?.throwIfCancelled();
         try {
-          final req = http.MultipartRequest('POST', _uri('/storage/upload'));
+          final uri = source == null
+              ? _uri('/storage/upload')
+              : _uri(
+                  '/storage/upload',
+                ).replace(queryParameters: {'uploadMode': 'im-file-stream-v1'});
+          final req = http.MultipartRequest('POST', uri);
           req.headers['Authorization'] = 'Bearer ${_session.token}';
           req.fields['bucket'] = 'im-attachments';
           req.fields['conversationId'] = '$conversationId';
+          if (source != null) req.fields['fileSize'] = '${source.length}';
           req.files.add(
-            _progressMultipartFile(
-              'file',
-              bytes,
-              fileName,
-              onProgress == null
-                  ? null
-                  : (sent, total) {
-                      if (total > 0) {
-                        onProgress((sent / total).clamp(0.0, 1.0));
-                      }
-                    },
-              mimeType: mimeType,
-              cancelToken: cancelToken,
-            ),
+            source != null
+                ? _sourceMultipartFile(
+                    source,
+                    fileName,
+                    mimeType,
+                    onProgress,
+                    cancelToken,
+                  )
+                : _progressMultipartFile(
+                    'file',
+                    bytes!,
+                    fileName,
+                    onProgress == null
+                        ? null
+                        : (sent, total) {
+                            if (total > 0) {
+                              onProgress((sent / total).clamp(0.0, 1.0));
+                            }
+                          },
+                    mimeType: mimeType,
+                    cancelToken: cancelToken,
+                  ),
           );
           final streamed = await client.send(req);
           cancelToken?.throwIfCancelled();
@@ -1464,27 +1532,42 @@ class ConversationService {
               await _delayForRetry(attempt);
               continue;
             }
-            throw Exception('上传失败: HTTP ${streamed.statusCode}');
+            throw _ChatUploadRejected('上传失败: HTTP ${streamed.statusCode}');
           }
           final body = _decode(bodyText);
           if (body['success'] == false) {
-            throw Exception((body['message'] ?? '上传失败').toString());
+            throw _ChatUploadRejected((body['message'] ?? '上传失败').toString());
           }
           final data = body['data'];
           if (data is! Map<String, dynamic>) {
-            throw Exception('上传失败: 返回数据异常');
+            throw const _ChatUploadRejected('上传失败: 返回数据异常');
           }
           final url = (data['url'] ?? '').toString();
           final objectKey = (data['objectKey'] ?? url).toString();
           if (url.isEmpty && objectKey.isEmpty) {
-            throw Exception('上传失败: 未返回文件地址');
+            throw const _ChatUploadRejected('上传失败: 未返回文件地址');
           }
           return UploadedAttachment(url: url, objectKey: objectKey);
+        } on _ChatUploadRejected {
+          // Preserve legacy media upload retry behavior. Ordinary files skip
+          // permanent errors so a 413/403 cannot resend the whole file.
+          if (source == null && attempt < _maxSendAttempts) {
+            await _delayForRetry(attempt);
+            continue;
+          }
+          rethrow;
+        } on ChatFileChangedException {
+          rethrow;
         } on ChatUploadCancelledException {
           rethrow;
         } catch (e) {
           if (cancelToken?.isCancelled == true) {
             throw const ChatUploadCancelledException();
+          }
+          if (source != null &&
+              e is! http.ClientException &&
+              e is! TimeoutException) {
+            rethrow;
           }
           if (attempt >= _maxSendAttempts) rethrow;
           await _delayForRetry(attempt);
@@ -2434,7 +2517,10 @@ class ConversationService {
   }
 
   /// 群主把普通群与已读不回工作群互转。work 为 true 时服务端会在群里发通知。
-  Future<void> convertGroupType(int conversationId, {required bool work}) async {
+  Future<void> convertGroupType(
+    int conversationId, {
+    required bool work,
+  }) async {
     final resp = await _client.post(
       _uri('/conversations/$conversationId/group-type'),
       headers: _headers,
@@ -2445,7 +2531,9 @@ class ConversationService {
       final decoded = _decode(resp.body);
       if (decoded.isNotEmpty) body = decoded;
     } catch (_) {}
-    if (resp.statusCode < 200 || resp.statusCode >= 300 || body['success'] == false) {
+    if (resp.statusCode < 200 ||
+        resp.statusCode >= 300 ||
+        body['success'] == false) {
       final message = (body['message'] ?? '').toString().trim();
       throw Exception(message.isEmpty ? '转换群类型失败' : message);
     }

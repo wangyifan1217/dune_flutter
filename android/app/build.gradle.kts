@@ -85,6 +85,15 @@ android {
     }
 }
 
+// release 只打手机 ARM 架构，须与 flutter build apk --target-platform android-arm,android-arm64 一致。
+// ndk.abiFilters 会被 Flutter 插件覆盖，只能在打包时排除：否则插件的 x86_64 库还在而没有
+// libflutter.so，x86_64 设备会选中该目录后启动崩溃。debug 不排除，模拟器照常运行。
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.packaging.jniLibs.excludes.addAll(listOf("lib/x86_64/**", "lib/x86/**"))
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17

@@ -90,11 +90,16 @@ Android release 使用 android/key.properties 和对应的正式 keystore。该�
     . .\scripts\resolve-dart-defines.ps1
     $dartDefines = Get-DunesDartDefines -FlutterRoot $PWD
     flutter pub get
-    flutter build apk --release @dartDefines
+    flutter build apk --release --target-platform android-arm,android-arm64 --split-debug-info=build\app\outputs\symbols @dartDefines
 
 APK 路径：
 
     build\app\outputs\flutter-apk\app-release.apk
+
+只打 ARM 手机架构（arm64-v8a、armeabi-v7a），不含 x86_64（模拟器用），约省 50 MB。
+android/app/build.gradle.kts 在 release 打包时排除 lib/x86_64，命令里的 --target-platform 必须保持一致。
+--split-debug-info 把 Dart 调试符号移到 build\app\outputs\symbols，不进安装包；同一版本的符号目录要留存，
+用于还原线上崩溃堆栈（flutter symbolize）。
 
 将 APK 用于公司内部分发或设备安装。复制前确认它由正式 keystore 签名，并在测试设备安装、登录和检查推送等本次相关功能。
 

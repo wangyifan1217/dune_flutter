@@ -1588,7 +1588,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        Icons.south_east_rounded,
+                        Icons.keyboard_return_rounded,
                         size: _compact ? 10 : 11,
                         color: DunesColors.resolve(context, _C.purple),
                       ),

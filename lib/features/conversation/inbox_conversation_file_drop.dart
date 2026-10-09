@@ -11,11 +11,12 @@ import '../../core/util/friendly_error.dart';
 import '../chat/chat_image_editor.dart';
 import '../chat/chat_image_utils.dart';
 import '../chat/desktop_composer_pending.dart';
+import '../chat/chat_file_upload_source.dart';
 import '../shell/dunes_toast.dart';
 
 const _maxDropFiles = 20;
 const _maxImageBytes = 30 * 1024 * 1024;
-const _maxFileBytes = 100 * 1024 * 1024;
+const _maxFileBytes = chatMaxFileBytes;
 
 var _inboxFileDropBusy = false;
 
@@ -220,6 +221,26 @@ Future<List<DesktopComposerPendingFile>> _readDroppedFiles(
   final out = <DesktopComposerPendingFile>[];
   for (final file in files) {
     final fileName = _fileNameOf(file);
+    if (!_isChatImageFileName(fileName)) {
+      final source = await ChatFileUploadSource.fromFile(file);
+      if (source.length == 0 || source.length > _maxFileBytes) {
+        toast(
+          source.length == 0 ? '$fileName 无法读取' : '$fileName 超过 100MB 上限，无法添加',
+          error: true,
+        );
+        continue;
+      }
+      out.add(
+        DesktopComposerPendingFile(
+          bytes: Uint8List(0),
+          uploadSource: source,
+          fileName: fileName,
+          mimeType: lookupMimeType(fileName) ?? 'application/octet-stream',
+          isImage: false,
+        ),
+      );
+      continue;
+    }
     final bytes = await file.readAsBytes();
     if (bytes.isEmpty) {
       toast('$fileName 无法读取', error: true);

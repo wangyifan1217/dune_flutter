@@ -8,8 +8,7 @@ import 'weekly_summary_models.dart';
 const _ink = Color(0xFF1D1D1F);
 const _inkSub = Color(0xFF3A3A3C);
 const _secondary = Color(0xFF8E8E93);
-const _line = Color(0x10000000);
-const _tileBg = Color(0x07000000);
+const _dot = Color(0xFFAEAEB2);
 
 class WeeklySummaryPoster extends StatelessWidget {
   const WeeklySummaryPoster({
@@ -23,18 +22,18 @@ class WeeklySummaryPoster extends StatelessWidget {
   final bool showShareHint;
   final VoidCallback? onShare;
 
-  static const double cardWidth = 258.0;
+  static const double cardWidth = 272.0;
 
   @override
   Widget build(BuildContext context) {
-    final view = _WeeklySummaryView.fromShare(data);
+    final sheetRows = _sheetRows(context);
 
     return SizedBox(
       width: cardWidth,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: DunesColors.resolve(
@@ -49,41 +48,60 @@ class WeeklySummaryPoster extends StatelessWidget {
                   Colors.white,
                   role: DunesColorRole.border,
                 ).withValues(alpha: 0.95),
-                width: 1.0,
+                width: 1,
               ),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x0C000000),
+                  color: Color(0x14000000),
                   blurRadius: 16,
                   offset: Offset(0, 4),
                 ),
                 BoxShadow(
-                  color: Color(0x04000000),
-                  blurRadius: 3,
+                  color: Color(0x0A000000),
+                  blurRadius: 2,
                   offset: Offset(0, 1),
                 ),
               ],
             ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _header(context, view),
-                  const SizedBox(height: 10),
-                  _communicationSection(context, view),
-                  if (view.meetings.isNotEmpty) ...[
-                    _divider(context),
-                    _meetingsSection(context, view),
+                  _header(context),
+                  const SizedBox(height: 9),
+                  _metrics(context),
+                  if (data.latestLabel.trim().isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      _latestText(data.latestLabel),
+                      style: _sans(
+                        context,
+                        size: 11,
+                        weight: FontWeight.w500,
+                        color: _secondary,
+                        height: 1.2,
+                      ),
+                    ),
                   ],
-                  if (view.portrait.isNotEmpty) ...[
-                    _divider(context),
-                    _portraitSection(context, view),
-                  ],
-                  if (view.travel.isNotEmpty || view.route.isNotEmpty) ...[
-                    _divider(context),
-                    _travelSection(context, view),
+                  if (sheetRows.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0x14FFFFFF)
+                            : const Color(0x09000000),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: sheetRows,
+                        ),
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -94,7 +112,7 @@ class WeeklySummaryPoster extends StatelessWidget {
     );
   }
 
-  Widget _header(BuildContext context, _WeeklySummaryView view) {
+  Widget _header(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.baseline,
       textBaseline: TextBaseline.alphabetic,
@@ -102,24 +120,24 @@ class WeeklySummaryPoster extends StatelessWidget {
         Expanded(
           child: Text(
             '一周小结',
-            style: DunesTypography.sans(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
+            style: _sans(
+              context,
+              size: 15,
+              weight: FontWeight.w600,
               color: _ink,
+              letterSpacing: -0.2,
               height: 1.15,
-              context: context,
             ),
           ),
         ),
-        if (view.rangeLabel.isNotEmpty)
+        if (data.rangeLabel.trim().isNotEmpty)
           Text(
-            view.rangeLabel,
-            style: DunesTypography.sans(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w500,
+            data.rangeLabel.trim(),
+            style: _sans(
+              context,
+              size: 11,
+              weight: FontWeight.w500,
               color: _secondary,
-              context: context,
             ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
           ),
         if (showShareHint) ...[
@@ -137,349 +155,250 @@ class WeeklySummaryPoster extends StatelessWidget {
     );
   }
 
-  Widget _divider(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 9),
-      child: SizedBox(
-        height: 0.5,
-        width: double.infinity,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: DunesColors.resolveNullable(
-              context,
-              _line,
-              role: DunesColorRole.surface,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _sectionTitle(BuildContext context, String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
-      child: Text(
-        title,
-        style: DunesTypography.sans(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: _secondary,
-          context: context,
-        ),
-      ),
-    );
-  }
-
-  Widget _communicationSection(BuildContext context, _WeeklySummaryView view) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _metrics(BuildContext context) {
+    return Row(
       children: [
-        _sectionTitle(context, '沟通'),
-        Row(
-          children: [
-            for (final item in view.communication)
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.value,
-                      style:
-                          DunesTypography.sans(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.4,
-                            color: _ink,
-                            height: 1.05,
-                            context: context,
-                          ).copyWith(
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.label,
-                      style: DunesTypography.sans(
-                        fontSize: 10.5,
-                        color: _secondary,
-                        context: context,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        if (view.latestLabel.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            '最晚在${view.latestLabel}',
-            style: DunesTypography.sans(
-              fontSize: 11,
-              color: _secondary,
-              height: 1.25,
-              context: context,
-            ),
-          ),
-        ],
+        Expanded(child: _metric(context, '${data.sessionCount}', '会话')),
+        Expanded(child: _metric(context, '${data.messageCount}', '消息')),
+        Expanded(child: _metric(context, '${data.minutes}', '分钟')),
       ],
     );
   }
 
-  Widget _meetingsSection(BuildContext context, _WeeklySummaryView view) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _metric(BuildContext context, String value, String unit) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
       children: [
-        _sectionTitle(context, '会议'),
-        Row(
-          children: [
-            for (final item in view.meetings)
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.value,
-                      style:
-                          DunesTypography.sans(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.3,
-                            color: _ink,
-                            height: 1.05,
-                            context: context,
-                          ).copyWith(
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.label,
-                      style: DunesTypography.sans(
-                        fontSize: 10.5,
-                        color: _secondary,
-                        context: context,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
+        Text(
+          value,
+          style: _sans(
+            context,
+            size: 18,
+            weight: FontWeight.w600,
+            color: _ink,
+            letterSpacing: -0.4,
+            height: 1,
+          ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+        ),
+        const SizedBox(width: 3),
+        Text(
+          unit,
+          style: _sans(
+            context,
+            size: 11,
+            weight: FontWeight.w500,
+            color: _secondary,
+            height: 1,
+          ),
         ),
       ],
     );
   }
 
-  Widget _portraitSection(BuildContext context, _WeeklySummaryView view) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle(context, '画像'),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: DunesColors.resolveNullable(
-              context,
-              _tileBg,
-              role: DunesColorRole.surface,
+  List<Widget> _sheetRows(BuildContext context) {
+    final rows = <Widget>[];
+    final meeting = _meetingLine(context);
+    if (meeting != null) rows.add(_factRow(context, '会议', meeting));
+    final week = _weekLine(context);
+    if (week != null) rows.add(_factRow(context, '本周', week));
+    final travel = _travelLine(context);
+    final travelCaption = _travelCaption();
+    if (travel != null || travelCaption.isNotEmpty) {
+      rows.add(
+        _factRow(
+          context,
+          '差旅',
+          travel ?? const TextSpan(text: ''),
+          caption: travelCaption,
+        ),
+      );
+    }
+    return rows;
+  }
+
+  Widget _factRow(
+    BuildContext context,
+    String label,
+    InlineSpan line, {
+    String caption = '',
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 28,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Text(
+                label,
+                style: _sans(
+                  context,
+                  size: 11,
+                  weight: FontWeight.w500,
+                  color: _secondary,
+                  height: 1.35,
+                ),
+              ),
             ),
-            borderRadius: BorderRadius.circular(10),
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          const SizedBox(width: 8),
+          Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (var i = 0; i < view.portrait.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 5),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          view.portrait[i].label,
-                          style: DunesTypography.sans(
-                            fontSize: 11.5,
-                            color: _inkSub,
-                            context: context,
-                          ),
-                        ),
+                Text.rich(TextSpan(children: [line]), style: _lineStyle(context)),
+                if (caption.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(
+                      caption,
+                      style: _sans(
+                        context,
+                        size: 11,
+                        weight: FontWeight.w500,
+                        color: _secondary,
+                        height: 1.3,
                       ),
-                      Text(
-                        view.portrait[i].value,
-                        style:
-                            DunesTypography.sans(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: _ink,
-                              context: context,
-                            ).copyWith(
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
-                      ),
-                    ],
+                    ),
                   ),
-                ],
               ],
             ),
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _travelSection(BuildContext context, _WeeklySummaryView view) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle(context, '差旅'),
-        if (view.travel.isNotEmpty)
-          Row(
-            children: [
-              for (final item in view.travel)
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.value,
-                        style:
-                            DunesTypography.sans(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.3,
-                              color: _ink,
-                              height: 1.05,
-                              context: context,
-                            ).copyWith(
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item.label,
-                        style: DunesTypography.sans(
-                          fontSize: 10,
-                          color: _secondary,
-                          context: context,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        if (view.route.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            view.route,
-            style: DunesTypography.sans(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w500,
-              color: _inkSub,
-              height: 1.25,
-              context: context,
-            ),
-          ),
         ],
-      ],
-    );
-  }
-}
-
-class _Metric {
-  const _Metric(this.value, this.label);
-  final String value;
-  final String label;
-}
-
-class _WeeklySummaryView {
-  const _WeeklySummaryView({
-    required this.rangeLabel,
-    required this.sessionCount,
-    required this.messageCount,
-    required this.minutes,
-    this.latestLabel = '',
-    this.meetingCount = 0,
-    this.attendeeCount = 0,
-    this.completedTasks = 0,
-    this.proposals = 0,
-    this.minutesCount = 0,
-    this.travelDays = 0,
-    this.flightKm = 0,
-    this.trainKm = 0,
-    this.route = '',
-  });
-
-  final String rangeLabel;
-  final int sessionCount;
-  final int messageCount;
-  final int minutes;
-  final String latestLabel;
-  final int meetingCount;
-  final int attendeeCount;
-  final int completedTasks;
-  final int proposals;
-  final int minutesCount;
-  final int travelDays;
-  final int flightKm;
-  final int trainKm;
-  final String route;
-
-  factory _WeeklySummaryView.fromShare(WeeklySummaryShare data) {
-    return _WeeklySummaryView(
-      rangeLabel: data.rangeLabel,
-      sessionCount: data.sessionCount,
-      messageCount: data.messageCount,
-      minutes: data.minutes,
-      latestLabel: data.latestLabel,
-      meetingCount: 0,
-      attendeeCount: 0,
-      completedTasks: 0,
-      proposals: 0,
-      minutesCount: 0,
-      travelDays: 0,
-      flightKm: 0,
-      trainKm: 0,
-      route: '',
+      ),
     );
   }
 
-  List<_Metric> get communication => [
-    _Metric('$sessionCount', '工作会话'),
-    _Metric('$messageCount', '消息'),
-    _Metric('$minutes', '分钟'),
-  ];
+  InlineSpan? _meetingLine(BuildContext context) {
+    final parts = <InlineSpan>[];
+    if (data.meetingCount > 0) {
+      parts.addAll(_numUnit(context, '${data.meetingCount}', '场'));
+    }
+    if (data.attendeeCount > 0) {
+      if (parts.isNotEmpty) parts.add(_sep(context));
+      parts.addAll(_numUnit(context, '${data.attendeeCount}', '人'));
+    }
+    if (parts.isEmpty) return null;
+    return TextSpan(children: parts);
+  }
 
-  List<_Metric> get meetings {
-    if (meetingCount <= 0 && attendeeCount <= 0) return const [];
+  InlineSpan? _weekLine(BuildContext context) {
+    final parts = <InlineSpan>[];
+    void add(int value, String unit) {
+      if (value <= 0) return;
+      if (parts.isNotEmpty) parts.add(_sep(context));
+      parts.addAll(_numUnit(context, '$value', unit));
+    }
+
+    add(data.completedTasks, '项任务');
+    add(data.proposals, '提案');
+    add(data.minutesCount, '纪要');
+    if (parts.isEmpty) return null;
+    return TextSpan(children: parts);
+  }
+
+  InlineSpan? _travelLine(BuildContext context) {
+    final route = data.route.trim();
+    final parts = <InlineSpan>[];
+    if (data.travelDays > 0) {
+      parts.addAll(_numUnit(context, '${data.travelDays}', '天'));
+    }
+    if (route.isNotEmpty) {
+      if (parts.isNotEmpty) parts.add(_sep(context));
+      parts.add(TextSpan(text: route, style: _unitStyle(context)));
+    }
+    if (parts.isEmpty) return null;
+    return TextSpan(children: parts);
+  }
+
+  String _travelCaption() {
+    final parts = <String>[];
+    if (data.flightKm > 0) parts.add('飞行约 ${_grouped(data.flightKm)} 公里');
+    if (data.trainKm > 0) parts.add('高铁约 ${_grouped(data.trainKm)} 公里');
+    return parts.join(' · ');
+  }
+
+  List<InlineSpan> _numUnit(BuildContext context, String value, String unit) {
     return [
-      if (meetingCount > 0) _Metric('$meetingCount', '场次'),
-      if (attendeeCount > 0) _Metric('$attendeeCount', '参会人数'),
+      TextSpan(text: value, style: _valueStyle(context)),
+      TextSpan(text: ' $unit', style: _unitStyle(context)),
     ];
   }
 
-  List<_Metric> get portrait {
-    return [
-      if (completedTasks > 0) _Metric('$completedTasks', '已完成任务'),
-      if (proposals > 0) _Metric('$proposals', '发起提案'),
-      if (minutesCount > 0) _Metric('$minutesCount', '会议纪要'),
-    ];
+  InlineSpan _sep(BuildContext context) {
+    return TextSpan(text: ' · ', style: _dotStyle(context));
   }
 
-  List<_Metric> get travel {
-    if (travelDays <= 0 && flightKm <= 0 && trainKm <= 0) return const [];
-    return [
-      if (travelDays > 0) _Metric('$travelDays', '天'),
-      if (flightKm > 0) _Metric(_km(flightKm), '飞行约公里'),
-      if (trainKm > 0) _Metric(_km(trainKm), '高铁约公里'),
-    ];
+  TextStyle _lineStyle(BuildContext context) {
+    return _sans(
+      context,
+      size: 12,
+      weight: FontWeight.w500,
+      color: _inkSub,
+      height: 1.35,
+    );
   }
 
-  static String _km(int km) {
-    final text = '$km';
+  TextStyle _valueStyle(BuildContext context) {
+    return _sans(
+      context,
+      size: 12,
+      weight: FontWeight.w600,
+      color: _ink,
+      letterSpacing: -0.2,
+      height: 1.35,
+    ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+  }
+
+  TextStyle _unitStyle(BuildContext context) {
+    return _sans(
+      context,
+      size: 12,
+      weight: FontWeight.w500,
+      color: _inkSub,
+      height: 1.35,
+    );
+  }
+
+  TextStyle _dotStyle(BuildContext context) {
+    return _sans(
+      context,
+      size: 12,
+      weight: FontWeight.w500,
+      color: _dot,
+      height: 1.35,
+    );
+  }
+
+  TextStyle _sans(
+    BuildContext context, {
+    required double size,
+    required FontWeight weight,
+    required Color color,
+    double? letterSpacing,
+    double? height,
+  }) {
+    return DunesTypography.sans(
+      context: context,
+      fontSize: size,
+      fontWeight: weight,
+      letterSpacing: letterSpacing,
+      color: color,
+      height: height,
+    );
+  }
+
+  static String _latestText(String label) {
+    final text = label.trim();
+    if (text.startsWith('最晚')) return text;
+    return '最晚$text';
+  }
+
+  static String _grouped(int value) {
+    final text = '$value';
     final buf = StringBuffer();
     for (var i = 0; i < text.length; i++) {
       final left = text.length - i;

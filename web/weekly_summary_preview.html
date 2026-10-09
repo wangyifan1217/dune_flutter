@@ -7,101 +7,127 @@
   <style>
     :root {
       color-scheme: light;
-      --bg: #f5f5f7;
-      --card: #ffffff;
       --ink: #1d1d1f;
-      --secondary: #86868b;
-      --line: rgba(0, 0, 0, 0.08);
+      --sub: #3a3a3c;
+      --secondary: #8e8e93;
+      --dot: #c7c7cc;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      background: var(--bg);
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
       -webkit-font-smoothing: antialiased;
+      background:
+        radial-gradient(900px 420px at 12% -8%, rgba(255, 255, 255, 0.95), transparent 55%),
+        radial-gradient(720px 380px at 100% 0%, rgba(214, 206, 232, 0.85), transparent 46%),
+        linear-gradient(180deg, #eceaf2 0%, #f7f6f9 42%, #e7e4ee 100%);
     }
     .page {
-      max-width: 430px;
+      max-width: 320px;
       margin: 0 auto;
       padding: 28px 16px 48px;
     }
     .card {
-      background: var(--card);
-      border-radius: 22px;
-      padding: 22px 20px 18px;
+      border-radius: 18px;
+      padding: 12px 12px 10px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.95);
+      box-shadow:
+        0 10px 28px rgba(48, 35, 95, 0.08),
+        0 1px 2px rgba(48, 35, 95, 0.04);
+      backdrop-filter: blur(18px);
     }
     .head {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
-      gap: 12px;
+      gap: 8px;
     }
     h1 {
       margin: 0;
-      font-size: 28px;
+      font-size: 15px;
       font-weight: 650;
-      letter-spacing: -0.03em;
+      letter-spacing: -0.02em;
     }
     .range {
-      font-size: 15px;
+      font-size: 11px;
+      font-weight: 500;
       color: var(--secondary);
       font-variant-numeric: tabular-nums;
-    }
-    .section { margin-top: 22px; padding-top: 18px; border-top: 0.5px solid var(--line); }
-    .section-title {
-      margin: 0 0 14px;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--secondary);
     }
     .metrics {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
+      margin-top: 9px;
     }
-    .metrics.two { grid-template-columns: repeat(2, 1fr); max-width: 68%; }
-    .metric-value {
-      font-size: 32px;
-      font-weight: 620;
+    .metric {
+      display: flex;
+      align-items: baseline;
+      gap: 3px;
+      min-width: 0;
+    }
+    .metric b {
+      font-size: 18px;
+      font-weight: 650;
       letter-spacing: -0.04em;
       font-variant-numeric: tabular-nums;
-      line-height: 1.05;
+      line-height: 1;
     }
-    .metric-label {
-      margin-top: 4px;
-      font-size: 13px;
+    .metric span {
+      font-size: 11px;
+      font-weight: 500;
       color: var(--secondary);
+      line-height: 1;
     }
     .note {
-      margin: 14px 0 0;
-      font-size: 15px;
+      margin: 5px 0 0;
+      font-size: 11px;
+      line-height: 1.2;
       color: var(--secondary);
     }
-    .rows { display: flex; flex-direction: column; }
+    .sheet {
+      margin-top: 8px;
+      padding: 6px 8px 5px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.035);
+    }
     .row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      padding: 11px 0;
-      border-top: 0.5px solid var(--line);
-      font-size: 17px;
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      column-gap: 8px;
+      align-items: start;
+      padding: 2px 0;
+      font-size: 12px;
+      line-height: 1.35;
     }
-    .row:first-child { border-top: 0; padding-top: 0; }
-    .row span:last-child {
+    .k {
+      padding-top: 1px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--secondary);
+    }
+    .v b {
+      font-weight: 650;
       font-variant-numeric: tabular-nums;
-      font-weight: 590;
+      letter-spacing: -0.02em;
     }
-    .route {
-      margin: 14px 0 0;
-      font-size: 15px;
-      color: var(--ink);
+    .v span,
+    .cap {
+      font-weight: 500;
+      color: var(--sub);
     }
-    .quote {
-      margin: 22px 0 0;
-      font-size: 13px;
-      line-height: 1.45;
+    .v em {
+      font-style: normal;
+      font-weight: 500;
+      color: #aeaeb2;
+      padding: 0 4px;
+    }
+    .cap {
+      margin-top: 1px;
+      font-size: 11px;
+      line-height: 1.3;
       color: var(--secondary);
     }
   </style>
@@ -114,68 +140,30 @@
         <div class="range">9.22–9.26</div>
       </header>
 
-      <section class="section">
-        <h2 class="section-title">沟通</h2>
-        <div class="metrics">
+      <div class="metrics">
+        <div class="metric"><b>22</b><span>会话</span></div>
+        <div class="metric"><b>186</b><span>消息</span></div>
+        <div class="metric"><b>94</b><span>分钟</span></div>
+      </div>
+      <p class="note">最晚周四晚上 23:41</p>
+
+      <div class="sheet">
+        <div class="row">
+          <div class="k">会议</div>
+          <div class="v"><b>3</b><span> 场</span><em>·</em><b>18</b><span> 人</span></div>
+        </div>
+        <div class="row">
+          <div class="k">本周</div>
+          <div class="v"><b>4</b><span> 项任务</span><em>·</em><b>1</b><span> 提案</span><em>·</em><b>2</b><span> 纪要</span></div>
+        </div>
+        <div class="row">
+          <div class="k">差旅</div>
           <div>
-            <div class="metric-value">22</div>
-            <div class="metric-label">工作会话</div>
-          </div>
-          <div>
-            <div class="metric-value">186</div>
-            <div class="metric-label">消息</div>
-          </div>
-          <div>
-            <div class="metric-value">94</div>
-            <div class="metric-label">分钟</div>
+            <div class="v"><b>3</b><span> 天</span><em>·</em><span>上海 → 北京 → 上海</span></div>
+            <div class="cap">飞行约 2,140 公里 · 高铁约 1,086 公里</div>
           </div>
         </div>
-        <p class="note">最晚在周四晚上 23:41</p>
-      </section>
-
-      <section class="section">
-        <h2 class="section-title">会议</h2>
-        <div class="metrics two">
-          <div>
-            <div class="metric-value">3</div>
-            <div class="metric-label">场次</div>
-          </div>
-          <div>
-            <div class="metric-value">18</div>
-            <div class="metric-label">参会人数</div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <h2 class="section-title">画像</h2>
-        <div class="rows">
-          <div class="row"><span>已完成任务</span><span>4</span></div>
-          <div class="row"><span>发起提案</span><span>1</span></div>
-          <div class="row"><span>会议纪要</span><span>2</span></div>
-        </div>
-      </section>
-
-      <section class="section">
-        <h2 class="section-title">差旅</h2>
-        <div class="metrics">
-          <div>
-            <div class="metric-value">3</div>
-            <div class="metric-label">天</div>
-          </div>
-          <div>
-            <div class="metric-value">2,140</div>
-            <div class="metric-label">飞行约公里</div>
-          </div>
-          <div>
-            <div class="metric-value">1,086</div>
-            <div class="metric-label">高铁约公里</div>
-          </div>
-        </div>
-        <p class="route">上海 → 北京 → 上海</p>
-      </section>
-
-      <p class="quote">将小事做到极致，是做大事业的第一步</p>
+      </div>
     </article>
   </main>
 </body>

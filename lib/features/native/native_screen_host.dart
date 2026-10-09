@@ -852,6 +852,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       );
       return;
     }
+    if (event.type == 'conversation_member_removed') {
+      _scheduleCommBadgeRefresh();
+      return;
+    }
 
     const relevant = <String>{
       'message',

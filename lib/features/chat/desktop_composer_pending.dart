@@ -1,10 +1,12 @@
 import 'dart:typed_data';
 
 import 'desktop_composer_focus.dart';
+import 'chat_file_upload_source.dart';
 
 class DesktopComposerPendingFile {
   const DesktopComposerPendingFile({
     required this.bytes,
+    this.uploadSource,
     required this.fileName,
     required this.mimeType,
     required this.isImage,
@@ -12,6 +14,7 @@ class DesktopComposerPendingFile {
   });
 
   final Uint8List bytes;
+  final ChatFileUploadSource? uploadSource;
   final String fileName;
   final String mimeType;
   final bool isImage;

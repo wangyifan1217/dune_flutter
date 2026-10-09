@@ -1229,12 +1229,6 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     return buf.toString().trimRight();
   }
 
-  bool _preferRawSummaryView(String markdown) {
-    // Default to Markdown rendering for compatibility. Keep a high safety
-    // threshold only for extremely long content to avoid UI jank.
-    return markdown.length > 20000;
-  }
-
   String _transcriptEmptyText(NativeMeetingDetail d) {
     return switch (d.status.toUpperCase()) {
       'DRAFT' => '尚未开始转写。开始转写后，原始逐句内容将显示在这里。',
@@ -1742,24 +1736,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                         ),
                       ),
                     if (_summaryDisplayMarkdown(d).isNotEmpty)
-                      () {
-                        final markdown = _summaryDisplayMarkdown(d);
-                        if (_preferRawSummaryView(markdown)) {
-                          return SelectableText(
-                            markdown,
-                            style: DunesTypography.sans(
-                              fontSize: 14,
-                              color: DunesColors.resolve(
-                                context,
-                                DunesColors.text2,
-                              ),
-                              height: 1.7,
-                              context: context,
-                            ),
-                          );
-                        }
-                        return MeetingMinutesMarkdown(markdown: markdown);
-                      }()
+                      MeetingMinutesMarkdown(
+                        markdown: _summaryDisplayMarkdown(d),
+                      )
                     else
                       Text(
                         _summaryText(d),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/dunes_month_picker.dart';
@@ -41,7 +42,8 @@ DateTime parseKpiMonth(String raw, DateTime fallback) {
   return DateTime(int.parse(match.group(1)!), int.parse(match.group(2)!));
 }
 
-/// 绩效发展：按灯塔数据规则查看切片与得分等级，不可自行增改。
+/// 绩效发展：按灯塔数据规则查看切片与得分等级。
+/// 能源「折扣（分省）」不自动计分，由业务本人在本页填写。
 /// 默认上一自然月（与工作台月度绩效考评、灯塔月报一致），可自选月份；
 /// 未注入 [score] 时请求 `/kpi/my-score`。
 class NativeWorkProfilePerfPage extends StatefulWidget {
@@ -56,6 +58,7 @@ class NativeWorkProfilePerfPage extends StatefulWidget {
     this.ackScore,
     this.submitAppeal,
     this.listMyAppeals,
+    this.saveDiscount,
   });
 
   final AuthSession session;
@@ -67,6 +70,13 @@ class NativeWorkProfilePerfPage extends StatefulWidget {
   final Future<WorkProfileKpiScore> Function(String month)? ackScore;
   final Future<KpiAppeal> Function(String month, String comment)? submitAppeal;
   final Future<List<KpiAppeal>> Function(String month)? listMyAppeals;
+  final Future<WorkProfileKpiScore> Function({
+    required String month,
+    required int taskId,
+    double? points,
+    bool clear,
+  })?
+  saveDiscount;
 
   @override
   State<NativeWorkProfilePerfPage> createState() =>
@@ -80,6 +90,7 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
   Object? _error;
   int _loadGen = 0;
   List<KpiAppeal> _appeals = const [];
+  int _savingDiscountTaskId = 0;
 
   DateTime get _clock => widget.now ?? DateTime.now();
   DateTime get _currentMonth => kpiMonthStart(_clock);
@@ -243,6 +254,45 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
     }
   }
 
+  Future<void> _saveDiscount(
+    int taskId,
+    double? points, {
+    required bool clear,
+  }) async {
+    if (_savingDiscountTaskId != 0) return;
+    setState(() => _savingDiscountTaskId = taskId);
+    try {
+      final month = formatKpiMonth(_month);
+      final score = widget.saveDiscount != null
+          ? await widget.saveDiscount!(
+              month: month,
+              taskId: taskId,
+              points: points,
+              clear: clear,
+            )
+          : await WorkProfileKpiService(session: widget.session).saveMyDiscount(
+              month: month,
+              taskId: taskId,
+              points: points,
+              clear: clear,
+            );
+      if (!mounted) return;
+      setState(() {
+        _score = score;
+        _savingDiscountTaskId = 0;
+      });
+      showDunesToast(context, clear ? '已清空分省折扣' : '分省折扣已保存');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _savingDiscountTaskId = 0);
+      showDunesToast(
+        context,
+        friendlyErrorText(e, fallback: '保存失败'),
+        kind: DunesToastKind.error,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final person = _score?.me;
@@ -322,7 +372,11 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
                     const SizedBox(height: 14),
                     if (hasScore)
                       for (final cat in person.categories) ...[
-                        _CategoryBlock(category: cat),
+                        _CategoryBlock(
+                          category: cat,
+                          savingTaskId: _savingDiscountTaskId,
+                          onSaveDiscount: _saveDiscount,
+                        ),
                         const SizedBox(height: 14),
                       ],
                   ],
@@ -663,9 +717,16 @@ class _EmptyCard extends StatelessWidget {
 }
 
 class _CategoryBlock extends StatelessWidget {
-  const _CategoryBlock({required this.category});
+  const _CategoryBlock({
+    required this.category,
+    required this.onSaveDiscount,
+    required this.savingTaskId,
+  });
 
   final WorkProfileKpiCategory category;
+  final int savingTaskId;
+  final Future<void> Function(int taskId, double? points, {required bool clear})
+  onSaveDiscount;
 
   @override
   Widget build(BuildContext context) {
@@ -712,7 +773,12 @@ class _CategoryBlock extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          for (final task in category.tasks) _TaskRow(task: task),
+          for (final task in category.tasks)
+            _TaskRow(
+              task: task,
+              saving: savingTaskId == task.taskId,
+              onSaveDiscount: onSaveDiscount,
+            ),
         ],
       ),
     );
@@ -720,9 +786,23 @@ class _CategoryBlock extends StatelessWidget {
 }
 
 class _TaskRow extends StatelessWidget {
-  const _TaskRow({required this.task});
+  const _TaskRow({
+    required this.task,
+    required this.saving,
+    required this.onSaveDiscount,
+  });
 
   final WorkProfileKpiTask task;
+  final bool saving;
+  final Future<void> Function(int taskId, double? points, {required bool clear})
+  onSaveDiscount;
+
+  WorkProfileKpiMetric? get _discount {
+    for (final metric in task.metrics) {
+      if (metric.key == 'discount') return metric;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -906,8 +986,186 @@ class _TaskRow extends StatelessWidget {
             const SizedBox(height: 6),
             // 收入/利润/用户的本月上月都在指标明细里，不再单独铺三行文字。
             KpiMetricList(metrics: task.metrics),
+            if (_discount != null) ...[
+              const SizedBox(height: 8),
+              _DiscountFill(
+                taskId: task.taskId,
+                metric: _discount!,
+                busy: saving,
+                onSave: (points, {required clear}) =>
+                    onSaveDiscount(task.taskId, points, clear: clear),
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DiscountFill extends StatefulWidget {
+  const _DiscountFill({
+    required this.taskId,
+    required this.metric,
+    required this.busy,
+    required this.onSave,
+  });
+
+  final int taskId;
+  final WorkProfileKpiMetric metric;
+  final bool busy;
+  final Future<void> Function(double? points, {required bool clear}) onSave;
+
+  @override
+  State<_DiscountFill> createState() => _DiscountFillState();
+}
+
+class _DiscountFillState extends State<_DiscountFill> {
+  late final TextEditingController _controller;
+  String? _error;
+
+  double get _cap {
+    if (widget.metric.maxPoints > 0) return widget.metric.maxPoints;
+    if (widget.metric.weight > 0) return widget.metric.weight;
+    return 20;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: _pointsText(widget.metric));
+  }
+
+  @override
+  void didUpdateWidget(covariant _DiscountFill oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final next = _pointsText(widget.metric);
+    if (next != _pointsText(oldWidget.metric) && _controller.text != next) {
+      _controller.text = next;
+      _error = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  static String _pointsText(WorkProfileKpiMetric metric) {
+    final pts = metric.points;
+    if (pts == null) return '';
+    if (pts == pts.roundToDouble()) return pts.toInt().toString();
+    return pts.toString();
+  }
+
+  Future<void> _submit({required bool clear}) async {
+    if (widget.busy) return;
+    if (clear) {
+      setState(() => _error = null);
+      await widget.onSave(null, clear: true);
+      return;
+    }
+    final raw = _controller.text.trim();
+    final parsed = double.tryParse(raw);
+    if (parsed == null) {
+      setState(() => _error = '请填写数字');
+      return;
+    }
+    if (parsed < 0 || parsed > _cap) {
+      setState(() => _error = '需在 0 到 ${_cap.toStringAsFixed(0)} 之间');
+      return;
+    }
+    setState(() => _error = null);
+    await widget.onSave(parsed, clear: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final capLabel = _cap.toStringAsFixed(0);
+    final filled = widget.metric.points != null;
+    return Material(
+      type: MaterialType.transparency,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '分省折扣由本人填写，满分 $capLabel',
+            style: DunesTypography.sans(
+              fontSize: 11,
+              color: DunesColors.resolve(context, const Color(0xFFB07A2B)),
+              context: context,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              SizedBox(
+                width: 96,
+                child: TextField(
+                  key: Key('work-profile-perf-discount-${widget.taskId}'),
+                  controller: _controller,
+                  enabled: !widget.busy,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    context: context,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: '0–$capLabel',
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                key: Key('work-profile-perf-discount-save-${widget.taskId}'),
+                onPressed: widget.busy
+                    ? null
+                    : () => unawaited(_submit(clear: false)),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _perfAccent,
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: Text(widget.busy ? '保存中' : '保存'),
+              ),
+              if (filled) ...[
+                const SizedBox(width: 4),
+                TextButton(
+                  key: Key('work-profile-perf-discount-clear-${widget.taskId}'),
+                  onPressed: widget.busy
+                      ? null
+                      : () => unawaited(_submit(clear: true)),
+                  child: const Text('清空'),
+                ),
+              ],
+            ],
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              _error!,
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.resolve(context, const Color(0xFFA5473C)),
+                context: context,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

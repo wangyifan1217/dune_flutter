@@ -146,10 +146,14 @@ class XflowApprovalFlowTrackSection extends StatelessWidget {
     super.key,
     required this.rows,
     this.topSpacing = 0,
+    this.embedded = false,
   });
 
   final List<XflowApprovalFlowTrackRowData> rows;
   final double topSpacing;
+
+  /// 详情卡片里已经有标题和边框，不再套一层流程卡。
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
@@ -163,6 +167,16 @@ class XflowApprovalFlowTrackSection extends StatelessWidget {
         ),
       );
     }
+    final steps = [
+      for (var i = 0; i < rows.length; i++)
+        _FlowTrackRow(data: rows[i], isLast: i == rows.length - 1),
+    ];
+    if (embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: steps,
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -172,12 +186,7 @@ class XflowApprovalFlowTrackSection extends StatelessWidget {
           subLabel: '${rows.length} EVENTS',
         ),
         const SizedBox(height: 10),
-        XflowApprovalFlowCard(
-          children: [
-            for (var i = 0; i < rows.length; i++)
-              _FlowTrackRow(data: rows[i], isLast: i == rows.length - 1),
-          ],
-        ),
+        XflowApprovalFlowCard(children: steps),
       ],
     );
   }
@@ -479,7 +488,7 @@ class _FlowTrackRow extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

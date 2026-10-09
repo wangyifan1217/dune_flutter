@@ -5463,4 +5463,113 @@ void main() {
     expect(deco.color, const Color(0xFFFFF4D6));
     expect(tester.getRect(flash).top, inInclusiveRange(-4.0, 400.0));
   });
+
+  testWidgets('purchase simple rows do not overlap the content header', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1280,
+        row: ProposalIntakeRow.fromJson({
+          'id': 8,
+          'code': 'CG-2026-0008',
+          'kind': 'purchase',
+          'title': '平安-民营佛山精选站点提案',
+          'status': 'pending_president',
+          'myAction': 'president',
+          'createdBy': 11,
+          'form': {
+            'proposalName': '平安-民营佛山精选销售提案',
+            'proposalType': '新增',
+            'supplies': ['团油'],
+            'supplyBrand': '民营加油',
+            'marketOwner1': '王一凡',
+            'marketOwner1UserId': 4,
+            'marketOwner2': '徐朝',
+            'operator': '徐朝',
+            'purchaseNo': '2026-18-YW-00001',
+            'purchaseName': '合作协议',
+            'purchaseCounterparty': '能链石化科技有限公司',
+            'purchaseValidPeriod': '2025-12-31 至 2026-12-31',
+            'purchaseMode': '已签署合同',
+            'purchaseCoreTerms':
+                '1. 双方应对本次合作内容中所涉及的对方知识产权予以充分尊重和保护，并保证在履行本合同时，对于所涉及的第三方知识产权予以充分尊重和保护。',
+          },
+          'review': {'purchaseContractCompleted': true},
+        }),
+      ),
+    );
+    await tester.pump();
+    final thrown = tester.takeException();
+    expect(thrown, isNull, reason: '$thrown');
+
+    Rect fieldRect(String label) => tester.getRect(
+      find
+          .ancestor(
+            of: find.textContaining(label),
+            matching: find.byType(ProposalField),
+          )
+          .first,
+    );
+    final header = tester.getRect(find.text('填报内容').first);
+    final name = fieldRect('产品提案名称');
+    final submitter = fieldRect('提报人');
+    final type = fieldRect('提案类型');
+    final subtitle = fieldRect('子标题');
+    final people = fieldRect('负责人');
+
+    expect(name.top, greaterThan(header.bottom));
+    expect((name.top - submitter.top).abs(), lessThan(2));
+    expect((type.top - subtitle.top).abs(), lessThan(2));
+    expect((name.left - type.left).abs(), lessThan(4));
+    expect(people.width, greaterThan(type.width * 1.6));
+    expect(people.top, greaterThan(type.bottom - 1));
+  });
+
+  testWidgets(
+    'long text inside intrinsic height keeps the header below the row',
+    (tester) async {
+      const style = TextStyle(fontSize: 13, height: 1.35);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('填报内容'),
+                SizedBox(height: 6),
+                Text('提交人说明'),
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: ProposalDashedUnderline(
+                          child: ProposalOneLineText(
+                            '双方应对本次合作内容中所涉及的对方知识产权予以充分尊重和保护，并保证在履行本合同时继续尊重第三方权利',
+                            style: style,
+                          ),
+                        ),
+                      ),
+                      Expanded(child: Text('右侧')),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final thrown = tester.takeException();
+      expect(thrown, isNull, reason: '$thrown');
+      final header = tester.getRect(find.text('填报内容'));
+      final note = tester.getRect(find.text('提交人说明'));
+      expect(note.top, greaterThan(header.bottom - 1));
+    },
+  );
 }

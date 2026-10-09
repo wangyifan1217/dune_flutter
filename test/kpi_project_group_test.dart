@@ -122,13 +122,13 @@ WorkProfileKpiPerson _office({
 
 void main() {
   test('canonicalizes lighthouse products into telecom and energy groups', () {
-    expect(kpiCanonicalMarketGroup(_task(product: '小套-出行会员')), '出行会员');
-    expect(kpiCanonicalMarketGroup(_task(product: '小套-加油会员')), '加油会员');
-    expect(kpiCanonicalMarketGroup(_task(product: '小套-明星来电')), '明星来电');
-    expect(kpiCanonicalMarketGroup(_task(product: '点播-加油权益')), '加油权益');
-    expect(kpiCanonicalMarketGroup(_task(product: '会员套餐点播')), '加油权益');
-    expect(kpiCanonicalMarketGroup(_task(product: '移动点播（积分）')), '加油权益');
-    expect(kpiCanonicalMarketGroup(_task(product: '移动点播（积分） › 出行金')), '出行金');
+    expect(kpiCanonicalMarketGroup(_task(product: '小套-出行会员')), '小套-出行会员');
+    expect(kpiCanonicalMarketGroup(_task(product: '小套-加油会员')), '小套-加油会员');
+    expect(kpiCanonicalMarketGroup(_task(product: '小套-明星来电')), '小套-明星来电');
+    expect(kpiCanonicalMarketGroup(_task(product: '点播-加油权益')), '点播-加油权益');
+    expect(kpiCanonicalMarketGroup(_task(product: '会员套餐点播')), '会员套餐点播');
+    expect(kpiCanonicalMarketGroup(_task(product: '移动点播（积分）')), '移动点播（积分）');
+    expect(kpiCanonicalMarketGroup(_task(product: '移动点播（积分） › 出行金')), '移动点播（积分） › 出行金');
     expect(kpiCanonicalMarketGroup(_task(product: '出行金')), '出行金');
     expect(kpiCanonicalMarketGroup(_task(product: '中石油现金券')), '中石油');
     expect(kpiCanonicalMarketGroup(_task(product: '中石化现金券')), '中石化');
@@ -175,7 +175,7 @@ void main() {
           ),
         ],
       );
-      expect(kpiPersonProjectGroup(person, 'telecom'), '出行会员');
+      expect(kpiPersonProjectGroup(person, 'telecom'), '小套-出行会员');
       expect(kpiPersonProjectGroup(person, 'energy'), '中石油');
       expect(kpiPersonProjectGroup(person, 'rd'), '未分组');
     },
@@ -214,7 +214,7 @@ void main() {
           score: 60,
         ),
       ], sector: 'telecom');
-      expect(telecom.map((e) => e.key).toList(), ['出行会员', '加油会员']);
+      expect(telecom.map((e) => e.key).toList(), ['小套-出行会员', '小套-加油会员']);
       expect(telecom.first.value.map((p) => p.userName).toList(), ['石淼', '万青']);
       expect(telecom.last.value.map((p) => p.userName).toList(), ['徐峥', '李同池']);
 

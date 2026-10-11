@@ -147,6 +147,42 @@ class ProposalGridRowScope extends InheritedWidget {
   bool updateShouldNotify(ProposalGridRowScope oldWidget) => false;
 }
 
+/// 一行简单行里的「展开」状态：值点了「展开」后，左边名称也跟着写全（可折几行）。
+class ProposalRowExpand extends InheritedNotifier<ValueNotifier<bool>> {
+  const ProposalRowExpand({
+    super.key,
+    required ValueNotifier<bool> super.notifier,
+    required super.child,
+  });
+
+  /// 不建立依赖，只拿来改值（展开 / 收起时用）。
+  static ValueNotifier<bool>? read(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<ProposalRowExpand>()?.notifier;
+}
+
+class _ProposalRowExpandHost extends StatefulWidget {
+  const _ProposalRowExpandHost({required this.builder});
+
+  final Widget Function(ValueNotifier<bool> open) builder;
+
+  @override
+  State<_ProposalRowExpandHost> createState() => _ProposalRowExpandHostState();
+}
+
+class _ProposalRowExpandHostState extends State<_ProposalRowExpandHost> {
+  final _open = ValueNotifier<bool>(false);
+
+  @override
+  void dispose() {
+    _open.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      ProposalRowExpand(notifier: _open, child: widget.builder(_open));
+}
+
 /// 简单行一行的标准高度：名称、值、复核标记都在这一条里垂直居中。
 const double kProposalSimpleLineHeight = 22;
 
@@ -766,7 +802,6 @@ class ProposalField extends StatelessWidget {
         DunesColors.resolve(context, Color(v), role: role);
     final shown = narrow ? compactLabel(label) : label;
     final inGridRow = ProposalGridRowScope.of(context);
-    const line = kProposalSimpleLineHeight;
     final labelSpan = TextSpan(
       text: shown,
       children: [
@@ -796,6 +831,33 @@ class ProposalField extends StatelessWidget {
           .toDouble();
     }
     painter.dispose();
+    return _ProposalRowExpandHost(
+      builder: (open) => _readOnlyRowBody(
+        context,
+        labelWidth: labelWidth,
+        narrow: narrow,
+        inGridRow: inGridRow,
+        labelSpan: labelSpan,
+        baseSize: baseSize,
+        labelSize: labelSize,
+        open: open,
+      ),
+    );
+  }
+
+  Widget _readOnlyRowBody(
+    BuildContext context, {
+    required double labelWidth,
+    required bool narrow,
+    required bool inGridRow,
+    required TextSpan labelSpan,
+    required double baseSize,
+    required double labelSize,
+    required ValueNotifier<bool> open,
+  }) {
+    Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, Color(v), role: role);
+    const line = kProposalSimpleLineHeight;
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(vertical: narrow ? 3 : 4),
@@ -809,7 +871,25 @@ class ProposalField extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
+          // 平时名称一行（放不下缩小 / 省略）；这一行点了「展开」后名称写全，可折几行。
+          ValueListenableBuilder<bool>(
+            valueListenable: open,
+            builder: (context, expanded, _) => expanded
+                ? SizedBox(
+                    width: labelWidth,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text.rich(
+                        labelSpan,
+                        style: TextStyle(
+                          color: c(0xFF5B556A),
+                          fontSize: baseSize,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  )
+                : SizedBox(
             width: labelWidth,
             height: line,
             child: Row(
@@ -841,6 +921,7 @@ class ProposalField extends StatelessWidget {
                   ),
               ],
             ),
+          ),
           ),
           SizedBox(width: narrow ? 6 : 8),
           Expanded(
@@ -2979,13 +3060,27 @@ class _ProposalOneLineTextState extends State<ProposalOneLineText> {
   @override
   void didUpdateWidget(covariant ProposalOneLineText oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text) _open = false;
+    if (oldWidget.text != widget.text && _open) {
+      _open = false;
+      final notifier = ProposalRowExpand.read(context);
+      if (notifier != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          notifier.value = false;
+        });
+      }
+    }
+  }
+
+  void _setOpen(bool value) {
+    setState(() => _open = value);
+    // 告诉这一行：名称也跟着写全 / 收回一行。
+    ProposalRowExpand.read(context)?.value = value;
   }
 
   Widget _toggle(String label) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _open = !_open),
+      onTap: () => _setOpen(!_open),
       child: Padding(
         padding: const EdgeInsets.only(left: 4),
         child: Text(

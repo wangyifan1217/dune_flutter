@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'proposal_finance_formula.dart';
 import 'settlement_catalog.dart';
 
 String normalizeProposalIntakeKind(String raw) {
@@ -1039,6 +1040,7 @@ class ProposalIntakeOptions {
     this.settleModes = const [],
     this.settleCycles = const [],
     this.unitPriceFormulas = const [],
+    this.financeFormulaCatalog,
     required this.ratingS,
     required this.ratingA,
     required this.ratingB,
@@ -1073,6 +1075,13 @@ class ProposalIntakeOptions {
   final List<String> settleModes;
   final List<String> settleCycles;
   final List<String> unitPriceFormulas;
+
+  /// 财务按公式测算的字典：收入公式（按业务平台分组）、四类成本项与公式、利润公式。
+  /// 后端 `finance.formulaCatalog` 下发；没下发时用 [ProposalFinanceFormulaCatalog.fallback]。
+  final ProposalFinanceFormulaCatalog? financeFormulaCatalog;
+
+  ProposalFinanceFormulaCatalog get resolvedFinanceFormulaCatalog =>
+      financeFormulaCatalog ?? ProposalFinanceFormulaCatalog.fallback;
   final double ratingS;
   final double ratingA;
   final double ratingB;
@@ -1144,6 +1153,9 @@ class ProposalIntakeOptions {
       settleModes: _strings(finance['settleModes']),
       settleCycles: _strings(finance['settleCycles']),
       unitPriceFormulas: _strings(finance['unitPriceFormulas']),
+      financeFormulaCatalog: finance['formulaCatalog'] is Map
+          ? ProposalFinanceFormulaCatalog.fromJson(finance['formulaCatalog'])
+          : null,
       // 金额口径为万元。
       ratingS: _number(rules['ratingS'], 5000),
       ratingA: _number(rules['ratingA'], 2000),
@@ -2089,7 +2101,6 @@ String proposalIntakeActionLabel(
 bool proposalIntakeFinanceLineItemsReviewed(ProposalIntakeRow row) {
   final keys = <String>[
     'revenue',
-    'couponProcurementCost',
     'profit',
     'margin',
     'turnoverCash',
@@ -2392,7 +2403,6 @@ int proposalIntakeTaskRemainingCount(
     var left = 0;
     for (final key in [
       'revenue',
-      'couponProcurementCost',
       'profit',
       'margin',
       'turnoverCash',
@@ -2523,6 +2533,8 @@ class ProposalIntakeProgressStep {
     this.action = '',
     this.statusText = '',
     this.time = '',
+    this.since,
+    this.doneAt,
   });
 
   final String id;
@@ -2534,6 +2546,24 @@ class ProposalIntakeProgressStep {
   final String time;
   final ProposalIntakeProgressState state;
 
+  /// 这一环从什么时候开始等（进行中 / 被驳回时有值），用来算「卡了多久」。
+  final DateTime? since;
+
+  /// 这一环完成的时间。
+  final DateTime? doneAt;
+
+  /// 进行中 / 驳回的节点已经等了多久。
+  Duration? waited([DateTime? now]) {
+    final start = since;
+    if (start == null) return null;
+    if (state != ProposalIntakeProgressState.current &&
+        state != ProposalIntakeProgressState.rejected) {
+      return null;
+    }
+    final diff = (now ?? DateTime.now()).difference(start.toLocal());
+    return diff.isNegative ? Duration.zero : diff;
+  }
+
   ProposalIntakeProgressStep copyWith({String? statusText, String? time}) =>
       ProposalIntakeProgressStep(
         id: id,
@@ -2544,7 +2574,18 @@ class ProposalIntakeProgressStep {
         statusText: statusText ?? this.statusText,
         time: time ?? this.time,
         state: state,
+        since: since,
+        doneAt: doneAt,
       );
+}
+
+/// 「卡了多久」：不足 1 小时写分钟，不足 1 天写小时，否则「X 天 Y 小时」。
+String proposalIntakeWaitedText(Duration? waited) {
+  if (waited == null) return '';
+  if (waited.inMinutes < 60) return '${waited.inMinutes < 1 ? 1 : waited.inMinutes} 分钟';
+  if (waited.inHours < 24) return '${waited.inHours} 小时';
+  final hours = waited.inHours % 24;
+  return hours == 0 ? '${waited.inDays} 天' : '${waited.inDays} 天 $hours 小时';
 }
 
 int proposalIntakeStageRank(String stage) {
@@ -2642,6 +2683,34 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
     '${review['presidentDecidedAt'] ?? ''}',
   );
 
+  // 卡点计时：后端在每次写复核状态时记 completedAt[节点] 和 stageEnteredAt。
+  DateTime? at(Object? raw) => parseProposalIntakeInstant('${raw ?? ''}');
+  final completedAt = review['completedAt'] is Map
+      ? Map<String, dynamic>.from(review['completedAt'] as Map)
+      : const <String, dynamic>{};
+  DateTime? doneOf(String flag) => at(completedAt[flag]);
+  DateTime? latest(Iterable<DateTime?> values) {
+    DateTime? out;
+    for (final value in values) {
+      if (value == null) continue;
+      if (out == null || value.isAfter(out)) out = value;
+    }
+    return out;
+  }
+
+  final stageSince =
+      at(review['stageEnteredAt']) ??
+      at(review['lastHandoffAt']) ??
+      at(review['lastReviewedAt']) ??
+      at(row.createdAt);
+  final rejectedSince = at(review['rejectedAt']) ?? stageSince;
+  final contractDoneAt = latest([
+    doneOf('purchaseContractCompleted'),
+    doneOf('salesContractCompleted'),
+    doneOf('contractsCompleted'),
+  ]);
+  final handoffDoneAt = at(review['lastHandoffAt']);
+
   String ownerName(String prefix) {
     final name = proposalIntakeOwnerDisplayName(
       row.form,
@@ -2720,6 +2789,8 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
     String currentTime = '',
     String? title,
     String? statusText,
+    DateTime? since,
+    DateTime? doneAt,
   }) {
     final resolvedName = name.trim().isEmpty ? '未指定' : name.trim();
     final resolvedStatus =
@@ -2744,6 +2815,12 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       statusText: resolvedStatus,
       time: timeOf(state, done: time, current: currentTime),
       state: state,
+      since: switch (state) {
+        ProposalIntakeProgressState.current => since ?? stageSince,
+        ProposalIntakeProgressState.rejected => rejectedSince,
+        _ => null,
+      },
+      doneAt: state == ProposalIntakeProgressState.done ? doneAt : null,
     );
   }
 
@@ -2822,6 +2899,8 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
           : null,
       time: createdAt,
       currentTime: createdAt,
+      since: at(row.createdAt),
+      doneAt: handoffDoneAt ?? at(row.createdAt),
     ),
     person(
       id: 'fill_tech',
@@ -2831,6 +2910,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       state: fillState(current: inTechFill),
       time: handoffAt,
       currentTime: handoffAt,
+      doneAt: handoffDoneAt,
     ),
     person(
       id: 'fill_finance_interface',
@@ -2840,6 +2920,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       state: fillState(current: inTechFill),
       time: handoffAt,
       currentTime: handoffAt,
+      doneAt: handoffDoneAt,
     ),
     person(
       id: 'start_review',
@@ -2849,6 +2930,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       state: startReviewState(),
       time: handoffAt,
       currentTime: handoffAt,
+      doneAt: handoffDoneAt,
     ),
     person(
       id: 'review_market',
@@ -2857,6 +2939,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       action: '到市场部底部点「整个板块复核通过」',
       state: reviewerState('marketCompleted', techRound: true),
       time: reviewedAt,
+      doneAt: doneOf('marketCompleted'),
     ),
     person(
       id: 'review_tech',
@@ -2865,6 +2948,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       action: '到各科技字段旁点「点此复核」，再到科技部底部确认本板块',
       state: reviewerState('technologyCompleted', techRound: true),
       time: reviewedAt,
+      doneAt: doneOf('technologyCompleted'),
     ),
     person(
       id: 'review_contract',
@@ -2878,6 +2962,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
         active: !finance2Done,
       ),
       time: reviewedAt,
+      doneAt: contractDoneAt,
     ),
     if (!purchase)
       person(
@@ -2887,6 +2972,9 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
         action: '到财务部底部点「整个板块复核通过」',
         state: reviewerState('financeCompleted', active: finance2Done),
         time: reviewedAt,
+        // 财务整板块要等负责人二逐条复核完才开始。
+        since: contractDoneAt ?? stageSince,
+        doneAt: doneOf('financeCompleted'),
       ),
     person(
       id: 'notify_president',
@@ -2896,6 +2984,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       state: notifyState(),
       time: handoffAt,
       currentTime: handoffAt,
+      doneAt: handoffDoneAt,
     ),
     person(
       id: 'president',
@@ -2905,6 +2994,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       state: presidentState(),
       time: decidedAt,
       currentTime: decidedAt,
+      doneAt: at(review['presidentDecidedAt']),
     ),
     ProposalIntakeProgressStep(
       id: 'end',
@@ -3671,16 +3761,9 @@ void _tallySalesFill(_ProposalFillTally tally, Map<String, dynamic> form) {
     _tallyTechFill(tally, proposalIntakeChildTechnology(form));
   }
   final derivedFinance = proposalIntakeHasProductSalesScale(form);
-  final derivedProcurement =
-      proposalIntakeHasSupplySettleRatio(form) &&
-      (derivedFinance || proposalIntakeFormHasText(form, 'salesScale'));
   tally.slot(derivedFinance);
   for (final field in kProposalSalesFinanceFillFields) {
     if (_kDerivedFinanceMetricKeys.contains(field.$1)) continue;
-    if (field.$1 == 'couponProcurementCost' && derivedProcurement) {
-      tally.slot(true);
-      continue;
-    }
     tally.text(form, field.$1);
   }
   for (final module in proposalIntakeFinanceModules(form)) {
@@ -4701,7 +4784,9 @@ const _kProposalProductFinanceFields = <String>[
   'salesScale',
   'revenue',
   'revenueManual',
-  'couponProcurementCost',
+  'revenueFormula',
+  'revenueFormulaGroup',
+  'financeFormulaTouched',
   'profit',
   'margin',
   'turnoverCash',
@@ -4721,19 +4806,24 @@ const _kProposalProductFinanceFields = <String>[
   'costItemCodes',
   'costItemAmounts',
   'costItemSettleTerms',
+  'costItemFormulas',
+  'promotionTiers',
   'projectCost',
   'businessCostItems',
   'businessCostItemCodes',
   'businessCostItemAmounts',
   'businessCostItemSettleTerms',
+  'businessCostItemFormulas',
   'businessCost',
   'operatingCostItems',
   'operatingCostItemCodes',
   'operatingCostItemAmounts',
+  'operatingCostItemFormulas',
   'operatingCost',
   'taxCostItems',
   'taxCostItemCodes',
   'taxCostItemAmounts',
+  'taxCostItemFormulas',
   'taxCost',
   'rollback',
   'financeModules',
@@ -4769,6 +4859,15 @@ const kProposalUserOwnedFinanceKeys = <String>{
   'operatingCostItemCodes',
   'taxCostItems',
   'taxCostItemCodes',
+  // 财务按公式测算：所选收入公式、各成本项公式是用户的选择，估算不能覆盖。
+  'revenueFormula',
+  'revenueFormulaGroup',
+  'financeFormulaTouched',
+  'promotionTiers',
+  'costItemFormulas',
+  'businessCostItemFormulas',
+  'operatingCostItemFormulas',
+  'taxCostItemFormulas',
   'rollback',
   'financeModules',
 };
@@ -4901,7 +5000,6 @@ const _kProductFinanceScopeDerivedKeys = {
   'profit',
   'margin',
   'turnoverCash',
-  'couponProcurementCost',
 };
 
 /// Produces an isolated calculation input for one finance group.  Product
@@ -6955,7 +7053,6 @@ bool proposalIntakeFormHasRef(
 const kProposalSalesFinanceFillFields = <(String, String)>[
   ('salesScale', '销售规模目标（年·万元）'),
   ('revenue', '收入（万元）'),
-  ('couponProcurementCost', '电子券采购成本（万元）'),
   ('profit', '利润（万元）'),
   ('margin', '毛利率（%）'),
   ('turnoverTimes', '月周转次数'),
@@ -7053,13 +7150,8 @@ List<String> proposalIntakeSalesMarketIssues(Map<String, dynamic> form) {
 
 List<String> proposalIntakeSalesFinanceFillIssues(Map<String, dynamic> form) {
   final issues = <String>[];
-  final derived = proposalIntakeHasProductSalesScale(form);
-  final derivedProcurement =
-      proposalIntakeHasSupplySettleRatio(form) &&
-      (derived || proposalIntakeFormHasText(form, 'salesScale'));
   for (final field in kProposalSalesFinanceFillFields) {
     if (_kDerivedFinanceMetricKeys.contains(field.$1)) continue;
-    if (field.$1 == 'couponProcurementCost' && derivedProcurement) continue;
     if (!proposalIntakeFormHasText(form, field.$1)) {
       issues.add('请填写${field.$2}');
     }

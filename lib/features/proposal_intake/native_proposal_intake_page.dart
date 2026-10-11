@@ -30,6 +30,8 @@ import 'flow_panorama/flow_lane_section.dart';
 import 'flow_panorama/flow_lanes.dart';
 import 'proposal_cost_estimate.dart';
 import 'proposal_estimate_summary.dart';
+import 'proposal_finance_formula.dart';
+import 'proposal_finance_formula_board.dart';
 import 'proposal_view_style.dart';
 import 'proposal_intake_models.dart';
 import 'proposal_intake_unreviewed.dart';
@@ -783,6 +785,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           businessCatalog: _options?.businessCostItemOptions ?? const [],
           costCatalog: _options?.costItemOptions ?? const [],
           costNames: _options?.resolvedProjectCostItems ?? const [],
+          formulaCatalog: _options?.resolvedFinanceFormulaCatalog,
         );
         final fallbackForm = proposalIntakeJsonSafeForm(
           proposalIntakeConfirmContractEdits(editing.form),
@@ -3023,15 +3026,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   final Set<String> _assetProductSyncing = {};
   final Map<String, String> _assetProductSyncHint = {};
 
-  static const _financeMetricFields = <(String, String)>[
-    ('salesScale', '销售规模目标（年·万元）'),
-    ('revenue', '收入（万元）'),
-    ('couponProcurementCost', '电子券采购成本（万元）'),
-    ('profit', '利润（万元）'),
-    ('margin', '毛利率（%）'),
-    ('turnoverCash', '预计周转资金（万元）'),
-    ('turnoverTimes', '月周转次数'),
-  ];
 
   static const _financeSupplyFields = <(String, String)>[
     ('supplySettleMode', '结算模式'),
@@ -3088,7 +3082,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   static const _kFinanceReviewKeys = <String>[
     'revenue',
-    'couponProcurementCost',
     'profit',
     'margin',
     'turnoverCash',
@@ -3692,6 +3685,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         businessCatalog: widget.options.businessCostItemOptions,
         costCatalog: widget.options.costItemOptions,
         costNames: _projectCostItemNames,
+        formulaCatalog: widget.options.resolvedFinanceFormulaCatalog,
       );
       _bumpCostAmountStamps(before, form);
       estimated = true;
@@ -3794,6 +3788,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       businessCatalog: widget.options.businessCostItemOptions,
       costCatalog: widget.options.costItemOptions,
       costNames: _projectCostItemNames,
+      formulaCatalog: widget.options.resolvedFinanceFormulaCatalog,
     );
     _bumpCostAmountStamps(before, next);
     return _keepUnreviewed(next);
@@ -3806,6 +3801,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       businessCatalog: widget.options.businessCostItemOptions,
       costCatalog: widget.options.costItemOptions,
       costNames: _projectCostItemNames,
+      formulaCatalog: widget.options.resolvedFinanceFormulaCatalog,
     );
   }
 
@@ -3814,22 +3810,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       baseline: _serverForm,
       current: form,
       review: _review,
-    );
-  }
-
-  Widget? _costFormulaHint(String name, {String? fallback}) {
-    final help = proposalCostFormulaHelpOf(
-      name: name,
-      form: _form,
-      businessCatalog: widget.options.businessCostItemOptions,
-      costCatalog: widget.options.costItemOptions,
-    );
-    final formula = (help?.formula ?? fallback ?? '').trim();
-    if (formula.isEmpty) return null;
-    return ProposalFormulaHint(
-      key: ValueKey('cost-formula-$name'),
-      formula: formula,
-      detail: help?.substitution ?? '',
     );
   }
 
@@ -4499,87 +4479,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     _emitChanged(_row);
   }
 
-  void _setCostAmount({
-    required String amountsKey,
-    required String totalKey,
-    required String id,
-    required double? value,
-    String? resetReview,
-  }) {
-    if (amountsKey == 'businessCostItemAmounts' && !_canEditBusinessCost) {
-      return;
-    }
-    var amounts = proposalCostAmountMap(_form[amountsKey]);
-    if (value == null) {
-      amounts.remove(id);
-    } else {
-      amounts[id] = value;
-    }
-    var form = Map<String, dynamic>.from(_form)
-      ..[amountsKey] = {
-        for (final entry in amounts.entries) entry.key: entry.value,
-      }
-      ..[totalKey] = proposalCostAmountTotal(amounts);
-    form = proposalMarkCostAmountManual(form, amountsKey: amountsKey, id: id);
-    form = _withEstimatedFinanceCosts(form);
-    final review = Map<String, dynamic>.from(_review);
-    if (resetReview != null) review[resetReview] = false;
-    _markFormDirty();
-    _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
-    if (mounted) setState(() {});
-    _emitChanged(_row);
-  }
-
-  void _setCostSettleTerms({
-    required String settleTermsKey,
-    required String id,
-    required ProposalFinanceSettleTerms terms,
-  }) {
-    if (settleTermsKey == 'businessCostItemSettleTerms' &&
-        !_canEditBusinessCost) {
-      return;
-    }
-    final map = proposalCostSettleTermsMap(_form[settleTermsKey]);
-    map[id] = terms;
-    final form = _withEstimatedFinanceCosts(
-      Map<String, dynamic>.from(_form)
-        ..[settleTermsKey] = {
-          for (final entry in map.entries) entry.key: entry.value.toJson(),
-        },
-    );
-    final review = Map<String, dynamic>.from(_review)
-      ..['financeCompleted'] = false;
-    _markFormDirty();
-    _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
-    if (mounted) setState(() {});
-    _emitChanged(_row);
-  }
-
-  void _writeCostSettleRows({
-    required String settleTermsKey,
-    required String id,
-    required List<ProposalFinanceSettleTerms> rows,
-  }) {
-    if (settleTermsKey == 'businessCostItemSettleTerms' &&
-        !_canEditBusinessCost) {
-      return;
-    }
-    final raw = _form[settleTermsKey];
-    final map = raw is Map
-        ? Map<String, dynamic>.from(raw)
-        : <String, dynamic>{};
-    map[id] = [for (final terms in rows) terms.toJson()];
-    final form = _withEstimatedFinanceCosts(
-      Map<String, dynamic>.from(_form)..[settleTermsKey] = map,
-    );
-    final review = Map<String, dynamic>.from(_review)
-      ..['financeCompleted'] = false;
-    _markFormDirty();
-    _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
-    if (mounted) setState(() {});
-    _emitChanged(_row);
-  }
-
   String _text(String key) => '${_form[key] ?? ''}';
   double _number(String key) => _form[key] is num
       ? (_form[key] as num).toDouble()
@@ -5241,13 +5140,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
     final scaleValue = proposalEffectiveSalesScale(scope);
     final scale = scaleValue > 0 ? scaleValue : null;
-    final revenue = proposalRevenueIsManual(scope)
-        ? double.tryParse(_looseAmountText(scope['revenue']))
-        : metric('revenue');
-    final procurement =
-        metric(kProposalCouponProcurementCostKey) ??
-        stored(kProposalCouponProcurementCostKey);
-    final profit = metric('profit');
+    // 收入、四类成本、利润都取下方「成本」「利润」同一份公式测算，不读旧存值。
+    final eval = _financeEvaluationOf(
+      proposalIntakeIsolatedFinanceScope(
+        _form,
+        owner: kProposalProductFinanceMain,
+      ),
+    );
+    final known = eval.salesScale > 0 || eval.revenue.amount != 0;
+    final revenue = known ? eval.revenue.amount : null;
+    final profit = known && !_businessCostSealed ? eval.profit : null;
     if (scale == null && revenue == null && profit == null) return null;
     final skus = proposalIntakeSkuDetails(scope);
     final faces = [
@@ -5274,12 +5176,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ratingRule: ratingRule,
       scale: scale,
       revenue: revenue,
-      procurement: procurement,
-      projectCost: stored('projectCost'),
-      businessCost: stored('businessCost'),
-      operatingCost: stored('operatingCost'),
+      projectCost: known ? eval.total(kProposalCostCategoryProject) : null,
+      businessCost: known && !_businessCostSealed
+          ? eval.total(kProposalCostCategoryBusiness)
+          : null,
+      operatingCost: known ? eval.total(kProposalCostCategoryOperating) : null,
+      taxCost: known ? eval.total(kProposalCostCategoryTax) : null,
       profit: profit,
-      margin: metric('margin'),
+      margin: _businessCostSealed ? null : eval.margin,
       turnoverCash: metric(kProposalTurnoverCashKey),
       turnoverTimes: stored(kProposalTurnoverTimesKey),
       skuCount: skus.length,
@@ -6446,78 +6350,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   /// 财务供给侧 / 渠道侧合成一行：「按核销 · 月结 · 付款 广州宇天 · 工商银行 ****0457」。
-  /// 只读展示时，账号类字段（结算账户、付款账户、收款账户）中间的数字打码。
-  String _maskIfAccount(String key, String value) =>
-      key.contains('Account') ? proposalMaskAccount(value) : value;
+  /// 账号不打码（按需求原样显示）；保留入口，以后要打码只改这里。
+  String _maskIfAccount(String key, String value) => value;
 
-  Widget _financeSideSimpleLine(String title, List<(String, String)> fields) {
-    final value = [
-      for (final (key, label) in fields)
-        if (_text(key).trim().isNotEmpty)
-          key.contains('Payer') || key.contains('Payee')
-              ? '${label.replaceAll('主体', '')} ${_text(key).trim()}'
-              : _maskIfAccount(key, _text(key).trim()),
-    ].join(' · ');
-    return _simpleLine(
-      title,
-      value,
-      anchorKey: fields.first.$1,
-      required: true,
-      fullWidth: true,
-      trailing: _mergedReviewToggle([
-        for (final (key, _) in fields) 'financeItem:$key',
-      ], pendingLabel: _financeReviewLabel),
-    );
-  }
-
-  /// 简单行里「产品结算」清单是否展开。
-  bool _simpleSkuOpen = false;
-
-  /// 产品结算收成一行（有子产品时用）：「30 个产品 · 共 30 条结算」+ 复核 + 展开。
-  Widget _skuSettleSimpleLine() {
-    final rows = proposalIntakeSkuDetails(_form);
-    final settleCount = rows.fold<int>(
-      0,
-      (sum, row) => sum + proposalIntakeSkuSettlements(row).length,
-    );
-    final toggle =
-        proposalIntakeSkuSettleReviewKeys(_form).isEmpty || _simpleSkuOpen
-        ? null
-        : _rowReviewToggle(
-            'financeItem:$kProposalSkuSettlementsReviewKey',
-            '待复核',
-          );
-    return _simpleLine(
-      proposalIntakeHasChildProducts(_form)
-          ? '$kProposalMainProductLabel结算'
-          : '产品结算',
-      rows.isEmpty
-          ? ''
-          : [
-              '${rows.length} 个产品 · 共 $settleCount 条结算',
-              if (proposalIntakeChildProducts(_form).isNotEmpty)
-                '关联产品 ${proposalIntakeChildProducts(_form).length} 个',
-            ].join(' · '),
-      required: true,
-      fullWidth: true,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (rows.isNotEmpty) _simpleSkuToggleButton(rows.length),
-          if (toggle != null) ...[const SizedBox(width: 8), toggle],
-        ],
-      ),
-    );
-  }
-
-  /// 原型「展开 30 个 ▾ / 收起清单 ▴」：科技 SKU 清单、财务产品结算共用一个开关。
-  Widget _simpleSkuToggleButton(int count) {
-    final open = _simpleSkuOpen;
-    return _simplePillButton(
-      open ? '收起清单 ▴' : '展开 $count 个 ▾',
-      () => setState(() => _simpleSkuOpen = !open),
-    );
-  }
 
   /// 展开了的产品清单（tech / finance）。默认都收起，点「展开 N 个」才一行一个产品列出来。
   final Set<String> _simpleSkuListShown = {};
@@ -6565,68 +6400,103 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  /// 财务部简单行里，业务产品下面直接列出关联产品。不放进「展开 N 个」里，
-  /// 那一层只展开业务产品自己的结算。
-  Widget _simpleRelatedProductsSummary() {
-    final lines = [
-      for (final parent in proposalIntakeSkuDetails(_form))
-        if (proposalIntakeChildProducts(
-          _form,
-        ).any((item) => item.parentSkuId == parent.id))
-          _simpleRelatedProductLines(parent),
-    ];
-    if (lines.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: lines,
-      ),
-    );
-  }
-
-  Widget _simpleRelatedProductLines(ProposalSkuDetailRow parent) {
+  /// 关联产品的一行速览：「[关联] 中石油50元现金券 面值 50 ×2 · 满200减20 ×1」。
+  /// [withParent] 为 true 时前面带业务产品名（财务部产品结算行下面用）；
+  /// 清单里每个产品收起时用 false，缩进到名称下面。
+  Widget _simpleRelatedProductLines(
+    ProposalSkuDetailRow parent, {
+    bool withParent = true,
+  }) {
     if (parent.id.isEmpty) return const SizedBox.shrink();
     final children = [
       for (final item in proposalIntakeChildProducts(_form))
         if (item.parentSkuId == parent.id) item,
     ];
     if (children.isEmpty) return const SizedBox.shrink();
+    Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, Color(v), role: role);
     final parentName = parent.displayName.trim().isEmpty
         ? kProposalMainProductLabel
         : parent.displayName.trim();
+    final muted = TextStyle(color: c(0xFF8A8499), fontSize: 11);
+    final spans = <InlineSpan>[
+      if (withParent)
+        TextSpan(
+          text: '$parentName：',
+          style: TextStyle(color: c(0xFF5B556A), fontWeight: FontWeight.w600),
+        ),
+      for (var i = 0; i < children.length; i++) ...[
+        if (i > 0) TextSpan(text: '   ·   ', style: muted),
+        TextSpan(
+          text: children[i].displayName.trim().isEmpty
+              ? '未命名关联产品'
+              : children[i].displayName.trim(),
+        ),
+        if (children[i].faceValue.trim().isNotEmpty &&
+            children[i].faceValue.trim() != children[i].displayName.trim())
+          TextSpan(text: ' 面值 ${children[i].faceValue.trim()}', style: muted),
+        TextSpan(
+          text:
+              ' ×${proposalIntakeChildProductQuantity(_form, children[i].id)}',
+          style: TextStyle(
+            fontFamily: kProposalProtoMono,
+            fontFamilyFallback: kProposalProtoMonoFallback,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: c(0xFF3F2A9A),
+          ),
+        ),
+      ],
+    ];
     return Padding(
-      padding: const EdgeInsets.only(top: 2, bottom: 2),
-      child: Column(
+      padding: withParent
+          ? const EdgeInsets.only(top: 4, bottom: 2)
+          : const EdgeInsets.only(left: 22, bottom: 6),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '$parentName 的关联产品',
-            style: TextStyle(
-              color: DunesColors.resolve(context, ProposalPalette.text3),
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: _simpleTagPill(withParent ? '关联产品' : '关联'),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text.rich(
+              TextSpan(children: spans),
+              maxLines: withParent ? 3 : 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: c(0xFF2A2638), fontSize: 12, height: 1.5),
             ),
           ),
-          for (final child in children)
-            Text(
-              [
-                child.displayName.trim().isEmpty
-                    ? '未命名关联产品'
-                    : child.displayName.trim(),
-                if (child.faceValue.trim().isNotEmpty)
-                  '面值 ${child.faceValue.trim()}',
-                '数量 ${proposalIntakeChildProductQuantity(_form, child.id)}',
-              ].join(' · '),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: DunesColors.resolve(context, ProposalPalette.text),
-                fontSize: 12,
-                height: 1.45,
-              ),
-            ),
         ],
+      ),
+    );
+  }
+
+  /// 淡紫底小标签（「关联」「应收」这类），和业务平台状态小圆角标签同一套尺寸。
+  Widget _simpleTagPill(
+    String label, {
+    int bg = 0xFFEDE8FB,
+    int fg = 0xFF3F2A9A,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Color(bg),
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          height: 1.5,
+          fontWeight: FontWeight.w600,
+          color: DunesColors.resolve(context, Color(fg)),
+        ),
       ),
     );
   }
@@ -6814,67 +6684,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return best;
   }
 
-  /// 「4 个：收入一 0.9755 · 3 个：收入一 0.9855；其余 22 个同上」。
-  String _settleDiffText(
-    List<ProposalSkuDetailRow> rows,
-    ProposalSkuDetailRow commonSku,
-  ) {
-    final common = proposalIntakeSkuSettlements(commonSku);
-    final commonSig = _skuSettleSignature(commonSku);
-    String describe(ProposalSkuDetailRow sku) {
-      final mine = proposalIntakeSkuSettlements(sku);
-      final parts = <String>[];
-      for (final cost in const [false, true]) {
-        final a = [
-          for (final item in common)
-            if (item.isCost == cost) item,
-        ];
-        final b = [
-          for (final item in mine)
-            if (item.isCost == cost) item,
-        ];
-        final aLabels = _settleRowLabels(a);
-        final bLabels = _settleRowLabels(b);
-        for (var i = 0; i < math.max(a.length, b.length); i++) {
-          final label = i < a.length ? aLabels[i] : bLabels[i];
-          if (i >= b.length) {
-            parts.add('无$label');
-            continue;
-          }
-          final mineText = _settleTermsText(b[i].terms);
-          if (i >= a.length) {
-            parts.add('$label $mineText');
-            continue;
-          }
-          if (mineText == _settleTermsText(a[i].terms)) continue;
-          final ratioA = a[i].terms.displayRatio.trim();
-          final ratioB = b[i].terms.displayRatio.trim();
-          final onlyRatio =
-              ratioA != ratioB &&
-              _settleTermsText(a[i].terms).replaceFirst(ratioA, '') ==
-                  mineText.replaceFirst(ratioB, '');
-          parts.add(
-            '$label ${onlyRatio && ratioB.isNotEmpty ? ratioB : mineText}',
-          );
-        }
-      }
-      return parts.join('、');
-    }
-
-    final groups = <String, int>{};
-    var same = 0;
-    for (final row in rows) {
-      if (_skuSettleSignature(row) == commonSig) {
-        same++;
-        continue;
-      }
-      final text = describe(row);
-      groups[text] = (groups[text] ?? 0) + 1;
-    }
-    if (groups.isEmpty) return '';
-    return '${[for (final entry in groups.entries) '${entry.value} 个：${entry.key}'].join(' · ')}；其余 $same 个同上';
-  }
-
   /// 「业务平台状态 待配置 30」或「业务平台状态 已创建 28 · 待配置 2」。
   String _skuPlatformSummary(List<ProposalSkuDetailRow> rows) {
     final counts = <String, int>{};
@@ -6907,104 +6716,240 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       color: c(color),
     );
 
-    Widget settleTable(ProposalSkuDetailRow sku, bool differs) {
+    /// 区块小标题：「结算 1 条」「关联产品 2 个」，灰色小字，和字段表左对齐。
+    Widget sectionLabel(String title, String extra) => Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 2),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: title,
+              style: TextStyle(
+                color: c(0xFF5B556A),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (extra.isNotEmpty) TextSpan(text: '  $extra'),
+          ],
+        ),
+        style: TextStyle(fontSize: 11, color: c(0xFF8A8499)),
+      ),
+    );
+
+    /// 每条结算两行：上面「[应收] 权益包销售款 …… 0.926」，下面「模式 · 公式 · 发票 · 税率 …」。
+    /// 不再横向铺 10 列表格（窄屏会截断、空列满是「—」），空项直接不写。
+    Widget settleTable(
+      ProposalSkuDetailRow sku,
+      bool differs, {
+      bool boxed = true,
+    }) {
       final items = proposalIntakeSkuSettlements(sku);
       if (items.isEmpty) return const SizedBox.shrink();
-      final income = [
+      final ordered = [
         for (final item in items)
           if (!item.isCost) item,
-      ];
-      final cost = [
         for (final item in items)
           if (item.isCost) item,
       ];
-      final labels = _settleRowLabels([...income, ...cost]);
-      final ordered = [
-        for (var i = 0; i < income.length + cost.length; i++)
-          (
-            labels[i],
-            (i < income.length ? income[i] : cost[i - income.length]).terms,
-            i < income.length,
+      final labels = _settleRowLabels(ordered);
+      Widget line(int i) {
+        final item = ordered[i];
+        final t = item.terms;
+        final side = item.isCost ? '应付' : '应收';
+        final label = labels[i];
+        final name = label.startsWith('$side · ')
+            ? label.substring(side.length + 3)
+            : label;
+        final ratio = t.displayRatio.trim().isNotEmpty
+            ? t.displayRatio.trim()
+            : (t.displayUnitPrice.trim().isEmpty
+                  ? ''
+                  : '单价 ${t.displayUnitPrice.trim()}');
+        final tax = t.taxRate.trim();
+        final from = t.effectiveTime.trim();
+        final to = t.expireTime.trim();
+        final meta = [
+          t.settleMode.trim(),
+          t.displayFormula.trim(),
+          t.invoiceType.trim(),
+          if (tax.isNotEmpty) tax.endsWith('%') ? tax : '$tax%',
+          if (from.isNotEmpty || to.isNotEmpty) '$from–$to',
+          if (t.scale.trim().isNotEmpty)
+            '规模 ${t.scale.trim()} 万${t.scalePeriod == '月' ? '/月' : ''}',
+          [
+            t.ourParty.trim(),
+            t.counterparty.trim(),
+          ].where((item) => item.isNotEmpty).join(' → '),
+        ].where((item) => item.isNotEmpty).join(' · ');
+        final hi = differs && !item.isCost;
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            border: i == 0
+                ? null
+                : Border(
+                    top: BorderSide(
+                      color: c(0xFFF3F0F8, DunesColorRole.border),
+                    ),
+                  ),
           ),
-      ];
-      TableRow tr(
-        List<String> cells, {
-        bool head = false,
-        bool hiRatio = false,
-      }) => TableRow(
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: c(0xFFF3F0F8, DunesColorRole.border)),
-          ),
-        ),
-        children: [
-          for (var i = 0; i < cells.length; i++)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              child: Text(
-                cells[i].isEmpty ? '—' : cells[i],
-                style: i == 3 && !head
-                    ? mono(
-                        11,
-                        hiRatio ? 0xFF3F2A9A : 0xFF2A2638,
-                        weight: hiRatio ? FontWeight.w700 : null,
-                      )
-                    : TextStyle(
-                        fontSize: head ? 11 : 12,
-                        color: c(head ? 0xFF8A8499 : 0xFF2A2638),
-                      ),
-              ),
-            ),
-        ],
-      );
-      return Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Table(
-            defaultColumnWidth: const IntrinsicColumnWidth(),
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              tr(const [
-                '结算',
-                '账单类型',
-                '模式',
-                '比例/单价',
-                '公式',
-                '发票',
-                '税率',
-                '起止',
-                '规模',
-                '我方 → 对方',
-              ], head: true),
-              for (final (label, t, isIncome) in ordered)
-                tr([
-                  label,
-                  t.billType,
-                  t.settleMode,
-                  t.displayRatio.isNotEmpty
-                      ? t.displayRatio
-                      : (t.displayUnitPrice.isEmpty
-                            ? ''
-                            : '单价 ${t.displayUnitPrice}'),
-                  t.displayFormula,
-                  t.invoiceType,
-                  t.taxRate.isEmpty || t.taxRate.endsWith('%')
-                      ? t.taxRate
-                      : '${t.taxRate}%',
-                  t.effectiveTime.isEmpty && t.expireTime.isEmpty
-                      ? ''
-                      : '${t.effectiveTime}–${t.expireTime}',
-                  t.scale.isEmpty
-                      ? ''
-                      : '${t.scale} 万${t.scalePeriod == '月' ? '/月' : ''}',
-                  [
-                    t.ourParty,
-                    t.counterparty,
-                  ].where((item) => item.trim().isNotEmpty).join(' → '),
-                ], hiRatio: differs && isIncome),
+              Row(
+                children: [
+                  item.isCost
+                      ? _simpleTagPill(side, bg: 0xFFFDF2E6, fg: 0xFF9A4A0C)
+                      : _simpleTagPill(side, bg: 0xFFE6F3EB, fg: 0xFF2D6E47),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: c(0xFF2A2638),
+                      ),
+                    ),
+                  ),
+                  if (ratio.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      ratio,
+                      style: mono(
+                        12,
+                        hi ? 0xFF3F2A9A : 0xFF2A2638,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (meta.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    meta,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.5,
+                      color: c(0xFF5B556A),
+                    ),
+                  ),
+                ),
             ],
           ),
+        );
+      }
+
+      final body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [for (var i = 0; i < ordered.length; i++) line(i)],
+      );
+      if (!boxed) return body;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+        decoration: BoxDecoration(
+          color: c(0xFFFFFFFF, DunesColorRole.surface),
+          border: Border.all(color: c(0xFFE7E3F2, DunesColorRole.border)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: body,
+      );
+    }
+
+    /// 关联产品一张小卡：头部「① 名称 …… 面值 50 · 数量 2」，下面是它自己的结算。
+    Widget relatedCard(int index, ProposalSkuDetailRow child) {
+      final name = child.displayName.trim().isEmpty
+          ? '未命名关联产品'
+          : child.displayName.trim();
+      final face = child.faceValue.trim();
+      final qty = proposalIntakeChildProductQuantity(_form, child.id);
+      final hasSettle = proposalIntakeSkuSettlements(child).isNotEmpty;
+      final meta = [
+        if (face.isNotEmpty && face != name) '面值 $face',
+        '数量 $qty',
+        hasSettle
+            ? '${proposalIntakeSkuSettlements(child).length} 条结算'
+            : '未填结算',
+      ].join(' · ');
+      return Container(
+        key: ValueKey('proposal-simple-related-$scope-${child.id}'),
+        margin: const EdgeInsets.only(top: 6),
+        decoration: BoxDecoration(
+          color: c(0xFFFFFFFF, DunesColorRole.surface),
+          border: Border.all(color: c(0xFFE7E3F2, DunesColorRole.border)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+              decoration: BoxDecoration(
+                color: c(0xFFFBFAFF, DunesColorRole.surface),
+                borderRadius: BorderRadius.vertical(
+                  top: const Radius.circular(8),
+                  bottom: Radius.circular(hasSettle ? 0 : 8),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 18,
+                    height: 18,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: c(0xFFEDE8FB, DunesColorRole.surface),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      '${index + 1}',
+                      style: mono(10, 0xFF3F2A9A, weight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: c(0xFF2A2638),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    meta,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: c(hasSettle ? 0xFF8A8499 : 0xFF9A4A0C),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (hasSettle)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 1,
+                ),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: c(0xFFF1EEF8, DunesColorRole.border),
+                    ),
+                  ),
+                ),
+                child: settleTable(child, false, boxed: false),
+              ),
+          ],
         ),
       );
     }
@@ -7097,7 +7042,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
             if (open)
               Padding(
-                padding: const EdgeInsets.only(left: 22, bottom: 6),
+                padding: const EdgeInsets.only(left: 22, bottom: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -7105,48 +7050,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       fields,
                       background: c(0xFFFFFFFF, DunesColorRole.surface),
                     ),
-                    settleTable(sku, differs),
-                    for (var r = 0; r < related.length; r++)
-                      Container(
-                        margin: const EdgeInsets.only(top: 6),
-                        padding: const EdgeInsets.only(left: 8),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            left: BorderSide(
-                              color: c(0xFFCFC2F5, DunesColorRole.border),
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              [
-                                '关联产品 ${r + 1}',
-                                if (related[r].displayName.trim().isNotEmpty)
-                                  related[r].displayName.trim(),
-                                if (related[r].faceValue.trim().isNotEmpty)
-                                  '面值 ${related[r].faceValue.trim()}',
-                                '数量 ${proposalIntakeChildProductQuantity(_form, related[r].id)}',
-                                '${proposalIntakeSkuSettlements(related[r]).length} 条结算',
-                              ].join(' · '),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: c(0xFF2A2638),
-                              ),
-                            ),
-                            settleTable(related[r], false),
-                          ],
-                        ),
+                    if (proposalIntakeSkuSettlements(sku).isNotEmpty) ...[
+                      sectionLabel(
+                        '结算',
+                        '${proposalIntakeSkuSettlements(sku).length} 条',
                       ),
+                      settleTable(sku, differs),
+                    ],
+                    if (related.isNotEmpty) ...[
+                      sectionLabel('关联产品', '${related.length} 个'),
+                      for (var r = 0; r < related.length; r++)
+                        relatedCard(r, related[r]),
+                    ],
                   ],
                 ),
               ),
-            _simpleRelatedProductLines(sku),
+            if (!open && related.isNotEmpty)
+              _simpleRelatedProductLines(sku, withParent: false),
           ],
         ),
       );
@@ -7226,30 +7146,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   /// 原型「填报内容 · 财务部」（无子产品时）：产品结算、收入/成本各条、结算不同的产品、
   /// 项目成本、其他成本、周转、供给侧、渠道侧、结算账户、备注，一行一条。
+  /// 财务部「产品结算」块：填写、复核、查看共用一套版式。
+  /// 只读时行里是「字段：值」；填写时同一行展开就是输入框。
   Widget _financeSimpleRows(bool wide) {
+    final editing = !_simpleView;
     final rows = proposalIntakeSkuDetails(_form);
-    final commonSig = _commonSkuSettleSignature(rows);
-    final commonSku = rows
-        .where((row) => _skuSettleSignature(row) == commonSig)
-        .firstOrNull;
-    final common = commonSku == null
-        ? const <ProposalSkuSettleRow>[]
-        : proposalIntakeSkuSettlements(commonSku);
-    final income = [
-      for (final item in common)
-        if (!item.isCost) item,
-    ];
-    final cost = [
-      for (final item in common)
-        if (item.isCost) item,
-    ];
-    // 应收在前、应付在后；每行叫「应收 · 渠道结算」这类名字。
-    final commonOrdered = [...income, ...cost];
-    final commonLabels = _settleRowLabels(commonOrdered);
-    final diff = commonSku == null ? '' : _settleDiffText(rows, commonSku);
     final shared = kProposalSharedSettleEnabled
         ? proposalIntakeSharedSettlements(_form)
         : const <ProposalSharedSettleRow>[];
+    final settleCount = rows.fold<int>(
+      0,
+      (sum, row) => sum + proposalIntakeSkuSettlements(row).length,
+    );
     final settleReview = proposalIntakeSkuSettleReviewKeys(_form).isEmpty
         ? null
         : _rowReviewToggle(
@@ -7257,178 +7165,360 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             '待复核',
           );
 
-    final scope = proposalIntakeProductFinanceScope(
-      _form,
-      owner: kProposalProductFinanceMain,
-    );
-    final catalog = widget.options.costItemOptions;
-    // 成本一行：「合计 9.65 万元 · 印花税 0.24 万元 · 增值税及附加 9.41 万元」，不再列公式。
-    String costText(
-      String totalKey,
-      String namesKey,
-      String amountsKey, {
-      List<ProposalCostItemOption> options = const [],
-      bool project = false,
-    }) {
-      final items = _form[namesKey] is List
-          ? [
-              for (final item in _form[namesKey] as List)
-                if ('$item'.trim().isNotEmpty) '$item'.trim(),
-            ]
-          : const <String>[];
-      final map = proposalCostAmountMap(_form[amountsKey]);
-      double amountOf(String name) =>
-          map[proposalCostAmountId(name, options)] ?? map[name] ?? 0;
-      final rawTotal = double.tryParse(_text(totalKey).trim());
-      if (items.isEmpty && rawTotal == null) return '';
-      final total =
-          rawTotal ??
-          items.fold<double>(0, (sum, name) => sum + amountOf(name));
-      return [
-        '合计 ${_money(total)}',
-        for (final name in items)
-          '${project ? proposalProjectCostDisplayName(name) : name} ${_money(amountOf(name))}',
-      ].join(' · ');
-    }
+    TextStyle small(Color color, {FontWeight weight = FontWeight.w400}) =>
+        TextStyle(
+          color: DunesColors.resolve(context, color),
+          fontSize: 11.5,
+          height: 1.45,
+          fontWeight: weight,
+        );
 
-    final accounts = [
-      if (_text('generalBusinessAccount').trim().isNotEmpty)
-        '一：${proposalMaskAccount(_text('generalBusinessAccount').trim())}',
-      if (_text('prepaidAccount').trim().isNotEmpty)
-        '二：${proposalMaskAccount(_text('prepaidAccount').trim())}',
+    // 产品清单是重点：每个产品卡片里已经带了自己的应收 / 应付结算（有标签、有比例），
+    // 这里不再把结算条款另写一遍文字。
+    final productDetail = rows.isEmpty
+        ? Text('请先在科技部添加业务产品', style: small(ProposalPalette.text3))
+        : editing
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _skuSettlementsBlock(wide, header: false),
+              if (proposalIntakeHasChildProducts(_form)) ...[
+                const SizedBox(height: 12),
+                _childSettlementsBlock(wide),
+              ],
+            ],
+          )
+        : _simpleSkuList(rows, scope: 'finance');
+    final productSummary = [
+      '$settleCount 条结算',
+      if (proposalIntakeHasChildProducts(_form))
+        '关联产品 ${proposalIntakeChildProducts(_form).length} 个',
+      if (shared.isNotEmpty) '共用结算 ${shared.length} 组',
     ].join(' · ');
 
-    return Column(
+    String sideText(List<(String, String)> fields) => [
+      for (final (key, label) in fields)
+        if (_text(key).trim().isNotEmpty)
+          key.contains('Payer') || key.contains('Payee')
+              ? '${label.replaceAll('主体', '')} ${_text(key).trim()}'
+              : _maskIfAccount(key, _text(key).trim()),
+    ].join(' · ');
+    Widget? sideReview(List<(String, String)> fields) => _mergedReviewToggle([
+      for (final (key, _) in fields) 'financeItem:$key',
+    ], pendingLabel: _financeReviewLabel);
+    String brief(String settleMode, String cycle) => [
+      _text(settleMode).trim(),
+      _text(cycle).trim(),
+    ].where((item) => item.isNotEmpty).join(' ');
+    final accounts = [
+      if (_text('generalBusinessAccount').trim().isNotEmpty)
+        '一：${_text('generalBusinessAccount').trim()}',
+      if (_text('prepaidAccount').trim().isNotEmpty)
+        '二：${_text('prepaidAccount').trim()}',
+    ].join(' · ');
+    final owners = _simplePeopleText(const [
+      ('财务一', 'financeOwner1'),
+      ('财务二', 'financeOwner2'),
+    ]);
+
+    // hero 带：产品与结算条数 + 资金流向（渠道侧收款 → 我方账户 → 供给侧付款）。
+    Widget flowChip(String title, String body, Color accent) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(context, Colors.white, role: DunesColorRole.surface),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: DunesColors.resolve(context, const Color(0xFFD9E0F2), role: DunesColorRole.border),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(title, style: small(accent, weight: FontWeight.w700)),
+          Text(
+            body.isEmpty ? '未填' : body,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: small(ProposalPalette.text2),
+          ),
+        ],
+      ),
+    );
+    final arrow = Icon(
+      Icons.arrow_forward_rounded,
+      size: 14,
+      color: DunesColors.resolve(context, ProposalPalette.text3),
+    );
+    final band = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _fieldGrid(wide, [
-          _simpleLine(
-            '产品结算',
-            rows.isEmpty
-                ? ''
-                : [
-                    '${rows.length} 个产品',
-                    if (proposalIntakeHasChildProducts(_form))
-                      '关联产品 ${proposalIntakeChildProducts(_form).length} 个',
-                    if (shared.isEmpty)
-                      '每个一套结算'
-                    else
-                      '含共用结算 ${shared.length} 组',
-                    _skuPlatformSummary(rows),
-                  ].where((item) => item.isNotEmpty).join(' · '),
-            anchorKey: 'productSalesSettle',
-            required: true,
-            fullWidth: true,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (rows.isNotEmpty)
-                  _simpleSkuListButton('finance', rows.length),
-                if (settleReview != null) ...[
-                  const SizedBox(width: 8),
-                  settleReview,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text.rich(
+              TextSpan(
+                text: '${rows.length}',
+                style: TextStyle(
+                  fontFamily: kProposalProtoMono,
+                  fontFamilyFallback: kProposalProtoMonoFallback,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.resolve(context, const Color(0xFF2A2638)),
+                ),
+                children: [
+                  TextSpan(
+                    text: ' 个产品 · $settleCount 条结算'
+                        '${proposalIntakeHasChildProducts(_form) ? ' · 关联产品 ${proposalIntakeChildProducts(_form).length} 个' : ''}',
+                    style: small(ProposalPalette.text3),
+                  ),
                 ],
+              ),
+            ),
+            const Spacer(),
+            // 财务部负责人二：一个开关进入逐条复核，平时字段旁只留状态。
+            if (_reviewEnabled('financeItem:revenue') &&
+                _review['financeCompleted'] != true) ...[
+              _financeReviewModeButton(),
+              const SizedBox(width: 8),
+            ],
+            if (_skuPlatformSummary(rows).isNotEmpty)
+              Flexible(
+                child: Text(
+                  _skuPlatformSummary(rows),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: small(const Color(0xFF3B4A7A), weight: FontWeight.w600),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            flowChip('渠道侧结算 · 收款', brief('channelSettleMode', 'channelSettleCycle'), const Color(0xFF4A83C4)),
+            arrow,
+            flowChip('我方 · 结算账户', _text('generalBusinessAccount').trim(), ProposalPalette.purple),
+            arrow,
+            flowChip('供给侧结算 · 付款', brief('supplySettleMode', 'supplySettleCycle'), const Color(0xFF3B8B5A)),
+          ],
+        ),
+      ],
+    );
+
+    // 展开后按「字段：值」一行一项排，不再把摘要原样重复一遍。
+    Widget kvDetail(List<(String, String)> pairs) {
+      final shown = [
+        for (final pair in pairs)
+          if (pair.$2.trim().isNotEmpty) pair,
+      ];
+      if (shown.isEmpty) return Text('未填', style: small(ProposalPalette.text3));
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.soft,
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (label, value) in shown)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 72,
+                      child: Text(label, style: small(ProposalPalette.text3)),
+                    ),
+                    Expanded(
+                      child: SelectableText(
+                        value,
+                        style: small(
+                          ProposalPalette.text,
+                          weight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    List<(String, String)> sidePairs(List<(String, String)> fields) => [
+      for (final (key, label) in fields)
+        (label, _maskIfAccount(key, _text(key).trim())),
+    ];
+    Widget subSection(String title, Widget? review, Widget content) => Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: small(ProposalPalette.text, weight: FontWeight.w700),
+                ),
+              ),
+              ?review,
+            ],
+          ),
+          const SizedBox(height: 4),
+          content,
+        ],
+      ),
+    );
+    Widget editRows(List<(String, String)> fields) => LayoutBuilder(
+      builder: (_, box) => _financeFieldRows(
+        fields,
+        ProposalLayout.isCompact(box.maxWidth) ? 1 : 2,
+      ),
+    );
+    final settleRuleMissing = [
+      for (final (key, _) in [
+        ..._financeChannelFields,
+        ..._financeSupplyFields,
+        ..._financeAccountFields.take(2),
+      ])
+        key,
+    ].any((key) => _text(key).trim().isEmpty);
+
+    return ProposalFinanceBlockShell(
+      icon: Icons.account_balance_outlined,
+      title: '产品结算',
+      band: band,
+      rows: [
+        if (!editing)
+        _anchor(
+          'financeOwner1',
+          ProposalFinanceRow(
+            title: '负责人',
+            summary: owners,
+            value: '',
+          ),
+        ),
+        _anchor(
+          'productSalesSettle',
+          ProposalFinanceRow(
+            title: '产品清单',
+            summary: productSummary,
+            value: '${rows.length} 个',
+            review: settleReview,
+            collapsedReview: _reviewStatusTag([
+              for (final key in proposalIntakeSkuSettleReviewKeys(_form))
+                'financeItem:$key',
+            ]),
+            // 产品清单是这一块的重点，默认展开。
+            initiallyOpen: rows.isNotEmpty,
+            detail: productDetail,
+          ),
+        ),
+        _anchor(
+          'channelSettleMode',
+          ProposalFinanceRow(
+            title: '结算规则与账户',
+            summary: [
+              if (brief('channelSettleMode', 'channelSettleCycle').isNotEmpty)
+                '渠道 ${brief('channelSettleMode', 'channelSettleCycle')}',
+              if (brief('supplySettleMode', 'supplySettleCycle').isNotEmpty)
+                '供给 ${brief('supplySettleMode', 'supplySettleCycle')}',
+              if (accounts.isNotEmpty)
+                '账户 ${[_text('generalBusinessAccount'), _text('prepaidAccount')].where((t) => t.trim().isNotEmpty).length} 个',
+            ].join(' · '),
+            value: '',
+            // 收起时只看复核进度；点开后每一段旁边才有复核按钮。
+            collapsedReview: _reviewStatusTag([
+              for (final (key, _) in [
+                ..._financeChannelFields,
+                ..._financeSupplyFields,
+                ..._financeAccountFields,
+              ])
+                'financeItem:$key',
+            ]),
+            initiallyOpen: editing && settleRuleMissing,
+            detail: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                subSection(
+                  '渠道侧结算规则',
+                  sideReview(_financeChannelFields),
+                  editing
+                      ? editRows(_financeChannelFields)
+                      : kvDetail(sidePairs(_financeChannelFields)),
+                ),
+                subSection(
+                  '供给侧结算规则',
+                  sideReview(_financeSupplyFields),
+                  editing
+                      ? editRows(_financeSupplyFields)
+                      : kvDetail(sidePairs(_financeSupplyFields)),
+                ),
+                _anchor(
+                  'generalBusinessAccount',
+                  subSection(
+                    '结算账户',
+                    _mergedReviewToggle(const [
+                      'financeItem:generalBusinessAccount',
+                      'financeItem:prepaidAccount',
+                    ]),
+                    editing
+                        ? editRows(_financeAccountFields.take(2).toList())
+                        : kvDetail([
+                            ('结算账户一', _text('generalBusinessAccount').trim()),
+                            ('结算账户二', _text('prepaidAccount').trim()),
+                          ]),
+                  ),
+                ),
+                _anchor(
+                  'financeRemark',
+                  subSection(
+                    '财务备注',
+                    _rowReviewToggle('financeItem:financeRemark', '待复核'),
+                    editing
+                        ? editRows(_financeAccountFields.skip(2).toList())
+                        : (_text('financeRemark').trim().isEmpty
+                              ? Text('未填', style: small(ProposalPalette.text3))
+                              : SelectableText(
+                                  _text('financeRemark').trim(),
+                                  style: small(
+                                    ProposalPalette.text,
+                                    weight: FontWeight.w500,
+                                  ),
+                                )),
+                  ),
+                ),
               ],
             ),
           ),
-        ]),
-        if (rows.isNotEmpty && !_simpleSkuListHidden('finance'))
-          _simpleSkuList(rows, scope: 'finance'),
-        _fieldGrid(wide, [
-          for (var i = 0; i < commonOrdered.length; i++)
-            _simpleLine(
-              commonLabels[i],
-              _settleTermsText(commonOrdered[i].terms, withBillType: false),
-              required: i == 0,
-              fullWidth: true,
-            ),
-          if (diff.isNotEmpty) _simpleLine('结算不同的产品', diff, fullWidth: true),
-          for (var i = 0; i < shared.length; i++)
-            _simpleLine(
-              proposalIntakeSettleLabel(i, kind: '共用结算'),
-              '${shared[i].skuIds.length} 个产品 · ${_settleTermsText(shared[i].terms)}',
-              fullWidth: true,
-            ),
-          // 测算各项一行一条（收入、电子券采购成本、利润、毛利率、周转资金、月周转次数），
-          // 各自复核；规模在顶部测算里，不再重复。
-          for (final field in _financeMetricFields)
-            if (field.$1 != 'salesScale')
-              _anchor(
-                field.$1,
-                _scopedFinanceField(
-                  field,
-                  owner: kProposalProductFinanceMain,
-                  scope: scope,
-                ),
-              ),
-          _simpleLine(
-            '项目成本',
-            costText(
-              'projectCost',
-              'costItems',
-              'costItemAmounts',
-              options: catalog,
-              project: true,
-            ),
-            anchorKey: 'costItems',
-            required: true,
-            trailing: _rowReviewToggle('financeItem:costItems', '待复核'),
-          ),
-          _simpleLine(
-            '业务成本',
-            _businessCostSealed
-                ? '仅市场部负责人一可见'
-                : costText(
-                    'businessCost',
-                    'businessCostItems',
-                    'businessCostItemAmounts',
-                  ),
-            anchorKey: 'businessCost',
-          ),
-          _simpleLine(
-            '经营成本',
-            costText(
-              'operatingCost',
-              'operatingCostItems',
-              'operatingCostItemAmounts',
-            ),
-            anchorKey: 'operatingCost',
-            trailing: _rowReviewToggle('financeItem:operatingCost', '待复核'),
-          ),
-          _simpleLine(
-            '税务成本',
-            costText('taxCost', 'taxCostItems', 'taxCostItemAmounts'),
-            anchorKey: 'taxCost',
-            trailing: _rowReviewToggle('financeItem:taxCost', '待复核'),
-          ),
-          _financeSideSimpleLine('供给侧', _financeSupplyFields),
-          _financeSideSimpleLine('渠道侧', _financeChannelFields),
-          _simpleLine(
-            '结算账户',
-            accounts,
-            anchorKey: 'generalBusinessAccount',
-            required: true,
-            fullWidth: true,
-            trailing: _mergedReviewToggle(const [
-              'financeItem:generalBusinessAccount',
-              'financeItem:prepaidAccount',
-            ]),
-          ),
-          _simpleLine(
-            '财务备注',
-            _text('financeRemark'),
-            anchorKey: 'financeRemark',
-            fullWidth: true,
-            trailing: _rowReviewToggle('financeItem:financeRemark', '待复核'),
-          ),
-        ]),
+        ),
       ],
     );
   }
 
   /// 原型「填报内容 · 科技部」的产品部分：SKU 共同项一行，SKU 清单一行（可展开）。
+  /// 科技部产品清单默认展开（只展开清单一层，每个产品的明细仍收起），只在第一次显示时打开一次。
+  bool _techSkuAutoOpened = false;
+
   Widget _techSkuSimple(bool wide) {
     final rows = proposalIntakeSkuDetails(_form);
+    if (!_techSkuAutoOpened && rows.isNotEmpty) {
+      _techSkuAutoOpened = true;
+      _simpleSkuListShown.add('tech');
+    }
     // 所有产品都一样的字段收进「SKU 共同项」，其余写在清单每个产品下面。
     final common = _skuCommonFields(rows).values.join(' · ');
     final faces = [
@@ -7638,7 +7728,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             decoration: BoxDecoration(
               color: DunesColors.resolve(
                 context,
-                const Color(0xFFB4570F),
+                const Color(0xFF6B4FD8),
                 role: DunesColorRole.surface,
               ),
               borderRadius: BorderRadius.circular(999),
@@ -9162,7 +9252,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 decoration: BoxDecoration(
                   color: DunesColors.resolve(
                     context,
-                    ProposalPalette.amber,
+                    ProposalPalette.purple,
                     role: DunesColorRole.surface,
                   ),
                   shape: BoxShape.circle,
@@ -9369,7 +9459,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   decoration: BoxDecoration(
                     color: DunesColors.resolve(
                       context,
-                      ProposalPalette.amber,
+                      ProposalPalette.purple,
                       role: DunesColorRole.surface,
                     ),
                     shape: BoxShape.circle,
@@ -9668,7 +9758,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         form: _form,
       );
       hint = left > 0 ? '还剩 $left 条没复核 · 有问题可直接驳回本板块' : '逐条已完成，到本板块底部确认通过';
-      hintColor = left > 0 ? 0xFFB4570F : 0xFF5B556A;
+      hintColor = left > 0 ? 0xFF6B4FD8 : 0xFF5B556A;
     } else {
       final missing = _validate();
       if (missing.isEmpty || _stage == 'awaiting_submit') {
@@ -9677,7 +9767,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       } else {
         hint =
             '还差 ${missing.length} 项：${missing.take(2).join('、')}${missing.length > 2 ? '…' : ''}';
-        hintColor = 0xFFB4570F;
+        hintColor = 0xFF6B4FD8;
       }
     }
     ButtonStyle base(int bg, int fg, {int? border}) => ButtonStyle(
@@ -9817,10 +9907,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         : (write ? '待你填写' : (review ? '待你复核' : '待你处理'));
     final tagBg = awaitingModule
         ? 0xFF3B8B5A
-        : (write ? 0xFFB4570F : (review ? 0xFF6B4FD8 : 0xFF3F2A9A));
-    final bg = awaitingModule ? 0xFFEEF6F1 : (write ? 0xFFFDF7F0 : 0xFFF7F5FC);
-    final bd = awaitingModule ? 0xFFB9DDBE : (write ? 0xFFF0C9A0 : 0xFFE7E3F2);
-    final fg = awaitingModule ? 0xFF2D6E47 : (write ? 0xFF9A4A0C : 0xFF3F2A9A);
+        : (write || review ? 0xFF6B4FD8 : 0xFF3F2A9A);
+    // 待你填写 / 待你复核 / 待你处理：一律淡紫底 + 淡紫边（不再用土黄色）。
+    final bg = awaitingModule ? 0xFFEEF6F1 : 0xFFF7F5FC;
+    final bd = awaitingModule ? 0xFFB9DDBE : 0xFFDCD3F5;
+    final fg = awaitingModule ? 0xFF2D6E47 : 0xFF3F2A9A;
     return Padding(
       key: const ValueKey('proposal-task-banner'),
       padding: EdgeInsets.fromLTRB(compact ? 10 : 18, 8, compact ? 10 : 18, 0),
@@ -9875,7 +9966,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   Text(
                     '还剩 $remaining 条',
                     style: TextStyle(
-                      color: c(0xFFB4570F),
+                      color: c(0xFF6B4FD8),
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       fontFamily: kProposalProtoMono,
@@ -9910,7 +10001,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           color: write
               ? DunesColors.resolve(
                   context,
-                  ProposalPalette.amberSoft,
+                  ProposalPalette.purpleSoft,
                   role: DunesColorRole.surface,
                 )
               : DunesColors.resolve(
@@ -9923,7 +10014,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             color: write
                 ? DunesColors.resolve(
                     context,
-                    ProposalPalette.amber,
+                    ProposalPalette.purple,
                     role: DunesColorRole.border,
                   )
                 : DunesColors.resolve(
@@ -9939,7 +10030,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               write ? Icons.edit_outlined : Icons.task_alt_rounded,
               size: 16,
               color: write
-                  ? DunesColors.resolve(context, ProposalPalette.amber)
+                  ? DunesColors.resolve(context, ProposalPalette.purpleDeep)
                   : DunesColors.resolve(context, ProposalPalette.purpleDeep),
             ),
             const SizedBox(width: 8),
@@ -9948,7 +10039,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 remaining > 0 ? '$cue · 还剩 $remaining 条' : cue,
                 style: TextStyle(
                   color: write
-                      ? DunesColors.resolve(context, ProposalPalette.amber)
+                      ? DunesColors.resolve(context, ProposalPalette.purpleDeep)
                       : DunesColors.resolve(
                           context,
                           ProposalPalette.purpleDeep,
@@ -10275,8 +10366,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
         decoration: BoxDecoration(
-          color: c(0xFFFDF2E6, DunesColorRole.surface),
-          border: Border.all(color: c(0xFFF0C9A0, DunesColorRole.border)),
+          color: c(0xFFF7F5FC, DunesColorRole.surface),
+          border: Border.all(color: c(0xFFDCD3F5, DunesColorRole.border)),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Wrap(
@@ -10287,7 +10378,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: c(0xFFB4570F, DunesColorRole.surface),
+                color: c(0xFF6B4FD8, DunesColorRole.surface),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -10302,7 +10393,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             Text(
               '$boardName被 $who 驳回',
               style: TextStyle(
-                color: c(0xFF9A4A0C),
+                color: c(0xFF3F2A9A),
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
@@ -10497,7 +10588,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           decoration: BoxDecoration(
             color: DunesColors.resolve(
               context,
-              ProposalPalette.amberSoft,
+              ProposalPalette.purpleSoft,
               role: DunesColorRole.surface,
             ),
             borderRadius: BorderRadius.circular(4),
@@ -10505,7 +10596,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           child: Text(
             proposalIntakeSectionTaskCue(_taskAction),
             style: TextStyle(
-              color: DunesColors.resolve(context, ProposalPalette.amber),
+              color: DunesColors.resolve(context, ProposalPalette.purpleDeep),
               fontSize: 11,
               height: 1.3,
               fontWeight: FontWeight.w700,
@@ -11098,114 +11189,632 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   /// 原型「填报内容 · 市场部」（销售）：一行一条。名称、规模已在标题和测算里，不再重复；
   /// 负责人、合同、盈利模式各合成一行；子分类、子标题没填就不显示。
-  Widget _salesMarketSimple(bool wide) {
+  // ---------------------------------------------------------------------------
+  // 只读视图分块：市场 / 科技 / 财务都用同一种「hero 带 + 行」的块。
+  // 每块的 hero 带里有一条「链路」，把提案串成闭环：
+  //   市场 规模 → 科技 SKU → 财务 产品清单 / 结算规则 → 成本 → 利润 → 顶部年化测算
+  // 链路上的每一格都能点，直接跳到对应板块的那一行。
+  // ---------------------------------------------------------------------------
+
+  bool _filled(String key) {
+    final value = _form[key];
+    if (value is List) return value.isNotEmpty;
+    if (value is Map) return value.isNotEmpty;
+    return '${value ?? ''}'.trim().isNotEmpty;
+  }
+
+  TextStyle _blockText(
+    Color color, {
+    double size = 11.5,
+    FontWeight weight = FontWeight.w400,
+  }) => TextStyle(
+    color: DunesColors.resolve(context, color),
+    fontSize: size,
+    height: 1.45,
+    fontWeight: weight,
+  );
+
+  /// 链路小卡：上面写环节，下面写值；可点时跳到那一环。
+  Widget _loopChip(
+    String label,
+    String value, {
+    Color accent = ProposalPalette.purple,
+    VoidCallback? onTap,
+  }) {
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFD9E0F2),
+            role: DunesColorRole.border,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            onTap == null ? label : '$label ›',
+            style: _blockText(accent, size: 11, weight: FontWeight.w700),
+          ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Text(
+              value.isEmpty ? '未填' : value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _blockText(
+                value.isEmpty ? ProposalPalette.text3 : ProposalPalette.text,
+                weight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) return chip;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: chip,
+    );
+  }
+
+  Widget get _loopArrow => Icon(
+    Icons.arrow_forward_rounded,
+    size: 14,
+    color: DunesColors.resolve(context, ProposalPalette.text3),
+  );
+
+  Widget _blockHeadline(String text, {String sub = ''}) => Text.rich(
+    TextSpan(
+      text: text.isEmpty ? '未填写' : text,
+      style: _blockText(ProposalPalette.text, size: 14, weight: FontWeight.w700),
+      children: [
+        if (sub.isNotEmpty)
+          TextSpan(
+            text: '  $sub',
+            style: _blockText(ProposalPalette.text3, size: 11),
+          ),
+      ],
+    ),
+    maxLines: 2,
+    overflow: TextOverflow.ellipsis,
+  );
+
+  /// 块顶 hero 带：标题 + 必填完成度、标签、链路、待补项。
+  Widget _blockBand({
+    required Widget headline,
+    List<String> tags = const [],
+    List<Widget> loop = const [],
+    List<(String, bool)> checks = const [],
+    Widget? highlight,
+  }) {
+    final done = checks.where((item) => item.$2).length;
+    final missing = [
+      for (final item in checks)
+        if (!item.$2) item.$1,
+    ];
+    final shownTags = [
+      for (final tag in tags)
+        if (tag.trim().isNotEmpty) tag.trim(),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _fieldGrid(wide, [
-          _simpleLine(
-            '产品提案名称',
-            _text('proposalName'),
-            anchorKey: 'proposalName',
-            required: true,
+        Row(
+          children: [
+            Expanded(child: headline),
+            if (checks.isNotEmpty)
+              ProposalFinanceTag(
+                '必填 $done/${checks.length}',
+                color: missing.isEmpty
+                    ? ProposalPalette.green
+                    : ProposalPalette.amber,
+                fill: missing.isEmpty
+                    ? ProposalPalette.greenSoft
+                    : ProposalPalette.amberSoft,
+              ),
+          ],
+        ),
+        if (shownTags.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (final tag in shownTags)
+                  ProposalFinanceTag(
+                    tag,
+                    color: const Color(0xFF3B4A7A),
+                    fill: const Color(0xFFDCE4F6),
+                  ),
+              ],
+            ),
           ),
-          _simpleLine(
-            '业务板块',
-            _text('sector'),
-            anchorKey: 'sector',
-            required: true,
+        if (highlight != null)
+          Padding(padding: const EdgeInsets.only(top: 10), child: highlight),
+        if (loop.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: loop,
+            ),
           ),
-          _simpleLine(
-            '提案类型',
-            _text('proposalType'),
-            anchorKey: 'proposalType',
-            required: true,
+        if (missing.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              '待补：${missing.join('、')}',
+              style: _blockText(ProposalPalette.amber, size: 11),
+            ),
           ),
-          // 顶部测算「年化规模 · 来自 市场部」点过来要落在这一行。
-          _simpleLine(
-            '规模（万元）',
-            _text('salesScale'),
-            anchorKey: 'salesScale',
-            required: true,
-          ),
-          _simpleLine(
-            '产品（标签一）',
-            _text('product'),
-            anchorKey: 'product',
-            required: true,
-          ),
-          _simpleLine('子分类', _text('productL3'), anchorKey: 'productL3'),
-          _simpleLine(
-            '项目（标签一二级）',
-            _text('projectName'),
-            anchorKey: 'projectName',
-            required: true,
-          ),
-          _simpleLine(
-            '供给（标签二）',
-            _setOf('supplies').join('、'),
-            anchorKey: 'supplies',
-            required: true,
-          ),
-          _textField(
-            '子标题',
-            'proposalSubtitle',
-            writable: _canEditProposalSubtitle,
-            resetReview: 'financeCompleted',
-            reviewSection: 'financeItem:proposalSubtitle',
-            reviewLabel: _subtitleFillLabel,
-          ),
-          _simpleLine(
-            '负责人',
-            _simplePeopleText(const [
-              ('市场二', 'marketOwner2'),
-              ('市场一', 'marketOwner1'),
-              ('运营', 'operator'),
-            ], extra: _simplePresidentText),
-            anchorKey: 'marketOwner1',
-            required: true,
-            fullWidth: true,
-          ),
-          _contractSimpleLine('采购合同', 'purchase'),
-          _contractTermsLine('采购合同核心条款', 'purchase'),
-          _contractSimpleLine('销售合同', 'sales'),
-          _contractTermsLine('销售合同核心条款', 'sales'),
-          _textField(
-            '供货商政策',
-            'supplierPolicy',
-            maxLines: 3,
-            fullWidth: true,
-            required: true,
-            resetReview: 'marketCompleted',
-          ),
-          _textField(
-            '渠道政策',
-            'channelPolicy',
-            maxLines: 3,
-            fullWidth: true,
-            required: true,
-            resetReview: 'marketCompleted',
-          ),
-          _profitSimpleLine(),
-          _textField(
-            '执行计划',
-            'executionPlan',
-            maxLines: 4,
-            fullWidth: false,
-            required: true,
-            resetReview: 'marketCompleted',
-          ),
-          _textField(
-            '风险点',
-            'riskPoints',
-            maxLines: 4,
-            fullWidth: false,
-            required: true,
-            resetReview: 'marketCompleted',
-          ),
-        ]),
-        _marketModuleReviewCard(),
       ],
+    );
+  }
+
+  /// 只读块：hero 带 + 原有的简单行（复核、展开、详情都照旧）。
+  Widget _simpleBlock({
+    required IconData icon,
+    required String title,
+    required Widget band,
+    required bool wide,
+    List<Widget> children = const [],
+    Widget? body,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: ProposalFinanceBlockShell(
+        icon: icon,
+        title: title,
+        band: band,
+        rows: [
+          Padding(
+            padding: ProposalLayout.isCompact(MediaQuery.sizeOf(context).width)
+                ? const EdgeInsets.fromLTRB(8, 6, 8, 8)
+                : const EdgeInsets.fromLTRB(14, 8, 14, 10),
+            child: body ??
+                // 只读字段排成产品卡片那种样式：白底细框，灰名称 + 值，行间细实线，不画紫色虚线。
+                ProposalKvCardScope(
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+                    decoration: BoxDecoration(
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFEEE8F3),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
+                    ),
+                    child: _fieldGrid(wide, children),
+                  ),
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 规模 / 成本 / 利润三张大卡：提案最重要的三个数，渐变底色区分，可点跳到出处。
+  /// 手机上一排三张等宽，数字自动缩放；特别窄时竖着排。
+  Widget _kpiTriple() {
+    final eval = _mainFinanceEvaluation;
+    final known = eval.salesScale > 0 || eval.revenue.amount != 0;
+    final scale = eval.salesScale;
+    final margin = eval.margin;
+    final costRate = scale > 0 && known ? eval.costTotal / scale * 100 : null;
+    final tiles = [
+      _kpiTile(
+        label: '年化规模',
+        value: scale > 0 ? proposalFormatWan(scale) : '—',
+        sub: _rating.isEmpty || _rating == '—' ? '市场部填写' : '评级 $_rating',
+        colors: const [Color(0xFF3D6FD8), Color(0xFF6FA8F0)],
+        icon: Icons.trending_up_rounded,
+        onTap: () =>
+            _openEstimateField(ProposalIntakeNavSection.market, 'salesScale'),
+      ),
+      _kpiTile(
+        label: '年化成本',
+        value: known && !_businessCostSealed
+            ? proposalFormatWan(eval.costTotal)
+            : (_businessCostSealed ? '已加密' : '—'),
+        sub: costRate == null || _businessCostSealed
+            ? '项目 · 业务 · 经营 · 税务'
+            : '占规模 ${proposalFormatWan(costRate)}%',
+        colors: const [Color(0xFFD9822B), Color(0xFFF4B860)],
+        icon: Icons.receipt_long_rounded,
+        onTap: () =>
+            _openEstimateField(ProposalIntakeNavSection.finance, 'financeCost'),
+      ),
+      _kpiTile(
+        label: '年化利润',
+        value: _businessCostSealed
+            ? '已加密'
+            : (known ? proposalFormatWan(eval.profit) : '—'),
+        sub: _businessCostSealed || margin == null
+            ? '收入 − 四类成本'
+            : '毛利率 ${proposalFormatWan(margin)}%',
+        colors: const [Color(0xFFB8406A), Color(0xFFE9786A)],
+        icon: Icons.savings_rounded,
+        onTap: () =>
+            _openEstimateField(ProposalIntakeNavSection.finance, 'profit'),
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, box) {
+        if (box.maxWidth < 300) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < tiles.length; i++) ...[
+                if (i > 0) const SizedBox(height: 8),
+                tiles[i],
+              ],
+            ],
+          );
+        }
+        final gap = box.maxWidth < 420 ? 6.0 : 10.0;
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < tiles.length; i++) ...[
+                if (i > 0) SizedBox(width: gap),
+                Expanded(child: tiles[i]),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _kpiTile({
+    required String label,
+    required String value,
+    required String sub,
+    required List<Color> colors,
+    required IconData icon,
+    VoidCallback? onTap,
+  }) {
+    final narrow = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
+    final resolved = [for (final c in colors) DunesColors.resolve(context, c)];
+    const white = Colors.white;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: resolved,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: resolved.first.withAlpha(70),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              narrow ? 10 : 14,
+              narrow ? 10 : 12,
+              narrow ? 10 : 14,
+              narrow ? 10 : 12,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(icon, size: narrow ? 13 : 15, color: white.withAlpha(220)),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: white.withAlpha(230),
+                          fontSize: narrow ? 11 : 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: narrow ? 14 : 16,
+                      color: white.withAlpha(200),
+                    ),
+                  ],
+                ),
+                SizedBox(height: narrow ? 6 : 8),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text.rich(
+                    TextSpan(
+                      text: value,
+                      style: TextStyle(
+                        color: white,
+                        fontFamily: kProposalProtoMono,
+                        fontFamilyFallback: kProposalProtoMonoFallback,
+                        fontSize: narrow ? 22 : 28,
+                        fontWeight: FontWeight.w800,
+                        height: 1.1,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                      children: [
+                        if (value != '—' && value != '已加密')
+                          TextSpan(
+                            text: ' 万',
+                            style: TextStyle(
+                              color: white.withAlpha(220),
+                              fontSize: narrow ? 11 : 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(height: narrow ? 4 : 6),
+                Text(
+                  sub,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: white.withAlpha(215),
+                    fontSize: narrow ? 10 : 11,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  ProposalFinanceEvaluation get _mainFinanceEvaluation => _financeEvaluationOf(
+    proposalIntakeIsolatedFinanceScope(
+      _form,
+      owner: kProposalProductFinanceMain,
+    ),
+  );
+
+  String _loopWan(double value) => '${proposalFormatWan(value)} 万';
+
+  /// 财务环节的链路格：收入 / 成本 / 利润（业务成本加密时利润不显示）。
+  List<Widget> _financeLoopChips({bool withRevenue = true}) {
+    final eval = _mainFinanceEvaluation;
+    final known = eval.salesScale > 0 || eval.revenue.amount != 0;
+    return [
+      if (withRevenue) ...[
+        _loopChip(
+          '财务 · 收入',
+          known ? _loopWan(eval.revenue.amount) : '',
+          onTap: () =>
+              _openEstimateField(ProposalIntakeNavSection.finance, 'revenue'),
+        ),
+        _loopArrow,
+      ],
+      _loopChip(
+        '财务 · 成本',
+        known && !_businessCostSealed ? _loopWan(eval.costTotal) : '',
+        accent: const Color(0xFFB07A2B),
+        onTap: () =>
+            _openEstimateField(ProposalIntakeNavSection.finance, 'financeCost'),
+      ),
+      _loopArrow,
+      _loopChip(
+        '财务 · 利润',
+        _businessCostSealed ? '已加密' : (known ? _loopWan(eval.profit) : ''),
+        accent: const Color(0xFFC0563F),
+        onTap: () =>
+            _openEstimateField(ProposalIntakeNavSection.finance, 'profit'),
+      ),
+    ];
+  }
+
+  /// 市场部两块（项目概况、合同与执行）。只读时块里是简单行；
+  /// 填写时传入 [identityBody] / [executionBody]，同一套块头、链路，块里换成输入表单。
+  Widget _salesMarketSimple(
+    bool wide, {
+    Widget? identityBody,
+    Widget? executionBody,
+  }) {
+    // 块一：项目概况 —— 卖什么、多大规模、谁负责；链路串到科技 SKU 和财务测算。
+    final identity = _simpleBlock(
+      icon: Icons.flag_outlined,
+      title: '项目概况',
+      wide: wide,
+      body: identityBody,
+      band: _blockBand(
+        headline: _anchor(
+          'proposalName',
+          _blockHeadline(_text('proposalName').trim()),
+        ),
+        tags: [
+          _text('sector'),
+          _text('proposalType'),
+          _text('product'),
+          _text('projectName'),
+        ],
+        // 规模、成本、利润是提案最重要的三个数：三张大卡，点了跳到出处。
+        highlight: _anchor('salesScale', _kpiTriple()),
+        checks: [
+          ('提案名称', _filled('proposalName')),
+          ('业务板块', _filled('sector')),
+          ('提案类型', _filled('proposalType')),
+          ('规模', _filled('salesScale')),
+          ('产品', _filled('product')),
+          ('项目', _filled('projectName')),
+          ('供给', _filled('supplies')),
+        ],
+      ),
+      children: [
+        _simpleLine(
+          '产品（标签一）',
+          _text('product'),
+          anchorKey: 'product',
+          required: true,
+        ),
+        _simpleLine('子分类', _text('productL3'), anchorKey: 'productL3'),
+        _simpleLine(
+          '项目（标签一二级）',
+          _text('projectName'),
+          anchorKey: 'projectName',
+          required: true,
+        ),
+        _simpleLine(
+          '供给（标签二）',
+          _setOf('supplies').join('、'),
+          anchorKey: 'supplies',
+          required: true,
+        ),
+        _textField(
+          '子标题',
+          'proposalSubtitle',
+          writable: _canEditProposalSubtitle,
+          resetReview: 'financeCompleted',
+          reviewSection: 'financeItem:proposalSubtitle',
+          reviewLabel: _subtitleFillLabel,
+        ),
+        _simpleLine(
+          '负责人',
+          _simplePeopleText(const [
+            ('市场二', 'marketOwner2'),
+            ('市场一', 'marketOwner1'),
+            ('运营', 'operator'),
+          ], extra: _simplePresidentText),
+          anchorKey: 'marketOwner1',
+          required: true,
+          fullWidth: true,
+        ),
+      ],
+    );
+
+    // 块二：合同与执行 —— 采购合同进货、销售合同出货，结算规则落到财务部。
+    final execution = _simpleBlock(
+      icon: Icons.handshake_outlined,
+      title: '合同与执行',
+      wide: wide,
+      body: executionBody,
+      band: _blockBand(
+        headline: _blockHeadline('供给 → 我方 → 渠道', sub: '采购合同进货 · 销售合同出货'),
+        loop: [
+          _loopChip(
+            '采购合同 · 供给',
+            _text('purchaseName').trim(),
+            accent: const Color(0xFF3B8B5A),
+            onTap: () =>
+                _openEstimateField(ProposalIntakeNavSection.market, 'purchaseNo'),
+          ),
+          _loopArrow,
+          _loopChip(
+            '销售合同 · 渠道',
+            _text('salesName').trim(),
+            accent: const Color(0xFF4A83C4),
+            onTap: () =>
+                _openEstimateField(ProposalIntakeNavSection.market, 'salesNo'),
+          ),
+          _loopArrow,
+          _loopChip(
+            '财务 · 结算规则',
+            [
+              _text('supplySettleMode').trim(),
+              _text('channelSettleMode').trim(),
+            ].where((item) => item.isNotEmpty).toSet().join(' / '),
+            onTap: () => _openEstimateField(
+              ProposalIntakeNavSection.finance,
+              'channelSettleMode',
+            ),
+          ),
+        ],
+        checks: [
+          ('采购合同', _filled('purchaseName')),
+          ('采购条款', _filled('purchaseCoreTerms')),
+          ('销售合同', _filled('salesName')),
+          ('销售条款', _filled('salesCoreTerms')),
+          ('供货商政策', _filled('supplierPolicy')),
+          ('渠道政策', _filled('channelPolicy')),
+          ('盈利模式', _filled('profitModes')),
+          ('执行计划', _filled('executionPlan')),
+          ('风险点', _filled('riskPoints')),
+        ],
+      ),
+      children: [
+        _contractSimpleLine('采购合同', 'purchase'),
+        _contractTermsLine('采购合同核心条款', 'purchase'),
+        _contractSimpleLine('销售合同', 'sales'),
+        _contractTermsLine('销售合同核心条款', 'sales'),
+        _textField(
+          '供货商政策',
+          'supplierPolicy',
+          maxLines: 3,
+          fullWidth: true,
+          required: true,
+          resetReview: 'marketCompleted',
+        ),
+        _textField(
+          '渠道政策',
+          'channelPolicy',
+          maxLines: 3,
+          fullWidth: true,
+          required: true,
+          resetReview: 'marketCompleted',
+        ),
+        _profitSimpleLine(),
+        _textField(
+          '执行计划',
+          'executionPlan',
+          maxLines: 4,
+          fullWidth: false,
+          required: true,
+          resetReview: 'marketCompleted',
+        ),
+        _textField(
+          '风险点',
+          'riskPoints',
+          maxLines: 4,
+          fullWidth: false,
+          required: true,
+          resetReview: 'marketCompleted',
+        ),
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [identity, execution, _marketModuleReviewCard()],
     );
   }
 
@@ -11238,7 +11847,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   List<Widget> _salesMarketForm(bool wide) {
-    return [
+    final form = <Widget>[
       _salesMarketSheet(wide),
       _contractCard('03', '采购合同', 'purchase', wide),
       if (!_isPurchase) _contractCard('04', '销售合同', 'sales', wide),
@@ -11312,6 +11921,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ),
       ),
       _marketModuleReviewCard(),
+    ];
+    // 填写时与只读同一套块：项目概况放基础信息，合同与执行放合同和政策。
+    return [
+      _salesMarketSimple(
+        wide,
+        identityBody: form.first,
+        executionBody: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: form.sublist(1, form.length - 1),
+        ),
+      ),
     ];
   }
 
@@ -11760,9 +12380,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ],
           ),
         ),
-        ProposalCard(
-          padding: EdgeInsets.zero,
-          child: Column(
+        // 填写与只读同一套块头和链路；填写时块里是原来的输入表单。
+        _techPlatformBlock(
+          wide,
+          interfaces,
+          body: _simpleView
+              ? null
+              : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _marketSheetGroup(
@@ -11898,10 +12522,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           const SizedBox(height: 12),
           _childTechCard(wide),
         ],
-        if (_simpleView)
-          _techSkuSimple(wide)
-        else
-          ProposalCard(child: _skuDetailsBlock(wide)),
+        _techSkuBlock(
+          wide,
+          body: _simpleView ? null : _skuDetailsBlock(wide),
+        ),
         _moduleReview(
           key: _techModuleReviewKey,
           title: '科技部板块审核',
@@ -11920,6 +12544,164 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           plain: true,
         ),
       ],
+    );
+  }
+
+  /// 科技部块一：平台与研发 —— 标签一、能力输出、业务平台、财务技术接口、研发与交付。
+  Widget _techPlatformBlock(
+    bool wide,
+    Map<String, dynamic> interfaces, {
+    Widget? body,
+  }) {
+    final skus = proposalIntakeSkuDetails(_form);
+    final platforms = <String>{
+      for (final sku in skus)
+        if ((sku.syncSourceRef?.name ?? '').trim().isNotEmpty)
+          sku.syncSourceRef!.name.trim(),
+    };
+    final interfaceCount = interfaces.values.where((v) => v == true).length;
+    final rdTypes = _setOf('developmentTypes').join('、');
+    final rdCost = switch (_text('hasRdCost').trim()) {
+      '是' => _text('rdAmount').trim().isEmpty
+          ? '有研发费用'
+          : '研发费用 ${_text('rdAmount').trim()} 万',
+      '否' => '无研发费用',
+      _ => '',
+    };
+    return _simpleBlock(
+      icon: Icons.memory_outlined,
+      title: '平台与研发',
+      wide: wide,
+      body: body,
+      band: _blockBand(
+        headline: _blockHeadline(
+          _text('technologyPlatform').trim(),
+          sub: _setOf('outputForms').join('、'),
+        ),
+        tags: [
+          ...platforms.map((name) => '业务平台 $name'),
+          if (_text('deliveryDate').trim().isNotEmpty)
+            '交付 ${_text('deliveryDate').trim()}',
+        ],
+        loop: [
+          _loopChip(
+            '研发',
+            [rdTypes, rdCost].where((item) => item.isNotEmpty).join(' · '),
+            accent: const Color(0xFF4A83C4),
+          ),
+          _loopArrow,
+          _loopChip(
+            '财务技术接口',
+            interfaceCount == 0 ? '' : '$interfaceCount 项',
+            accent: ProposalPalette.purple,
+          ),
+          _loopArrow,
+          _loopChip(
+            '财务 · 项目成本',
+            _loopWan(_mainFinanceEvaluation.total(kProposalCostCategoryProject)),
+            accent: const Color(0xFF6B4FD8),
+            onTap: () =>
+                _openEstimateField(ProposalIntakeNavSection.finance, 'costItems'),
+          ),
+        ],
+        checks: [
+          ('标签一', _filled('technologyPlatform')),
+          ('能力输出形式', _filled('outputForms')),
+          ('研发类型', _filled('developmentTypes')),
+          ('交付时间', _filled('deliveryDate')),
+        ],
+      ),
+      children: [
+        _personField(
+          '科技部负责人',
+          'technologyOwner',
+          positionIncludes: '科技部负责人',
+          required: true,
+        ),
+        _dropdownField(
+          'τ-标签一',
+          'technologyPlatform',
+          widget.options.platforms.map((item) => item.value).toList(),
+          required: true,
+          writable: _canEditTech,
+          resetReview: 'technologyCompleted',
+          reviewSection: 'technologyItem:technologyPlatform',
+          reviewLabel: _techReviewLabel,
+          addLabel: '新增标签一',
+        ),
+        _multiField(
+          '能力输出形式',
+          'outputForms',
+          proposalIntakeOutputFormOptions(widget.options.outputForms),
+          null,
+          required: true,
+          writable: _canEditTech,
+          resetReview: 'technologyCompleted',
+          reviewSection: 'technologyItem:outputForms',
+          reviewLabel: _techReviewLabel,
+        ),
+        _techSyncSourceField(),
+        _salesFinanceInterfaceField(interfaces),
+        _rdSimpleLine(),
+        _dateField(
+          '交付时间',
+          'deliveryDate',
+          required: true,
+          writable: _canEditTech,
+          resetReview: 'technologyCompleted',
+          reviewSection: 'technologyItem:deliveryDate',
+          reviewLabel: _techReviewLabel,
+        ),
+      ],
+    );
+  }
+
+  /// 科技部块二：业务平台产品 —— SKU 清单；链路接到财务部产品清单、成本、利润。
+  Widget _techSkuBlock(bool wide, {Widget? body}) {
+    final skus = proposalIntakeSkuDetails(_form);
+    final faces = [
+      for (final row in skus)
+        if (double.tryParse(row.faceValue.trim()) case final v? when v > 0) v,
+    ]..sort();
+    final faceText = faces.isEmpty
+        ? ''
+        : (faces.first == faces.last
+              ? '面值 ${proposalFormatWan(faces.first)} 元'
+              : '面值 ${proposalFormatWan(faces.first)}–${proposalFormatWan(faces.last)} 元');
+    final settleCount = skus.fold<int>(
+      0,
+      (sum, row) => sum + proposalIntakeSkuSettlements(row).length,
+    );
+    return _simpleBlock(
+      icon: Icons.inventory_2_outlined,
+      title: '业务平台产品',
+      wide: wide,
+      band: _blockBand(
+        headline: _blockHeadline(
+          skus.isEmpty ? '' : '${skus.length} 个 SKU',
+          sub: faceText,
+        ),
+        loop: [
+          _loopChip(
+            '科技 · SKU',
+            skus.isEmpty ? '' : '${skus.length} 个',
+            accent: const Color(0xFF4A83C4),
+          ),
+          _loopArrow,
+          _loopChip(
+            '财务 · 产品清单',
+            settleCount == 0 ? '' : '$settleCount 条结算',
+            onTap: () => _openEstimateField(
+              ProposalIntakeNavSection.finance,
+              'productSalesSettle',
+            ),
+          ),
+          _loopArrow,
+          ..._financeLoopChips(withRevenue: false),
+        ],
+        checks: [('SKU 清单', skus.isNotEmpty)],
+      ),
+      body: body ?? _techSkuSimple(wide),
     );
   }
 
@@ -12290,19 +13072,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 first: true,
                 label: '人',
                 description: '填写、逐条复核与整板块确认',
+                // 只读简单视图：负责人放进下方「产品结算」块的第一行。
                 child: _simpleView
-                    ? _fieldGrid(wide, [
-                        _simpleLine(
-                          '负责人',
-                          _simplePeopleText(const [
-                            ('财务一', 'financeOwner1'),
-                            ('财务二', 'financeOwner2'),
-                          ]),
-                          anchorKey: 'financeOwner1',
-                          required: true,
-                          fullWidth: true,
-                        ),
-                      ])
+                    ? const SizedBox.shrink()
                     : _fieldGrid(wide, [
                         _personField(
                           '财务部负责人一（整板块复核）',
@@ -12338,14 +13110,28 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ),
               _marketSheetGroup(
                 label: '产品结算',
-                description: '收入、成本、结算、账户与周转资金',
-                // 简单行：结算、测算、成本、账户各一行（有子产品时也一样，按业务产品这一组）。
-                child: _simpleView
-                    ? _financeSimpleRows(wide)
-                    : _financeProductContent(
-                        wide,
-                        owner: kProposalProductFinanceMain,
-                      ),
+                description: '产品清单、结算规则与账户',
+                child: Padding(
+                  padding: EdgeInsets.only(top: _simpleView ? 0 : 10),
+                  child: _financeSimpleRows(wide),
+                ),
+              ),
+              // 成本、利润两块：与顶部年化测算 hero 联动，点 hero 直接跳到这里。
+              _marketSheetGroup(
+                label: '成本',
+                description: '项目 · 业务 · 经营 · 税务 · 周转资金',
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: _financeCostPanel(kProposalProductFinanceMain),
+                ),
+              ),
+              _marketSheetGroup(
+                label: '利润',
+                description: '收入 · 利润 · 毛利率',
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: _financeProfitPanel(kProposalProductFinanceMain),
+                ),
               ),
             ],
           ),
@@ -12366,302 +13152,205 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool get _allFinanceItemsReviewed =>
       _itemsReviewed('financeItem', _financeReviewKeys);
 
-  Widget _financeProductContent(bool wide, {required String owner}) {
-    final children = owner == kProposalProductFinanceChildren;
-    final scope = proposalIntakeProductFinanceScope(_form, owner: owner);
-    // 简单行：只有分主/子产品时才写组名；逐条复核开关只给财务部负责人二。
-    final simple = _simpleView;
-    final showGroupTitle = !simple || proposalIntakeHasChildProducts(_form);
-    final showToolbar =
-        !simple ||
-        (_reviewEnabled('financeItem:revenue') &&
-            _review['financeCompleted'] != true);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (showGroupTitle) ...[
-          _financeProductGroupTitle(
-            children
-                ? '$kProposalChildProductLabel合计'
-                : '$kProposalMainProductLabel合计',
-            children: children,
-            description: children
-                ? '本组独立核算，不与$kProposalMainProductLabel合并。'
-                : '本组独立核算，不与其他产品组合并。',
-          ),
-          const SizedBox(height: 12),
-        ],
-        if (showToolbar) ...[
-          _financeReviewToolbar(children: children),
-          const SizedBox(height: 12),
-        ],
-        if (children)
-          _childSettlementsBlock(wide)
-        else ...[
-          // 简单行：产品结算先收成一行「30 个产品 · 共 30 条结算」，点展开再看每个产品。
-          if (simple) _skuSettleSimpleLine(),
-          if (simple) _simpleRelatedProductsSummary(),
-          if (!simple || _simpleSkuOpen) _skuSettlementsBlock(wide),
-        ],
-        if (!children)
-          _mainFinanceDetails(wide)
-        else ...[
-          const SizedBox(height: 16),
-          if (!simple)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 10),
-              child: Text(
-                '收入默认按本组结算测算，填写人可改；其余自动测算。',
-                style: kProposalCaptionStyle,
-              ),
-            ),
-          LayoutBuilder(
-            builder: (_, box) {
-              final columns = ProposalLayout.isCompact(box.maxWidth) ? 1 : 2;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _financeMetricSection(
-                    owner: owner,
-                    scope: scope,
-                    columns: columns,
-                  ),
-                  const SizedBox(height: 10),
-                  _financeSideGroup(
-                    title: '供给侧',
-                    child: _scopedFinanceRows(
-                      _financeSupplyFields,
-                      columns,
-                      owner: owner,
-                      scope: scope,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _financeSideGroup(
-                    title: '渠道侧',
-                    child: _scopedFinanceRows(
-                      _financeChannelFields,
-                      columns,
-                      owner: owner,
-                      scope: scope,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _scopedFinanceRows(
-                    _financeAccountFields,
-                    columns,
-                    owner: owner,
-                    scope: scope,
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          _scopedCostField(
-            label: '项目成本',
-            owner: owner,
-            namesKey: 'costItems',
-            amountsKey: 'costItemAmounts',
-            totalKey: 'projectCost',
-            options: _projectCostItemNames,
-            writable: _canEditProjectCostChips,
-          ),
-          const SizedBox(height: 10),
-          _scopedCostField(
-            label: '业务成本',
-            owner: owner,
-            namesKey: 'businessCostItems',
-            amountsKey: 'businessCostItemAmounts',
-            totalKey: 'businessCost',
-            options: widget.options.businessCostItems,
-            writable: _canEditBusinessCost,
-          ),
-          const SizedBox(height: 10),
-          _scopedCostField(
-            label: '经营成本',
-            owner: owner,
-            namesKey: 'operatingCostItems',
-            amountsKey: 'operatingCostItemAmounts',
-            totalKey: 'operatingCost',
-            options: kProposalOperatingCostItems,
-          ),
-          const SizedBox(height: 10),
-          _scopedCostField(
-            label: '税务成本',
-            owner: owner,
-            namesKey: 'taxCostItems',
-            amountsKey: 'taxCostItemAmounts',
-            totalKey: 'taxCost',
-            options: kProposalTaxCostItems,
-          ),
-        ],
-      ],
+  // ---------------------------------------------------------------------------
+  // 财务部「测算」：收入 / 成本 / 利润按所选公式自动算，不再手填金额。
+  // ---------------------------------------------------------------------------
+
+  ProposalFinanceFormulaCatalog get _financeFormulaCatalog =>
+      widget.options.resolvedFinanceFormulaCatalog;
+
+  ProposalFinanceEvaluation _financeEvaluationOf(Map<String, dynamic> scope) {
+    return proposalEvaluateFinance(
+      scope,
+      catalog: _financeFormulaCatalog,
+      costCatalog: widget.options.costItemOptions,
+      costNames: _projectCostItemNames,
     );
   }
 
-  Widget _financeMetricSection({
-    required String owner,
-    required Map<String, dynamic> scope,
-    required int columns,
-  }) {
-    return _scopedFinanceRows(
-      // 简单行：规模已在顶部测算里，不再重复。
-      _simpleView
-          ? [
-              for (final field in _financeMetricFields)
-                if (field.$1 != 'salesScale') field,
-            ]
-          : _financeMetricFields,
-      columns,
-      owner: owner,
-      scope: scope,
+
+  String _financeReviewSection(String owner, String key) =>
+      owner == kProposalProductFinanceChildren
+      ? 'financeItem:children:$key'
+      : 'financeItem:$key';
+
+  /// 「测算」顶部一句话：当前用户在这块能做什么、看不到什么。
+  String get _financeRoleNote {
+    if (_isLocked || _showSelectedAsText) return '';
+    final notes = <String>[];
+    if (_canEditAsSubmitter) {
+      notes.add(
+        '填写人：选好收入公式和项目 / 经营 / 税务成本项即可，金额自动算；业务成本由市场部负责人一在财务复核时选择。',
+      );
+    } else if (_isOwner('financeOwner2')) {
+      notes.add(
+        _canEditUnreviewedFinance
+            ? '财务部负责人二：可调整收入公式和项目 / 经营 / 税务成本，并逐条复核；业务成本和利润对你加密。'
+            : '财务部负责人二：业务成本和利润对你加密。',
+      );
+    }
+    if (_canEditBusinessCost) {
+      notes.add('市场部负责人一：请在「业务成本」里选择成本项和公式，利润随之更新。');
+    }
+    if (_isOwner('financeOwner1')) {
+      notes.add('财务部负责人一：负责人二逐条复核完成后，在本板块底部整板块复核。');
+    }
+    return notes.isEmpty ? '查看：金额均按所选公式自动测算。' : notes.join(' ');
+  }
+
+  bool _financeFormulaEditable(String owner, bool? writable, String key) {
+    if (_showSelectedAsText) return false;
+    return _fillEnabled(
+      writable,
+      resetReview: 'financeCompleted',
+      reviewSection: _financeReviewSection(owner, key),
     );
   }
 
-  Widget _mainFinanceDetails(bool wide) {
-    const owner = kProposalProductFinanceMain;
-    final scope = proposalIntakeProductFinanceScope(_form, owner: owner);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 16),
-        if (!_simpleView)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 10),
-            child: Text(
-              '销售规模取市场部填报。收入默认按结算测算，填写人可改；其余自动测算。',
-              style: kProposalCaptionStyle,
-            ),
-          ),
-        LayoutBuilder(
-          builder: (_, box) {
-            final columns = ProposalLayout.isCompact(box.maxWidth) ? 1 : 2;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _financeMetricSection(
-                  owner: owner,
-                  scope: scope,
-                  columns: columns,
-                ),
-                const SizedBox(height: 10),
-                // 简单行：供给侧、渠道侧、结算账户各合成一行。
-                // 账户不能再走 _financeFieldRows：那里用 IntrinsicHeight 包只读值，
-                // 只读值内部是 LayoutBuilder，测量高度会直接失败，上面的产品结算和
-                // 收入行就会叠在同一条线上。
-                if (_simpleView) ...[
-                  _financeSideSimpleLine('供给侧', _financeSupplyFields),
-                  _financeSideSimpleLine('渠道侧', _financeChannelFields),
-                  _simpleLine(
-                    '结算账户',
-                    [
-                      if (_text('generalBusinessAccount').trim().isNotEmpty)
-                        '一：${_text('generalBusinessAccount').trim()}',
-                      if (_text('prepaidAccount').trim().isNotEmpty)
-                        '二：${_text('prepaidAccount').trim()}',
-                    ].join(' · '),
-                    anchorKey: 'generalBusinessAccount',
-                    required: true,
-                    fullWidth: true,
-                    trailing: _mergedReviewToggle(const [
-                      'financeItem:generalBusinessAccount',
-                      'financeItem:prepaidAccount',
-                    ]),
-                  ),
-                  _simpleLine(
-                    '财务备注',
-                    _text('financeRemark'),
-                    anchorKey: 'financeRemark',
-                    fullWidth: true,
-                    trailing: _rowReviewToggle(
-                      'financeItem:financeRemark',
-                      '待复核',
-                    ),
-                  ),
-                ] else ...[
-                  _financeSideGroup(
-                    title: '供给侧',
-                    child: _financeFieldRows(_financeSupplyFields, columns),
-                  ),
-                  const SizedBox(height: 10),
-                  _financeSideGroup(
-                    title: '渠道侧',
-                    child: _financeFieldRows(_financeChannelFields, columns),
-                  ),
-                  const SizedBox(height: 10),
-                  _financeFieldRows(_financeAccountFields, columns),
-                ],
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 16),
-        _costSelectField(
-          label: '项目成本',
-          namesKey: 'costItems',
-          amountsKey: 'costItemAmounts',
-          totalKey: 'projectCost',
-          options: _projectCostItemNames,
-          catalog: widget.options.costItemOptions,
-          addLabel: widget.options.costItemSource == 'asset' ? null : '新增成本项',
-          reviewSection: 'financeItem:costItems',
-          writable: _canEditProjectCostChips,
-          wide: wide,
-        ),
-        const SizedBox(height: 10),
-        _businessCostField(wide: wide),
-        const SizedBox(height: 10),
-        _costSelectField(
-          label: '经营成本',
-          namesKey: 'operatingCostItems',
-          amountsKey: 'operatingCostItemAmounts',
-          totalKey: 'operatingCost',
-          options: kProposalOperatingCostItems,
-          catalog: const [],
-          reviewSection: 'financeItem:operatingCost',
-          wide: wide,
-        ),
-        const SizedBox(height: 10),
-        _costSelectField(
-          label: '税务成本',
-          namesKey: 'taxCostItems',
-          amountsKey: 'taxCostItemAmounts',
-          totalKey: 'taxCost',
-          options: kProposalTaxCostItems,
-          catalog: const [],
-          reviewSection: 'financeItem:taxCost',
-          wide: wide,
-        ),
-      ],
+  /// 改公式 / 改成本项：只写所选，金额由测算统一重算后回写。
+  void _writeFinanceFormula(
+    String owner,
+    Map<String, dynamic> Function(Map<String, dynamic> finance) mutate,
+  ) {
+    final finance = mutate(proposalIntakeProductFinance(_form, owner: owner));
+    final form = _withEstimatedFinanceCosts(
+      proposalIntakeWriteProductFinance(_form, owner: owner, finance: finance),
     );
+    final review = Map<String, dynamic>.from(_review)
+      ..['financeCompleted'] = false;
+    _markFormDirty();
+    _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
+    if (mounted) setState(() {});
+    _emitChanged(_row);
   }
 
-  Widget _scopedFinanceRows(
-    List<(String, String)> fields,
-    int columns, {
-    required String owner,
-    required Map<String, dynamic> scope,
-  }) {
-    return LayoutBuilder(
-      builder: (_, box) {
-        final itemWidth = columns == 1
-            ? box.maxWidth
-            : math.max(240.0, (box.maxWidth - 12) / 2);
-        return Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          children: [
-            for (final field in fields)
-              SizedBox(
-                width: itemWidth,
-                child: _scopedFinanceField(field, owner: owner, scope: scope),
-              ),
-          ],
-        );
+  /// 「成本」「利润」两块共用的配置：测算结果、各角色能改什么、复核、锚点。
+  ProposalFinanceBoardConfig _financeBoardConfig(String owner) {
+    final scope = proposalIntakeIsolatedFinanceScope(_form, owner: owner);
+    final evaluation = _financeEvaluationOf(scope);
+    final times = proposalFinanceAmount(scope, kProposalTurnoverTimesKey);
+    return ProposalFinanceBoardConfig(
+      evaluation: evaluation,
+      catalog: _financeFormulaCatalog,
+      revenueEditable: _financeFormulaEditable(
+        owner,
+        _canEditUnreviewedFinance,
+        'revenue',
+      ),
+      categoryEditable: {
+        kProposalCostCategoryProject: _financeFormulaEditable(
+          owner,
+          _canEditProjectCostChips,
+          'costItems',
+        ),
+        kProposalCostCategoryBusiness:
+            !_showSelectedAsText && _canEditBusinessCost,
+        kProposalCostCategoryOperating: _financeFormulaEditable(
+          owner,
+          _canEditUnreviewedFinance,
+          'operatingCost',
+        ),
+        kProposalCostCategoryTax: _financeFormulaEditable(
+          owner,
+          _canEditUnreviewedFinance,
+          'taxCost',
+        ),
       },
+      businessSealed: _businessCostSealed,
+      roleNote: _financeRoleNote,
+      promotionPlan: proposalPromotionTierPlanOf(scope),
+      onPromotionTiers: (plan) => _writeFinanceFormula(
+        owner,
+        (finance) => Map<String, dynamic>.from(finance)
+          ..[kProposalPromotionTiersKey] = plan.toJson(),
+      ),
+      reviewStatus: (key) => switch (key) {
+        'profit' => _reviewStatusTag([
+          _financeReviewSection(owner, 'profit'),
+          _financeReviewSection(owner, 'margin'),
+        ]),
+        'businessCost' => null,
+        _ => _reviewStatusTag([_financeReviewSection(owner, key)]),
+      },
+      reviewToggle: (key) => switch (key) {
+        'profit' => _mergedReviewToggle([
+          _financeReviewSection(owner, 'profit'),
+          _financeReviewSection(owner, 'margin'),
+        ]),
+        // 业务成本由市场部负责人一填，不走财务部负责人二逐条复核。
+        'businessCost' => null,
+        _ => _rowReviewToggle(
+          _financeReviewSection(owner, key),
+          _financeReviewLabel,
+        ),
+      },
+      onRevenueFormula: (group, code) => _writeFinanceFormula(
+        owner,
+        (finance) => proposalFinanceWriteRevenueFormula(
+          finance,
+          groupKey: group,
+          code: code,
+        ),
+      ),
+      onCostItemsChanged: (category, names) => _writeFinanceFormula(
+        owner,
+        (finance) => proposalFinanceWriteSelection(finance, category, names),
+      ),
+      onCostFormula: (category, name, code) => _writeFinanceFormula(
+        owner,
+        (finance) =>
+            proposalFinanceWriteItemFormula(finance, category, name, code),
+      ),
+      // 子产品组不挂锚点，避免顶部 hero 跳到子产品那一份。
+      anchor: owner == kProposalProductFinanceMain ? _anchor : null,
+      // hero 跳下来只定位、闪一下，不自动展开，保持简单。
+      focusKeys: const <String>{},
+      turnoverTimes: times > 0 ? times : null,
+      turnoverCash: proposalTurnoverCashAmount(scope),
+      turnoverField: _scopedFinanceField(
+        ('turnoverTimes', '月周转次数'),
+        owner: owner,
+        scope: scope,
+      ),
     );
   }
+
+  /// 收起状态下的复核进度小标签：「已核 3/4」/「有问题」。展开后才出现复核按钮。
+  Widget? _reviewStatusTag(List<String> sections) {
+    final items = [
+      for (final section in sections)
+        if (section.trim().isNotEmpty) section,
+    ];
+    if (items.isEmpty || _isPurchase) return null;
+    final done = items.where(_itemReviewed).length;
+    final rejected = items.any(
+      (section) =>
+          !_itemReviewed(section) && _itemRejectComment(section).isNotEmpty,
+    );
+    if (rejected) {
+      return const ProposalFinanceTag(
+        '有问题',
+        color: Color(0xFFC0563F),
+        fill: Color(0xFFF5E5DC),
+      );
+    }
+    final all = done == items.length;
+    return ProposalFinanceTag(
+      all ? '已核' : '已核 $done/${items.length}',
+      color: all ? ProposalPalette.green : ProposalPalette.text2,
+      fill: all ? ProposalPalette.greenSoft : const Color(0xFFF3F0F7),
+    );
+  }
+
+  Widget _financeCostPanel(String owner) => ProposalFinanceCostPanel(
+    key: ValueKey('finance-cost-panel-$owner'),
+    config: _financeBoardConfig(owner),
+  );
+
+  Widget _financeProfitPanel(String owner) => ProposalFinanceProfitPanel(
+    key: ValueKey('finance-profit-panel-$owner'),
+    config: _financeBoardConfig(owner),
+  );
 
   Widget _scopedFinanceField(
     (String, String) field, {
@@ -12815,173 +13504,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
     if (mounted) setState(() {});
     _emitChanged(_row);
-  }
-
-  Widget _scopedCostField({
-    required String label,
-    required String owner,
-    required String namesKey,
-    required String amountsKey,
-    required String totalKey,
-    required List<String> options,
-    bool? writable,
-  }) {
-    if (label == '业务成本' && _businessCostSealed) {
-      return ProposalField(
-        label: '业务成本',
-        tone: ProposalFieldTone.locked,
-        child: Text(
-          '已加密上锁，负责人二不可查看。由市场部负责人一在财务复核时填写。',
-          style: TextStyle(
-            color: DunesColors.resolve(context, ProposalPalette.text2),
-            fontSize: 13,
-            height: 1.45,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
-    }
-    final finance = proposalIntakeProductFinance(_form, owner: owner);
-    final names = finance[namesKey] is List
-        ? [
-            for (final value in finance[namesKey] as List)
-              if ('$value'.trim().isNotEmpty) '$value'.trim(),
-          ]
-        : <String>[];
-    final amounts = proposalCostAmountMap(finance[amountsKey]);
-    final enabled = _fillEnabled(writable, resetReview: 'financeCompleted');
-    if (label == '业务成本' && !_canEditBusinessCost && names.isEmpty) {
-      return ProposalField(
-        label: '业务成本',
-        tone: ProposalFieldTone.locked,
-        child: Text(
-          '由市场部负责人一在财务复核时填写',
-          style: TextStyle(
-            color: DunesColors.resolve(context, ProposalPalette.text3),
-            fontSize: 13,
-            height: 1.45,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
-    }
-    void write(List<String> nextNames, Map<String, double> nextAmounts) {
-      final next = Map<String, dynamic>.from(finance)
-        ..[namesKey] = nextNames
-        ..[amountsKey] = nextAmounts
-        ..[totalKey] = proposalCostAmountTotal(nextAmounts);
-      final form = _keepUnreviewed(
-        proposalIntakeWriteProductFinance(_form, owner: owner, finance: next),
-      );
-      final review = Map<String, dynamic>.from(_review)
-        ..['financeCompleted'] = false;
-      setState(() {
-        _markFormDirty();
-        _row = _row.copyWith(
-          form: form,
-          review: review,
-          status: _statusAfterEdit,
-        );
-      });
-      _emitChanged(_row);
-    }
-
-    return _FullWidthField(
-      child: ProposalField(
-        label: label,
-        trailing: _rowReviewToggle(
-          owner == kProposalProductFinanceChildren
-              ? 'financeItem:children:$namesKey'
-              : 'financeItem:$namesKey',
-          _financeReviewLabel,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ProposalPills(
-              options: [
-                ...options,
-                ...names.where((value) => !options.contains(value)),
-              ],
-              selected: names.toSet(),
-              enabled: enabled,
-              onToggle: (name) {
-                final nextNames = namesKey == 'taxCostItems'
-                    ? proposalToggleTaxCostItem(names, name)
-                    : ([...names]..remove(name));
-                if (namesKey != 'taxCostItems' && !names.contains(name)) {
-                  nextNames.add(name);
-                }
-                final nextAmounts = Map<String, double>.from(amounts)
-                  ..removeWhere((id, _) => !nextNames.contains(id));
-                write(nextNames, nextAmounts);
-              },
-            ),
-            for (final name in names)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: TextFormField(
-                  key: ValueKey(
-                    'finance-$owner-$amountsKey-$name-$_fieldEpoch',
-                  ),
-                  initialValue: (amounts[name] ?? 0) == 0
-                      ? ''
-                      : _textFromAmount(amounts[name]!),
-                  enabled: enabled,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: proposalInputDecoration(
-                    context: context,
-                    hint: '$name 金额（万元）',
-                  ),
-                  onChanged: (value) {
-                    final nextAmounts = Map<String, double>.from(amounts);
-                    final amount = double.tryParse(value);
-                    amount == null
-                        ? nextAmounts.remove(name)
-                        : nextAmounts[name] = amount;
-                    write(names, nextAmounts);
-                  },
-                ),
-              ),
-            if (names.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  '合计 ${_money(proposalCostAmountTotal(amounts))}',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: DunesColors.resolve(context, ProposalPalette.text2),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _financeProductGroupTitle(
-    String title, {
-    required bool children,
-    required String description,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 2, 2, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: kProposalBlockTitleStyle),
-          // 新样式不再写「本组独立核算…」这类说明，版面更整齐。
-          if (!_protoForm && description.isNotEmpty) ...[
-            const SizedBox(height: 3),
-            Text(description, style: kProposalCaptionStyle),
-          ],
-        ],
-      ),
-    );
   }
 
   Widget _flowSection(bool wide) {
@@ -17129,8 +17651,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title, style: kProposalSubBlockTitleStyle),
-              const SizedBox(height: 4),
-              Text(hint, style: kProposalCaptionStyle),
+              if (hint.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(hint, style: kProposalCaptionStyle),
+              ],
             ],
           ),
         ),
@@ -17150,7 +17674,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         children: [
           _skuSettlementsReviewHeader(
             title: '$kProposalChildProductLabel结算',
-            hint: '每个$kProposalChildProductLabel独立结算，用切换条查看；复核整块完成。',
+            hint: '',
           ),
           if (rows.isEmpty)
             Padding(
@@ -17205,7 +17729,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  Widget _skuSettlementsBlock(bool wide) {
+  Widget _skuSettlementsBlock(bool wide, {bool header = true}) {
     final channelRows = proposalIntakeSkuDetails(_form);
     final enabled = _canEditSkuSettlements;
     return _anchor(
@@ -17213,15 +17737,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (header)
           _skuSettlementsReviewHeader(
             title: proposalIntakeHasChildProducts(_form)
                 ? '$kProposalMainProductLabel结算'
                 : '产品结算',
-            hint: kProposalSharedSettleEnabled
-                ? '比例相同可勾共用结算，各产品只填规模；不同则各卡单独填。'
-                : '每个产品一套结算，可再加明细；复核整块完成。',
+            hint: '',
           ),
-          if (channelRows.isEmpty)
+          if (channelRows.isEmpty && header)
             Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
@@ -19911,36 +20434,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool _isFinanceLongTextKey(String key) => key == 'financeRemark';
 
-  Widget _financeReviewToolbar({required bool children}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                children
-                    ? '$kProposalChildProductLabel财务复核'
-                    : '$kProposalMainProductLabel财务复核',
-                style: kProposalSubBlockTitleStyle,
-              ),
-            ),
-            _financeReviewModeButton(),
-            const SizedBox(width: 8),
-            Text(
-              _review['financeCompleted'] == true ? '财务部复核已完成' : '待财务部负责人二逐项复核',
-              style: kProposalCaptionStyle,
-            ),
-          ],
-        ),
-        const Padding(
-          padding: EdgeInsets.only(top: 6),
-          child: Text('先核产品结算，再核合计收入成本。', style: kProposalCaptionStyle),
-        ),
-      ],
-    );
-  }
-
   /// 逐条复核的总开关：关掉时字段旁只留圆点，打开才显示复核 / 驳回按钮。
   Widget _financeReviewModeButton() {
     final on = _financeReviewMode;
@@ -20030,42 +20523,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  Widget _financeSideGroup({required String title, required Widget child}) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Divider(
-            height: 1,
-            color: DunesColors.resolve(
-              context,
-              ProposalPalette.borderSoft,
-              role: DunesColorRole.border,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            title,
-            style: TextStyle(
-              color: DunesColors.resolve(context, ProposalPalette.text2),
-              fontWeight: FontWeight.w700,
-              fontSize: 11,
-              letterSpacing: .6,
-            ),
-          ),
-          const SizedBox(height: 10),
-          child,
-        ],
-      ),
-    );
-  }
-
   String? _financeMetricFormula(String key) {
     return switch (key) {
       'salesScale' => kProposalSalesScaleFormula,
       'revenue' => kProposalRevenueFormula,
-      'couponProcurementCost' => kProposalProcurementFormula,
       'profit' => kProposalProfitFormula,
       'margin' => kProposalMarginFormula,
       'turnoverCash' => kProposalTurnoverCashFormula,
@@ -20085,13 +20546,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           display: cash == null ? '' : proposalFormatWan(cash),
           formula: kProposalTurnoverCashFormula,
         );
-      case 'couponProcurementCost':
-        final estimated = proposalEstimatedProcurementCost(form);
-        if (estimated == null) return null;
-        return (
-          display: proposalFormatWan(estimated),
-          formula: kProposalProcurementFormula,
-        );
       case 'salesScale':
         final rollup = proposalProductScaleRollup(form);
         return (
@@ -20099,56 +20553,33 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           formula: kProposalSalesScaleFormula,
         );
       case 'revenue':
-        final rollup = proposalProductScaleRollup(form);
+        // 收入按「测算」里所选的渠道侧公式算，不再手填。
+        final eval = _financeEvaluationOf(form);
+        final known =
+            eval.salesScale > 0 || eval.revenue.amount != 0;
         return (
-          display: rollup == null ? '' : proposalFormatWan(rollup.revenue),
-          formula: kProposalRevenueFormula,
+          display: known ? proposalFormatWan(eval.revenue.amount) : '',
+          formula: eval.revenue.formula?.name ?? kProposalRevenueFormula,
         );
       case 'profit':
-        final rollup = proposalProductScaleRollup(form);
-        final procurement =
-            proposalEstimatedProcurementCost(form) ??
-            proposalFinanceAmount(form, kProposalCouponProcurementCostKey);
-        final revenue = proposalEffectiveRevenue(form);
+        // 利润含业务成本：业务成本加密的人（负责人二）看不到利润。
+        if (_businessCostSealed) {
+          return (display: '', formula: kProposalProfitFormula);
+        }
+        final eval = _financeEvaluationOf(form);
+        final known =
+            eval.salesScale > 0 || eval.revenue.amount != 0;
         return (
-          display: rollup == null && !proposalRevenueIsManual(form)
-              ? ''
-              : proposalFormatWan(
-                  proposalRoundWan(
-                    revenue -
-                        procurement -
-                        proposalFinanceAmount(form, 'projectCost'),
-                  ),
-                ),
+          display: known ? proposalFormatWan(eval.profit) : '',
           formula: kProposalProfitFormula,
         );
       case 'margin':
-        final rollup = proposalProductScaleRollup(form);
-        final scale = rollup?.salesScale ?? proposalEffectiveSalesScale(form);
-        if ((rollup == null && !proposalRevenueIsManual(form)) || scale == 0) {
-          return (
-            display: rollup == null && !proposalRevenueIsManual(form)
-                ? ''
-                : '0',
-            formula: kProposalMarginFormula,
-          );
+        if (_businessCostSealed) {
+          return (display: '', formula: kProposalMarginFormula);
         }
-        final procurement =
-            proposalEstimatedProcurementCost(form) ??
-            proposalFinanceAmount(form, kProposalCouponProcurementCostKey);
-        final profit = proposalRoundWan(
-          proposalEffectiveRevenue(form) -
-              procurement -
-              proposalFinanceAmount(form, 'projectCost'),
-        );
+        final margin = _financeEvaluationOf(form).margin;
         return (
-          display: proposalFormatWan(
-            proposalEstimatedMarginAmount(
-              form,
-              salesScale: scale,
-              profit: profit,
-            ),
-          ),
+          display: margin == null ? '' : proposalFormatWan(margin),
           formula: kProposalMarginFormula,
         );
       default:
@@ -21158,549 +21589,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
     );
   }
-
-  Widget _businessCostField({bool wide = true}) {
-    if (_businessCostSealed) {
-      return ProposalField(
-        label: '业务成本',
-        tone: ProposalFieldTone.locked,
-        child: Text(
-          '已加密上锁，负责人二不可查看。由市场部负责人一在财务复核时填写。',
-          style: TextStyle(
-            color: DunesColors.resolve(context, ProposalPalette.text2),
-            fontSize: 13,
-            height: 1.45,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
-    }
-    final names = _form['businessCostItems'] is List
-        ? [
-            for (final item in _form['businessCostItems'] as List)
-              if ('$item'.trim().isNotEmpty) '$item'.trim(),
-          ]
-        : const <String>[];
-    if (!_canEditBusinessCost && names.isEmpty) {
-      return ProposalField(
-        label: '业务成本',
-        tone: ProposalFieldTone.locked,
-        child: Text(
-          '由市场部负责人一在财务复核时填写',
-          style: TextStyle(
-            color: DunesColors.resolve(context, ProposalPalette.text3),
-            fontSize: 13,
-            height: 1.45,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
-    }
-    return _costSelectField(
-      label: '业务成本',
-      namesKey: 'businessCostItems',
-      amountsKey: 'businessCostItemAmounts',
-      totalKey: 'businessCost',
-      options: widget.options.businessCostItems,
-      catalog: widget.options.businessCostItemOptions,
-      addLabel: widget.options.costItemSource == 'asset'
-          ? null
-          : (widget.options.businessCostItems.isEmpty ? null : '新增成本项'),
-      writable: _canEditBusinessCost,
-      allowDuringReview: true,
-      wide: wide,
-    );
-  }
-
-  Widget _costSelectField({
-    required String label,
-    required String namesKey,
-    required String amountsKey,
-    required String totalKey,
-    required List<String> options,
-    required List<ProposalCostItemOption> catalog,
-    String? reviewSection,
-    String? addLabel,
-    bool? writable,
-    bool allowDuringReview = false,
-    String settleTermsKey = '',
-    bool wide = true,
-  }) {
-    final enabled = allowDuringReview
-        ? (!_isLocked &&
-              (writable ?? false) &&
-              !_reviewLocksField(resetReview: 'financeCompleted'))
-        : _fillEnabled(
-            writable,
-            resetReview: 'financeCompleted',
-            reviewSection: reviewSection,
-          );
-    final tone = proposalFieldTone(enabled: enabled);
-    final selectedRaw = _setOf(namesKey);
-    final selected = namesKey == 'costItems'
-        ? {for (final item in selectedRaw) proposalProjectCostDisplayName(item)}
-        : selectedRaw;
-    final names = _form[namesKey] is List
-        ? [
-            for (final item in _form[namesKey] as List)
-              if ('$item'.trim().isNotEmpty)
-                namesKey == 'costItems'
-                    ? proposalProjectCostDisplayName('$item')
-                    : '$item'.trim(),
-          ]
-        : selected.toList();
-    final chipOptions = options;
-    final amounts = proposalCostAmountMap(_form[amountsKey]);
-    final total = proposalCostAmountTotal(amounts);
-    final settleMap = settleTermsKey.isEmpty
-        ? const <String, ProposalFinanceSettleTerms>{}
-        : proposalCostSettleTermsMap(_form[settleTermsKey]);
-    Widget settleFields(String name) {
-      if (settleTermsKey.isEmpty) return const SizedBox.shrink();
-      final id = proposalCostAmountId(name, catalog);
-      final project = namesKey == 'costItems';
-      var rows = proposalCostSettleTermsList(
-        _form[settleTermsKey],
-        name: name,
-        id: id,
-      );
-      if (rows.isEmpty) {
-        rows = [
-          proposalCostSettleTermsOf(terms: settleMap, name: name, id: id),
-        ];
-      }
-      final estimated = project
-          ? proposalEstimateProjectCostAmount(
-              _form,
-              name,
-              catalog: catalog,
-              costNames: namesKey == 'costItems'
-                  ? _projectCostItemNames
-                  : const [],
-            )
-          : null;
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var i = 0; i < rows.length; i++) ...[
-              if (i > 0) const SizedBox(height: 8),
-              if (project && rows.length > 1)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      Text(
-                        '第 ${i + 1} 条',
-                        style: TextStyle(
-                          color: DunesColors.resolve(
-                            context,
-                            ProposalPalette.text2,
-                          ),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (enabled)
-                        TextButton(
-                          onPressed: () {
-                            final next = [...rows]..removeAt(i);
-                            _writeCostSettleRows(
-                              settleTermsKey: settleTermsKey,
-                              id: id,
-                              rows: next,
-                            );
-                          },
-                          style: TextButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(36, 28),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Text(
-                            '删除',
-                            style: TextStyle(fontSize: 11),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              if (project)
-                _settleTermsGrid(
-                  wide: wide,
-                  keyPrefix: '$settleTermsKey-$id-$i',
-                  terms: rows[i],
-                  enabled: enabled,
-                  includeChannel: false,
-                  includeSkuPick: true,
-                  includeSalesFields: false,
-                  includeInvoiceTax: false,
-                  includeParties: false,
-                  includeFormula: false,
-                  includeSchedule: false,
-                  compactCostRules: true,
-                  syncSource: _primarySyncSource(),
-                  productSource: 'SUPPLIER',
-                  onChanged: (terms) {
-                    final next = [...rows];
-                    next[i] = terms;
-                    _writeCostSettleRows(
-                      settleTermsKey: settleTermsKey,
-                      id: id,
-                      rows: next,
-                    );
-                  },
-                )
-              else
-                _settleBlockCard(
-                  index: i,
-                  wide: wide,
-                  canRemove: enabled && rows.length > 1,
-                  onRemove: enabled && rows.length > 1
-                      ? () {
-                          final next = [...rows]..removeAt(i);
-                          _writeCostSettleRows(
-                            settleTermsKey: settleTermsKey,
-                            id: id,
-                            rows: next,
-                          );
-                        }
-                      : null,
-                  child: _settleTermsGrid(
-                    wide: wide,
-                    keyPrefix: '$settleTermsKey-$id-$i',
-                    terms: rows[i],
-                    enabled: enabled,
-                    includeChannel: true,
-                    includeSkuPick: false,
-                    includeSalesFields: true,
-                    includeParties: true,
-                    syncSource: _primarySyncSource(),
-                    productSource: 'SUPPLIER',
-                    onChanged: (terms) {
-                      _setCostSettleTerms(
-                        settleTermsKey: settleTermsKey,
-                        id: id,
-                        terms: terms,
-                      );
-                    },
-                  ),
-                ),
-            ],
-            if (project && enabled)
-              TextButton.icon(
-                onPressed: () => _writeCostSettleRows(
-                  settleTermsKey: settleTermsKey,
-                  id: id,
-                  rows: [...rows, const ProposalFinanceSettleTerms()],
-                ),
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('再加一条'),
-              ),
-            if (project)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  estimated == null ? '填比例或单价后自动加总' : '合计 ${_money(estimated)}',
-                  style: TextStyle(
-                    color: DunesColors.resolve(context, ProposalPalette.text2),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      );
-    }
-
-    Widget amountRows() {
-      if (names.isEmpty) return const SizedBox.shrink();
-      final withSettle = settleTermsKey.isNotEmpty;
-      return Padding(
-        padding: const EdgeInsets.only(top: 10),
-        child: Column(
-          children: [
-            for (final name in names) ...[
-              if (withSettle)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: TextStyle(
-                            color: DunesColors.resolve(
-                              context,
-                              ProposalPalette.text,
-                            ),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (namesKey != 'costItems') ?_costFormulaHint(name),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                _costAmountRow(
-                  name: name,
-                  id: proposalCostAmountId(name, catalog),
-                  amount:
-                      amounts[proposalCostAmountId(name, catalog)] ??
-                      amounts[name] ??
-                      0,
-                  amountsKey: amountsKey,
-                  totalKey: totalKey,
-                  enabled: enabled,
-                ),
-              settleFields(name),
-            ],
-            if (!withSettle)
-              Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    '合计 ${_money(total)}',
-                    style: TextStyle(
-                      color: DunesColors.resolve(
-                        context,
-                        ProposalPalette.text2,
-                      ),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      );
-    }
-
-    // 只读（查看、复核、或这一项已锁）：一行写完「合计 · 各项金额」，和其他行一样整齐，
-    // 不再一项一个大字、下面挂公式。
-    if ((_showSelectedAsText || !enabled) && settleTermsKey.isEmpty) {
-      final summary = names.isEmpty
-          ? ''
-          : [
-              '合计 ${_money(total)}',
-              for (final name in names)
-                '$name ${_money(amounts[proposalCostAmountId(name, catalog)] ?? amounts[name] ?? 0)}',
-            ].join(' · ');
-      return _FullWidthField(
-        child: ProposalField(
-          label: label,
-          formula: namesKey == 'costItems' ? '成本明细各项之和' : null,
-          tone: tone,
-          trailing: _rowReviewToggle(reviewSection, _financeReviewLabel),
-          child: _readonlySelectedText(summary, maxLines: 2),
-        ),
-      );
-    }
-    if (_showSelectedAsText) {
-      return _FullWidthField(
-        child: ProposalField(
-          label: label,
-          formula: namesKey == 'costItems' ? '成本明细各项之和' : null,
-          tone: tone,
-          trailing: _rowReviewToggle(reviewSection, _financeReviewLabel),
-          child: names.isEmpty
-              ? _readonlySelectedText('')
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final name in names) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              settleTermsKey.isEmpty
-                                  ? '$name  ${_money(amounts[proposalCostAmountId(name, catalog)] ?? amounts[name] ?? 0)}'
-                                  : name,
-                              style: TextStyle(
-                                color: DunesColors.resolve(
-                                  context,
-                                  ProposalPalette.text,
-                                ),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            if (namesKey != 'costItems')
-                              ?_costFormulaHint(name),
-                          ],
-                        ),
-                      ),
-                      settleFields(name),
-                    ],
-                    if (settleTermsKey.isEmpty)
-                      Text(
-                        '合计 ${_money(total)}',
-                        style: TextStyle(
-                          color: DunesColors.resolve(
-                            context,
-                            ProposalPalette.text2,
-                          ),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                  ],
-                ),
-        ),
-      );
-    }
-
-    return _FullWidthField(
-      child: ProposalField(
-        label: label,
-        formula: namesKey == 'costItems' ? '成本明细各项之和' : null,
-        tone: tone,
-        trailing: _rowReviewToggle(reviewSection, _financeReviewLabel),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ProposalPills(
-              options: [
-                ...chipOptions,
-                ...names.where((value) => !chipOptions.contains(value)),
-              ],
-              selected: selected,
-              enabled: enabled,
-              onToggle: (value) {
-                if (enabled) {
-                  _toggleList(namesKey, value, resetReview: 'financeCompleted');
-                }
-              },
-              onAdd: addLabel == null || !enabled
-                  ? null
-                  : () => _addOption(
-                      namesKey,
-                      addLabel,
-                      resetReview: 'financeCompleted',
-                    ),
-            ),
-            if (namesKey == 'costItems')
-              Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text(
-                  '从产品成本结算的「成本类型」匹配；金额可改。',
-                  style: TextStyle(
-                    color: DunesColors.resolve(context, ProposalPalette.text3),
-                    fontSize: 11,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-            if (namesKey == 'taxCostItems')
-              Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text(
-                  '增值税及附加两种口径只选一种，后点的生效；印花税、所得税可另选。',
-                  style: TextStyle(
-                    color: DunesColors.resolve(context, ProposalPalette.text3),
-                    fontSize: 11,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-            amountRows(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _costAmountRow({
-    required String name,
-    required String id,
-    required double amount,
-    required String amountsKey,
-    required String totalKey,
-    required bool enabled,
-  }) {
-    final tone = proposalFieldTone(enabled: enabled);
-    final stamp = math.max(
-      _costAmountStamp['$amountsKey::$id'] ?? 0,
-      _costAmountStamp['$amountsKey::$name'] ?? 0,
-    );
-    final formulaHint = _costFormulaHint(name);
-    final estimated = proposalCostHasEstimateFormula(name);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: DunesColors.resolve(context, ProposalPalette.text),
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          ?formulaHint,
-          Align(
-            alignment: Alignment.centerRight,
-            child: SizedBox(
-              width: 148,
-              child: TextFormField(
-                key: ValueKey('$amountsKey-$id-${_row.id}-$_fieldEpoch-$stamp'),
-                initialValue: amount == 0 ? '' : _textFromAmount(amount),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                enabled: enabled,
-                readOnly: !enabled,
-                onTapOutside: (_) =>
-                    FocusManager.instance.primaryFocus?.unfocus(),
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: enabled
-                      ? DunesColors.resolve(context, ProposalPalette.text)
-                      : DunesColors.resolve(context, ProposalPalette.text3),
-                ),
-                onChanged: enabled
-                    ? (value) => _setCostAmount(
-                        amountsKey: amountsKey,
-                        totalKey: totalKey,
-                        id: id,
-                        value: value.trim().isEmpty
-                            ? null
-                            : double.tryParse(value),
-                        resetReview: 'financeCompleted',
-                      )
-                    : null,
-                decoration: proposalInputDecoration(
-                  context: context,
-                  hint: estimated ? '测算（万元）' : '预计（万元）',
-                  readOnly: !enabled,
-                  tone: tone,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _textFromAmount(double value) => value == value.roundToDouble()
-      ? value.toStringAsFixed(0)
-      : value.toStringAsFixed(2);
 
   Widget _multiField(
     String label,

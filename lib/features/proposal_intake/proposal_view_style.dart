@@ -28,6 +28,17 @@ bool proposalIntakeMockPresident(
 }) =>
     enabled && localHost && userId > 0;
 
+/// 包在它下面的只读值不画紫色虚线（分块卡片里用）。
+class ProposalKvCardScope extends InheritedWidget {
+  const ProposalKvCardScope({super.key, required super.child});
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ProposalKvCardScope>() != null;
+
+  @override
+  bool updateShouldNotify(ProposalKvCardScope oldWidget) => false;
+}
+
 /// 只读值下方画一条紫色虚线，让查看、复核、最终确认时的字段与填写态看起来一致。
 /// 只加 3px 底部留白和一条线，不改文字本身。
 class ProposalDashedUnderline extends StatelessWidget {
@@ -37,6 +48,8 @@ class ProposalDashedUnderline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 市场 / 科技 / 财务分块里的只读值按产品卡片的样式排（灰名称 + 值 + 细实线），不画虚线。
+    if (ProposalKvCardScope.of(context)) return child;
     final color = DunesColors.resolve(
       context,
       ProposalPalette.purpleLine.withValues(alpha: .55),

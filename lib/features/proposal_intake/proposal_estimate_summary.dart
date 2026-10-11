@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../lighthouse/lighthouse_theme.dart' show LhColors, LhTypography;
 import 'proposal_cost_estimate.dart';
+import 'proposal_finance_formula.dart';
 import 'proposal_intake_models.dart';
 import 'proposal_intake_ui.dart';
 
@@ -29,18 +30,15 @@ const kProposalListFiguresEnabled = true;
   final revenueKnown = rollup != null || proposalRevenueIsManual(scope);
   final scale = rollup?.salesScale ?? scaleValue;
   var margin = '';
-  if (revenueKnown && scale > 0) {
-    final procurement =
-        proposalEstimatedProcurementCost(scope) ??
-        proposalFinanceAmount(scope, kProposalCouponProcurementCostKey);
-    final profit = proposalRoundWan(
-      proposalEffectiveRevenue(scope) -
-          procurement -
-          proposalFinanceAmount(scope, 'projectCost'),
-    );
-    margin = proposalFormatWan(
-      proposalEstimatedMarginAmount(scope, salesScale: scale, profit: profit),
-    );
+  if (scale > 0) {
+    // 与财务部同一套公式：利润 = 收入 − 项目 − 业务 − 经营 − 税务。
+    // 已存的毛利率优先；业务成本被加密时没有毛利率，不自己补算（补算会漏掉业务成本）。
+    if (proposalIntakeFormHasText(scope, 'margin')) {
+      margin = proposalFormatWan(proposalFinanceAmount(scope, 'margin'));
+    } else if (revenueKnown && scope['businessCostRedacted'] != true) {
+      final value = proposalEvaluateFinance(scope).margin;
+      if (value != null) margin = proposalFormatWan(value);
+    }
   }
   return (
     scale: scaleValue > 0 ? proposalFormatWan(scaleValue) : '',
@@ -84,6 +82,7 @@ class ProposalEstimateSummaryData {
     this.projectCost,
     this.businessCost,
     this.operatingCost,
+    this.taxCost,
     this.profit,
     this.margin,
     this.turnoverCash,
@@ -119,16 +118,17 @@ class ProposalEstimateSummaryData {
   final String ratingRule;
   final double? scale;
 
-  /// 收入（含采购的毛收入，与财务部「收入（万元）」一致）。
+  /// 收入（按财务部所选收入公式测算）。
   final double? revenue;
 
-  /// 电子券采购成本。
+  /// 旧字段：电子券采购成本已取消，恒为 null，仅为兼容保留。
   final double? procurement;
   final double? projectCost;
   final double? businessCost;
   final double? operatingCost;
+  final double? taxCost;
 
-  /// 利润 = 收入 − 采购 − 项目成本（与财务部一致）。
+  /// 利润 = 收入 − 项目成本 − 业务成本 − 经营成本 − 税务成本（与财务部一致）。
   final double? profit;
 
   /// 毛利率（%）= 利润 ÷ 规模。
@@ -138,12 +138,8 @@ class ProposalEstimateSummaryData {
   final int skuCount;
   final String faceRange;
 
-  /// 原型里的「收入（利差）」= 收入 − 电子券采购。
-  double? get spread {
-    final r = revenue;
-    if (r == null) return null;
-    return r - (procurement ?? 0);
-  }
+  /// 原型里的「收入（利差）」。电子券采购成本取消后即为收入。
+  double? get spread => revenue;
 
   double? get monthlyScale => scale == null ? null : scale! / 12;
   double? get monthlyProfit => profit == null ? null : profit! / 12;
@@ -155,7 +151,7 @@ class ProposalEstimateSummaryData {
   }
 
   double? get costTotal {
-    final parts = [projectCost, businessCost, operatingCost];
+    final parts = [projectCost, businessCost, operatingCost, taxCost];
     if (parts.every((v) => v == null)) return null;
     return parts.fold<double>(0, (sum, v) => sum + (v ?? 0));
   }
@@ -211,23 +207,17 @@ class ProposalEstimateSummary extends StatelessWidget {
   /// 测算里每个数的出处：板块 + 填报内容里那一行的锚点 + 说明。
   static const _sources = <String, (ProposalIntakeNavSection, String, String)>{
     '年化规模': (ProposalIntakeNavSection.market, 'salesScale', '市场部 · 规模'),
-    '收入（利差）': (
-      ProposalIntakeNavSection.finance,
-      'productSalesSettle',
-      '财务部 · 产品结算',
-    ),
-    '收入': (ProposalIntakeNavSection.finance, 'revenue', '财务部 · 收入'),
+    '收入（利差）': (ProposalIntakeNavSection.finance, 'revenue', '财务部 · 利润 · 收入'),
+    // 下方财务部「成本」「利润」两块：hero 点一下直接跳过去并展开对应行。
+    '成本': (ProposalIntakeNavSection.finance, 'financeCost', '财务部 · 成本'),
+    '收入': (ProposalIntakeNavSection.finance, 'revenue', '财务部 · 利润 · 收入'),
     '月均规模': (ProposalIntakeNavSection.market, 'salesScale', '市场部 · 规模'),
     '利润': (ProposalIntakeNavSection.finance, 'profit', '财务部 · 利润'),
     '月均利润': (ProposalIntakeNavSection.finance, 'profit', '财务部 · 利润'),
-    '毛利率': (ProposalIntakeNavSection.finance, 'margin', '财务部 · 毛利率'),
-    '电子券采购': (
-      ProposalIntakeNavSection.finance,
-      'couponProcurementCost',
-      '财务部 · 电子券采购成本',
-    ),
-    '成本合计': (ProposalIntakeNavSection.finance, 'costItems', '财务部 · 项目成本'),
-    '成本率': (ProposalIntakeNavSection.finance, 'costItems', '财务部 · 项目成本'),
+    '毛利率': (ProposalIntakeNavSection.finance, 'margin', '财务部 · 利润 · 毛利率'),
+    '税务成本': (ProposalIntakeNavSection.finance, 'taxCost', '财务部 · 税务成本'),
+    '成本合计': (ProposalIntakeNavSection.finance, 'financeCost', '财务部 · 成本'),
+    '成本率': (ProposalIntakeNavSection.finance, 'financeCost', '财务部 · 成本'),
     '售价': (
       ProposalIntakeNavSection.finance,
       'productSalesSettle',
@@ -242,7 +232,7 @@ class ProposalEstimateSummary extends StatelessWidget {
     '周转资金': (
       ProposalIntakeNavSection.finance,
       'turnoverTimes',
-      '财务部 · 月周转次数',
+      '财务部 · 成本 · 周转资金',
     ),
     'SKU': (ProposalIntakeNavSection.tech, 'skuDetails', '科技部 · 业务平台产品'),
   };
@@ -382,12 +372,16 @@ class ProposalEstimateSummary extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          _t(
-            context,
-            '= 收入 ${proposalEstimateWan(spread)} − 项目成本 ${proposalEstimateWan(data.projectCost)}',
-            size: 11,
-            color: _C.text2,
-            maxLines: 2,
+          InkWell(
+            onTap: _openerFor('利润', null),
+            borderRadius: BorderRadius.circular(4),
+            child: _t(
+              context,
+              '= 收入 ${proposalEstimateWan(spread)} − 成本合计 ${proposalEstimateWan(data.costTotal)}  明细 ›',
+              size: 11,
+              color: _C.text2,
+              maxLines: 2,
+            ),
           ),
         ],
       ),
@@ -650,132 +644,327 @@ class ProposalStatusPill extends StatelessWidget {
   }
 }
 
-/// 原型的「流程」格子：每个环节一格，✓ 已过、橙框是当前、灰色未开始。
+/// 一条线看卡点：发起 → 填写 → 提交复核 → 复核（四方并行）→ 通知最终人 → 最终确认 → 结束。
+///
+/// - 线上每个节点一个圆点：绿 ✓ 已过、紫 / 琥珀 / 红 ● 卡在这里（按等了多久变色）、红 ✕ 驳回、灰 ○ 未到；
+/// - 顶部一句话写清「卡在谁 · 等了多久 · 要做什么」，老板一眼看到；
+/// - 复核节点是四方并行，节点下面列出四个人各自的状态和等待时间。
 class ProposalFlowCard extends StatelessWidget {
   const ProposalFlowCard({super.key, required this.steps});
 
   final List<ProposalIntakeProgressStep> steps;
 
+  /// 线上的节点分组：同一组里任一人卡住，节点就是「卡」。
+  static const _groups = <(String, String, List<String>)>[
+    ('initiate', '发起', ['initiate']),
+    ('fill', '科技 / 财务填写', ['fill_tech', 'fill_finance_interface']),
+    ('start', '提交复核', ['start_review']),
+    (
+      'review',
+      '四方复核',
+      ['review_market', 'review_tech', 'review_contract', 'review_finance_module'],
+    ),
+    ('notify', '通知最终人', ['notify_president']),
+    ('president', '最终确认', ['president']),
+    ('end', '结束', ['end']),
+  ];
+
+  static const _reviewLabels = {
+    'review_market': '市场部',
+    'review_tech': '科技部',
+    'review_contract': '合同 · 财务逐条',
+    'review_finance_module': '财务整板块',
+  };
+
+  /// 等待时长的颜色：1 天内紫，1–3 天琥珀，超过 3 天红。
+  static Color severity(Duration? waited) {
+    if (waited == null) return const Color(0xFF6B4FD8);
+    if (waited.inHours >= 72) return _C.red;
+    if (waited.inHours >= 24) return const Color(0xFFB07A2B);
+    return const Color(0xFF6B4FD8);
+  }
+
+  static ProposalIntakeProgressState _groupState(
+    List<ProposalIntakeProgressStep> members,
+  ) {
+    if (members.isEmpty) return ProposalIntakeProgressState.pending;
+    if (members.any((s) => s.state == ProposalIntakeProgressState.rejected)) {
+      return ProposalIntakeProgressState.rejected;
+    }
+    if (members.any((s) => s.state == ProposalIntakeProgressState.current)) {
+      return ProposalIntakeProgressState.current;
+    }
+    if (members.every((s) => s.state == ProposalIntakeProgressState.done)) {
+      return ProposalIntakeProgressState.done;
+    }
+    if (members.any((s) => s.state == ProposalIntakeProgressState.done)) {
+      return ProposalIntakeProgressState.current;
+    }
+    return ProposalIntakeProgressState.pending;
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 原型只列复核环节，格子名写板块名。
-    const labels = {
-      'review_market': '市场部',
-      'review_tech': '科技部',
-      'review_contract': '合同 · 财务逐条',
-      'review_finance_module': '财务整板块',
-      'notify_president': '通知最终人',
-      'president': '总裁',
-    };
-    final visible = [
+    if (steps.isEmpty) return const SizedBox.shrink();
+    final now = DateTime.now();
+    final byId = {for (final step in steps) step.id: step};
+    TextStyle style(
+      double size,
+      Color color, {
+      FontWeight? weight,
+      bool mono = false,
+    }) => TextStyle(
+      fontSize: size,
+      height: 1.3,
+      fontWeight: weight,
+      color: DunesColors.resolve(context, color),
+      fontFamily: mono ? kProposalProtoMono : kProposalProtoSans,
+      fontFamilyFallback: mono
+          ? kProposalProtoMonoFallback
+          : kProposalProtoSansFallback,
+    );
+    String who(ProposalIntakeProgressStep step) {
+      final name = step.name.trim();
+      if (name.isEmpty || name == '未指定') return '${step.role}（未指定）';
+      return '${step.role} $name';
+    }
+
+    // ---- 顶部一句话：卡在谁、多久、要做什么 ----
+    final blocked = [
       for (final step in steps)
-        if (labels.containsKey(step.id)) step,
-    ];
-    if (visible.isEmpty) return const SizedBox.shrink();
-    final current = [
-      for (final step in visible)
-        if (step.state == ProposalIntakeProgressState.current) step,
-    ];
-    final allDone = visible.every(
-      (step) => step.state == ProposalIntakeProgressState.done,
-    );
-    final note = current.isNotEmpty
-        ? '卡 · ${current.map((s) => s.name.isEmpty ? s.role : s.name).join('、')}'
-        : (allDone ? '${visible.length}/${visible.length} 已通过' : '');
-    final noteColor = current.isNotEmpty ? const Color(0xFF6B4FD8) : _C.green;
-    TextStyle style(double size, Color color, {FontWeight? weight, bool mono = false}) =>
-        TextStyle(
-          fontSize: size,
-          height: 1.3,
-          fontWeight: weight,
-          color: DunesColors.resolve(context, color),
-          fontFamily: mono ? kProposalProtoMono : kProposalProtoSans,
-          fontFamilyFallback: mono
-              ? kProposalProtoMonoFallback
-              : kProposalProtoSansFallback,
-        );
-    Widget rich(String text, TextStyle s, {int maxLines = 1}) => RichText(
-      maxLines: maxLines,
-      overflow: TextOverflow.ellipsis,
-      textScaler: MediaQuery.textScalerOf(context),
-      text: TextSpan(text: text, style: s),
-    );
-    Widget cell(ProposalIntakeProgressStep step) {
-      final (bg, value, color, ring) = switch (step.state) {
-        ProposalIntakeProgressState.done => (
-          const Color(0xFFEEF6F1),
-          '✓',
-          _C.green,
-          false,
+        if (step.state == ProposalIntakeProgressState.current ||
+            step.state == ProposalIntakeProgressState.rejected)
+          if (step.id != 'end') step,
+    ]..sort((a, b) => (b.waited(now) ?? Duration.zero).compareTo(
+        a.waited(now) ?? Duration.zero,
+      ));
+    final finished = byId['end']?.state == ProposalIntakeProgressState.done;
+    final worst = blocked.isEmpty ? null : blocked.first.waited(now);
+    final headColor = blocked.isEmpty
+        ? _C.green
+        : (blocked.first.state == ProposalIntakeProgressState.rejected
+              ? _C.red
+              : severity(worst));
+    final headline = blocked.isEmpty
+        ? (finished ? '已全部通过' : '暂无卡点')
+        : [
+            for (final step in blocked)
+              [
+                step.state == ProposalIntakeProgressState.rejected
+                    ? '驳回待改 · ${who(step)}'
+                    : '卡在 ${who(step)}',
+                if (step.waited(now) != null)
+                  '已 ${proposalIntakeWaitedText(step.waited(now))}',
+              ].join(' · '),
+          ].join('；');
+    final todo = blocked.isEmpty ? '' : blocked.first.action.trim();
+
+    // ---- 线上的节点 ----
+    final groups = [
+      for (final (key, label, ids) in _groups)
+        (
+          key,
+          label,
+          [
+            for (final id in ids)
+              if (byId[id] != null) byId[id]!,
+          ],
         ),
-        // 原型格子里只放短值（✓ / 18/21 / 待你 / —）；长提示放到悬停里。
-        // 进行中：浅紫底 + 细紫边 + 「● 进行中」小字，不再用橙色粗框。
-        ProposalIntakeProgressState.current => (
-          const Color(0xFFF7F5FD),
-          '● ${step.statusText.trim().isNotEmpty && step.statusText.trim().runes.length <= 5 ? step.statusText.trim() : '进行中'}',
-          const Color(0xFF6B4FD8),
-          true,
-        ),
-        ProposalIntakeProgressState.rejected => (
-          const Color(0xFFFBF0EC),
-          '驳回',
-          _C.red,
-          false,
-        ),
-        ProposalIntakeProgressState.pending => (
-          const Color(0xFFF5F4F8),
-          '—',
-          _C.grey,
-          false,
-        ),
+    ].where((group) => group.$3.isNotEmpty).toList();
+
+    Widget dot(ProposalIntakeProgressState state, Color accent) {
+      final (fill, icon) = switch (state) {
+        ProposalIntakeProgressState.done => (_C.green, Icons.check_rounded),
+        ProposalIntakeProgressState.rejected => (_C.red, Icons.close_rounded),
+        ProposalIntakeProgressState.current => (accent, Icons.circle),
+        ProposalIntakeProgressState.pending => (_C.markIdle, null),
       };
-      final sub = [
-        if (step.name.isNotEmpty) step.name,
-        if (step.time.isNotEmpty && step.time != '当前') step.time,
-      ].join(' · ');
-      final tip = step.state == ProposalIntakeProgressState.current
-          ? step.statusText.trim()
-          : '';
-      final box = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      return Container(
+        width: 18,
+        height: 18,
         decoration: BoxDecoration(
-          color: DunesColors.resolve(context, bg, role: DunesColorRole.surface),
-          borderRadius: BorderRadius.circular(8),
-          border: ring
-              ? Border.all(
-                  color: DunesColors.resolve(
-                    context,
-                    const Color(0xFFDCD3F5),
-                    role: DunesColorRole.border,
+          shape: BoxShape.circle,
+          color: DunesColors.resolve(
+            context,
+            state == ProposalIntakeProgressState.pending ? Colors.white : fill,
+            role: DunesColorRole.surface,
+          ),
+          border: Border.all(
+            color: DunesColors.resolve(context, fill, role: DunesColorRole.border),
+            width: state == ProposalIntakeProgressState.current ? 3 : 1.5,
+          ),
+          boxShadow: state == ProposalIntakeProgressState.current
+              ? [
+                  BoxShadow(
+                    color: DunesColors.resolve(context, accent).withAlpha(60),
+                    blurRadius: 6,
+                    spreadRadius: 2,
                   ),
-                )
+                ]
               : null,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            rich(labels[step.id] ?? step.role, style(11, _C.label)),
-            const SizedBox(height: 1),
-            rich(
-              value,
-              ring
-                  // 行高对齐其他格子（14 × 1.3），格子一样高。
-                  ? style(12, color, weight: FontWeight.w600)
-                        .copyWith(height: 14 * 1.3 / 12)
-                  : style(14, color, weight: FontWeight.w700, mono: true),
+        child: icon == null || state == ProposalIntakeProgressState.current
+            ? null
+            : Icon(icon, size: 11, color: Colors.white),
+      );
+    }
+
+    Widget node((String, String, List<ProposalIntakeProgressStep>) group) {
+      final (key, label, members) = group;
+      final state = _groupState(members);
+      final waiting = [
+        for (final step in members)
+          if (step.waited(now) != null) step.waited(now)!,
+      ]..sort((a, b) => b.compareTo(a));
+      final accent = state == ProposalIntakeProgressState.rejected
+          ? _C.red
+          : severity(waiting.isEmpty ? null : waiting.first);
+      final doneTimes = [
+        for (final step in members)
+          if (step.doneAt != null) step.doneAt!,
+      ]..sort();
+      final names = {
+        for (final step in members)
+          if (step.name.trim().isNotEmpty && step.name != '未指定') step.name.trim(),
+      };
+      final sub = switch (state) {
+        ProposalIntakeProgressState.done => doneTimes.isEmpty
+            ? (members.first.time.isEmpty ? '已过' : members.first.time)
+            : formatProposalIntakeProgressTime(doneTimes.last.toIso8601String()),
+        ProposalIntakeProgressState.current => waiting.isEmpty
+            ? '进行中'
+            : '卡 ${proposalIntakeWaitedText(waiting.first)}',
+        ProposalIntakeProgressState.rejected => '驳回',
+        ProposalIntakeProgressState.pending => '—',
+      };
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          dot(state, accent),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style(
+              11,
+              state == ProposalIntakeProgressState.pending ? _C.grey : _C.ink,
+              weight: state == ProposalIntakeProgressState.current
+                  ? FontWeight.w700
+                  : FontWeight.w600,
             ),
-            const SizedBox(height: 1),
-            rich(sub.isEmpty ? ' ' : sub, style(10, _C.text2)),
+          ),
+          if (key != 'review' && key != 'end')
+            Text(
+              names.isEmpty ? ' ' : names.join('、'),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style(10, _C.text2),
+            ),
+          Text(
+            sub,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style(
+              10,
+              state == ProposalIntakeProgressState.current ||
+                      state == ProposalIntakeProgressState.rejected
+                  ? accent
+                  : _C.grey,
+              weight: state == ProposalIntakeProgressState.current
+                  ? FontWeight.w700
+                  : null,
+              mono: true,
+            ),
+          ),
+        ],
+      );
+    }
+
+    Widget connector(ProposalIntakeProgressState leftState) => Container(
+      height: 2,
+      margin: const EdgeInsets.only(top: 8),
+      color: DunesColors.resolve(
+        context,
+        leftState == ProposalIntakeProgressState.done ? _C.green : _C.axis,
+        role: DunesColorRole.border,
+      ),
+    );
+
+    // ---- 四方复核：节点下面列出每个人 ----
+    final reviewers = [
+      for (final id in _reviewLabels.keys)
+        if (byId[id] != null) byId[id]!,
+    ];
+    Widget reviewerChip(ProposalIntakeProgressStep step) {
+      final waited = step.waited(now);
+      final (mark, color) = switch (step.state) {
+        ProposalIntakeProgressState.done => ('✓', _C.green),
+        ProposalIntakeProgressState.rejected => ('✕', _C.red),
+        ProposalIntakeProgressState.current => ('●', severity(waited)),
+        ProposalIntakeProgressState.pending => ('○', _C.grey),
+      };
+      final tail = switch (step.state) {
+        ProposalIntakeProgressState.done => step.doneAt == null
+            ? (step.time.isEmpty ? '已过' : step.time)
+            : formatProposalIntakeProgressTime(step.doneAt!.toIso8601String()),
+        ProposalIntakeProgressState.current =>
+          waited == null ? '进行中' : '卡 ${proposalIntakeWaitedText(waited)}',
+        ProposalIntakeProgressState.rejected => '驳回待改',
+        ProposalIntakeProgressState.pending => '未到',
+      };
+      final chip = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            step.state == ProposalIntakeProgressState.current
+                ? const Color(0xFFF7F5FD)
+                : const Color(0xFFF7F6FA),
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              step.state == ProposalIntakeProgressState.current
+                  ? color.withAlpha(120)
+                  : _C.border,
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(mark, style: style(11, color, weight: FontWeight.w700)),
+            const SizedBox(width: 5),
+            Text(
+              '${_reviewLabels[step.id] ?? step.role} · ${step.name.trim().isEmpty ? '未指定' : step.name.trim()}',
+              style: style(11, _C.ink, weight: FontWeight.w600),
+            ),
+            const SizedBox(width: 6),
+            Text(tail, style: style(10.5, color, mono: true)),
           ],
         ),
       );
-      return tip.isEmpty ? box : Tooltip(message: tip, child: box);
+      final tip = step.state == ProposalIntakeProgressState.current
+          ? step.action.trim()
+          : '';
+      return tip.isEmpty ? chip : Tooltip(message: tip, child: chip);
     }
 
-    const columns = 3;
+    final reviewGroup = groups.where((g) => g.$1 == 'review').firstOrNull;
+    final reviewActive =
+        reviewGroup != null &&
+        _groupState(reviewGroup.$3) != ProposalIntakeProgressState.pending;
+
     return Container(
       key: const ValueKey('proposal-flow-card'),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
         color: DunesColors.resolve(context, Colors.white, role: DunesColorRole.surface),
         border: Border.all(
@@ -786,38 +975,78 @@ class ProposalFlowCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            // 原型：「流程」在左，「卡 · 谁」靠右。
-            child: Row(
-              children: [
-                rich('流程', style(13, _C.ink, weight: FontWeight.w700)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: note.isEmpty
-                      ? const SizedBox.shrink()
-                      : Align(
-                          alignment: Alignment.centerRight,
-                          child: rich(note, style(11, noteColor, mono: true)),
-                        ),
-                ),
-              ],
-            ),
-          ),
-          for (var i = 0; i < visible.length; i += columns) ...[
-            if (i > 0) const SizedBox(height: 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var j = 0; j < columns; j++) ...[
-                  if (j > 0) const SizedBox(width: 6),
-                  Expanded(
-                    child: i + j < visible.length
-                        ? cell(visible[i + j])
-                        : const SizedBox.shrink(),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('流程', style: style(13, _C.ink, weight: FontWeight.w700)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolve(
+                      context,
+                      headColor.withAlpha(24),
+                      role: DunesColorRole.surface,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
                   ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        headline,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: style(12, headColor, weight: FontWeight.w700),
+                      ),
+                      if (todo.isNotEmpty)
+                        Text(
+                          '要做：$todo',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: style(10.5, _C.text2),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, box) {
+              const nodeWidth = 84.0;
+              final minWidth = groups.length * nodeWidth;
+              final line = Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var i = 0; i < groups.length; i++) ...[
+                    SizedBox(width: nodeWidth, child: node(groups[i])),
+                    if (i < groups.length - 1)
+                      Expanded(child: connector(_groupState(groups[i].$3))),
+                  ],
                 ],
-              ],
+              );
+              // 够宽就铺满一条线；窄屏横向滑动，仍是一条线。
+              if (box.maxWidth >= minWidth + (groups.length - 1) * 12) {
+                return line;
+              }
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: minWidth + (groups.length - 1) * 24,
+                  child: line,
+                ),
+              );
+            },
+          ),
+          if (reviewActive && reviewers.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [for (final step in reviewers) reviewerChip(step)],
             ),
           ],
         ],
@@ -877,7 +1106,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     '利润': '利润',
     '月均利润': '月均规模',
     '收入': '收入（利差）',
-    '电子券采购': '收入（利差）',
+    '税务成本': '项目成本',
     '毛利率': '利润',
     '成本率': '项目成本',
   };
@@ -1130,11 +1359,17 @@ class _CompactEstimateState extends State<_CompactEstimate> {
             ],
           ),
           const SizedBox(height: 4),
-          _t(
-            '= 收入 ${proposalEstimateWan(d.spread)} − 项目成本 ${proposalEstimateWan(d.projectCost)}',
-            size: _compact ? 9 : 10,
-            color: _C.text2,
-            maxLines: 3,
+          // 算式可点：跳到下方财务部「利润」块。
+          InkWell(
+            key: const ValueKey('proposal-estimate-hero-formula'),
+            onTap: _s._openerFor('利润', null),
+            borderRadius: BorderRadius.circular(4),
+            child: _t(
+              '= 收入 ${proposalEstimateWan(d.spread)} − 成本合计 ${proposalEstimateWan(d.costTotal)}  明细 ›',
+              size: _compact ? 9 : 10,
+              color: _C.text2,
+              maxLines: 3,
+            ),
           ),
           if (stretch) const Spacer() else const SizedBox(height: 8),
           Container(
@@ -1691,6 +1926,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     List<Widget> cells, {
     int columns = 1,
     bool result = false,
+    VoidCallback? onTap,
   }) {
     const resultAccent = Color(0xFF4A83C4);
     final blue = DunesColors.resolve(context, resultAccent);
@@ -1738,34 +1974,52 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: 24,
-            child: Row(
-              children: [
-                const SizedBox(width: 2),
-                Icon(
-                  icon,
-                  size: 14,
-                  color: result
-                      ? blue
-                      : DunesColors.resolve(context, const Color(0xFF8A84A0)),
-                ),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    style: LhTypography.sans(
-                      size: 11.5,
-                      color: DunesColors.resolve(context, LhColors.ink2),
-                      weight: FontWeight.w600,
-                      letterSpacing: 0.2,
-                      height: 1.3,
-                      context: context,
+          InkWell(
+            // 点「成本 / 利润」标题跳到下方财务部对应那一块。
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 24,
+              child: Row(
+                children: [
+                  const SizedBox(width: 2),
+                  Icon(
+                    icon,
+                    size: 14,
+                    color: result
+                        ? blue
+                        : DunesColors.resolve(context, const Color(0xFF8A84A0)),
+                  ),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      style: LhTypography.sans(
+                        size: 11.5,
+                        color: DunesColors.resolve(context, LhColors.ink2),
+                        weight: FontWeight.w600,
+                        letterSpacing: 0.2,
+                        height: 1.3,
+                        context: context,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                  if (onTap != null) ...[
+                    const Spacer(),
+                    Text(
+                      '明细 ›',
+                      style: LhTypography.sans(
+                        size: 10.5,
+                        color: DunesColors.resolve(context, _C.link),
+                        weight: FontWeight.w600,
+                        context: context,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                  ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 6),
@@ -1785,8 +2039,8 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       _cell('售价', price == null ? '—' : price.toStringAsFixed(1), '%', '收入 ÷ 规模'),
       _cell('SKU', d.skuCount == 0 ? '—' : '${d.skuCount}', '个', d.faceRange, divider: false),
     ]);
-    final cost = _section('成本', Icons.receipt_long_outlined, [
-      _cell('成本合计', proposalEstimateWan(d.costTotal), '万', '项目 + 业务 + 经营'),
+    final cost = _section('成本', Icons.receipt_long_outlined, onTap: _s._openerFor('成本', null), [
+      _cell('成本合计', proposalEstimateWan(d.costTotal), '万', '项目 + 业务 + 经营 + 税务'),
       _cell(
         '项目成本',
         proposalEstimateWan(d.projectCost),
@@ -1803,7 +2057,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       ),
     ]);
     final profitCells = [
-      _cell('利润', proposalEstimateWan(d.profit), '万', '收入 − 项目成本', color: _C.red),
+      _cell('利润', proposalEstimateWan(d.profit), '万', '收入 − 四类成本', color: _C.red),
       _cell('月均利润', proposalEstimateWan(d.monthlyProfit), '万', '÷12'),
       _cell(
         '收入',
@@ -1811,7 +2065,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
         '万',
         d.pctOfScale(spread) == null ? '' : '规模 × ${_pct(d.pctOfScale(spread))}',
       ),
-      _cell('电子券采购', proposalEstimateWan(d.procurement), '万', ''),
+      _cell('税务成本', proposalEstimateWan(d.taxCost), '万', ''),
       _cell(
         '毛利率',
         d.margin == null ? '—' : d.margin!.toStringAsFixed(2),
@@ -1822,13 +2076,20 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       ),
       _cell(
         '成本率',
-        d.pctOfScale(d.projectCost) == null ? '—' : d.pctOfScale(d.projectCost)!.toStringAsFixed(2),
+        d.pctOfScale(d.costTotal) == null ? '—' : d.pctOfScale(d.costTotal)!.toStringAsFixed(2),
         '%',
-        '项目成本 ÷ 规模',
+        '成本合计 ÷ 规模',
         divider: false,
       ),
     ];
-    final profit = _section('利润', Icons.trending_up_rounded, profitCells, columns: 2, result: true);
+    final profit = _section(
+      '利润',
+      Icons.trending_up_rounded,
+      profitCells,
+      columns: 2,
+      result: true,
+      onTap: _s._openerFor('利润', null),
+    );
     if (_stacked) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

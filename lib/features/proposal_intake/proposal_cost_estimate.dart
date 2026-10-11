@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'proposal_finance_formula.dart';
 import 'proposal_intake_models.dart';
 import 'proposal_intake_unreviewed.dart';
 import 'settlement_catalog.dart';
@@ -21,22 +22,29 @@ const kProposalVatOperatorName = '增值税及附加（运营商+公共出行）
 const kProposalStampTaxName = '印花税';
 
 const kProposalRevenueFormulaTitle = '收入';
-const kProposalRevenueFormula =
-    '各产品有规模时按规模×比例加总；只有总规模时按面值分摊后再乘比例，合计只乘一次';
+const kProposalRevenueFormula = '按所选渠道侧结算公式代入：业务量取年化规模，结算比例取产品销售结算';
 const kProposalSalesScaleFormula = '市场部基础信息填写的年化规模';
 const kProposalProcurementFormula = '各供给规则：关联产品年化规模 × 该条比例，加总';
-const kProposalProfitFormula = '收入 − 采购 − 项目';
+const kProposalProfitFormula = '收入 − 项目成本 − 业务成本 − 经营成本 − 税务成本';
 const kProposalMarginFormula = '利润 ÷ 规模';
 const kProposalTurnoverCashFormula = '年化规模 ÷ 12 ÷ 月周转次数';
 
 const _kEstimatedFinanceOutputKeys = {
   kProposalSalesScaleKey,
   'revenue',
+  kProposalRevenueManualKey,
+  kProposalRevenueFormulaKey,
+  kProposalRevenueFormulaGroupKey,
   'profit',
   'margin',
   kProposalTurnoverCashKey,
-  kProposalCouponProcurementCostKey,
   'projectCost',
+  'costItemFormulas',
+  'businessCostItemFormulas',
+  'operatingCostItemFormulas',
+  'taxCostItemFormulas',
+  kProposalFinanceFormulaTouchedKey,
+  kProposalPromotionTiersKey,
   'costItems',
   'costItemAmounts',
   'operatingCost',
@@ -487,10 +495,13 @@ double proposalEstimatedProfitAmount(
   double? revenue,
 }) {
   final r = revenue ?? proposalEffectiveRevenue(form);
+  // 利润 = 收入 − 项目成本 − 业务成本 − 经营成本 − 税务成本（电子券采购成本已取消）。
   return proposalRoundWan(
     r -
-        proposalFinanceAmount(form, kProposalCouponProcurementCostKey) -
-        proposalFinanceAmount(form, 'projectCost'),
+        proposalFinanceAmount(form, 'projectCost') -
+        proposalFinanceAmount(form, 'businessCost') -
+        proposalFinanceAmount(form, 'operatingCost') -
+        proposalFinanceAmount(form, 'taxCost'),
   );
 }
 
@@ -649,7 +660,7 @@ double proposalProjectCostTaxRate(Map<String, dynamic> form) =>
 /// 销项按各销售结算「规模 × 比例 × 该行税率」加总；无规模时用收入 × 销项税率。
 /// 销项不看票种——开普票一样要交。
 ///
-/// 进项 = 采购成本 × 供给税率 + 项目成本 × 项目成本税率。
+/// 进项 = 项目成本 × 项目成本税率（电子券采购成本已取消）。
 /// 进项税率只取专用发票那一行；票种已填但全是普票时进项按 0 算，
 /// 票种一行都没填时才拿销项税率兜底。
 ProposalVatEstimate proposalVatEstimate(Map<String, dynamic> form) {
@@ -683,10 +694,8 @@ ProposalVatEstimate proposalVatEstimate(Map<String, dynamic> form) {
     outputTax = proposalEffectiveRevenue(form) * outputRate;
   }
 
-  final inputTax =
-      proposalFinanceAmount(form, kProposalCouponProcurementCostKey) *
-          inputRate +
-      proposalFinanceAmount(form, 'projectCost') * projectRate;
+  // 电子券采购成本已取消，进项只算项目成本。
+  final inputTax = proposalFinanceAmount(form, 'projectCost') * projectRate;
   return ProposalVatEstimate(
     outputTax: outputTax,
     inputTax: inputTax,
@@ -698,13 +707,13 @@ ProposalVatEstimate proposalVatEstimate(Map<String, dynamic> form) {
 
 String proposalCostFormulaText(ProposalCostEstimateKind kind) => switch (kind) {
   ProposalCostEstimateKind.revenue => kProposalRevenueFormula,
-  ProposalCostEstimateKind.operating => '(收入 − 采购 − 项目) × 2%',
+  ProposalCostEstimateKind.operating => '(收入 − 项目成本) × 2%',
   ProposalCostEstimateKind.vat => '(销项 − 进项) × 1.12',
   ProposalCostEstimateKind.stamp => '销售规模 × 0.0006',
   ProposalCostEstimateKind.incomeTax =>
-    '(收入 − 采购 − 项目 − 业务 − 经营) × 25%（25% 未经财务确认）',
-  ProposalCostEstimateKind.businessBn => '(收入 − 采购 − 项目 − 经营) × 10%',
-  ProposalCostEstimateKind.businessU => '(收入 − 采购 − 项目 − 经营) × 45%',
+    '(收入 − 项目成本 − 业务成本 − 经营成本) × 25%',
+  ProposalCostEstimateKind.businessBn => '(收入 − 项目成本 − 经营成本) × 10%',
+  ProposalCostEstimateKind.businessU => '(收入 − 项目成本 − 经营成本) × 45%',
 };
 
 ProposalCostFormulaHelp? proposalCostFormulaHelpOf({
@@ -748,10 +757,7 @@ String proposalCostFormulaSubstitution({
   List<ProposalCostItemOption> businessCatalog = const [],
 }) {
   final revenue = proposalEffectiveRevenue(form);
-  final procurement = proposalFinanceAmount(
-    form,
-    kProposalCouponProcurementCostKey,
-  );
+  const procurement = 0.0; // 电子券采购成本已取消
   final project = proposalFinanceAmount(form, 'projectCost');
   final salesScale = proposalEffectiveSalesScale(form);
   final operating = _bucketTotal(
@@ -779,17 +785,17 @@ String proposalCostFormulaSubstitution({
   return switch (kind) {
     ProposalCostEstimateKind.revenue => '电子券销售收入 = ${r(revenue)} 万元',
     ProposalCostEstimateKind.operating =>
-      '(${r(revenue)} − ${r(procurement)} − ${r(project)}) × 2% = ${r(base * 0.02)} 万元',
+      '(${r(revenue)} − ${r(project)}) × 2% = ${r(base * 0.02)} 万元',
     ProposalCostEstimateKind.vat =>
       '销项 ${r(vat.outputTax)} − 进项 ${r(vat.inputTax)}，× 1.12 = ${r(vat.payable)} 万元',
     ProposalCostEstimateKind.stamp =>
       '${r(salesScale)} × 0.0006 = ${r(salesScale * 0.0006)} 万元',
     ProposalCostEstimateKind.incomeTax =>
-      '(${r(revenue)} − ${r(procurement)} − ${r(project)} − ${r(business)} − ${r(operating)}) × 25% = ${r(incomeBase * 0.25)} 万元',
+      '(${r(revenue)} − ${r(project)} − ${r(business)} − ${r(operating)}) × 25% = ${r(incomeBase * 0.25)} 万元',
     ProposalCostEstimateKind.businessBn =>
-      '(${r(revenue)} − ${r(procurement)} − ${r(project)} − ${r(operating)}) × 10% = ${r(bizBase * 0.10)} 万元',
+      '(${r(revenue)} − ${r(project)} − ${r(operating)}) × 10% = ${r(bizBase * 0.10)} 万元',
     ProposalCostEstimateKind.businessU =>
-      '(${r(revenue)} − ${r(procurement)} − ${r(project)} − ${r(operating)}) × 45% = ${r(bizBase * 0.45)} 万元',
+      '(${r(revenue)} − ${r(project)} − ${r(operating)}) × 45% = ${r(bizBase * 0.45)} 万元',
   };
 }
 
@@ -801,10 +807,7 @@ double? proposalEstimateAmountForName({
   final kind = proposalCostEstimateKindOf(name);
   if (kind == null || kind == ProposalCostEstimateKind.revenue) return null;
   final revenue = proposalEffectiveRevenue(form);
-  final procurement = proposalFinanceAmount(
-    form,
-    kProposalCouponProcurementCostKey,
-  );
+  const procurement = 0.0; // 电子券采购成本已取消
   final project = proposalFinanceAmount(form, 'projectCost');
   final salesScale = proposalEffectiveSalesScale(form);
   final operating = _bucketTotal(
@@ -1416,44 +1419,75 @@ Map<String, dynamic> _applyEstimatedFinanceCostsOnForm(
   List<ProposalCostItemOption> businessCatalog = const [],
   List<ProposalCostItemOption> costCatalog = const [],
   List<String> costNames = const [],
+  ProposalFinanceFormulaCatalog? formulaCatalog,
 }) {
-  var next = proposalApplyTurnoverCash(proposalApplyProductScaleRollup(form));
-  next = proposalApplyEstimatedProcurement(next);
-  next = proposalApplyEstimatedProjectCosts(
+  // 财务部不再手填：规模、周转资金照旧，收入 / 四类成本 / 利润全部按所选公式算。
+  final next = proposalApplyTurnoverCash(proposalApplyProductScaleRollup(form));
+  return proposalApplyFinanceFormulas(
     next,
-    catalog: costCatalog,
+    catalog: formulaCatalog,
+    costCatalog: costCatalog,
+    businessCatalog: businessCatalog,
     costNames: costNames,
   );
-  next = proposalWriteDerivedProfit(next);
-  next = proposalEnsureAutoTaxItems(next);
-  next = _writeEstimatedBucket(
-    next,
-    namesKey: 'operatingCostItems',
-    amountsKey: 'operatingCostItemAmounts',
-    totalKey: 'operatingCost',
-    manualKey: kProposalOperatingCostManualKey,
-    catalog: const [],
-    businessCatalog: businessCatalog,
-  );
-  next = _writeEstimatedBucket(
-    next,
-    namesKey: 'businessCostItems',
-    amountsKey: 'businessCostItemAmounts',
-    totalKey: 'businessCost',
-    manualKey: kProposalBusinessCostManualKey,
-    catalog: businessCatalog,
-    businessCatalog: businessCatalog,
-  );
-  next = _writeEstimatedBucket(
-    next,
-    namesKey: 'taxCostItems',
-    amountsKey: 'taxCostItemAmounts',
-    totalKey: 'taxCost',
-    manualKey: kProposalTaxCostManualKey,
-    catalog: const [],
-    businessCatalog: businessCatalog,
-  );
-  return next;
+}
+
+/// 子产品财务组自己的成本选择和公式，算之前要从主产品顶层字段里隔离出来。
+const _kChildIsolatedFinanceKeys = <String>{
+  kProposalRevenueFormulaKey,
+  kProposalRevenueFormulaGroupKey,
+  kProposalFinanceFormulaTouchedKey,
+  kProposalPromotionTiersKey,
+  'costItems',
+  'costItemAmounts',
+  'costItemFormulas',
+  'projectCost',
+  'businessCostItems',
+  'businessCostItemAmounts',
+  'businessCostItemFormulas',
+  'businessCost',
+  'operatingCostItems',
+  'operatingCostItemAmounts',
+  'operatingCostItemFormulas',
+  'operatingCost',
+  'taxCostItems',
+  'taxCostItemAmounts',
+  'taxCostItemFormulas',
+  'taxCost',
+};
+
+/// 含业务成本的字段：业务成本加密时不能被当前用户的测算覆盖。
+const _kBusinessSensitiveFinanceKeys = <String>{
+  'profit',
+  'margin',
+  'businessCostItems',
+  'businessCostItemCodes',
+  'businessCostItemAmounts',
+  'businessCostItemFormulas',
+  'businessCostItemSettleTerms',
+  'businessCost',
+};
+
+/// 某个产品财务组的测算输入。子产品组的 scope 会带上主产品顶层字段，
+/// 成本选择和公式必须换成子产品自己的，不能沿用主产品。
+Map<String, dynamic> proposalIntakeIsolatedFinanceScope(
+  Map<String, dynamic> form, {
+  required String owner,
+}) {
+  final scope = proposalIntakeProductFinanceScope(form, owner: owner);
+  if (proposalIntakeProductFinanceOwner(owner) !=
+      kProposalProductFinanceChildren) {
+    return scope;
+  }
+  final own = proposalIntakeProductFinance(form, owner: owner);
+  for (final key in _kChildIsolatedFinanceKeys) {
+    if (own.containsKey(key)) {
+      scope[key] = own[key];
+    } else {
+      scope.remove(key);
+    }
+  }
+  return scope;
 }
 
 Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
@@ -1461,6 +1495,7 @@ Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
   List<ProposalCostItemOption> businessCatalog = const [],
   List<ProposalCostItemOption> costCatalog = const [],
   List<String> costNames = const [],
+  ProposalFinanceFormulaCatalog? formulaCatalog,
 }) {
   final estimated = _applyEstimatedFinanceCostsOnForm(
     proposalIntakeProductFinanceScope(
@@ -1470,17 +1505,60 @@ Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
     businessCatalog: businessCatalog,
     costCatalog: costCatalog,
     costNames: costNames,
+    formulaCatalog: formulaCatalog,
   );
-  return proposalIntakeWriteProductFinance(
+  final existingMain = proposalIntakeProductFinance(
     form,
     owner: kProposalProductFinanceMain,
-    finance: {
-      ...proposalIntakeProductFinance(form, owner: kProposalProductFinanceMain),
-      ...proposalIntakePickProductFinanceFields(estimated),
-      for (final key in _kEstimatedFinanceOutputKeys)
-        if (estimated.containsKey(key)) key: estimated[key],
-    },
   );
+  final mainFinance = <String, dynamic>{
+    ...existingMain,
+    ...proposalIntakePickProductFinanceFields(estimated),
+    for (final key in _kEstimatedFinanceOutputKeys)
+      if (estimated.containsKey(key)) key: estimated[key],
+  }..remove(kProposalCouponProcurementCostKey);
+  if (form['businessCostRedacted'] == true) {
+    // 业务成本对当前用户加密：算不出完整利润，业务成本和利润都保留原值，不拿空值覆盖。
+    for (final key in _kBusinessSensitiveFinanceKeys) {
+      if (existingMain.containsKey(key)) {
+        mainFinance[key] = existingMain[key];
+      } else {
+        mainFinance.remove(key);
+      }
+    }
+  }
+  var next = proposalIntakeWriteProductFinance(
+    form,
+    owner: kProposalProductFinanceMain,
+    finance: mainFinance,
+  )..remove(kProposalCouponProcurementCostKey);
+  if (!proposalIntakeHasChildProducts(form)) return next;
+  // 子产品独立核算：同一套公式，只算子产品自己的规模和结算。
+  final childScope = proposalIntakeIsolatedFinanceScope(
+    next,
+    owner: kProposalProductFinanceChildren,
+  );
+  final childEstimated = _applyEstimatedFinanceCostsOnForm(
+    childScope,
+    businessCatalog: businessCatalog,
+    costCatalog: costCatalog,
+    costNames: costNames,
+    formulaCatalog: formulaCatalog,
+  );
+  final childFinance = <String, dynamic>{
+    ...proposalIntakeProductFinance(
+      next,
+      owner: kProposalProductFinanceChildren,
+    ),
+    for (final key in _kEstimatedFinanceOutputKeys)
+      if (childEstimated.containsKey(key)) key: childEstimated[key],
+  }..remove(kProposalCouponProcurementCostKey);
+  next = proposalIntakeWriteProductFinance(
+    next,
+    owner: kProposalProductFinanceChildren,
+    finance: childFinance,
+  );
+  return next;
 }
 
 /// 点保存和返回自动保存共用：估算失败时回退当前表单，保证能提交。
@@ -1490,6 +1568,7 @@ Map<String, dynamic> proposalIntakeBuildPersistForm(
   List<ProposalCostItemOption> businessCatalog = const [],
   List<ProposalCostItemOption> costCatalog = const [],
   List<String> costNames = const [],
+  ProposalFinanceFormulaCatalog? formulaCatalog,
 }) {
   var next = form;
   try {
@@ -1498,6 +1577,7 @@ Map<String, dynamic> proposalIntakeBuildPersistForm(
       businessCatalog: businessCatalog,
       costCatalog: costCatalog,
       costNames: costNames,
+      formulaCatalog: formulaCatalog,
     );
   } catch (_) {
     next = form;

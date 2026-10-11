@@ -252,12 +252,30 @@ class LighthouseService {
     }, '灯塔折扣加载失败');
   }
 
-  /// 供给资金池（资管标签二：资产合计 / 票税应开实开原件），按省份 map。
-  /// 默认取最新快照；asOfDate 仅用于明确的历史审计查询。
+  /// 供给资金池（资管标签二主体接口：资产合计 / 票税应开实开原件）。
+  /// byProvince 按省份 map（老字段）；provinces / entities / totals 是省级、
+  /// 供给侧主体和底部三行。默认取昨天的快照（主体接口不收今天）；
+  /// asOfDate 仅用于明确的历史审计查询。
   Future<Map<String, dynamic>> fetchFundPool({String? asOfDate}) {
     return _getData('/lighthouse/fund-pool', {
       if (asOfDate != null && asOfDate.isNotEmpty) 'asOfDate': asOfDate,
     }, '灯塔资金池加载失败');
+  }
+
+  /// 资产走势三条线（总额 / 资产（本金）/ 累计利润）。
+  /// [scope]：total | oil | petro | province:<省> | entity:<rowKey>；
+  /// [granularity]：day、week、month、quarter、year，跟随灯塔顶部周期。
+  /// 最后一格是昨天（资管主体接口不收今天）。
+  Future<Map<String, dynamic>> fetchFundPoolSeries({
+    required String scope,
+    String granularity = 'day',
+    int? count,
+  }) {
+    return _getData('/lighthouse/fund-pool/series', {
+      'scope': scope,
+      'granularity': granularity,
+      if (count != null && count > 0) 'count': '$count',
+    }, '资产走势加载失败');
   }
 
   /// 净TA tab：bank_flow_mapped_daily 五类映射加总及分类明细。

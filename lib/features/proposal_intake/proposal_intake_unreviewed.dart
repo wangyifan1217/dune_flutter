@@ -5,6 +5,7 @@ const _kBusinessCostFormKeys = {
   'businessCostItemCodes',
   'businessCostItemAmounts',
   'businessCostItemSettleTerms',
+  'businessCostItemFormulas',
   'businessCost',
 };
 
@@ -18,11 +19,17 @@ const _kFinanceAliasKeys = {
   'taxCostItems': 'taxCost',
   'taxCostItemAmounts': 'taxCost',
   'taxCostItemSettleTerms': 'taxCost',
+  // 公式测算：所选公式跟着对应的复核项走。
+  'costItemFormulas': 'costItems',
+  'promotionTiers': 'costItems',
+  'operatingCostItemFormulas': 'operatingCost',
+  'taxCostItemFormulas': 'taxCost',
+  'revenueFormula': 'revenue',
+  'revenueFormulaGroup': 'revenue',
 };
 
 const _kFinanceReviewKeys = {
   'revenue',
-  'couponProcurementCost',
   'profit',
   'taxCost',
   'margin',

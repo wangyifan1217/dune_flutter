@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -27,174 +25,253 @@ class WeeklySummaryPoster extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sheetRows = _sheetRows(context);
-
+    final border = DunesColors.resolve(
+      context,
+      const Color(0xFFE0E8E5),
+      role: DunesColorRole.border,
+    );
     return SizedBox(
       width: cardWidth,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: DunesColors.resolve(
-                context,
-                Colors.white,
-                role: DunesColorRole.surface,
-              ).withValues(alpha: 0.88),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  Colors.white,
-                  role: DunesColorRole.border,
-                ).withValues(alpha: 0.95),
-                width: 1,
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 16,
-                  offset: Offset(0, 4),
-                ),
-                BoxShadow(
-                  color: Color(0x0A000000),
-                  blurRadius: 2,
-                  offset: Offset(0, 1),
-                ),
-              ],
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: border),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x09000000),
+              blurRadius: 16,
+              offset: Offset(0, 5),
             ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _header(context),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _header(context),
-                  const SizedBox(height: 9),
                   _metrics(context),
-                  if (data.latestLabel.trim().isNotEmpty) ...[
-                    const SizedBox(height: 5),
-                    Text(
-                      _latestText(data.latestLabel),
-                      style: _sans(
-                        context,
-                        size: 11,
-                        weight: FontWeight.w500,
-                        color: _secondary,
-                        height: 1.2,
-                      ),
-                    ),
-                  ],
                   if (sheetRows.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0x14FFFFFF)
-                            : const Color(0x09000000),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: sheetRows,
+                    const SizedBox(height: 14),
+                    for (var i = 0; i < sheetRows.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 6),
+                      sheetRows[i],
+                    ],
+                  ],
+                  if (data.latestLabel.trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Divider(height: 1, color: border),
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 1),
+                          child: Icon(
+                            Icons.schedule_rounded,
+                            size: 13,
+                            color: DunesColors.resolve(context, _secondary),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _latestText(data.latestLabel),
+                            style: _sans(
+                              context,
+                              size: 11,
+                              weight: FontWeight.w400,
+                              color: _secondary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _header(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
+  Widget _header(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 16, 12, 14),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Text(
-            '一周小结',
-            style: _sans(
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
               context,
-              size: 15,
-              weight: FontWeight.w600,
-              color: _ink,
-              letterSpacing: -0.2,
-              height: 1.15,
+              DunesColors.accentSoft,
+              role: DunesColorRole.surface,
             ),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            Icons.insert_chart_outlined_rounded,
+            size: 19,
+            color: DunesColors.resolve(context, DunesColors.accent),
           ),
         ),
-        if (data.rangeLabel.trim().isNotEmpty)
-          Text(
-            data.rangeLabel.trim(),
-            style: _sans(
-              context,
-              size: 11,
-              weight: FontWeight.w500,
-              color: _secondary,
-            ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '一周小结',
+                style: _sans(
+                  context,
+                  size: 16,
+                  weight: FontWeight.w600,
+                  color: _ink,
+                  height: 1.3,
+                ),
+              ),
+              if (data.rangeLabel.trim().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  data.rangeLabel.trim(),
+                  style:
+                      _sans(
+                        context,
+                        size: 11,
+                        weight: FontWeight.w400,
+                        color: _secondary,
+                        height: 1.4,
+                      ).copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                ),
+              ],
+            ],
           ),
-        if (showShareHint) ...[
-          const SizedBox(width: 4),
-          GestureDetector(
-            onTap: onShare,
-            child: Icon(
+        ),
+        if (showShareHint)
+          IconButton(
+            tooltip: '分享一周小结',
+            onPressed: onShare,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            icon: Icon(
               Icons.ios_share_rounded,
-              size: 15,
-              color: DunesColors.resolveNullable(context, _secondary),
+              size: 18,
+              color: DunesColors.resolve(context, DunesColors.accent),
             ),
           ),
-        ],
       ],
-    );
-  }
+    ),
+  );
 
   Widget _metrics(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: _metric(context, '${data.sessionCount}', '会话')),
-        Expanded(child: _metric(context, '${data.messageCount}', '消息')),
-        Expanded(child: _metric(context, '${data.minutes}', '分钟')),
-      ],
+    // Keep equal values as separate metrics (e.g. an empty week).
+    final values = [
+      _grouped(data.sessionCount),
+      _grouped(data.messageCount),
+      _grouped(data.minutes),
+    ];
+    const labels = ['会话', '消息', '分钟'];
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF1F6F4),
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final scale = MediaQuery.textScalerOf(context).scale(1);
+          final maxDigits = values
+              .map((v) => v.length)
+              .reduce((a, b) => a > b ? a : b);
+          final columns =
+              scale <= 1.3 &&
+              maxDigits * 20 * .62 * scale <= constraints.maxWidth / 3 - 4;
+          if (!columns) {
+            return Column(
+              children: [
+                for (var i = 0; i < values.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(values[i], style: _numberStyle(context)),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        labels[i],
+                        style: _sans(
+                          context,
+                          size: 11,
+                          weight: FontWeight.w400,
+                          color: _secondary,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < values.length; i++)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(values[i], style: _numberStyle(context)),
+                      const SizedBox(height: 5),
+                      Text(
+                        labels[i],
+                        style: _sans(
+                          context,
+                          size: 11,
+                          weight: FontWeight.w400,
+                          color: _secondary,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
     );
   }
 
-  Widget _metric(BuildContext context, String value, String unit) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        Text(
-          value,
-          style: _sans(
-            context,
-            size: 18,
-            weight: FontWeight.w600,
-            color: _ink,
-            letterSpacing: -0.4,
-            height: 1,
-          ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
-        ),
-        const SizedBox(width: 3),
-        Text(
-          unit,
-          style: _sans(
-            context,
-            size: 11,
-            weight: FontWeight.w500,
-            color: _secondary,
-            height: 1,
-          ),
-        ),
-      ],
-    );
-  }
+  TextStyle _numberStyle(BuildContext context) => _sans(
+    context,
+    size: 20,
+    weight: FontWeight.w600,
+    color: _ink,
+    height: 1.2,
+    letterSpacing: -.5,
+  ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
 
   List<Widget> _sheetRows(BuildContext context) {
     final rows = <Widget>[];
@@ -229,7 +306,7 @@ class WeeklySummaryPoster extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 28,
+            width: 28 * MediaQuery.textScalerOf(context).scale(1),
             child: Padding(
               padding: const EdgeInsets.only(top: 1),
               child: Text(
@@ -249,7 +326,10 @@ class WeeklySummaryPoster extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text.rich(TextSpan(children: [line]), style: _lineStyle(context)),
+                Text.rich(
+                  TextSpan(children: [line]),
+                  style: _lineStyle(context),
+                ),
                 if (caption.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 1),

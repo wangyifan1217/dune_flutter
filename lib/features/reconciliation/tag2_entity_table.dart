@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'recon_pinned_table.dart';
+import 'recon_mobile_report.dart';
+import 'recon_report_dialog.dart';
 import 'tag2_entity_models.dart';
 import 'tag3_daily_models.dart';
 
@@ -54,6 +56,7 @@ class Tag2EntityTable extends StatelessWidget {
     required this.onComment,
     this.onViewComments,
     this.onReject,
+    this.myUserId = 0,
   });
 
   final List<Tag2EntityRow> rows;
@@ -64,9 +67,39 @@ class Tag2EntityTable extends StatelessWidget {
   final ValueChanged<Tag2EntityRow> onComment;
   final ValueChanged<Tag2EntityRow>? onViewComments;
   final ValueChanged<Tag2EntityRow>? onReject;
+  final int myUserId;
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.hasBoundedHeight &&
+            (constraints.maxWidth < 600 || constraints.maxHeight >= 280)) {
+          return tag2MobileReport(
+            wideTableBuilder: constraints.maxWidth < 600
+                ? null
+                : (ids) => _buildWide(context, [
+                    for (final row in rows)
+                      if (ids.contains(row.rowKey)) row,
+                  ]),
+            rows: rows,
+            comments: comments,
+            busyKeys: busyKeys,
+            myUserId: myUserId,
+            onDrill: onDrill,
+            onConfirm: onConfirm,
+            onComment: onComment,
+            onReject: onReject,
+            onViewComments: onViewComments,
+          );
+        }
+        return _buildWide(context);
+      },
+    );
+  }
+
+  Widget _buildWide(BuildContext context, [List<Tag2EntityRow>? source]) {
+    final rows = (source ?? this.rows).where((row) => !row.isTotal).toList();
     if (rows.isEmpty) {
       return Center(
         child: Text(
@@ -81,7 +114,8 @@ class Tag2EntityTable extends StatelessWidget {
     }
     final amounts = _amountColumns(rows);
     final dataWidth =
-        _kIdWidths.fold<double>(0, (a, b) => a + b) + amounts.length * _kAmountW;
+        _kIdWidths.fold<double>(0, (a, b) => a + b) +
+        amounts.length * _kAmountW;
     final bands = _bands(rows);
     final heights = [
       for (var i = 0; i < rows.length; i++) _rowHeight(rows[i], bands[i]),
@@ -357,9 +391,7 @@ class Tag2EntityTable extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final lane in lanes) _auditLane(context, lane),
-          ],
+          children: [for (final lane in lanes) _auditLane(context, lane)],
         ),
       ),
     );
@@ -555,37 +587,38 @@ class Tag2EntityTable extends StatelessWidget {
     required bool enabled,
     required VoidCallback onTap,
   }) {
-    final color = enabled
-        ? DunesColors.resolve(context, DunesColors.accent)
-        : DunesColors.resolve(context, DunesColors.text3);
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(8),
-      child: Ink(
-        height: _kChipH,
-        decoration: BoxDecoration(
-          color: DunesColors.resolveNullable(
+    final accent = DunesColors.resolve(context, DunesColors.accent);
+    final muted = DunesColors.resolve(context, DunesColors.text3);
+    final borderColor = enabled ? accent : muted;
+    // 底色画在 Material 上。Ink 的装饰色会画到外层，白字就贴在浅色行上看不见。
+    final fill = filled
+        ? (enabled ? accent : accent.withValues(alpha: 0.16))
+        : DunesColors.resolve(
             context,
-            filled
-                ? (enabled
-                      ? DunesColors.accent
-                      : DunesColors.accent.withValues(alpha: 0.35))
-                : Colors.white,
+            Colors.white,
             role: DunesColorRole.surface,
+          );
+    final labelColor = filled ? (enabled ? Colors.white : accent) : borderColor;
+    return Material(
+      color: fill,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        child: Container(
+          height: _kChipH,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: filled && enabled ? accent : borderColor),
           ),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color),
-        ),
-        child: Center(
           child: Text(
             label,
             style: DunesTypography.sans(
               fontSize: 11,
               height: 1,
               fontWeight: FontWeight.w700,
-              color: filled
-                  ? DunesColors.resolve(context, Colors.white)
-                  : color,
+              color: labelColor,
               context: context,
             ),
           ),
@@ -785,7 +818,7 @@ Future<String?> showTag2EntityActionDialog({
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
-        return AlertDialog(
+        return ReconReportDialog(
           title: const Text('二次确认'),
           content: Text('确定以$who确认「${row.title}」？'),
           actions: [
@@ -838,7 +871,7 @@ class _Tag2RejectDialogState extends State<_Tag2RejectDialog> {
   Widget build(BuildContext context) {
     final remark = _controller.text.trim();
     final tooLong = remark.runes.length > 512;
-    return AlertDialog(
+    return ReconReportDialog(
       title: const Text('驳回到业务确认'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -849,8 +882,8 @@ class _Tag2RejectDialogState extends State<_Tag2RejectDialog> {
           TextField(
             controller: _controller,
             autofocus: true,
-            minLines: 3,
-            maxLines: 6,
+            minLines: 2,
+            maxLines: 4,
             onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
               hintText: '请填写驳回原因（必填，最多 512 字）',
@@ -897,7 +930,7 @@ class _Tag2CommentDialogState extends State<_Tag2CommentDialog> {
   Widget build(BuildContext context) {
     final body = _controller.text.trim();
     final tooLong = body.runes.length > 512;
-    return AlertDialog(
+    return ReconReportDialog(
       title: const Text('提意见'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -915,8 +948,8 @@ class _Tag2CommentDialogState extends State<_Tag2CommentDialog> {
           TextField(
             controller: _controller,
             autofocus: true,
-            minLines: 3,
-            maxLines: 6,
+            minLines: 2,
+            maxLines: 4,
             onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
               hintText: '1～512 字，不改变确认状态',

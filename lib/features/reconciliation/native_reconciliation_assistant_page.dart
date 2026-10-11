@@ -817,8 +817,8 @@ class _NativeReconciliationAssistantPageState
                           Text(
                             [
                               confirmable.isEmpty
-                                  ? '没有待你确认的日行，仍可填意见。'
-                                  : '右侧可直接确认，意见选填。',
+                                  ? '暂无可确认记录，可按权限查看和提意见。'
+                                  : '打开明细核对，意见选填。',
                               if ((snap?.snapshotHint ?? '').trim().isNotEmpty)
                                 snap!.snapshotHint.trim(),
                             ].join(' · '),
@@ -874,6 +874,7 @@ class _NativeReconciliationAssistantPageState
                   : Padding(
                       padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
                       child: Tag3DailyTable(
+                        key: ValueKey('tag3-$_detailAsOfDate'),
                         rows: snap.rows,
                         assignees: snap.assignees,
                         comments: snap.comments,

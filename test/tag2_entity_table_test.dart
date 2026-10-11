@@ -55,7 +55,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SizedBox(
-            width: 480,
+            width: 760,
             height: 640,
             child: Tag2EntityTable(
               rows: snap.rows,
@@ -80,8 +80,14 @@ void main() {
     expect(find.text('广东'), findsOneWidget);
     expect(find.text('中石油广东'), findsOneWidget);
     expect(find.text('确认'), findsOneWidget);
-    expect(find.text('意见'), findsOneWidget);
-    expect(find.text('合计'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ReconPinnedTable),
+        matching: find.text('意见'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('合计'), findsNothing);
     expect(find.text('提意见'), findsNothing);
   });
 }

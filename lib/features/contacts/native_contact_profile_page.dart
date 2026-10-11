@@ -27,6 +27,7 @@ class NativeContactProfilePage extends StatefulWidget {
     required this.onOpenPrivateChat,
     this.conversationId,
     this.onOpenSearch,
+    this.onOpenContactSearch,
     this.onChatSettingsChanged,
     this.onCreateGroupWithContact,
   });
@@ -36,9 +37,12 @@ class NativeContactProfilePage extends StatefulWidget {
   final VoidCallback onBack;
   final ValueChanged<int> onOpenPrivateChat;
 
-  /// 从私聊打开时传入，用于展示免打扰 / 置顶 / 查找聊天内容。
+  /// 已知私聊编号，用于免打扰、置顶及兼容已有搜索回调。
   final int? conversationId;
   final ValueChanged<int>? onOpenSearch;
+
+  /// Resolve an existing private conversation when opened without chat context.
+  final Future<void> Function(NativeContact contact)? onOpenContactSearch;
   final void Function({required int conversationId, bool? muted, bool? pinned})?
   onChatSettingsChanged;
 
@@ -60,6 +64,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
   bool _muted = false;
   bool _pinned = false;
   bool _settingsLoaded = false;
+  bool _openingSearch = false;
 
   bool get _showChatSettings {
     final id = widget.conversationId;
@@ -246,6 +251,24 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     }
   }
 
+  Future<void> _openSearch() async {
+    if (_openingSearch) return;
+    final contact = _contact;
+    if (contact == null) return;
+    final openForContact = widget.onOpenContactSearch;
+    if (openForContact == null) {
+      final id = widget.conversationId;
+      if (id != null && id > 0) widget.onOpenSearch?.call(id);
+      return;
+    }
+    setState(() => _openingSearch = true);
+    try {
+      await openForContact(contact);
+    } finally {
+      if (mounted) setState(() => _openingSearch = false);
+    }
+  }
+
   void _toast(BuildContext context, String message) {
     showDunesToast(
       context,
@@ -326,7 +349,6 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     final department = (c.department ?? '').trim();
     final phone = (c.phone ?? '').trim();
     final isSelf = c.userId == widget.session.userId;
-    final convId = widget.conversationId;
 
     final nightApp =
         !isDesktopCommOnly && Theme.of(context).brightness == Brightness.dark;
@@ -398,14 +420,22 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
           trailing: GroupInfoToggle(value: _pinned),
           onTap: _togglePinned,
         ),
+      ],
+      if (!isSelf &&
+          (widget.onOpenContactSearch != null ||
+              (widget.onOpenSearch != null && _showChatSettings))) ...[
         const SizedBox(height: 10),
         GroupInfoRow(
           icon: Icons.search,
           title: '查找聊天内容',
-          trailing: const GroupInfoChevron(),
-          onTap: widget.onOpenSearch == null || convId == null
-              ? null
-              : () => widget.onOpenSearch!(convId),
+          trailing: _openingSearch
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const GroupInfoChevron(),
+          onTap: _openingSearch ? null : _openSearch,
         ),
       ],
       if (!isSelf)

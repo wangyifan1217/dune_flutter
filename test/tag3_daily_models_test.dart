@@ -4,6 +4,37 @@ import 'package:dunes_app/features/reconciliation/tag3_daily_preview.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'salesScale parses independently for each period and drilldown totals',
+    () {
+      for (final period in ['DAY', 'PREV_MONTH', 'MONTH']) {
+        final row = Tag3DailyRow.fromJson({
+          'period': period,
+          'salesAmount': 15,
+          'salesScale': '1234.56',
+          'scaleAmount': 9999,
+        });
+        expect(row.salesScale, 1234.56);
+        expect(row.salesAmount, 15);
+        expect(Tag3DailyRow.fromJson({'period': period}).salesScale, 0);
+        expect(Tag3DailyRow.fromJson({'salesScale': null}).salesScale, 0);
+      }
+      final data = Tag3DailyDrilldown.fromJson({
+        'totalSales': 15,
+        'totalSalesScale': 6789.12,
+        'items': [
+          {'salesAmount': 15, 'salesScale': 1234.56},
+          {'salesScale': 2345.67},
+        ],
+      });
+      expect(data.items.first.salesScale, 1234.56);
+      expect(data.items.first.salesAmount, 15);
+      expect(data.totalSalesScale, 6789.12);
+      expect(Tag3DailyDrilldown.fromJson({}).totalSalesScale, 0);
+      expect(Tag3DailyDrilldownItem.fromJson({}).salesScale, 0);
+    },
+  );
+
   test('reconCardTitle names tag3 daily', () {
     expect(reconCardTitle('TAG3_DAILY'), '标签三 · 业财一体-日清月结');
     expect(reconCardTitle('TAG2_ENTITY'), '标签二 · 业财一体-日清月结');
@@ -275,7 +306,7 @@ void main() {
           'confirmationStatus': 'WAIT_BUSINESS',
         }),
       ]),
-      '3 条日行 · 待业务确认 1 · 待运营确认 1 · 已完成 1',
+      '3 条核对明细 · 待业务确认 1 · 待运营确认 1 · 已完成 1',
     );
     expect(
       tag3DailySnapshotStatusLine([
@@ -285,7 +316,7 @@ void main() {
           'confirmationStatus': 'WAIT_BUSINESS',
         }),
       ], snapshotHint: '该日快照未跑完'),
-      '1 条日行 · 待业务确认 1 · 该日快照未跑完',
+      '1 条核对明细 · 待业务确认 1 · 该日快照未跑完',
     );
     expect(
       ReconDateItem.fromJson({

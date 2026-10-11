@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -1545,7 +1543,7 @@ class ChatInboxRow extends StatelessWidget {
   final bool previewGenerating;
   final bool selected;
 
-  /// 已读不回工作群（reply_sla）：标题旁显示工作群图标，不显示人数。
+  /// 已读不回工作群（reply_sla）：标题旁石绿色「工作群」文字标签，不显示人数。
   final bool workgroupTag;
   final Widget? robotAvatar;
 
@@ -2737,50 +2735,30 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
   }
 }
 
-/// 已读不回工作群：群组图标本身用磨砂玻璃质感，不是一块玻璃图形。
+/// 已读不回工作群的文字标识。只给 reply_sla 新工作群用。
 class WorkgroupTag extends StatelessWidget {
-  const WorkgroupTag({super.key});
+  const WorkgroupTag({super.key, this.fontSize = 9.5});
+
+  final double fontSize;
 
   @override
   Widget build(BuildContext context) {
-    final deep = DunesColors.resolve(context, DunesColors.brandPurpleDeep);
-    final tint = DunesColors.resolve(context, DunesColors.brandPurple);
-    const icon = Icon(Icons.groups_rounded, size: 16, color: Colors.white);
-    return Tooltip(
-      message: '工作群',
-      child: SizedBox(
-        width: 18,
-        height: 18,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 1.4, sigmaY: 1.4),
-              child: Icon(
-                Icons.groups_rounded,
-                size: 16,
-                color: tint.withValues(alpha: 0.38),
-              ),
-            ),
-            ShaderMask(
-              blendMode: BlendMode.srcIn,
-              shaderCallback: (bounds) {
-                return LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.96),
-                    Color.lerp(Colors.white, tint, 0.45)!.withValues(
-                      alpha: 0.9,
-                    ),
-                    deep.withValues(alpha: 0.82),
-                  ],
-                  stops: const [0, 0.42, 1],
-                ).createShader(bounds);
-              },
-              child: icon,
-            ),
-          ],
+    // 石绿。不用 accentSoft：桌面主题会把它改成浅紫。
+    final ink = DunesColors.resolve(context, DunesColors.accent);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: ink.withValues(alpha: 0.45)),
+        color: ink.withValues(alpha: 0.12),
+      ),
+      child: Text(
+        '工作群',
+        style: DunesTypography.sans(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w600,
+          color: ink,
+          context: context,
         ),
       ),
     );

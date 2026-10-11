@@ -13,6 +13,8 @@ import 'tag2_entity_table.dart';
 import 'tag3_daily_models.dart';
 import 'tag3_daily_preview.dart';
 import 'tag3_daily_table.dart';
+import 'recon_daily_progress.dart';
+import 'recon_report_summary.dart';
 
 enum _ReconLevel { dates, table }
 
@@ -58,6 +60,8 @@ class _NativeDailyReconciliationPageState
   String _tag3Project = '';
   String _tag2Province = '';
   String _tag2Entity = '';
+  final Map<String, ReconReportProgress> _dateProgress = {};
+  int _dateProgressGeneration = 0;
 
   @override
   void initState() {
@@ -109,6 +113,21 @@ class _NativeDailyReconciliationPageState
   void _popLevel() {
     _loadGen++;
     if (_level == _ReconLevel.table) {
+      _dateProgressGeneration++;
+      final tag3 = _tag3Daily;
+      final tag2 = _tag2;
+      if (!_tag3DailyPreview && tag3 != null) {
+        _dateProgress['TAG3_DAILY|$_asOfDate'] = tag3ReportProgress(
+          tag3,
+          widget.session.userId,
+        );
+      }
+      if (tag2 != null) {
+        _dateProgress['TAG2_ENTITY|$_asOfDate'] = tag2ReportProgress(
+          tag2,
+          widget.session.userId,
+        );
+      }
       setState(() {
         _level = _ReconLevel.dates;
         _tag3Daily = null;
@@ -127,6 +146,8 @@ class _NativeDailyReconciliationPageState
 
   Future<void> _loadDates() async {
     setState(() {
+      _dateProgress.clear();
+      _dateProgressGeneration++;
       _loading = true;
       _error = null;
     });
@@ -504,7 +525,7 @@ class _NativeDailyReconciliationPageState
     final body = ColoredBox(
       color: DunesColors.resolve(
         context,
-        const Color(0xFFF5F6F8),
+        DunesColors.bgApp,
         role: DunesColorRole.surface,
       ),
       child: _buildBody(),
@@ -543,33 +564,97 @@ class _NativeDailyReconciliationPageState
       case _ReconLevel.dates:
         return _buildDateList();
       case _ReconLevel.table:
-        return _buildTable();
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth >= 600) return _buildTable();
+            return Column(
+              children: [
+                _buildMobileReportHeader(),
+                Expanded(child: _buildTable()),
+              ],
+            );
+          },
+        );
     }
   }
 
-  String _tag2DateProgress(ReconDateItem item) {
-    final line = tag3DailyDateProgressLine(
-      businessConfirmRows: item.tag2BusinessConfirmRows,
-      operationConfirmRows: item.tag2OperationConfirmRows,
-      commentCount: item.tag2CommentCount,
+  Widget _buildMobileReportHeader() {
+    final day = DateTime.tryParse(_asOfDate);
+    final busy =
+        _loading || _tag3ConfirmingKeys.isNotEmpty || _tag2Busy.isNotEmpty;
+    final yesterday = tag3DailyCalendarDay(
+      DateTime.now(),
+    ).subtract(const Duration(days: 1));
+    return Column(
+      children: [
+        Row(
+          children: [
+            IconButton(
+              tooltip: '前一日',
+              onPressed: busy || day == null || !day.isAfter(DateTime(2024))
+                  ? null
+                  : () => unawaited(
+                      _openCard(
+                        tag3DailyYmd(day.subtract(const Duration(days: 1))),
+                        _cardKind,
+                      ),
+                    ),
+              icon: const Icon(Icons.chevron_left),
+            ),
+            Expanded(
+              child: TextButton.icon(
+                icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                label: Text(shucaiDisplayDate(_asOfDate)),
+                onPressed: busy
+                    ? null
+                    : () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: day == null || day.isAfter(yesterday)
+                              ? yesterday
+                              : day.isBefore(DateTime(2024))
+                              ? DateTime(2024)
+                              : day,
+                          firstDate: DateTime(2024),
+                          lastDate: yesterday,
+                          helpText: '选择对账日',
+                          cancelText: '取消',
+                          confirmText: '确定',
+                        );
+                        if (picked != null && mounted) {
+                          await _openCard(tag3DailyYmd(picked), _cardKind);
+                        }
+                      },
+              ),
+            ),
+            IconButton(
+              tooltip: '后一日',
+              onPressed: busy || day == null || !day.isBefore(yesterday)
+                  ? null
+                  : () => unawaited(
+                      _openCard(
+                        tag3DailyYmd(day.add(const Duration(days: 1))),
+                        _cardKind,
+                      ),
+                    ),
+              icon: const Icon(Icons.chevron_right),
+            ),
+          ],
+        ),
+      ],
     );
-    if (item.tag2BusinessConfirmRows == 0 &&
-        item.tag2OperationConfirmRows == 0 &&
-        item.tag2CommentCount == 0) {
-      return '业务、运营各自确认，合计行只展示';
-    }
-    return line;
   }
 
   Widget _buildDateList() {
     final dates = _visibleDates;
-    return ListView(
+    return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-      children: [
-        _buildDatePicker(),
-        if (dates.isEmpty)
-          Padding(
+      itemCount: dates.isEmpty ? 2 : dates.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) return _buildDatePicker();
+        if (dates.isEmpty) {
+          return Padding(
             padding: const EdgeInsets.fromLTRB(8, 40, 8, 0),
             child: Text(
               '还没有日清月结。到达每日推送时间后会出现在这里。',
@@ -580,9 +665,12 @@ class _NativeDailyReconciliationPageState
                 context: context,
               ),
             ),
-          )
-        else
-          for (final item in dates) ...[
+          );
+        }
+        final item = dates[index - 1];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
             Padding(
               padding: const EdgeInsets.only(top: 14, bottom: 8),
               child: Text(
@@ -595,39 +683,52 @@ class _NativeDailyReconciliationPageState
                 ),
               ),
             ),
-            _DailyCard(
-              title: reconCardTitle('TAG3_DAILY'),
-              subtitle: tag3DailyDispatchBody(item.asOfDate),
-              progress: tag3DailyDateProgressLine(
-                businessConfirmRows: item.tag3BusinessConfirmRows,
-                operationConfirmRows: item.tag3OperationConfirmRows,
-                commentCount: item.tag3CommentCount,
-              ),
-              pill: tag3DailyDateStatusPill(
-                myConfirmed: item.tag3MyConfirmed,
-                confirmRows: item.tag3ConfirmRows,
-              ),
-              done: item.tag3MyConfirmed,
-              highlighted:
-                  item.tag3ConfirmRows > 0 || item.tag3CommentCount > 0,
-              onTap: () => unawaited(_openCard(item.asOfDate, 'TAG3_DAILY')),
-            ),
+            _dateCard(item.asOfDate, 'TAG3_DAILY'),
             const SizedBox(height: 8),
-            _DailyCard(
-              title: reconCardTitle('TAG2_ENTITY'),
-              subtitle: '${item.asOfDate} 按主体核对，业务/运营请各自确认',
-              progress: _tag2DateProgress(item),
-              pill: tag3DailyDateStatusPill(
-                myConfirmed: item.tag2MyConfirmed,
-                confirmRows: item.tag2ConfirmRows,
-              ),
-              done: item.tag2MyConfirmed,
-              highlighted:
-                  item.tag2ConfirmRows > 0 || item.tag2CommentCount > 0,
-              onTap: () => unawaited(_openCard(item.asOfDate, 'TAG2_ENTITY')),
-            ),
+            _dateCard(item.asOfDate, 'TAG2_ENTITY'),
           ],
-      ],
+        );
+      },
+    );
+  }
+
+  Widget _dateCard(String date, String type) {
+    final cacheKey = '$type|$date';
+    final generation = _dateProgressGeneration;
+    return ReconDailyProgress(
+      key: ValueKey('$cacheKey|$generation'),
+      initial: _dateProgress[cacheKey],
+      load: () async {
+        final value = type == 'TAG2_ENTITY'
+            ? tag2ReportProgress(
+                await _api.fetchTag2Entity(asOfDate: date),
+                widget.session.userId,
+              )
+            : tag3ReportProgress(
+                await _api.fetchTag3Daily(asOfDate: date),
+                widget.session.userId,
+              );
+        if (mounted && generation == _dateProgressGeneration) {
+          _dateProgress[cacheKey] = value;
+        }
+        return value;
+      },
+      builder: (value, failed) => _DailyCard(
+        title: reconCardTitle(type),
+        subtitle: type == 'TAG2_ENTITY'
+            ? '$date 按主体核对，业务/运营请各自确认'
+            : tag3DailyDispatchBody(date),
+        progress: value?.line ?? (failed ? '统计加载失败，点击查看明细' : '正在核对当前可见明细…'),
+        pill: value?.pill ?? (failed ? '查看明细' : '统计中'),
+        done:
+            value != null && value.total > 0 && value.completed == value.total,
+        highlighted:
+            value != null &&
+            (value.businessConfirmed > 0 ||
+                value.operationConfirmed > 0 ||
+                value.opinions > 0),
+        onTap: () => unawaited(_openCard(date, type)),
+      ),
     );
   }
 
@@ -681,11 +782,9 @@ class _NativeDailyReconciliationPageState
     );
   }
 
-  bool get _tag3Filtering =>
-      _tag3Channel.isNotEmpty || _tag3Project.isNotEmpty;
+  bool get _tag3Filtering => _tag3Channel.isNotEmpty || _tag3Project.isNotEmpty;
 
-  bool get _tag2Filtering =>
-      _tag2Province.isNotEmpty || _tag2Entity.isNotEmpty;
+  bool get _tag2Filtering => _tag2Province.isNotEmpty || _tag2Entity.isNotEmpty;
 
   List<String> _tag3Channels(List<Tag3DailyRow> rows) {
     return _reconFilterOptions([
@@ -731,7 +830,6 @@ class _NativeDailyReconciliationPageState
   }
 
   List<Tag2EntityRow> _filterTag2(List<Tag2EntityRow> rows) {
-    if (!_tag2Filtering) return rows;
     return [
       for (final row in rows)
         if (!row.isTotal &&
@@ -750,81 +848,28 @@ class _NativeDailyReconciliationPageState
       return const Center(child: CircularProgressIndicator());
     }
     final rows = snap == null ? const <Tag3DailyRow>[] : _filterTag3(snap.rows);
-    final status = snap == null
-        ? '右侧可直接确认，意见选填。'
-        : tag3DailySnapshotStatusLine(
-            rows,
-            snapshotHint: snap.snapshotHint,
-          );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-          child: Material(
-            color: DunesColors.resolve(
-              context,
-              Colors.white,
-              role: DunesColorRole.surface,
-            ),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 4, 6, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG3_DAILY')}',
-                          style: DunesTypography.sans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text,
-                            ),
-                            context: context,
-                          ),
-                        ),
-                        const SizedBox(height: 1),
-                        Text(
-                          _tag3Filtering ? '筛选后 $status' : status,
-                          style: DunesTypography.sans(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.accent,
-                            ),
-                            context: context,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (snap != null) ...[
-                    const SizedBox(width: 8),
-                    Tag3DailyOpinionEntry(
-                      count: tag3DailyOpinionComments(snap.comments).length,
-                      onTap: () {
-                        unawaited(
-                          showTag3DailyOpinionList(
-                            context: context,
-                            title: shucaiDisplayDate(_asOfDate),
-                            comments: snap.comments,
-                            rows: snap.rows,
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ],
+        if (MediaQuery.sizeOf(context).width < 600 &&
+            (snap?.snapshotHint ?? '').trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(snap!.snapshotHint),
+          ),
+        if (MediaQuery.sizeOf(context).width >= 600)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+            child: Text(
+              '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG3_DAILY')}',
+              style: DunesTypography.sans(
+                context: context,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.resolve(context, DunesColors.text),
               ),
             ),
           ),
-        ),
         if (snap != null)
           _ReconFilterBar(
             filters: [
@@ -877,6 +922,7 @@ class _NativeDailyReconciliationPageState
               : Padding(
                   padding: const EdgeInsets.fromLTRB(2, 2, 2, 0),
                   child: Tag3DailyTable(
+                    key: ValueKey('tag3-$_asOfDate'),
                     rows: rows,
                     assignees: snap.assignees,
                     comments: snap.comments,
@@ -923,77 +969,27 @@ class _NativeDailyReconciliationPageState
     final rows = snap == null
         ? const <Tag2EntityRow>[]
         : _filterTag2(snap.rows);
-    final baseHint = hint.isEmpty ? '按主体核对。右侧可直接确认，意见选填。合计行只展示。' : hint;
-    final shown = rows.where((row) => !row.isTotal).length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-          child: Material(
-            color: DunesColors.resolve(
-              context,
-              Colors.white,
-              role: DunesColorRole.surface,
-            ),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 4, 6, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG2_ENTITY')}',
-                          style: DunesTypography.sans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text,
-                            ),
-                            context: context,
-                          ),
-                        ),
-                        const SizedBox(height: 1),
-                        Text(
-                          _tag2Filtering ? '筛选后 $shown 条 · $baseHint' : baseHint,
-                          style: DunesTypography.sans(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.accent,
-                            ),
-                            context: context,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (snap != null) ...[
-                    const SizedBox(width: 8),
-                    Tag3DailyOpinionEntry(
-                      count: tag3DailyOpinionComments(snap.comments).length,
-                      onTap: () {
-                        unawaited(
-                          showTag2EntityOpinionList(
-                            context: context,
-                            title: shucaiDisplayDate(_asOfDate),
-                            comments: snap.comments,
-                            rows: snap.rows,
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ],
+        if (MediaQuery.sizeOf(context).width < 600 && hint.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(hint),
+          ),
+        if (MediaQuery.sizeOf(context).width >= 600)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+            child: Text(
+              '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG2_ENTITY')}',
+              style: DunesTypography.sans(
+                context: context,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.resolve(context, DunesColors.text),
               ),
             ),
           ),
-        ),
         if (snap != null)
           _ReconFilterBar(
             filters: [
@@ -1046,6 +1042,8 @@ class _NativeDailyReconciliationPageState
               : Padding(
                   padding: const EdgeInsets.fromLTRB(2, 2, 2, 0),
                   child: Tag2EntityTable(
+                    key: ValueKey('tag2-$_asOfDate'),
+                    myUserId: widget.session.userId,
                     rows: rows,
                     comments: snap.comments,
                     busyKeys: _tag2Busy,
@@ -1097,17 +1095,29 @@ class _DailyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
+      elevation: 1,
+      shadowColor: Colors.black.withValues(alpha: .06),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE4E9E6),
+            role: DunesColorRole.border,
+          ),
+        ),
+      ),
       color: DunesColors.resolve(
         context,
         Colors.white,
         role: DunesColorRole.surface,
       ),
-      borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(18),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+          padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
           child: Row(
             children: [
               Expanded(
@@ -1133,17 +1143,17 @@ class _DailyCard extends StatelessWidget {
                         _Tag3DailyDateStatusPill(label: pill, done: done),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Text(
                       subtitle,
                       style: DunesTypography.sans(
-                        fontSize: 13,
+                        fontSize: 12,
                         color: DunesColors.resolve(context, DunesColors.text2),
-                        height: 1.35,
+                        height: 1.5,
                         context: context,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Text(
                       progress,
                       style: DunesTypography.sans(
@@ -1240,6 +1250,25 @@ class _ReconFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+        child: Row(
+          children: [
+            for (var i = 0; i < filters.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(child: _ReconFilterButton(filter: filters[i])),
+            ],
+            if (onClear != null)
+              IconButton(
+                tooltip: '清除渠道与项目筛选',
+                onPressed: onClear,
+                icon: const Icon(Icons.restart_alt_rounded, size: 20),
+              ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
       child: Wrap(
@@ -1286,51 +1315,75 @@ class _ReconFilterButton extends StatelessWidget {
     return Material(
       color: selected
           ? accent.withValues(alpha: 0.08)
-          : const Color(0xFFF4F6F8),
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: () async {
-          final picked = await showDialog<String>(
-            context: context,
-            builder: (context) => _ReconFilterDialog(
-              field: filter.field,
-              value: filter.value,
-              options: filter.options,
+          : DunesColors.resolve(
+              context,
+              DunesColors.bgSoft,
+              role: DunesColorRole.surface,
             ),
-          );
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () async {
+          final picked = MediaQuery.sizeOf(context).width < 600
+              ? await showModalBottomSheet<String>(
+                  context: context,
+                  isScrollControlled: true,
+                  showDragHandle: true,
+                  builder: (context) => Padding(
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.viewInsetsOf(context).bottom,
+                    ),
+                    child: _ReconFilterDialog(
+                      field: filter.field,
+                      value: filter.value,
+                      options: filter.options,
+                      bottomSheet: true,
+                    ),
+                  ),
+                )
+              : await showDialog<String>(
+                  context: context,
+                  builder: (context) => _ReconFilterDialog(
+                    field: filter.field,
+                    value: filter.value,
+                    options: filter.options,
+                  ),
+                );
           if (picked == null) return;
           filter.onChanged(picked);
         },
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 240),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: DunesTypography.sans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: selected
-                          ? accent
-                          : DunesColors.resolve(context, DunesColors.text),
-                      context: context,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: selected
+                            ? accent
+                            : DunesColors.resolve(context, DunesColors.text),
+                        context: context,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 2),
-                Icon(
-                  Icons.expand_more,
-                  size: 16,
-                  color: DunesColors.resolve(context, DunesColors.text3),
-                ),
-              ],
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.expand_more,
+                    size: 16,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1344,11 +1397,13 @@ class _ReconFilterDialog extends StatefulWidget {
     required this.field,
     required this.value,
     required this.options,
+    this.bottomSheet = false,
   });
 
   final String field;
   final String value;
   final List<String> options;
+  final bool bottomSheet;
 
   @override
   State<_ReconFilterDialog> createState() => _ReconFilterDialogState();
@@ -1370,110 +1425,118 @@ class _ReconFilterDialogState extends State<_ReconFilterDialog> {
       for (final item in widget.options)
         if (query.isEmpty || item.contains(query)) item,
     ];
-    return Dialog(
-      child: SizedBox(
-        width: 340,
-        height: 420,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                '筛选${widget.field}',
-                style: DunesTypography.sans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: DunesColors.resolve(context, DunesColors.text),
-                  context: context,
+    final content = SizedBox(
+      width: widget.bottomSheet ? double.infinity : 340,
+      height: widget.bottomSheet
+          ? (MediaQuery.sizeOf(context).height -
+                    MediaQuery.viewInsetsOf(context).bottom) *
+                0.65
+          : 420,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '筛选${widget.field}',
+              style: DunesTypography.sans(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _query,
+              autofocus: true,
+              style: DunesTypography.sans(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: '搜索${widget.field}',
+                filled: true,
+                fillColor: const Color(0xFFF5F6F8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
                 ),
               ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _query,
-                autofocus: true,
-                style: DunesTypography.sans(
-                  fontSize: 13,
-                  color: DunesColors.resolve(context, DunesColors.text),
-                  context: context,
-                ),
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: '搜索${widget.field}',
-                  filled: true,
-                  fillColor: const Color(0xFFF5F6F8),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 6),
-              Expanded(
-                child: ListView(
-                  children: [
-                    _option(context, '', '全部${widget.field}'),
-                    for (final item in shown) _option(context, item, item),
-                    if (shown.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
-                        child: Text(
-                          '没有匹配的${widget.field}',
-                          style: DunesTypography.sans(
-                            fontSize: 12,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text3,
-                            ),
-                            context: context,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              child: ListView(
+                children: [
+                  _option(context, '', '全部${widget.field}'),
+                  for (final item in shown) _option(context, item, item),
+                  if (shown.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+                      child: Text(
+                        '没有匹配的${widget.field}',
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
                           ),
+                          context: context,
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
+    return widget.bottomSheet
+        ? SafeArea(top: false, child: content)
+        : Dialog(child: content);
   }
 
   Widget _option(BuildContext context, String value, String label) {
     final selected = value == widget.value;
     return InkWell(
       onTap: () => Navigator.pop(context, value),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DunesTypography.sans(
-                  fontSize: 13,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected
-                      ? DunesColors.resolve(context, DunesColors.accent)
-                      : DunesColors.resolve(context, DunesColors.text),
-                  context: context,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected
+                        ? DunesColors.resolve(context, DunesColors.accent)
+                        : DunesColors.resolve(context, DunesColors.text),
+                    context: context,
+                  ),
                 ),
               ),
-            ),
-            if (selected)
-              Icon(
-                Icons.check,
-                size: 16,
-                color: DunesColors.resolve(context, DunesColors.accent),
-              ),
-          ],
+              if (selected)
+                Icon(
+                  Icons.check,
+                  size: 16,
+                  color: DunesColors.resolve(context, DunesColors.accent),
+                ),
+            ],
+          ),
         ),
       ),
     );

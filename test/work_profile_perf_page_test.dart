@@ -1120,4 +1120,68 @@ void main() {
     expect(find.text('不自动打分，由本人填写'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
   });
+
+  testWidgets('确认绩效后不能改折扣', (tester) async {
+    const locked = WorkProfileKpiMetric(
+      key: 'discount',
+      label: '折扣（分省）',
+      status: 'ok',
+      maxPoints: 20,
+      weight: 20,
+      points: 20,
+      note: '本人填写',
+      discountLocked: true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeWorkProfilePerfPage(
+          session: session,
+          onBack: () {},
+          score: WorkProfileKpiScore(
+            month: '2026-08',
+            prevMonth: '2026-07',
+            people: [
+              WorkProfileKpiPerson(
+                userId: 1,
+                userName: '王一凡',
+                mainScore: 88,
+                bonus: 0,
+                telecomWeight: 0,
+                energyWeight: 1,
+                telecomScore: 0,
+                energyScore: 88,
+                categories: [
+                  WorkProfileKpiCategory(
+                    category: 'energy',
+                    categoryLabel: '能源',
+                    categoryWeight: 1,
+                    score: 88,
+                    tasks: [
+                      WorkProfileKpiTask(
+                        taskId: 42,
+                        taskName: '中石油普惠现金券（交易）',
+                        province: '内蒙古',
+                        bucketLabel: '能源',
+                        weightPct: 46.3,
+                        taskTotal: 88,
+                        curRevenue: 157900,
+                        prevRevenue: 177600,
+                        curProfit: 0,
+                        prevProfit: 0,
+                        productName: '中石油普惠现金券（交易）',
+                        metrics: const [locked],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('work-profile-perf-discount-42')), findsNothing);
+    expect(find.text('分省折扣由本人填写，满分 20'), findsNothing);
+    expect(find.text('本人填写'), findsOneWidget);
+  });
 }

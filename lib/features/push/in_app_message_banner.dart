@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import 'desktop_notification_card.dart';
 import '../auth/auth_session.dart';
 import '../chat/group_composite_avatar.dart';
 import '../chat/user_avatar_widget.dart';
@@ -15,8 +17,7 @@ int _activeBannerConversationId = 0;
 /// 当前应用内 IM 横幅对应的会话；没有横幅时为 0。
 int get inAppMessageBannerConversationId => _activeBannerConversationId;
 
-/// APP 前台微信式 IM 横幅（组件保留，当前未接入）。
-/// 暂时恢复为仅 TPNS / 桌面通知。
+/// 前台 IM 横幅；桌面使用右上角通知卡片，移动端保留顶部横幅。
 void showInAppMessageBanner({
   required BuildContext context,
   required int conversationId,
@@ -131,6 +132,7 @@ class _InAppMessageBannerOverlayState extends State<_InAppMessageBannerOverlay>
     try {
       if (mounted) await _controller.reverse();
     } catch (_) {}
+    if (!mounted) return;
     if (act) widget.onAction();
     widget.onRemove();
   }
@@ -239,6 +241,31 @@ class _InAppMessageBannerOverlayState extends State<_InAppMessageBannerOverlay>
 
   @override
   Widget build(BuildContext context) {
+    if (isDesktopCommOnly) {
+      return DesktopNotificationPosition(
+        child: FadeTransition(
+          opacity: _fade,
+          child: SlideTransition(
+            position: _slide,
+            child: DesktopNotificationCard(
+              title: widget.title.trim().isEmpty ? '沙丘' : widget.title.trim(),
+              body: widget.body.trim().isEmpty ? '您有新消息' : widget.body.trim(),
+              leading: _buildAvatar(),
+              onTap: () => _close(act: true),
+              onClose: () => _close(act: false),
+              onEnter: () => _autoTimer?.cancel(),
+              onExit: () {
+                final auto = widget.autoDismiss;
+                if (!_closing && auto != null) {
+                  _autoTimer?.cancel();
+                  _autoTimer = Timer(auto, () => _close(act: false));
+                }
+              },
+            ),
+          ),
+        ),
+      );
+    }
     final topInset = MediaQuery.paddingOf(context).top;
     return Positioned(
       top: topInset + 8,

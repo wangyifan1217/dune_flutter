@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'recon_pinned_table.dart';
+import 'recon_mobile_report.dart';
+import 'recon_report_dialog.dart';
 import 'tag3_daily_models.dart';
 
 const _kTag3DailyHeaderH = 26.0;
@@ -22,6 +24,7 @@ const _kTag3DailyDataColWidths = <double>[
   112,
   124,
   124,
+  124,
   108,
   124,
   124,
@@ -29,7 +32,7 @@ const _kTag3DailyDataColWidths = <double>[
   124,
   108,
 ];
-const _kTag3DailyDataWidth = 1436.0;
+const _kTag3DailyDataWidth = 1560.0;
 const _kProjectFillA = Color(0xFFFFFFFF);
 const _kProjectFillB = Color(0xFFF4F6F8);
 const _kProjectEdge = Color(0xFFE6E8EC);
@@ -39,6 +42,7 @@ const _kTag3DailyDataLabels = <String>[
   '统计周期',
   '回款周期',
   '销售额',
+  '销售规模',
   '核销额',
   '利润',
   '经营性现金流',
@@ -90,6 +94,36 @@ class Tag3DailyTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.hasBoundedHeight &&
+            (constraints.maxWidth < 600 || constraints.maxHeight >= 280)) {
+          return tag3MobileReport(
+            wideTableBuilder: constraints.maxWidth < 600
+                ? null
+                : (ids) => _buildWide(context, [
+                    for (final row in rows)
+                      if (ids.contains(row.actionId)) row,
+                  ]),
+            rows: rows,
+            assignees: assignees,
+            comments: comments,
+            myUserId: myUserId,
+            busyKeys: busyKeys,
+            onConfirm: onConfirm,
+            onComment: onComment,
+            onProjectTap: onProjectTap,
+            onReceivableTap: onReceivableTap,
+            onViewComments: onViewComments,
+          );
+        }
+        return _buildWide(context);
+      },
+    );
+  }
+
+  Widget _buildWide(BuildContext context, [List<Tag3DailyRow>? source]) {
+    final rows = source ?? this.rows;
     if (rows.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
@@ -148,12 +182,7 @@ class Tag3DailyTable extends StatelessWidget {
         action: true,
         child: Row(
           children: [
-            _auditCell(
-              context,
-              sorted[i],
-              _kTag3DailyAuditWidth,
-              heights[i],
-            ),
+            _auditCell(context, sorted[i], _kTag3DailyAuditWidth, heights[i]),
             SizedBox(
               width: _kTag3DailyActionWidth,
               child: _actionCell(context, sorted[i]),
@@ -228,7 +257,7 @@ class Tag3DailyTable extends StatelessWidget {
           ),
           _cell(
             context,
-            tag3DailyMoney(row.writeOffAmount),
+            tag3DailyMoney(row.salesScale),
             _kTag3DailyDataColWidths[5],
             contentHeight,
             alignRight: true,
@@ -236,7 +265,7 @@ class Tag3DailyTable extends StatelessWidget {
           ),
           _cell(
             context,
-            tag3DailyMoney(row.profitAmount),
+            tag3DailyMoney(row.writeOffAmount),
             _kTag3DailyDataColWidths[6],
             contentHeight,
             alignRight: true,
@@ -244,8 +273,16 @@ class Tag3DailyTable extends StatelessWidget {
           ),
           _cell(
             context,
-            tag3DailyMoney(row.cashFlowAmount),
+            tag3DailyMoney(row.profitAmount),
             _kTag3DailyDataColWidths[7],
+            contentHeight,
+            alignRight: true,
+            maxLines: 1,
+          ),
+          _cell(
+            context,
+            tag3DailyMoney(row.cashFlowAmount),
+            _kTag3DailyDataColWidths[8],
             contentHeight,
             alignRight: true,
             maxLines: 1,
@@ -253,7 +290,7 @@ class Tag3DailyTable extends StatelessWidget {
           _tappable(
             context,
             tag3DailyMoney(row.cashReceivableAmount),
-            _kTag3DailyDataColWidths[8],
+            _kTag3DailyDataColWidths[9],
             contentHeight,
             alignRight: true,
             maxLines: 1,
@@ -262,14 +299,6 @@ class Tag3DailyTable extends StatelessWidget {
           _cell(
             context,
             tag3DailyMoney(row.cashPaidAmount),
-            _kTag3DailyDataColWidths[9],
-            contentHeight,
-            alignRight: true,
-            maxLines: 1,
-          ),
-          _cell(
-            context,
-            tag3DailyMoney(row.cashReceivableDiff),
             _kTag3DailyDataColWidths[10],
             contentHeight,
             alignRight: true,
@@ -277,8 +306,16 @@ class Tag3DailyTable extends StatelessWidget {
           ),
           _cell(
             context,
-            tag3DailyMoney(row.subsidyReceivableAmount),
+            tag3DailyMoney(row.cashReceivableDiff),
             _kTag3DailyDataColWidths[11],
+            contentHeight,
+            alignRight: true,
+            maxLines: 1,
+          ),
+          _cell(
+            context,
+            tag3DailyMoney(row.subsidyReceivableAmount),
+            _kTag3DailyDataColWidths[12],
             contentHeight,
             alignRight: true,
             maxLines: 1,
@@ -446,6 +483,7 @@ class Tag3DailyTable extends StatelessWidget {
   double _auditHeight(Tag3DailyRow row) {
     if (row.isMonthCumulative) return 0;
     final lanes = tag3DailyAuditLanes(
+      row: row,
       assignee: _assigneeFor(row),
       comments: _commentsFor(row),
     );
@@ -467,7 +505,7 @@ class Tag3DailyTable extends StatelessWidget {
       maxLines: 2,
       ellipsis: '…',
       textDirection: TextDirection.ltr,
-      )..layout(maxWidth: (colWidth - 16).clamp(24.0, colWidth));
+    )..layout(maxWidth: (colWidth - 16).clamp(24.0, colWidth));
     return painter.height;
   }
 
@@ -481,6 +519,7 @@ class Tag3DailyTable extends StatelessWidget {
       return SizedBox(width: width, height: height);
     }
     final lanes = tag3DailyAuditLanes(
+      row: row,
       assignee: _assigneeFor(row),
       comments: _commentsFor(row),
     );
@@ -488,14 +527,17 @@ class Tag3DailyTable extends StatelessWidget {
       width: width,
       height: height,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(6, _kTag3AuditPadV, 6, _kTag3AuditPadV),
+        padding: const EdgeInsets.fromLTRB(
+          6,
+          _kTag3AuditPadV,
+          6,
+          _kTag3AuditPadV,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final lane in lanes) _auditLane(context, lane),
-          ],
+          children: [for (final lane in lanes) _auditLane(context, lane)],
         ),
       ),
     );
@@ -698,41 +740,39 @@ class Tag3DailyTable extends StatelessWidget {
     required bool enabled,
     VoidCallback? onTap,
   }) {
-    final color = enabled
-        ? DunesColors.resolve(context, DunesColors.accent)
-        : DunesColors.resolve(context, DunesColors.text3);
+    final accent = DunesColors.resolve(context, DunesColors.accent);
+    final muted = DunesColors.resolve(context, DunesColors.text3);
+    final borderColor = enabled ? accent : muted;
+    // 底色画在 Material 上。Ink 的装饰色会画到外层，白字就贴在浅色行上看不见。
+    final fill = filled
+        ? (enabled ? accent : accent.withValues(alpha: 0.16))
+        : DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          );
+    final labelColor = filled ? (enabled ? Colors.white : accent) : borderColor;
     return Material(
-      color: Colors.transparent,
+      color: fill,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(8),
-        child: Ink(
+        child: Container(
           height: _kTag3ChipH,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: DunesColors.resolveNullable(
-              context,
-              filled
-                  ? (enabled
-                        ? DunesColors.accent
-                        : DunesColors.accent.withValues(alpha: 0.35))
-                  : Colors.white,
-              role: DunesColorRole.surface,
-            ),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color),
+            border: Border.all(color: filled && enabled ? accent : borderColor),
           ),
-          child: Center(
-            child: Text(
-              label,
-              style: DunesTypography.sans(
-                fontSize: 11,
-                height: 1,
-                fontWeight: FontWeight.w700,
-                color: filled
-                    ? DunesColors.resolve(context, Colors.white)
-                    : color,
-                context: context,
-              ),
+          child: Text(
+            label,
+            style: DunesTypography.sans(
+              fontSize: 11,
+              height: 1,
+              fontWeight: FontWeight.w700,
+              color: labelColor,
+              context: context,
             ),
           ),
         ),
@@ -865,7 +905,7 @@ class Tag3DailyDrilldownSheet extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '销售额 ${tag3DailyMoney(data.totalSales)}  ·  核销 ${tag3DailyMoney(data.totalWriteOff)}  ·  利润 ${tag3DailyMoney(data.totalProfit)}',
+              '销售额 ${tag3DailyMoney(data.totalSales)}  ·  销售规模 ${tag3DailyMoney(data.totalSalesScale)}  ·  核销 ${tag3DailyMoney(data.totalWriteOff)}  ·  利润 ${tag3DailyMoney(data.totalProfit)}',
               style: DunesTypography.sans(
                 fontSize: 12,
                 color: DunesColors.resolve(context, DunesColors.text3),
@@ -920,6 +960,10 @@ class Tag3DailyDrilldownSheet extends StatelessWidget {
                             DataColumn(label: Text(province ? '省份' : '统计日')),
                             DataColumn(label: Text(province ? '周期' : '产品')),
                             const DataColumn(label: Text('销售额'), numeric: true),
+                            const DataColumn(
+                              label: Text('销售规模'),
+                              numeric: true,
+                            ),
                             const DataColumn(label: Text('核销额'), numeric: true),
                             const DataColumn(label: Text('利润'), numeric: true),
                             const DataColumn(label: Text('利润率')),
@@ -948,6 +992,9 @@ class Tag3DailyDrilldownSheet extends StatelessWidget {
                                   ),
                                   DataCell(
                                     Text(tag3DailyMoney(item.salesAmount)),
+                                  ),
+                                  DataCell(
+                                    Text(tag3DailyMoney(item.salesScale)),
                                   ),
                                   DataCell(
                                     Text(tag3DailyMoney(item.writeOffAmount)),
@@ -993,9 +1040,11 @@ Future<String?> showTag3DailyActionDialog({
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
-        return AlertDialog(
+        return ReconReportDialog(
           title: const Text('二次确认'),
-          content: Text('确定确认「${row.projectName} · ${row.periodLabel}」？'),
+          content: Text(
+            '确定以${row.canConfirmStage == 'OPERATION' ? '运营' : '业务'}身份确认「${row.projectName} · ${row.periodLabel}」？',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
@@ -1040,7 +1089,7 @@ class _Tag3DailyCommentDialogState extends State<Tag3DailyCommentDialog> {
   Widget build(BuildContext context) {
     final body = _controller.text.trim();
     if (_secondStep) {
-      return AlertDialog(
+      return ReconReportDialog(
         title: const Text('二次确认'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1072,11 +1121,12 @@ class _Tag3DailyCommentDialogState extends State<Tag3DailyCommentDialog> {
         ],
       );
     }
-    return AlertDialog(
+    return ReconReportDialog(
       title: Text('意见 ${widget.row.projectName} · ${widget.row.periodLabel}'),
       content: TextField(
         controller: _controller,
         autofocus: true,
+        minLines: 2,
         maxLines: 4,
         maxLength: 512,
         onChanged: (_) => setState(() {}),

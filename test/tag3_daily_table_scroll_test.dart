@@ -1,3 +1,4 @@
+import 'package:dunes_app/features/reconciliation/recon_pinned_table.dart';
 import 'package:dunes_app/features/reconciliation/tag3_daily_models.dart';
 import 'package:dunes_app/features/reconciliation/tag3_daily_preview.dart';
 import 'package:dunes_app/features/reconciliation/tag3_daily_table.dart';
@@ -6,18 +7,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Finder _scrollable(AxisDirection direction) {
-  return find.byWidgetPredicate(
-    (widget) => widget is Scrollable && widget.axisDirection == direction,
+  return find.descendant(
+    of: find.byType(ReconPinnedTable),
+    matching: find.byWidgetPredicate(
+      (widget) => widget is Scrollable && widget.axisDirection == direction,
+    ),
   );
 }
 
-Future<void> _pumpTable(WidgetTester tester, {double height = 220}) async {
+Future<void> _pumpTable(WidgetTester tester, {double height = 110}) async {
   final snap = tag3DailyPreviewSnapshot(asOfDate: '2026-09-17');
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
         body: SizedBox(
-          width: 480,
+          width: 760,
           height: height,
           child: Tag3DailyTable(rows: snap.rows),
         ),
@@ -28,7 +32,7 @@ Future<void> _pumpTable(WidgetTester tester, {double height = 220}) async {
 }
 
 void main() {
-  testWidgets('tag3 daily table pans horizontally in a narrow pane', (
+  testWidgets('wide tag3 table pans horizontally when columns overflow', (
     tester,
   ) async {
     await _pumpTable(tester, height: 640);
@@ -210,7 +214,7 @@ void main() {
         .map((decoration) => decoration.color)
         .whereType<Color>()
         .toSet();
-    expect(fills, contains(const Color(0xFFF3F0F8)));
-    expect(fills, contains(const Color(0xFFFFFCF8)));
+    expect(fills, contains(const Color(0xFFFFFFFF)));
+    expect(fills, contains(const Color(0xFFF4F6F8)));
   });
 }

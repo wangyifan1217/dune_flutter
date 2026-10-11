@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
+import '../../core/platform/desktop_features.dart';
+import '../push/desktop_notification_card.dart';
 
 enum DunesToastKind { normal, error }
 
@@ -287,6 +289,7 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
     } catch (_) {
       // 动画期间组件可能已被移除，忽略即可。
     }
+    if (!mounted) return;
     if (act) widget.onAction();
     widget.onRemove();
   }
@@ -300,6 +303,53 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
 
   @override
   Widget build(BuildContext context) {
+    if (isDesktopCommOnly) {
+      final isError = widget.kind == DunesToastKind.error;
+      return DesktopNotificationPosition(
+        child: FadeTransition(
+          opacity: _fade,
+          child: SlideTransition(
+            position: _slide,
+            child: DesktopNotificationCard(
+              title: isError ? '需要关注' : '工作提醒',
+              body: widget.message,
+              actionLabel: widget.actionLabel,
+              isError: isError,
+              leading: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: DunesColors.resolve(
+                    context,
+                    isError ? const Color(0xFFFDECEC) : const Color(0xFFEAF2FF),
+                    role: DunesColorRole.surface,
+                  ),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  widget.icon,
+                  size: 21,
+                  color: DunesColors.resolve(
+                    context,
+                    isError ? const Color(0xFFC43D3D) : const Color(0xFF176CE5),
+                  ),
+                ),
+              ),
+              onTap: () => _close(act: true),
+              onClose: () => _close(act: false),
+              onEnter: () => _autoTimer?.cancel(),
+              onExit: () {
+                final auto = widget.autoDismiss;
+                if (!_closing && auto != null) {
+                  _autoTimer?.cancel();
+                  _autoTimer = Timer(auto, () => _close(act: false));
+                }
+              },
+            ),
+          ),
+        ),
+      );
+    }
     final topInset = MediaQuery.paddingOf(context).top;
     final isError = widget.kind == DunesToastKind.error;
     final bg = isError

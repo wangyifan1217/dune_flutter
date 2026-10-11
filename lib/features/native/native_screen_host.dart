@@ -2019,6 +2019,64 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.go('C9');
   }
 
+  Future<void> _openContactChatSearch(NativeContact contact) async {
+    if (contact.userId <= 0 || contact.userId == widget.session.userId) return;
+    bool stillOnProfile() =>
+        mounted &&
+        widget.navigation.currentScreen == 'C9' &&
+        _selectedContact?.userId == contact.userId;
+    try {
+      final service = ConversationService(session: widget.session);
+      final current = _selectedPrivate;
+      final id =
+          current != null &&
+              current.id > 0 &&
+              current.peerUserId == contact.userId
+          ? current.id
+          : await service.findPrivateConversationForPeer(contact.userId);
+      if (!mounted || !stillOnProfile()) return;
+      if (id == null || id <= 0) {
+        showDunesToast(context, '暂无与该联系人的聊天记录');
+        return;
+      }
+      final conversation =
+          _conversationById(id) ?? await service.fetchConversation(id);
+      if (!mounted || !stillOnProfile()) return;
+      if (conversation == null ||
+          conversation.kind != 'PRIVATE' ||
+          conversation.peerUserId != contact.userId) {
+        showDunesToast(context, '聊天记录加载失败，请重试', kind: DunesToastKind.error);
+        return;
+      }
+      _approvalAssistantOpenGen++;
+      setState(() {
+        _selectedPrivate = conversation;
+        _selectedPrivatePeerUserId = contact.userId;
+        _selectedGroup = null;
+        _selectedRobot = null;
+        _selectedApprovalAssistant = null;
+        _selectedTaskAssistant = null;
+        _selectedKpiAssistant = null;
+        _selectedDriveAssistant = null;
+        _selectedXrxsAssistant = null;
+        _selectedWeeklySummary = null;
+        _selectedReconciliation = null;
+        _selectedAdministrativeNotice = null;
+        _administrativeNoticeTargetId = null;
+        _searchConversationId = id;
+        _searchTitle = '${contact.displayLabel} · 搜索';
+        _searchReturnScreen = 'C5';
+        _profileReturnScreen = 'C5';
+        _focusMessageId = null;
+        _focusMessageHint = null;
+      });
+      widget.navigation.go('C12');
+    } catch (e) {
+      if (!mounted || !stillOnProfile()) return;
+      showDunesToast(context, friendlyErrorText(e), kind: DunesToastKind.error);
+    }
+  }
+
   void _leaveChatToInbox({required bool clearSelection}) {
     _approvalAssistantOpenGen++;
     setState(() {
@@ -2311,7 +2369,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (_selectedPrivate?.isSelfMemo == true) {
       return _buildSelfMemoSettingsPage();
     }
-    final profileConvId = _profileReturnScreen == 'C5'
+    final profileConvId =
+        _profileReturnScreen == 'C5' &&
+            _selectedPrivate?.peerUserId == _selectedContact?.userId
         ? _selectedPrivate?.id
         : null;
     return NativeContactProfilePage(
@@ -2323,18 +2383,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       conversationId: profileConvId,
       onChatSettingsChanged: _onPrivateChatSettingsChanged,
       onCreateGroupWithContact: _startGroupFromContact,
-      onOpenSearch: profileConvId == null
-          ? null
-          : (convId) {
-              setState(() {
-                _searchConversationId = convId;
-                _searchTitle = '${_selectedPrivate?.displayTitle ?? '私聊'} · 搜索';
-                _searchReturnScreen = 'C5';
-                _focusMessageId = null;
-                _focusMessageHint = null;
-              });
-              widget.navigation.go('C12');
-            },
+      onOpenContactSearch: _openContactChatSearch,
     );
   }
 
@@ -4806,7 +4855,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         if (_selectedPrivate?.isSelfMemo == true) {
           return _buildSelfMemoSettingsPage();
         }
-        final profileConvId = _profileReturnScreen == 'C5'
+        final profileConvId =
+            _profileReturnScreen == 'C5' &&
+                _selectedPrivate?.peerUserId == _selectedContact?.userId
             ? _selectedPrivate?.id
             : null;
         return NativeContactProfilePage(
@@ -4817,19 +4868,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           conversationId: profileConvId,
           onChatSettingsChanged: _onPrivateChatSettingsChanged,
           onCreateGroupWithContact: _startGroupFromContact,
-          onOpenSearch: profileConvId == null
-              ? null
-              : (convId) {
-                  setState(() {
-                    _searchConversationId = convId;
-                    _searchTitle =
-                        '${_selectedPrivate?.displayTitle ?? '私聊'} · 搜索';
-                    _searchReturnScreen = 'C5';
-                    _focusMessageId = null;
-                    _focusMessageHint = null;
-                  });
-                  widget.navigation.go('C12');
-                },
+          onOpenContactSearch: _openContactChatSearch,
         );
       case 'B13':
         return NativeApprovalPage(

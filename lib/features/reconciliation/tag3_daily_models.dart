@@ -91,6 +91,13 @@ class Tag3DailyAuditLane {
   final bool done;
 
   String get statusLabel => done ? '已确认' : '未确认';
+
+  /// `业务：王奕凡 未确认`。没有负责人时只保留确认状态。
+  String get lineLabel {
+    final who = names.trim();
+    if (who.isEmpty) return '$role：$statusLabel';
+    return '$role：$who $statusLabel';
+  }
 }
 
 bool tag3DailyRoleConfirmed({
@@ -105,7 +112,8 @@ bool tag3DailyRoleConfirmed({
   final want = stage.trim().toUpperCase();
   return comments.any((item) {
     if (!item.isConfirm) return false;
-    if (item.stage.toUpperCase() == want) return true;
+    if (item.stage.trim().isNotEmpty) return item.stage.toUpperCase() == want;
+    if (people.any((person) => person.userId == '${item.userId}')) return true;
     return names.contains(item.userName.trim());
   });
 }
@@ -113,25 +121,37 @@ bool tag3DailyRoleConfirmed({
 List<Tag3DailyAuditLane> tag3DailyAuditLanes({
   Tag3DailyAssignee? assignee,
   List<Tag3DailyComment> comments = const [],
+  Tag3DailyRow? row,
 }) {
   return [
     Tag3DailyAuditLane(
       role: '业务',
       names: tag3DailyPersonNames(assignee?.businessUsers ?? const []),
-      done: tag3DailyRoleConfirmed(
-        stage: 'BUSINESS',
-        people: assignee?.businessUsers ?? const [],
-        comments: comments,
-      ),
+      done:
+          const [
+            'WAIT_OPERATION',
+            'ALL_CONFIRMED',
+            'CONFIRMED',
+          ].contains(row?.confirmationStatus) ||
+          tag3DailyRoleConfirmed(
+            stage: 'BUSINESS',
+            people: assignee?.businessUsers ?? const [],
+            comments: comments,
+          ),
     ),
     Tag3DailyAuditLane(
       role: '运营',
       names: tag3DailyPersonNames(assignee?.operationUsers ?? const []),
-      done: tag3DailyRoleConfirmed(
-        stage: 'OPERATION',
-        people: assignee?.operationUsers ?? const [],
-        comments: comments,
-      ),
+      done:
+          const [
+            'ALL_CONFIRMED',
+            'CONFIRMED',
+          ].contains(row?.confirmationStatus) ||
+          tag3DailyRoleConfirmed(
+            stage: 'OPERATION',
+            people: assignee?.operationUsers ?? const [],
+            comments: comments,
+          ),
     ),
   ];
 }
@@ -309,6 +329,7 @@ class Tag3DailyRow {
     required this.statDate,
     required this.paymentTerm,
     required this.salesAmount,
+    this.salesScale = 0,
     required this.writeOffAmount,
     required this.profitAmount,
     required this.cashFlowAmount,
@@ -332,6 +353,7 @@ class Tag3DailyRow {
   final String statDate;
   final String paymentTerm;
   final double salesAmount;
+  final double salesScale;
   final double writeOffAmount;
   final double profitAmount;
   final double cashFlowAmount;
@@ -370,6 +392,7 @@ class Tag3DailyRow {
       statDate: '${json['statDate'] ?? ''}'.trim(),
       paymentTerm: '${json['paymentTerm'] ?? ''}'.trim(),
       salesAmount: tag3DailyNum(json['salesAmount']),
+      salesScale: tag3DailyNum(json['salesScale']),
       writeOffAmount: tag3DailyNum(json['writeOffAmount']),
       profitAmount: tag3DailyNum(json['profitAmount']),
       cashFlowAmount: tag3DailyNum(json['cashFlowAmount']),
@@ -465,6 +488,7 @@ class Tag3DailyDrilldownItem {
     required this.statDate,
     required this.productName,
     required this.salesAmount,
+    this.salesScale = 0,
     required this.writeOffAmount,
     required this.profitAmount,
     required this.profitRate,
@@ -477,6 +501,7 @@ class Tag3DailyDrilldownItem {
   final String statDate;
   final String productName;
   final double salesAmount;
+  final double salesScale;
   final double writeOffAmount;
   final double profitAmount;
   final double? profitRate;
@@ -491,6 +516,7 @@ class Tag3DailyDrilldownItem {
       statDate: '${json['statDate'] ?? ''}'.trim(),
       productName: '${json['productName'] ?? ''}'.trim(),
       salesAmount: tag3DailyNum(json['salesAmount']),
+      salesScale: tag3DailyNum(json['salesScale']),
       writeOffAmount: tag3DailyNum(json['writeOffAmount']),
       profitAmount: tag3DailyNum(json['profitAmount']),
       profitRate: rateRaw == null ? null : tag3DailyNum(rateRaw),
@@ -505,6 +531,7 @@ class Tag3DailyDrilldown {
     required this.metricKey,
     required this.items,
     required this.totalSales,
+    this.totalSalesScale = 0,
     required this.totalWriteOff,
     required this.totalProfit,
     this.snapshotHint = '',
@@ -513,6 +540,7 @@ class Tag3DailyDrilldown {
   final String metricKey;
   final List<Tag3DailyDrilldownItem> items;
   final double totalSales;
+  final double totalSalesScale;
   final double totalWriteOff;
   final double totalProfit;
   final String snapshotHint;
@@ -530,6 +558,7 @@ class Tag3DailyDrilldown {
             ]
           : const [],
       totalSales: tag3DailyNum(json['totalSales']),
+      totalSalesScale: tag3DailyNum(json['totalSalesScale']),
       totalWriteOff: tag3DailyNum(json['totalWriteOff']),
       totalProfit: tag3DailyNum(json['totalProfit']),
       snapshotHint: '${json['snapshotHint'] ?? ''}'.trim(),
@@ -572,6 +601,8 @@ String tag3DailyDateProgressLine({
 String tag3DailySnapshotStatusLine(
   List<Tag3DailyRow> rows, {
   String snapshotHint = '',
+  List<Tag3DailyComment> comments = const [],
+  List<Tag3DailyAssignee> assignees = const [],
 }) {
   final day = [
     for (final row in rows)
@@ -586,22 +617,24 @@ String tag3DailySnapshotStatusLine(
   var waitBiz = 0;
   var waitOps = 0;
   var done = 0;
+  final people = {for (final a in assignees) a.rowKey: a};
   for (final row in day) {
-    switch (row.confirmationStatus) {
-      case 'ALL_CONFIRMED':
-      case 'CONFIRMED':
-        done++;
-        break;
-      case 'WAIT_OPERATION':
-        waitOps++;
-        break;
-      default:
-        waitBiz++;
+    final lanes = tag3DailyAuditLanes(
+      row: row,
+      assignee: people[row.rowKey],
+      comments: comments.where((c) => c.matchesRow(row)).toList(),
+    );
+    if (lanes.every((lane) => lane.done)) {
+      done++;
+    } else if (!lanes[0].done) {
+      waitBiz++;
+    } else {
+      waitOps++;
     }
   }
   return _withTag3DailySnapshotHint(
     [
-      '${day.length} 条日行',
+      '${day.length} 条核对明细',
       if (waitBiz > 0) '待业务确认 $waitBiz',
       if (waitOps > 0) '待运营确认 $waitOps',
       if (done > 0) '已完成 $done',

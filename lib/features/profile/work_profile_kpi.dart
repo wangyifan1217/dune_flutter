@@ -117,6 +117,7 @@ class WorkProfileKpiMetric {
     this.current,
     this.previous,
     this.note = '',
+    this.discountLocked = false,
   });
 
   final String key;
@@ -131,6 +132,7 @@ class WorkProfileKpiMetric {
   final double? current;
   final double? previous;
   final String note;
+  final bool discountLocked;
 
   factory WorkProfileKpiMetric.fromJson(Map<String, dynamic> json) {
     return WorkProfileKpiMetric(
@@ -146,6 +148,7 @@ class WorkProfileKpiMetric {
       current: (json['current'] as num?)?.toDouble(),
       previous: (json['previous'] as num?)?.toDouble(),
       note: '${json['note'] ?? ''}',
+      discountLocked: json['discountLocked'] == true,
     );
   }
 

@@ -986,7 +986,7 @@ class _TaskRow extends StatelessWidget {
             const SizedBox(height: 6),
             // 收入/利润/用户的本月上月都在指标明细里，不再单独铺三行文字。
             KpiMetricList(metrics: task.metrics),
-            if (_discount != null) ...[
+            if (_discount != null && !_discount!.discountLocked) ...[
               const SizedBox(height: 8),
               _DiscountFill(
                 taskId: task.taskId,

@@ -164,7 +164,10 @@ class _MetricRow extends StatelessWidget {
       return m.note.trim();
     }
     if (m.status == 'manual') {
-      return m.key == 'discount' ? '不自动打分，由本人填写' : '不自动打分，需人工填写';
+      if (m.key == 'discount') {
+        return m.discountLocked ? '已确认本月绩效，不能再改' : '不自动打分，由本人填写';
+      }
+      return '不自动打分，需人工填写';
     }
     if (m.status == 'none') {
       return m.kind == 'users' || m.kind == 'newUsers'
@@ -172,7 +175,7 @@ class _MetricRow extends StatelessWidget {
           : '上期为 0，环比算不出来，本指标不计分';
     }
     if (m.note.isNotEmpty && m.momPct == null) {
-      return m.note; // 例如能源回款的「默认已回」
+      return m.note; // 例如能源回款的「默认未回」
     }
     final cur = _value(m, m.current);
     final prev = _value(m, m.previous);

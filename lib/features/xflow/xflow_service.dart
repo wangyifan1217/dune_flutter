@@ -777,6 +777,28 @@ class XflowService {
         .toList(growable: false);
   }
 
+  Future<bool> fetchProposalLinkEnabled() async {
+    final data = await _request('/xflow/proposal-link-feature');
+    return data['enabled'] == true;
+  }
+
+  Future<Map<String, dynamic>> fetchCompletedProposalIntakes({
+    String query = '',
+    String kind = '',
+    int page = 1,
+  }) => _request(
+    '/xflow/proposals/intake-done?${Uri(queryParameters: {'q': query.trim(), 'kind': kind, 'page': '$page', 'pageSize': '20'}).query}',
+  );
+
+  Future<Map<String, dynamic>> fetchProposalRelatedApprovals(
+    int proposalId, {
+    int page = 1,
+    String status = '',
+    String templateKey = '',
+  }) => _request(
+    '/proposal-intakes/$proposalId/related-approvals?${Uri(queryParameters: {'page': '$page', 'pageSize': '20', 'status': status, 'templateKey': templateKey}).query}',
+  );
+
   Future<Map<String, dynamic>?> fetchOrgUser(int userId) async {
     return fetchOrgUserProfile(userId: userId);
   }
@@ -1389,7 +1411,9 @@ class XflowService {
   }
 
   /// 按原单内容新建一条草稿（新单据、新编号），表单字段与来源一致。
-  Future<XflowProposalItem> copyApprovalAsDraft(XflowProposalItem source) async {
+  Future<XflowProposalItem> copyApprovalAsDraft(
+    XflowProposalItem source,
+  ) async {
     final bt = source.businessType.trim().toUpperCase();
     var templateKey = (source.templateKey ?? '').trim();
     var values = <String, dynamic>{};
@@ -1399,7 +1423,9 @@ class XflowService {
       if (values.isEmpty) {
         final rawForm = detail.raw['formData'] ?? detail.raw['formValues'];
         if (rawForm is Map) {
-          values = copyableApprovalFormValues(Map<String, dynamic>.from(rawForm));
+          values = copyableApprovalFormValues(
+            Map<String, dynamic>.from(rawForm),
+          );
         }
       }
       if (templateKey.isEmpty) {
@@ -1423,15 +1449,14 @@ class XflowService {
         source.title.trim().isNotEmpty) {
       values['title'] = source.title.trim();
     }
-    final raw = await submitDraft(
-      formValues: values,
-      templateKey: templateKey,
-    );
+    final raw = await submitDraft(formValues: values, templateKey: templateKey);
     final newId = _int(raw['proposalId'] ?? raw['businessId'] ?? raw['id']);
     if (newId <= 0) {
       throw Exception('复制失败，未返回新单据');
     }
-    final newBt = (raw['businessType'] ?? source.businessType).toString().trim();
+    final newBt = (raw['businessType'] ?? source.businessType)
+        .toString()
+        .trim();
     return XflowProposalItem(
       id: newId,
       businessType: newBt.isEmpty ? source.businessType : newBt,

@@ -867,6 +867,33 @@ class SettlementCatalogService {
     );
   }
 
+  /// 资管供应商一级（标签二一级）：出行、能源。
+  Future<List<CatalogRef>> fetchSupplierCategoryL1() async {
+    return _mapList(
+      '/out/shaqiu/catalog/supplier-category/l1',
+      CatalogRef.fromJson,
+    );
+  }
+
+  /// 资管供应商二级（标签二二级）。不传父级时返回全部启用二级。
+  Future<List<CatalogRef>> fetchSupplierCategoryL2({
+    String parentCode = '',
+    int? parentId,
+    String parentIdText = '',
+  }) async {
+    final idText = parentIdText.trim().isNotEmpty
+        ? parentIdText.trim()
+        : (parentId != null && parentId > 0 ? '$parentId' : '');
+    return _mapList(
+      '/out/shaqiu/catalog/supplier-category/l2',
+      CatalogRef.fromJson,
+      query: {
+        if (parentCode.trim().isNotEmpty) 'parentCode': parentCode.trim(),
+        if (idText.isNotEmpty) 'parentId': idText,
+      },
+    );
+  }
+
   Future<List<CatalogRef>> fetchProjects({String keyword = ''}) async {
     return _mapList(
       '/out/shaqiu/catalog/project',

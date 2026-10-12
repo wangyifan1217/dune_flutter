@@ -14,6 +14,8 @@ void main() {
     expect(await catalog.fetchProductCategoryL3(), isEmpty);
     expect(await catalog.fetchChannelCategoryL1(), isEmpty);
     expect(await catalog.fetchChannelCategoryL2(parentCode: 'YH'), isEmpty);
+    expect(await catalog.fetchSupplierCategoryL1(), isEmpty);
+    expect(await catalog.fetchSupplierCategoryL2(parentCode: 'NY'), isEmpty);
     expect(await catalog.fetchProjects(keyword: '星和'), isEmpty);
     expect(
       await catalog.fetchBillTypes(syncSource: 'YD', productSource: 'CHANNEL'),
@@ -412,6 +414,63 @@ void main() {
     expect(seen?.path, contains('/out/shaqiu/catalog/product-category/l1'));
     expect(rows.map((e) => e.name).toList(), ['民营', '能源', 'fintech']);
     expect(rows[1].code, 'NY');
+  });
+
+  test('fetchSupplierCategoryL1 maps 供应商一级', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': [
+            {'id': '2070815690000031746', 'code': 'NY', 'name': '能源', 'level': 1},
+          ],
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final rows = await catalog.fetchSupplierCategoryL1();
+    expect(seen?.path, contains('/out/shaqiu/catalog/supplier-category/l1'));
+    expect(rows.single.name, '能源');
+    expect(rows.single.code, 'NY');
+  });
+
+  test('fetchSupplierCategoryL2 filters by parentCode', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': [
+            {
+              'id': '2081633627619319816',
+              'code': 'NY_ZSY',
+              'name': '中石油',
+              'level': 2,
+              'parentId': '2070815690000031746',
+              'parentCode': 'NY',
+              'parentName': '能源',
+            },
+          ],
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final rows = await catalog.fetchSupplierCategoryL2(parentCode: 'NY');
+    expect(seen?.path, contains('/out/shaqiu/catalog/supplier-category/l2'));
+    expect(seen?.queryParameters['parentCode'], 'NY');
+    expect(rows.single.name, '中石油');
+    expect(rows.single.parentName, '能源');
   });
 
   test('fetchChannelCategoryL2 filters by parentCode and keeps parent fields', () async {

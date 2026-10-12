@@ -81,6 +81,10 @@ String detailStatusLabel(String? st) {
       return '已驳回';
     case 'voided':
       return '已作废';
+    case 'withdrawn':
+      return '已撤回';
+    case 'superseded':
+      return '已重新提交';
     default:
       return st?.isNotEmpty == true ? st! : '—';
   }
@@ -158,6 +162,7 @@ Map<String, dynamic> linkedProposalIntakePayload({
   required int id,
   required String code,
   required String title,
+  String kind = '',
 }) {
   return <String, dynamic>{
     'proposalId': id,
@@ -165,6 +170,7 @@ Map<String, dynamic> linkedProposalIntakePayload({
     'title': title,
     'source': linkedProposalSourceIntake,
     'businessType': 'PROPOSAL_INTAKE',
+    if (kind.isNotEmpty) 'kind': kind,
   };
 }
 
@@ -362,6 +368,17 @@ List<DetailSection> buildFieldSections(
   Map<String, dynamic> formValues,
   XflowProposalDetail detail,
 ) {
+  // Historical links remain visible when the global switch is off or the
+  // template no longer contains the extra reference field.
+  if (parseLinkedProposalId(formValues['linkedProposal']) > 0) {
+    fields = [
+      XflowField.fromJson({
+        'key': 'linkedProposal', 'label': '关联提案',
+        'type': 'proposal', 'readonly': true,
+      }),
+      ...fields.where((field) => field.key != 'linkedProposal'),
+    ];
+  }
   final fv = Map<String, dynamic>.from(formValues);
   if ((fv['provinces'] == null || (fv['provinces'] is List && (fv['provinces'] as List).isEmpty)) &&
       detail.raw['coverage'] is List) {

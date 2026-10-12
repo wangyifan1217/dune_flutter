@@ -4,11 +4,23 @@ import 'package:dunes_app/features/proposal_intake/proposal_intake_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Map<String, dynamic> _sku(String id, String name, String scale) => {
+Map<String, dynamic> _sku(
+  String id,
+  String name,
+  String scale, {
+  bool payable = false,
+}) => {
   'id': id,
   'productName': name,
   'settlements': [
     {'id': '$id-st', 'scale': scale, 'settleRatio': '0.9', 'taxRate': '6%'},
+    if (payable)
+      {
+        'id': '$id-promotion',
+        'kind': 'cost',
+        'billType': '应付账单 / 服务费 / 推广费',
+        'settleRatio': '0.01',
+      },
   ],
 };
 
@@ -31,7 +43,10 @@ const _touched = {'project': true, 'tax': true};
 void main() {
   test('each product evaluates its own formulas and totals add up', () {
     final eval = proposalEvaluateFinance({
-      'skuDetails': [_sku('a', '产品A', '1200'), _sku('b', '产品B', '600')],
+      'skuDetails': [
+        _sku('a', '产品A', '1200', payable: true),
+        _sku('b', '产品B', '600'),
+      ],
       kProposalFinanceFormulaTouchedKey: _touched,
       kProposalProductFormulasKey: {
         'a': {
@@ -64,14 +79,13 @@ void main() {
         },
       },
     });
-    final lines =
-        eval.buckets[kProposalCostCategoryProject]?.lines ?? const [];
+    final lines = eval.buckets[kProposalCostCategoryProject]?.lines ?? const [];
     expect(lines.map((line) => line.name), isNot(contains('推广费')));
   });
 
   test('each product uses only the first promoter plan', () {
     final eval = proposalEvaluateFinance({
-      'skuDetails': [_sku('a', '产品A', '1200')],
+      'skuDetails': [_sku('a', '产品A', '1200', payable: true)],
       kProposalFinanceFormulaTouchedKey: _touched,
       kProposalProductFormulasKey: {
         'a': {
@@ -157,14 +171,14 @@ void main() {
     expect((entries['a'] as Map)['revenueFormula'], 'R1');
   });
 
-  test('cost is auto-estimated: per product formula reviews are not required', () {
+  test('product cost formulas must be reviewed before finance approval', () {
     final keys = proposalIntakeFinanceReviewKeys({
       'skuDetails': [_sku('a', '产品A', '1200')],
       'childProducts': [_sku('c', '子产品C', '100')],
     });
     for (final kind in kProposalProductFormulaReviewKinds) {
-      expect(keys, isNot(contains(proposalIntakeProductFormulaReviewKey('a', kind))));
-      expect(keys, isNot(contains(proposalIntakeProductFormulaReviewKey('c', kind))));
+      expect(keys, contains(proposalIntakeProductFormulaReviewKey('a', kind)));
+      expect(keys, contains(proposalIntakeProductFormulaReviewKey('c', kind)));
     }
     expect(keys, isNot(contains('profit')));
     expect(keys, isNot(contains('margin')));
@@ -173,7 +187,6 @@ void main() {
   testWidgets('finance board hides estimate amounts and lists products', (
     tester,
   ) async {
-    expect(kProposalFinanceShowEstimates, isFalse);
     final eval = proposalEvaluateFinance({
       'skuDetails': [_sku('a', '产品A', '1200'), _sku('b', '产品B', '600')],
       kProposalFinanceFormulaTouchedKey: _touched,
@@ -192,6 +205,7 @@ void main() {
               config: ProposalFinanceBoardConfig(
                 evaluation: eval,
                 catalog: ProposalFinanceFormulaCatalog.fallback,
+                showEstimates: false,
                 products: eval.products,
               ),
             ),

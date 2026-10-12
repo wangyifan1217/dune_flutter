@@ -1339,6 +1339,46 @@ List<String> proposalIntakeContractFillKeys(String prefix) {
   return keys;
 }
 
+/// 票种要落在固定选项上，多份合同时保留第一份非空值，不参与逗号拼接。
+const Set<String> kProposalContractSingleValueKeys = {'salesInvoiceType'};
+
+const String kProposalContractFieldJoiner = '，';
+
+/// 已签按选中份数计，未签按上传文件份数计；都没有时，填了编号或名称算 1 份。
+int proposalIntakeVisibleContractCount(
+  Map<String, dynamic> form,
+  String prefix,
+) {
+  final mode = '${form['${prefix}Mode'] ?? ''}'.trim();
+  if (mode != '未签署合同') {
+    final selected = proposalIntakeSelectedContractIds(form, prefix).length;
+    if (selected > 0) return selected;
+  }
+  if (mode == '未签署合同') {
+    final files = proposalIntakeContractFiles(form, prefix).length;
+    if (files > 0) return files;
+  }
+  final named =
+      '${form['${prefix}Name'] ?? ''}'.trim().isNotEmpty ||
+      '${form['${prefix}No'] ?? ''}'.trim().isNotEmpty;
+  return named ? 1 : 0;
+}
+
+int proposalIntakeVisibleContractTotal(Map<String, dynamic> form) =>
+    proposalIntakeVisibleContractCount(form, 'purchase') +
+    proposalIntakeVisibleContractCount(form, 'sales');
+
+String proposalIntakeJoinContractTexts(Iterable<String> values) {
+  final seen = <String>{};
+  final parts = <String>[];
+  for (final raw in values) {
+    final text = raw.trim();
+    if (text.isEmpty || !seen.add(text)) continue;
+    parts.add(text);
+  }
+  return parts.join(kProposalContractFieldJoiner);
+}
+
 /// 切换已签/未签时清空该合同抓取字段，避免上一份合同内容残留。
 Map<String, dynamic> proposalIntakeResetContractFields(String prefix) {
   return <String, dynamic>{
@@ -1488,9 +1528,57 @@ List<Map<String, dynamic>> proposalIntakeFilesFromContractDetail(
   ].where((file) => !proposalIntakeContractFileIsEmpty(file)).toList();
 }
 
+Map<String, String> proposalIntakeRecognizedFieldsFromDetail({
+  required String prefix,
+  required Map<String, dynamic> detail,
+}) {
+  final related = detail['proposalRelated'] is Map
+      ? Map<String, dynamic>.from(detail['proposalRelated'] as Map)
+      : const <String, dynamic>{};
+  String pick(List<String> keys) {
+    final fromRelated = _contractText(related, keys);
+    if (fromRelated.isNotEmpty) return fromRelated;
+    return _contractText(detail, keys);
+  }
+
+  final registerNo = _contractText(detail, ['contractNo']);
+  final values = <String, String>{
+    '${prefix}No': registerNo.isNotEmpty ? registerNo : pick(['${prefix}No']),
+    '${prefix}Name': pick(['${prefix}Name', 'contractName']),
+    '${prefix}SignDate': pick(['${prefix}SignDate', 'signDate']),
+    '${prefix}OurParty': pick(['${prefix}OurParty', 'partyA']),
+    '${prefix}Counterparty': pick(['${prefix}Counterparty', 'partyB']),
+    '${prefix}ValidPeriod': pick(['${prefix}ValidPeriod', 'endDate']),
+    '${prefix}CoreTerms': pick(['${prefix}CoreTerms']),
+  };
+  if (prefix == 'purchase') {
+    values['supplierPolicy'] = pick(['supplierPolicy']);
+    values['supplyPayer'] = pick(['supplyPayer']);
+    values['supplyPayAccount'] = pick(['supplyPayAccount']);
+  } else {
+    values['channelPolicy'] = pick(['channelPolicy']);
+    values['channelPayee'] = pick(['channelPayee']);
+    values['channelReceiveAccount'] = pick(['channelReceiveAccount']);
+    values['salesInvoiceType'] = pick([
+      'salesInvoiceType',
+      'invoiceType',
+      'invoiceTypes',
+    ]);
+    values['salesInvoiceFlow'] = pick(['salesInvoiceFlow', 'invoiceFlow']);
+  }
+  return values;
+}
+
+bool proposalIntakeContractRefHasRecognized(Map<String, dynamic> ref) {
+  final raw = ref['recognized'];
+  if (raw is! Map || raw.isEmpty) return false;
+  return raw.values.any((value) => '$value'.trim().isNotEmpty);
+}
+
 Map<String, dynamic> proposalIntakeContractRefFromDetail(
-  Map<String, dynamic> detail,
-) {
+  Map<String, dynamic> detail, {
+  String prefix = '',
+}) {
   final related = detail['proposalRelated'] is Map
       ? Map<String, dynamic>.from(detail['proposalRelated'] as Map)
       : const <String, dynamic>{};
@@ -1508,6 +1596,11 @@ Map<String, dynamic> proposalIntakeContractRefFromDetail(
     'partyB': pick(['partyB', 'purchaseCounterparty', 'salesCounterparty']),
     'signDate': pick(['signDate', 'purchaseSignDate', 'salesSignDate']),
     'files': proposalIntakeFilesFromContractDetail(detail),
+    if (prefix == 'purchase' || prefix == 'sales')
+      'recognized': proposalIntakeRecognizedFieldsFromDetail(
+        prefix: prefix,
+        detail: detail,
+      ),
   };
 }
 
@@ -1690,7 +1783,7 @@ Map<String, dynamic> proposalIntakeAppendSelectedContract(
     prefix: prefix,
     refs: [
       ...proposalIntakeSelectedContractRefs(form, prefix),
-      proposalIntakeContractRefFromDetail(detail),
+      proposalIntakeContractRefFromDetail(detail, prefix: prefix),
     ],
   );
   final next = proposalIntakeSetSelectedContracts(
@@ -1699,10 +1792,153 @@ Map<String, dynamic> proposalIntakeAppendSelectedContract(
     ids: [...ids, id],
     refs: refs,
   );
-  return proposalIntakeSyncSelectedContractFiles(next, prefix: prefix);
+  return proposalIntakeRefreshJoinedContractFields(
+    proposalIntakeSyncSelectedContractFiles(next, prefix: prefix),
+    prefix: prefix,
+  );
 }
 
-/// 从合同归集详情取出源文件，写入提案表单，供内部 PDF 预览。配置内容只取第一份。
+Map<String, String> _proposalIntakeSnapshotValues(
+  Map<String, dynamic> form,
+  String prefix,
+) {
+  final snapshots = form[kProposalContractSnapshotKey];
+  if (snapshots is! Map) return const {};
+  final raw = snapshots[prefix];
+  if (raw is! Map) return const {};
+  return <String, String>{
+    for (final entry in raw.entries)
+      '${entry.key}': '${entry.value ?? ''}'.trim(),
+  };
+}
+
+Map<String, String> _proposalIntakeRecognizedOf(Map<String, dynamic> ref) {
+  final raw = ref['recognized'];
+  if (raw is! Map) return const {};
+  return <String, String>{
+    for (final entry in raw.entries)
+      '${entry.key}': '${entry.value ?? ''}'.trim(),
+  };
+}
+
+List<Map<String, dynamic>> _proposalIntakeBackfillRecognized({
+  required String prefix,
+  required List<Map<String, dynamic>> refs,
+  required Map<String, String> snapshot,
+}) {
+  final keys = proposalIntakeContractFillKeys(prefix);
+  final out = <Map<String, dynamic>>[];
+  for (var i = 0; i < refs.length; i++) {
+    final ref = Map<String, dynamic>.from(refs[i]);
+    if (proposalIntakeContractRefHasRecognized(ref)) {
+      out.add(ref);
+      continue;
+    }
+    final recognized = <String, String>{for (final key in keys) key: ''};
+    if (i == 0 && snapshot.isNotEmpty) {
+      for (final key in keys) {
+        recognized[key] = (snapshot[key] ?? '').trim();
+      }
+    }
+    void fill(String key, String value) {
+      if (recognized[key]!.isNotEmpty) return;
+      recognized[key] = value.trim();
+    }
+
+    fill('${prefix}No', '${ref['contractNo'] ?? ''}');
+    fill('${prefix}Name', '${ref['contractName'] ?? ''}');
+    fill('${prefix}OurParty', '${ref['partyA'] ?? ''}');
+    fill('${prefix}Counterparty', '${ref['partyB'] ?? ''}');
+    fill('${prefix}SignDate', '${ref['signDate'] ?? ''}');
+    fill(
+      '${prefix}ValidPeriod',
+      '${ref['endDate'] ?? ref['validPeriod'] ?? ''}',
+    );
+    ref['recognized'] = recognized;
+    out.add(ref);
+  }
+  return out;
+}
+
+String _proposalIntakeMergeRecognized(
+  String key,
+  List<Map<String, dynamic>> refs,
+) {
+  final values = [
+    for (final ref in refs) _proposalIntakeRecognizedOf(ref)[key] ?? '',
+  ];
+  if (kProposalContractSingleValueKeys.contains(key)) {
+    for (final value in values) {
+      final text = value.trim();
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+  return proposalIntakeJoinContractTexts(values);
+}
+
+/// 按当前选中的合同，把识别字段用中文逗号拼回表单。
+/// 和上次带出值不一致的字段视为手改，保留不覆盖。
+Map<String, dynamic> proposalIntakeRefreshJoinedContractFields(
+  Map<String, dynamic> form, {
+  required String prefix,
+}) {
+  final refs = proposalIntakeSelectedContractRefs(form, prefix);
+  if (refs.isEmpty) return Map<String, dynamic>.from(form);
+  final snapshot = _proposalIntakeSnapshotValues(form, prefix);
+  final hasSnapshot =
+      form[kProposalContractSnapshotKey] is Map &&
+      (form[kProposalContractSnapshotKey] as Map)[prefix] is Map;
+  final enriched = _proposalIntakeBackfillRecognized(
+    prefix: prefix,
+    refs: refs,
+    snapshot: snapshot,
+  );
+  final next = Map<String, dynamic>.from(form);
+  next['${prefix}Contracts'] = enriched;
+  final stored = <String, String>{
+    for (final key in proposalIntakeContractFillKeys(prefix))
+      key: snapshot[key] ?? '',
+  };
+  final edits = next[kProposalContractEditsKey] is Map
+      ? Map<String, dynamic>.from(next[kProposalContractEditsKey] as Map)
+      : <String, dynamic>{};
+  for (final key in proposalIntakeContractFillKeys(prefix)) {
+    final merged = _proposalIntakeMergeRecognized(key, enriched);
+    final current = '${form[key] ?? ''}'.trim();
+    final previous = hasSnapshot ? (snapshot[key] ?? '').trim() : null;
+    final edited = previous != null && current != previous;
+    if (edited) {
+      stored[key] = previous;
+      continue;
+    }
+    next[key] = merged;
+    stored[key] = merged;
+    edits.remove(key);
+  }
+  final snapshots = next[kProposalContractSnapshotKey] is Map
+      ? Map<String, dynamic>.from(next[kProposalContractSnapshotKey] as Map)
+      : <String, dynamic>{};
+  snapshots[prefix] = stored;
+  next[kProposalContractSnapshotKey] = snapshots;
+  next[kProposalContractEditsKey] = edits;
+  return next;
+}
+
+bool proposalIntakeContractFieldsChanged(
+  Map<String, dynamic> before,
+  Map<String, dynamic> after,
+  String prefix,
+) {
+  for (final key in proposalIntakeContractFillKeys(prefix)) {
+    if ('${before[key] ?? ''}'.trim() != '${after[key] ?? ''}'.trim()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// 从合同归集详情取出源文件，写入提案表单，供内部 PDF 预览。主文件名取第一份。
 Map<String, dynamic> proposalIntakeFilePatchFromContractDetail(
   String prefix,
   Map<String, dynamic> detail,
@@ -1733,70 +1969,26 @@ Map<String, dynamic> proposalIntakePatchFromContract({
   required String prefix,
   required Map<String, dynamic> detail,
 }) {
-  final related = detail['proposalRelated'] is Map
-      ? Map<String, dynamic>.from(detail['proposalRelated'] as Map)
-      : <String, dynamic>{};
-  String pick(List<String> keys) {
-    final fromRelated = _contractText(related, keys);
-    if (fromRelated.isNotEmpty) return fromRelated;
-    return _contractText(detail, keys);
-  }
-
   final contractId = _proposalIntakePositiveId(detail['id']);
+  final recognized = proposalIntakeRecognizedFieldsFromDetail(
+    prefix: prefix,
+    detail: detail,
+  );
   final patch = <String, dynamic>{
     '${prefix}ContractId': contractId > 0 ? contractId : detail['id'],
     '${prefix}ContractIds': contractId > 0 ? <int>[contractId] : const <int>[],
     '${prefix}Contracts': contractId > 0
-        ? <Map<String, dynamic>>[proposalIntakeContractRefFromDetail(detail)]
+        ? <Map<String, dynamic>>[
+            proposalIntakeContractRefFromDetail(detail, prefix: prefix),
+          ]
         : const <Map<String, dynamic>>[],
   };
   for (final key in proposalIntakeContractFillKeys(prefix)) {
     patch[key] = '';
   }
   // 合同编号必须用合同归集编号；AI 抽到的对方文号不能盖掉所选合同。
-  final registerNo = _contractText(detail, ['contractNo']);
-  _putField(
-    patch,
-    '${prefix}No',
-    registerNo.isNotEmpty ? registerNo : pick(['${prefix}No']),
-  );
-  _putField(patch, '${prefix}Name', pick(['${prefix}Name', 'contractName']));
-  _putField(
-    patch,
-    '${prefix}SignDate',
-    pick(['${prefix}SignDate', 'signDate']),
-  );
-  _putField(patch, '${prefix}OurParty', pick(['${prefix}OurParty', 'partyA']));
-  _putField(
-    patch,
-    '${prefix}Counterparty',
-    pick(['${prefix}Counterparty', 'partyB']),
-  );
-  _putField(
-    patch,
-    '${prefix}ValidPeriod',
-    pick(['${prefix}ValidPeriod', 'endDate']),
-  );
-  _putField(patch, '${prefix}CoreTerms', pick(['${prefix}CoreTerms']));
-
-  if (prefix == 'purchase') {
-    _putField(patch, 'supplierPolicy', pick(['supplierPolicy']));
-    _putField(patch, 'supplyPayer', pick(['supplyPayer']));
-    _putField(patch, 'supplyPayAccount', pick(['supplyPayAccount']));
-  } else {
-    _putField(patch, 'channelPolicy', pick(['channelPolicy']));
-    _putField(patch, 'channelPayee', pick(['channelPayee']));
-    _putField(patch, 'channelReceiveAccount', pick(['channelReceiveAccount']));
-    _putField(
-      patch,
-      'salesInvoiceType',
-      pick(['salesInvoiceType', 'invoiceType', 'invoiceTypes']),
-    );
-    _putField(
-      patch,
-      'salesInvoiceFlow',
-      pick(['salesInvoiceFlow', 'invoiceFlow']),
-    );
+  for (final entry in recognized.entries) {
+    _putField(patch, entry.key, entry.value);
   }
   patch['${prefix}FileName'] = '';
   patch['${prefix}ObjectKey'] = '';
@@ -1945,7 +2137,10 @@ bool proposalIntakeCanPatchDraft(
   if (row.createdBy == userId) return true;
   if (isOwner('technologyOwner') || isOwner('financeOwner2')) return true;
   if (viewAll) return true;
-  return isOwner('marketOwner1') && row.status == 'reviewing';
+  return isOwner(
+        proposalIntakeIsPurchase(row.kind) ? 'marketOwner1' : 'financeOwner1',
+      ) &&
+      row.status == 'reviewing';
 }
 
 /// 返回列表时是否自动保存。已完成 / 待最终确认只读，不能再 PATCH 草稿。
@@ -2215,7 +2410,14 @@ const kProposalTechnologyReviewLabels = <String, String>{
 List<String> _proposalTechnologyItemAliases(String key) {
   if (key.startsWith('sku:')) {
     final id = key.substring(4);
-    return [key, 'skuDetails:$id', 'channelSku:$id', 'channelSkus:$id', 'product:$id', id];
+    return [
+      key,
+      'skuDetails:$id',
+      'channelSku:$id',
+      'channelSkus:$id',
+      'product:$id',
+      id,
+    ];
   }
   if (key.startsWith('child:')) {
     final id = key.substring(6);
@@ -2538,7 +2740,8 @@ class ProposalIntakeProgressStep {
 /// 「卡了多久」：不足 1 小时写分钟，不足 1 天写小时，否则「X 天 Y 小时」。
 String proposalIntakeWaitedText(Duration? waited) {
   if (waited == null) return '';
-  if (waited.inMinutes < 60) return '${waited.inMinutes < 1 ? 1 : waited.inMinutes} 分钟';
+  if (waited.inMinutes < 60)
+    return '${waited.inMinutes < 1 ? 1 : waited.inMinutes} 分钟';
   if (waited.inHours < 24) return '${waited.inHours} 小时';
   final hours = waited.inHours % 24;
   return hours == 0 ? '${waited.inDays} 天' : '${waited.inDays} 天 $hours 小时';
@@ -3698,6 +3901,7 @@ void _tallySalesFill(_ProposalFillTally tally, Map<String, dynamic> form) {
   tally.ref(form, 'productRef', 'product');
   tally.ref(form, 'projectRef', 'projectName');
   tally.list(form, 'supplies');
+  tally.ref(form, 'supplyTagL1Ref', 'supplyTagL1');
   tally.ref(form, 'channelTagL1Ref', 'channelTagL1');
   tally.text(form, 'supplierPolicy');
   tally.text(form, 'channelPolicy');
@@ -4324,6 +4528,31 @@ bool proposalIntakeSettleIsTier(ProposalFinanceSettleTerms terms) {
 const kProposalDefaultBusinessPlatforms = <String>['能源', '出行'];
 const kProposalDefaultUnitPriceFormulas = <String>['按核销统计结算单价', '按销售统计结算单价'];
 
+/// 结算比例怎么填。空字符串是旧数据：直接填比例和单价。
+const kProposalSettlePriceModeDirect = 'direct';
+const kProposalSettlePriceModeUnit = 'unit';
+const kProposalSettlePriceModeTier = 'tier';
+
+/// 结算比例选「按阶梯」后，在这一条下面填的档位。起点单位万元，比例是小数。
+class ProposalSettleTier {
+  const ProposalSettleTier({this.from = '', this.rate = ''});
+
+  final String from;
+  final String rate;
+
+  bool get isEmpty => from.trim().isEmpty && rate.trim().isEmpty;
+
+  Map<String, dynamic> toJson() => {'from': from, 'rate': rate};
+
+  factory ProposalSettleTier.fromJson(Object? raw) {
+    if (raw is! Map) return const ProposalSettleTier();
+    return ProposalSettleTier(
+      from: '${raw['from'] ?? ''}'.trim(),
+      rate: '${raw['rate'] ?? ''}'.trim(),
+    );
+  }
+}
+
 /// 结算比例和结算单价只能填一项：填了比例就清掉单价，反之亦然。
 ProposalFinanceSettleTerms proposalIntakeApplySettleXor(
   ProposalFinanceSettleTerms terms, {
@@ -4431,6 +4660,8 @@ class ProposalFinanceSettleTerms {
     this.settleModeRef,
     this.settleRatio = '',
     this.settleUnitPrice = '',
+    this.priceMode = '',
+    this.settleTiers = const [],
     this.scale = '',
     this.scalePeriod = '',
     this.skuIds = const [],
@@ -4453,6 +4684,15 @@ class ProposalFinanceSettleTerms {
   final CatalogRef? settleModeRef;
   final String settleRatio;
   final String settleUnitPrice;
+
+  /// 空：跟以前一样直接填比例和单价。direct：明确改回直接填写。
+  /// unit：只填结算单价。tier：下面展开阶梯规则。
+  final String priceMode;
+  final List<ProposalSettleTier> settleTiers;
+
+  bool get settleByUnit => priceMode == kProposalSettlePriceModeUnit;
+
+  bool get settleByTier => priceMode == kProposalSettlePriceModeTier;
 
   /// 产品结算上的销售规模，单位万元。
   final String scale;
@@ -4532,6 +4772,8 @@ class ProposalFinanceSettleTerms {
       (settleModeRef == null || settleModeRef!.isEmpty) &&
       settleRatio.isEmpty &&
       settleUnitPrice.isEmpty &&
+      priceMode.isEmpty &&
+      settleTiers.every((item) => item.isEmpty) &&
       scale.isEmpty &&
       scalePeriod.isEmpty &&
       skuIds.isEmpty &&
@@ -4554,12 +4796,18 @@ class ProposalFinanceSettleTerms {
       taxRate.isNotEmpty;
 
   /// 项目成本：有比例或单价就能算，不要求销售结算那套主体和税率。
+  /// 选了按阶梯就按阶梯规则算，不再要求这一条再填比例或单价。
   bool get isProjectCostComplete =>
-      displayRatio.trim().isNotEmpty || displayUnitPrice.trim().isNotEmpty;
+      settleByTier ||
+      (settleByUnit
+          ? displayUnitPrice.trim().isNotEmpty
+          : displayRatio.trim().isNotEmpty ||
+                displayUnitPrice.trim().isNotEmpty);
 
   bool get isSkuComplete {
     if (taxRate.isEmpty || resolvedRule.isEmpty) return false;
-    if (proposalIntakeSettleIsTier(this)) return true;
+    if (proposalIntakeSettleIsTier(this) || settleByTier) return true;
+    if (settleByUnit) return displayUnitPrice.isNotEmpty;
     return displayRatio.isNotEmpty ||
         displayUnitPrice.isNotEmpty ||
         resolvedPrice.isNotEmpty;
@@ -4571,6 +4819,8 @@ class ProposalFinanceSettleTerms {
     settleModeRef?.identity ?? settleMode,
     displayRatio,
     displayUnitPrice,
+    priceMode,
+    settleTiers.map((item) => '${item.from}:${item.rate}').join(','),
     scale,
     scalePeriod,
     skuIds.join(','),
@@ -4591,6 +4841,8 @@ class ProposalFinanceSettleTerms {
     Object? settleModeRef = _catalogUnset,
     String? settleRatio,
     String? settleUnitPrice,
+    String? priceMode,
+    List<ProposalSettleTier>? settleTiers,
     String? scale,
     String? scalePeriod,
     List<String>? skuIds,
@@ -4620,6 +4872,8 @@ class ProposalFinanceSettleTerms {
         ? this.settleRatio
         : proposalIntakeNormalizeSettleRatio(settleRatio),
     settleUnitPrice: settleUnitPrice ?? this.settleUnitPrice,
+    priceMode: priceMode ?? this.priceMode,
+    settleTiers: settleTiers ?? this.settleTiers,
     scale: scale ?? this.scale,
     scalePeriod: scalePeriod ?? this.scalePeriod,
     skuIds: skuIds ?? this.skuIds,
@@ -4657,6 +4911,9 @@ class ProposalFinanceSettleTerms {
     'settleModeRef': catalogRefToJson(settleModeRef),
     'settleRatio': proposalIntakeNormalizeSettleRatio(settleRatio),
     'settleUnitPrice': settleUnitPrice,
+    if (priceMode.isNotEmpty) 'priceMode': priceMode,
+    if (settleTiers.isNotEmpty)
+      'settleTiers': [for (final item in settleTiers) item.toJson()],
     'scale': scale,
     'scalePeriod': scalePeriod,
     'skuIds': skuIds,
@@ -4683,6 +4940,19 @@ class ProposalFinanceSettleTerms {
       settleModeRef: catalogRefOrNull(raw['settleModeRef']),
       settleRatio: proposalIntakeNormalizeSettleRatio(read('settleRatio')),
       settleUnitPrice: read('settleUnitPrice'),
+      priceMode: switch (read('priceMode')) {
+        kProposalSettlePriceModeDirect ||
+        kProposalSettlePriceModeUnit ||
+        kProposalSettlePriceModeTier => read('priceMode'),
+        _ => '',
+      },
+      settleTiers: [
+        for (final item
+            in (raw['settleTiers'] is List
+                ? raw['settleTiers'] as List
+                : const <Object?>[]))
+          if (item is Map) ProposalSettleTier.fromJson(item),
+      ],
       scale: read('scale').isNotEmpty ? read('scale') : read('salesScale'),
       scalePeriod: read('scalePeriod'),
       skuIds: proposalIntakeParseIdList(raw['skuIds']),
@@ -4850,7 +5120,7 @@ const kProposalFinanceLineReviewKeys = <String>[
   'proposalSubtitle',
 ];
 
-/// 按产品复核的公式类：收入、项目成本、税务成本。业务成本由市场部负责人一选，不走逐条复核。
+/// 按产品复核的公式类：收入、项目成本、税务成本。业务成本由财务部负责人一选，不走逐条复核。
 const kProposalProductFormulaReviewKinds = <String>[
   'revenue',
   'costItems',
@@ -4870,10 +5140,11 @@ List<String> proposalIntakeProductFormulaReviewKeys(Map<String, dynamic> form) {
 }
 
 /// 财务部负责人二要逐条复核完的全部项。
-/// 成本改为按结算规则自动测算（市场部「成本测算」只读展示），不再按产品选公式，
-/// 所以按产品的公式复核项（sku:<id>:revenue|costItems|taxCost）不再要求。
+/// 项目成本沿用结算公式，收入、项目成本和税务成本仍需按产品复核，
+/// 与服务端的整板块通过校验保持一致。
 List<String> proposalIntakeFinanceReviewKeys(Map<String, dynamic> form) => [
   ...kProposalFinanceLineReviewKeys,
+  ...proposalIntakeProductFormulaReviewKeys(form),
   ...proposalIntakeSkuSettleReviewKeys(form),
 ];
 
@@ -6375,7 +6646,12 @@ Map<String, dynamic> proposalIntakeDuplicateForm(Map<String, dynamic> form) {
   final decoded = jsonDecode(jsonEncode(form));
   if (decoded is! Map) return {};
   final copy = Map<String, dynamic>.from(decoded);
-  for (final key in ['skuDetails', 'childProducts', 'channelSkus', 'products']) {
+  for (final key in [
+    'skuDetails',
+    'childProducts',
+    'channelSkus',
+    'products',
+  ]) {
     final raw = copy[key];
     if (raw is! List) continue;
     copy[key] = [
@@ -7138,6 +7414,7 @@ List<String> proposalIntakeSalesMarketIssues(Map<String, dynamic> form) {
   needRef('productRef', 'product', '产品（标签一）');
   needRef('projectRef', 'projectName', '项目名称（标签一二级）');
   needList('supplies', '供给（标签二）');
+  needRef('supplyTagL1Ref', 'supplyTagL1', '标签二一级');
   needRef('channelTagL1Ref', 'channelTagL1', '标签三一级');
   need('supplierPolicy', '供货商政策');
   need('channelPolicy', '渠道政策');

@@ -25,7 +25,7 @@ const kProposalRevenueFormulaTitle = '收入';
 const kProposalRevenueFormula = '按所选渠道侧结算公式代入：业务量取年化规模，结算比例取产品销售结算';
 const kProposalSalesScaleFormula = '市场部基础信息填写的年化规模';
 const kProposalProcurementFormula = '各供给规则：关联产品年化规模 × 该条比例，加总';
-const kProposalProfitFormula = '收入 − 采购成本 − 项目成本 − 业务成本 − 税务成本';
+const kProposalProfitFormula = '收入 − 项目成本 − 业务成本 − 税务成本';
 const kProposalMarginFormula = '利润 ÷ 规模';
 const kProposalTurnoverCashFormula = '年化规模 ÷ 12 ÷ 月周转次数';
 
@@ -309,7 +309,11 @@ ProposalSkuSettleMoney proposalSkuSettleMoney(
 
 List<String> proposalSkuSettleMoneyBits(ProposalSkuSettleMoney money) {
   if (!money.hasAny) return const [];
-  String amount({required bool has, required double wan, required double share}) {
+  String amount({
+    required bool has,
+    required double wan,
+    required double share,
+  }) {
     if (!has) return '';
     if (money.scale > 0) return '${proposalFormatWan(wan)}万';
     final rounded = proposalRoundWan(share);
@@ -404,10 +408,7 @@ double? _faceWeightedIncomeShare(Map<String, dynamic> form) {
 ProposalProductScaleRollup? proposalProductScaleRollup(
   Map<String, dynamic> form,
 ) {
-  final explicitTotal = proposalIntakeFormHasText(
-    form,
-    kProposalSalesScaleKey,
-  );
+  final explicitTotal = proposalIntakeFormHasText(form, kProposalSalesScaleKey);
   final legacyScale = proposalIntakeLegacyProductScaleTotal(form);
   final hydrated = proposalIntakeHydrateMarketSalesScale(form);
   final scale = proposalFinanceAmount(hydrated, kProposalSalesScaleKey);
@@ -708,8 +709,7 @@ String proposalCostFormulaText(ProposalCostEstimateKind kind) => switch (kind) {
   ProposalCostEstimateKind.operating => '(收入 − 项目成本) × 2%',
   ProposalCostEstimateKind.vat => '(销项 − 进项) × 1.12',
   ProposalCostEstimateKind.stamp => '销售规模 × 0.0006',
-  ProposalCostEstimateKind.incomeTax =>
-    '(收入 − 项目成本 − 业务成本 − 经营成本) × 25%',
+  ProposalCostEstimateKind.incomeTax => '(收入 − 项目成本 − 业务成本 − 经营成本) × 25%',
   ProposalCostEstimateKind.businessBn => '(收入 − 项目成本 − 经营成本) × 10%',
   ProposalCostEstimateKind.businessU => '(收入 − 项目成本 − 经营成本) × 45%',
 };
@@ -960,8 +960,8 @@ double? proposalEstimatedProcurementCost(Map<String, dynamic> form) {
   for (final sku in proposalIntakeSkuDetails(form)) {
     if (covered.contains(sku.id)) continue;
     final local = proposalIntakeSkuScaleTotal(sku);
-    sum += (local > 0 ? local : proposalEffectiveSalesScale(form)) *
-        fallbackRatio;
+    sum +=
+        (local > 0 ? local : proposalEffectiveSalesScale(form)) * fallbackRatio;
     break;
   }
   if (sum <= 0) {
@@ -1028,7 +1028,8 @@ double proposalIntakeCostSettleFace(
     if (child > 0) return child;
     final parents = {
       for (final sku in skus)
-        if (want.contains(sku.id) && sku.parentSkuId.isNotEmpty) sku.parentSkuId,
+        if (want.contains(sku.id) && sku.parentSkuId.isNotEmpty)
+          sku.parentSkuId,
     };
     final parent = firstFace((sku) => parents.contains(sku.id));
     if (parent > 0) return parent;
@@ -1500,10 +1501,7 @@ Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
   // 先把每个产品的公式选择补全进 productFormulas，组上的合计写回后不会再反过来影响产品。
   form = proposalMaterializeProductFormulas(form);
   final estimated = _applyEstimatedFinanceCostsOnForm(
-    proposalIntakeProductFinanceScope(
-      form,
-      owner: kProposalProductFinanceMain,
-    ),
+    proposalIntakeProductFinanceScope(form, owner: kProposalProductFinanceMain),
     businessCatalog: businessCatalog,
     costCatalog: costCatalog,
     costNames: costNames,

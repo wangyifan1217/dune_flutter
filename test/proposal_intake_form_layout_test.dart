@@ -294,6 +294,97 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('标签二一级 sits beside 供给 and 标签二二级', (tester) async {
+    tester.view.physicalSize = const Size(1440, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+    await tester.tap(find.text('展开 ▾'));
+    await tester.pumpAndSettle();
+
+    final l1 = tester.getTopLeft(find.text('标签二一级'));
+    final supply = tester.getTopLeft(find.text('供给（标签二）'));
+    final l2 = tester.getTopLeft(find.text('标签二二级'));
+    expect(l1.dy, closeTo(supply.dy, 12));
+    expect(supply.dy, closeTo(l2.dy, 12));
+    expect(l1.dx, lessThan(supply.dx));
+    expect(supply.dx, lessThan(l2.dx));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('settlement rules sit on the matching contract', (tester) async {
+    tester.view.physicalSize = const Size(1440, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+    await tester.tap(find.text('展开 ▾'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('合同与执行'));
+    await tester.pumpAndSettle();
+
+    Finder onStage(String text) => find.text(text);
+    expect(onStage('供给侧结算规则'), findsOneWidget);
+    expect(onStage('渠道侧结算规则'), findsOneWidget);
+    expect(onStage('结算账户'), findsOneWidget);
+    expect(onStage('财务备注'), findsOneWidget);
+    expect(onStage('付款主体'), findsWidgets);
+    expect(onStage('收款主体'), findsWidgets);
+
+    expect(
+      tester.getTopLeft(onStage('采购合同').first).dy,
+      lessThan(tester.getTopLeft(onStage('供给侧结算规则')).dy),
+    );
+    final sales = tester.getTopLeft(onStage('销售合同').first);
+    final channel = tester.getTopLeft(onStage('渠道侧结算规则'));
+    final accounts = tester.getTopLeft(onStage('结算账户'));
+    final remark = tester.getTopLeft(onStage('财务备注'));
+    expect(sales.dy, lessThan(channel.dy));
+    expect(channel.dy, lessThan(accounts.dy));
+    expect(accounts.dy, lessThan(remark.dy));
+    // 财务部仍挂着同一组标题，只是同步展示，不在当前市场页上。
+    expect(find.text('结算规则与账户', skipOffstage: false), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('标签二一级 can add a custom option and keep it', (tester) async {
+    tester.view.physicalSize = const Size(1440, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+    await tester.tap(find.text('展开 ▾'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.descendant(of: _fieldOf('标签二一级'), matching: find.byType(TextField)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('+ 新增标签二一级'), findsOneWidget);
+
+    await tester.tap(find.text('+ 新增标签二一级'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '自定义一级');
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(of: _fieldOf('标签二一级'), matching: find.text('自定义一级')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.descendant(of: _fieldOf('标签二一级'), matching: find.byType(TextField)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('自定义一级'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final width in <double>[1440, 1180, 1024, 760, 420, 390]) {
     testWidgets('proposal form lays out without overflow at $width', (
       tester,
@@ -1548,6 +1639,8 @@ void main() {
 
       await tester.pumpWidget(_harness(1440));
       await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('proposal-nav-tech')));
+      await tester.pumpAndSettle();
 
       for (var i = 0; i < 20; i++) {
         if (find.text('开票接口 *').evaluate().isNotEmpty) break;
@@ -1562,6 +1655,7 @@ void main() {
         find.widgetWithText(ProposalChoiceChip, '开票接口 *'),
       );
       expect(chip.selected, isTrue);
+      expect(chip.enabled, isTrue);
       expect(
         find.ancestor(
           of: find.widgetWithText(ProposalChoiceChip, '开票接口 *'),
@@ -1569,7 +1663,7 @@ void main() {
             (widget) => widget is IgnorePointer && widget.ignoring,
           ),
         ),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         tester
@@ -1724,6 +1818,8 @@ void main() {
 
     await tester.pumpWidget(_harness(1440, session: session, row: row));
     await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('proposal-nav-tech')));
+    await tester.pumpAndSettle();
 
     await _scrollUntil(tester, '开票接口 *');
     expect(
@@ -1734,8 +1830,7 @@ void main() {
           .enabled,
       isTrue,
     );
-    expect(find.text('由财务部负责人二填写，科技部负责人随科技板块复核'), findsOneWidget);
-    expect(find.textContaining('请勾选财务技术接口'), findsOneWidget);
+    expect(find.text('财务技术接口'), findsWidgets);
   });
 
   testWidgets(
@@ -2661,14 +2756,22 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.tap(find.text('展开 ▾'));
+    await tester.pumpAndSettle();
+    if (find.text('修改内容').evaluate().isNotEmpty) {
+      await tester.tap(find.text('修改内容'));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('合同与执行'));
+    await tester.pumpAndSettle();
     await _scrollUntil(tester, '选择合同');
-    expect(find.textContaining('配置来源'), findsOneWidget);
+    expect(find.textContaining('2024-17-YW-00036'), findsWidgets);
     expect(find.text('查看合同'), findsWidgets);
     expect(find.text('合同源文件'), findsOneWidget);
     expect(find.text('点击「查看合同」预览合同归集中的源文件'), findsOneWidget);
   });
 
-  testWidgets('signed contracts show multi-select chips and first as source', (
+  testWidgets('signed contracts show one chip per selected contract', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 1800);
@@ -2719,8 +2822,12 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.tap(find.text('展开 ▾'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('合同与执行'));
+    await tester.pumpAndSettle();
     await _scrollUntil(tester, '选择合同');
-    expect(find.textContaining('配置来源'), findsOneWidget);
+    expect(find.textContaining('配置来源'), findsNothing);
     expect(find.textContaining('销售框架合同'), findsWidgets);
     expect(find.textContaining('补充协议'), findsWidgets);
     expect(find.text('继续搜索添加合同'), findsOneWidget);
@@ -2791,26 +2898,30 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('proposal-nav-finance')));
+    await tester.pumpAndSettle();
     await _scrollUntil(tester, '产品结算');
-    expect(find.text('产品结算'), findsOneWidget);
+    expect(find.text('产品结算'), findsWidgets);
     expect(find.textContaining('中石油100元'), findsWidgets);
     expect(find.byTooltip('中石油100元'), findsNothing);
-    expect(find.text('复制结算'), findsOneWidget);
-    expect(find.text('粘贴结算'), findsOneWidget);
     expect(find.text('新增共用结算'), findsNothing);
+    expect(find.text('结算一'), findsNothing);
+    await _tapVisible(tester, find.textContaining('结算 ›').last);
+    final dialog = find.byType(AlertDialog);
     expect(
-      find.textContaining('按$kProposalMainProductLabel填写结算'),
+      find.descendant(of: dialog, matching: find.text('复制结算')),
       findsOneWidget,
     );
-    expect(find.text('结算一'), findsNothing);
-    await _tapVisible(tester, find.text('填写结算').last);
-    final dialog = find.byType(AlertDialog);
+    expect(
+      find.descendant(of: dialog, matching: find.text('粘贴结算')),
+      findsOneWidget,
+    );
     expect(
       find.descendant(of: dialog, matching: find.text('销售（收入）')),
       findsWidgets,
     );
     expect(
-      find.descendant(of: dialog, matching: find.text('采购（成本）')),
+      find.descendant(of: dialog, matching: find.text('项目成本（采购成本）')),
       findsWidgets,
     );
     expect(
@@ -2838,7 +2949,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: dialog, matching: find.text('新增采购（成本）')),
+      find.descendant(of: dialog, matching: find.text('新增项目成本（采购成本）')),
       findsOneWidget,
     );
     expect(
@@ -2854,7 +2965,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: dialog, matching: find.text('尚未填写采购（成本）')),
+      find.descendant(of: dialog, matching: find.text('尚未填写项目成本（采购成本）')),
       findsOneWidget,
     );
     expect(
@@ -2954,7 +3065,7 @@ void main() {
     await tester.pump();
     await _scrollUntil(tester, '产品结算');
     expect(find.text(_approveLabel), findsWidgets);
-    await _tapVisible(tester, find.text('填写结算').last);
+    await _tapVisible(tester, find.textContaining('结算 ›').last);
     final settleDialog = find.byType(AlertDialog);
     expect(
       find.descendant(of: settleDialog, matching: find.text('点此复核')),
@@ -2994,11 +3105,21 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('proposal-nav-finance')));
+    await tester.pumpAndSettle();
     await _scrollUntil(tester, '产品结算');
-    await _tapVisible(tester, find.text('填写结算').last);
+    await _tapVisible(tester, find.textContaining('结算 ›').last);
     final dialog = find.byType(AlertDialog);
     expect(
       find.descendant(of: dialog, matching: find.text('成本一')),
+      findsOneWidget,
+    );
+    await _tapVisible(
+      tester,
+      find.descendant(of: dialog, matching: find.text('按阶梯')),
+    );
+    expect(
+      find.descendant(of: dialog, matching: find.text('项目成本（应付）.推广费阶梯')),
       findsOneWidget,
     );
     expect(
@@ -3014,11 +3135,11 @@ void main() {
       findsNothing,
     );
     expect(
-      find.descendant(of: dialog, matching: find.text('尚未填写采购（成本）')),
+      find.descendant(of: dialog, matching: find.text('尚未填写项目成本（采购成本）')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: dialog, matching: find.text('新增成本')),
+      find.descendant(of: dialog, matching: find.text('新增项目成本（采购成本）')),
       findsOneWidget,
     );
   });
@@ -3074,68 +3195,75 @@ void main() {
     expect(find.text('销售收入已走共用结算，这里只填规模。应付成本请新增明细。'), findsNothing);
     expect(find.textContaining('中石油100元'), findsWidgets);
     expect(find.text('复制结算'), findsWidgets);
-    await _tapVisible(tester, find.text('填写结算').first);
+    await _tapVisible(tester, find.textContaining('结算 ›').first);
     expect(find.text('结算比例'), findsWidgets);
     expect(find.text('填小数，如 0.08，不能填%'), findsWidgets);
   });
 
-  testWidgets(
-    'product settlement uses catalog formulas and xor-locks ratio',
-    (tester) async {
-      tester.view.physicalSize = const Size(1440, 2400);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
+  testWidgets('product settlement uses catalog formulas and xor-locks ratio', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(
-        _harness(
-          1440,
-          row: ProposalIntakeRow.fromJson({
-            'id': 1,
-            'code': 'TA-2026-0001',
-            'title': '测试提案',
-            'status': 'filling',
-            'createdBy': 11,
-            'form': {
-              'skuDetails': [
-                {
-                  'id': 'sku-1',
-                  'productName': '中石油100元',
-                  'faceValue': '100',
-                  'settlements': [
-                    {'id': 'st-1', 'settleUnitPrice': '12'},
-                  ],
-                },
-              ],
-            },
-          }),
-        ),
-      );
-      await tester.pump();
-      await _tapVisible(tester, find.byKey(const ValueKey('proposal-nav-finance')));
-      await _scrollUntil(tester, '产品结算');
-      await _tapVisible(tester, find.text('填写结算').last);
-      final formula = _childInField<ProposalSelectField<CatalogRef>>(
-        tester,
-        '计算公式',
-      );
-      expect(
-        formula.options.map((item) => item.label),
-        containsAll(['按核销统计结算单价', '按下发统计结算单价']),
-      );
-      expect(
-        formula.options.map((item) => item.label),
-        isNot(contains('按销售统计结算单价')),
-      );
-      final ratio = tester.widget<TextFormField>(
-        find.descendant(
-          of: _fieldOf('结算比例').first,
-          matching: find.byType(TextFormField),
-        ),
-      );
-      expect(ratio.enabled, isTrue);
-      expect(find.text('填写后将清空结算单价'), findsOneWidget);
-    },
-  );
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'filling',
+          'createdBy': 11,
+          'form': {
+            'skuDetails': [
+              {
+                'id': 'sku-1',
+                'productName': '中石油100元',
+                'faceValue': '100',
+                'settlements': [
+                  {'id': 'st-1', 'settleUnitPrice': '12'},
+                ],
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _tapVisible(
+      tester,
+      find.byKey(const ValueKey('proposal-nav-finance')),
+    );
+    await _scrollUntil(tester, '产品结算');
+    await _tapVisible(tester, find.textContaining('结算 ›').last);
+    final formula = _childInField<ProposalSelectField<CatalogRef>>(
+      tester,
+      '计算公式',
+    );
+    expect(
+      formula.options.map((item) => item.label),
+      containsAll(['按核销统计结算单价', '按下发统计结算单价']),
+    );
+    expect(
+      formula.options.map((item) => item.label),
+      isNot(contains('按销售统计结算单价')),
+    );
+    final ratio = tester.widget<TextFormField>(
+      find.descendant(
+        of: _fieldOf('结算比例').first,
+        matching: find.byType(TextFormField),
+      ),
+    );
+    expect(ratio.enabled, isTrue);
+    expect(find.text('填写后将清空结算单价'), findsOneWidget);
+    expect(find.text('按单价'), findsWidgets);
+    expect(find.text('按阶梯'), findsWidgets);
+    await _tapVisible(tester, find.text('按阶梯').first);
+    expect(find.text('阶梯规则'), findsWidgets);
+    expect(find.text('起点（万元）'), findsWidgets);
+  });
 
   test('product settle ratio formatter rejects percent sign', () {
     const formatter = ProposalSettleRatioFormatter();
@@ -4632,7 +4760,7 @@ void main() {
       );
       await tester.pump();
       await _scrollUntil(tester, '产品结算');
-      await _tapVisible(tester, find.text('填写结算').last);
+      await _tapVisible(tester, find.textContaining('结算 ›').last);
       final dialog = find.byType(AlertDialog);
       expect(
         find.descendant(of: dialog, matching: find.text('销售（收入）')),

@@ -19,6 +19,7 @@ import 'task_first_use_guide.dart';
 import 'task_inbox.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
+import 'task_subtasks_dialog.dart';
 
 enum _TaskPage { list, detail, action, daily, management }
 
@@ -1548,17 +1549,23 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           sliver: SliverLayoutBuilder(
             builder: (context, constraints) {
               final width = constraints.crossAxisExtent;
-              final columns = width >= 980
-                  ? 3
-                  : width >= 620
-                  ? 2
-                  : 1;
+              final columns = (width / 340).floor().clamp(1, 4);
               return SliverGrid(
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: columns,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
-                  mainAxisExtent: 280,
+                  mainAxisExtent:
+                      (items.any((t) => t.isPending)
+                          ? 280
+                          : items.any((t) => t.hasPendingChange)
+                          ? 244
+                          : 220) +
+                      (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(
+                            0,
+                            60,
+                          ) *
+                          8,
                 ),
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final task = items[index];
@@ -1567,6 +1574,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                     groupMode: true,
                     onTap: () => _openDetail(task.id),
                     onShare: () => unawaited(_shareTask(task)),
+                    onSubtasks: () => _openSubtasks(task),
                     groupTrailingAction: _goalCardCompleteAction(task),
                   );
                 }, childCount: items.length),
@@ -1619,6 +1627,19 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     );
   }
 
+  void _openSubtasks(TaskItem task) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => TaskSubtasksDialog(
+        task: task,
+        loadDetail: () => _api.getDetail(task.id),
+        onOpenTask: (id) {
+          if (mounted) _openDetail(id);
+        },
+      ),
+    );
+  }
+
   List<Widget> _buildItemCards(List<TaskItem> items) {
     final groupMode = _scope == 'goals';
     if (groupMode) {
@@ -1629,6 +1650,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             groupMode: true,
             onTap: () => _openDetail(t.id),
             onShare: () => unawaited(_shareTask(t)),
+            onSubtasks: () => _openSubtasks(t),
           ),
           const SizedBox(height: 10),
         ],

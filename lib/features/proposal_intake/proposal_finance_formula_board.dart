@@ -22,7 +22,7 @@ const kProposalFinanceShowEstimates = true;
 /// 谁能改什么由页面按角色传进 [ProposalFinanceBoardConfig]：
 /// - 填写人：收入公式、项目 / 税务成本、经营成本类型（产品结算里已有的项目成本自动带出、锁定）；
 /// - 财务部负责人二：同上并按产品逐条复核；业务成本与利润对其加密；
-/// - 市场部负责人一：财务复核时按产品选业务成本；
+/// - 财务部负责人一：财务复核时按产品选业务成本；
 /// - 其他人：只读。
 class ProposalFinanceBoardConfig {
   const ProposalFinanceBoardConfig({
@@ -33,7 +33,7 @@ class ProposalFinanceBoardConfig {
     this.categoryEditable = const {},
     this.productEditable,
     this.businessSealed = false,
-    this.businessWaitingText = '由市场部负责人一在财务复核时选择',
+    this.businessWaitingText = '由财务部负责人一在财务复核时选择',
     this.roleNote = '',
     this.reviewToggle,
     this.reviewStatus,
@@ -504,13 +504,19 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
               Row(
                 children: [
                   Expanded(child: title),
-                  value,
-                  if (review != null) ...[const SizedBox(width: 6), review],
+                  Flexible(
+                    child: FittedBox(fit: BoxFit.scaleDown, child: value),
+                  ),
                   chevron,
                 ],
               ),
               if (summary != null)
                 Padding(padding: const EdgeInsets.only(top: 2), child: summary),
+              if (review != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Align(alignment: Alignment.centerLeft, child: review),
+                ),
             ],
           )
         : Row(
@@ -551,7 +557,7 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
 /// - [full]：原来的按产品选公式（保留，暂不在页面上用）；
 /// - [result]：市场部「成本测算」——结算写好就自动算，只读出结果，不用填；
 /// - [inputs]：财务部「经营与周转」——只剩经营成本类型、月周转次数两项要填。
-enum ProposalFinanceCostPanelMode { full, result, inputs }
+enum ProposalFinanceCostPanelMode { full, result, inputs, cost }
 
 class ProposalFinanceCostPanel extends StatelessWidget {
   const ProposalFinanceCostPanel({
@@ -565,8 +571,9 @@ class ProposalFinanceCostPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (mode == ProposalFinanceCostPanelMode.inputs)
+    if (mode == ProposalFinanceCostPanelMode.inputs) {
       return _inputsPanel(context);
+    }
     final eval = config.evaluation;
     final sealed = config.businessSealed;
     final buckets = eval.buckets.values.toList();
@@ -574,10 +581,8 @@ class ProposalFinanceCostPanel extends StatelessWidget {
         sealed && bucket.category.key == kProposalCostCategoryBusiness
         ? 0
         : bucket.total;
-    // 成本合计含采购成本（付给供给侧的采购款）。
-    final total =
-        eval.procurement.amount +
-        buckets.fold<double>(0, (sum, b) => sum + shown(b));
+    // 成本合计只包含项目、业务和税务成本。
+    final total = buckets.fold<double>(0, (sum, b) => sum + shown(b));
     final scale = eval.salesScale;
     final products = config.products;
 
@@ -606,28 +611,35 @@ class ProposalFinanceCostPanel extends StatelessWidget {
 
     // 外层是成本类（项目 / 业务 / 税务），每一类点开后按产品列出；产品包在成本里面。
     // 利润块关掉时，收入公式也放在这里（按产品）。
-    if (mode == ProposalFinanceCostPanelMode.result) {
+    if (mode == ProposalFinanceCostPanelMode.result ||
+        mode == ProposalFinanceCostPanelMode.cost) {
       return config.wrapAll(
         [kProposalFinanceCostAnchor, kProposalFinanceProfitAnchor],
         ProposalFinanceBlockShell(
           icon: Icons.receipt_long_outlined,
-          title: '成本测算',
+          title: mode == ProposalFinanceCostPanelMode.result ? '成本测算' : '成本',
           band: band,
           rows: [
-            _procurementRow(context),
+            if (mode == ProposalFinanceCostPanelMode.cost)
+              config.wrap(
+                'revenue',
+                proposalFinanceRevenueRow(context, config),
+              ),
             for (final key in const [
               kProposalCostCategoryProject,
               kProposalCostCategoryBusiness,
               kProposalCostCategoryTax,
             ])
-              if (config.catalog.category(key) != null)
-                // 业务成本是内部分摊，结算里没有：还原成按产品选（市场部负责人一在复核时选），其余按结算自动算。
-                key == kProposalCostCategoryBusiness
-                    ? config.wrap(
-                        proposalFinanceCategoryAnchor(key),
-                        _categoryRow(context, key),
-                      )
-                    : _resultCategoryRow(context, key),
+              if (config.catalog.category(key) != null &&
+                  !(sealed && key == kProposalCostCategoryBusiness))
+                config.wrap(
+                  proposalFinanceCategoryAnchor(key),
+                  _categoryRow(
+                    context,
+                    key,
+                    readOnly: mode == ProposalFinanceCostPanelMode.result,
+                  ),
+                ),
           ],
         ),
       );
@@ -636,15 +648,13 @@ class ProposalFinanceCostPanel extends StatelessWidget {
       // 利润块关掉（或金额不展示）时，收入公式放在成本块第一行：业务成本、所得税要用到收入。
       if (!config.showEstimates || !kProposalFinanceShowProfit)
         config.wrap('revenue', proposalFinanceRevenueRow(context, config)),
-      // 采购成本放第一行：金额最大，取自供给侧结算，不用选。
-      if (config.showEstimates)
-        config.wrap('procurementCost', _procurementRow(context)),
       for (final key in const [
         kProposalCostCategoryProject,
         kProposalCostCategoryBusiness,
         kProposalCostCategoryTax,
       ])
-        if (config.catalog.category(key) != null)
+        if (config.catalog.category(key) != null &&
+            !(sealed && key == kProposalCostCategoryBusiness))
           config.wrap(
             proposalFinanceCategoryAnchor(key),
             _categoryRow(context, key),
@@ -668,77 +678,6 @@ class ProposalFinanceCostPanel extends StatelessWidget {
         band: band,
         rows: rows,
       ),
-    );
-  }
-
-  /// 只读的一类成本：合计 + 各项摘要；点开是每一项的金额和代入算式。全部按结算规则自动算。
-  Widget _resultCategoryRow(BuildContext context, String key) {
-    final category = config.catalog.category(key)!;
-    final sealed =
-        config.businessSealed && key == kProposalCostCategoryBusiness;
-    final bucket = config.evaluation.bucket(key);
-    final lines = bucket?.lines ?? const <ProposalFinanceLine>[];
-    final missing = {for (final l in lines) ...l.missing};
-    return ProposalFinanceRow(
-      title: category.name,
-      summary: sealed
-          ? '已加密，负责人二不可查看'
-          : lines.isEmpty
-          ? (key == kProposalCostCategoryProject ? '产品结算里还没有应付行' : '无')
-          : [for (final l in lines) '${l.name} ${_wan(l.amount)}'].join(' · '),
-      value: sealed ? '已加密' : '${_wan(bucket?.total ?? 0)} 万',
-      tag: missing.isEmpty || sealed
-          ? null
-          : ProposalFinanceTag(
-              '缺 ${missing.join('、')}',
-              color: ProposalPalette.amber,
-              fill: ProposalPalette.amberSoft,
-            ),
-      forceOpen: config.focusKeys.contains(proposalFinanceCategoryAnchor(key)),
-      detail: sealed || lines.isEmpty
-          ? null
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final l in lines)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                l.name,
-                                style: _sans(
-                                  context,
-                                  size: 12,
-                                  weight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              '${_wan(l.amount)} 万',
-                              style: _mono(context, size: 12),
-                            ),
-                          ],
-                        ),
-                        if (l.substitution.isNotEmpty)
-                          Text(
-                            l.substitution,
-                            style: _mono(
-                              context,
-                              size: 11,
-                              weight: FontWeight.w500,
-                              color: _K.text2,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
     );
   }
 
@@ -772,7 +711,11 @@ class ProposalFinanceCostPanel extends StatelessWidget {
   }
 
   /// 一类成本一行：合计 + 各产品摘要；点开后按产品分段，每段是这个产品这一类的成本项和公式。
-  Widget _categoryRow(BuildContext context, String key) {
+  Widget _categoryRow(
+    BuildContext context,
+    String key, {
+    bool readOnly = false,
+  }) {
     final category = config.catalog.category(key)!;
     final products = config.products;
     final show = config.showEstimates;
@@ -788,7 +731,7 @@ class ProposalFinanceCostPanel extends StatelessWidget {
             (sum, p) => sum + (p.evaluation.bucket(key)?.total ?? 0),
           );
     final summary = sealed
-        ? '已加密，负责人二不可查看'
+        ? '仅财务部负责人一和最终审批人可查看'
         : products.isEmpty
         ? '请先在科技部添加业务产品'
         : [
@@ -842,36 +785,9 @@ class ProposalFinanceCostPanel extends StatelessWidget {
                     product: products[i],
                     index: i,
                     categoryKey: key,
+                    readOnly: readOnly,
                   ),
               ],
-            ),
-    );
-  }
-
-  /// 采购成本：供给侧结算「关联产品年化规模 × 比例」，自动算、不用选；没填供给侧比例时标缺项。
-  Widget _procurementRow(BuildContext context) {
-    final line = config.evaluation.procurement;
-    final missing = line.missing.isNotEmpty;
-    return ProposalFinanceRow(
-      key: const ValueKey('finance-procurement-row'),
-      title: '采购成本',
-      summary: missing
-          ? line.substitution
-          : (line.source.isNotEmpty ? line.source : line.substitution),
-      value: '${_wan(line.amount)} 万',
-      tag: missing
-          ? const ProposalFinanceTag(
-              '缺供给侧比例',
-              color: ProposalPalette.amber,
-              fill: ProposalPalette.amberSoft,
-            )
-          : null,
-      forceOpen: config.focusKeys.contains('procurementCost'),
-      detail: line.substitution.isEmpty
-          ? null
-          : _Trace(
-              formula: '供给侧结算：关联产品年化规模 × 比例，加总',
-              substitution: line.substitution,
             ),
     );
   }
@@ -1032,7 +948,7 @@ class _CategoryDetail extends StatelessWidget {
           padding: const EdgeInsets.only(top: 4),
           child: Text(
             category.key == kProposalCostCategoryProject
-                ? '跟着产品结算，在采购（成本）里填写后自动带出'
+                ? '跟着产品结算，在项目成本（采购成本）里填写后自动带出'
                 : '未选择',
             style: _sans(context, size: 12, color: _K.grey),
           ),
@@ -1086,12 +1002,14 @@ class _ProductCategorySection extends StatelessWidget {
     required this.product,
     required this.index,
     required this.categoryKey,
+    this.readOnly = false,
   });
 
   final ProposalFinanceBoardConfig config;
   final ProposalProductFinanceEvaluation product;
   final int index;
   final String categoryKey;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -1102,7 +1020,9 @@ class _ProductCategorySection extends StatelessWidget {
     if (bucket == null) return const SizedBox.shrink();
     final category = bucket.category;
     final editable =
-        config.canEditProduct(skuId, key) && config.onCostItemsChanged != null;
+        !readOnly &&
+        config.canEditProduct(skuId, key) &&
+        config.onCostItemsChanged != null;
     final reviewKind = key == kProposalCostCategoryBusiness
         ? ''
         : ProposalFinanceFormulaBoardKeys.reviewKeyOf(key);
@@ -1140,7 +1060,7 @@ class _ProductCategorySection extends StatelessWidget {
       product: product,
       color: _categoryColor(key),
       trailing: show ? '${_wan(bucket.total)} 万' : '',
-      review: reviewKind.isEmpty
+      review: readOnly || reviewKind.isEmpty
           ? null
           : config.reviewToggle?.call(
               proposalFinanceProductReviewKey(skuId, reviewKind),
@@ -1536,22 +1456,18 @@ class _CostLine extends StatelessWidget {
                 },
               ),
             )
-          else if (formula != null &&
-              (!showEstimates || (!line.locked && !line.pending)))
+          else if (formula != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
-                showEstimates ? formula.name : '公式：${formula.name}',
+                '公式：${formula.name}',
                 style: _sans(context, size: 11, color: _K.grey),
               ),
             ),
           if (showEstimates)
             _Trace(
               // 产品结算带出的不再写公式（出处已经说明），只写代入。
-              formula:
-                  line.locked ||
-                      formula == null ||
-                      formula.expression == formula.name
+              formula: formula == null || formula.expression == formula.name
                   ? ''
                   : formula.expression,
               substitution: line.substitution,
@@ -1601,7 +1517,7 @@ class ProposalPromotionPlanField extends StatelessWidget {
           Row(
             children: [
               Text(
-                '应付 · 推广费阶梯',
+                '项目成本（应付）.推广费阶梯',
                 style: _sans(
                   context,
                   size: 12.5,
@@ -2607,7 +2523,7 @@ class ProposalFinanceProfitPanel extends StatelessWidget {
       ProposalFinanceRow(
         title: '利润',
         accent: _K.red,
-        summary: '收入 − 采购 − 项目 − 业务 − 税务',
+        summary: '收入 − 项目 − 业务 − 税务',
         value: sealed ? '—' : '${_wan(profit)} 万',
         valueColor: !sealed && profit < 0 ? _K.red : _K.ink,
         review: config.reviewToggle?.call('profit'),

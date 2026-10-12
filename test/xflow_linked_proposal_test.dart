@@ -1,7 +1,24 @@
 import 'package:dunes_app/features/xflow/xflow_detail_logic.dart';
+import 'package:dunes_app/features/xflow/xflow_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('stored proposal stays visible when disabled template lacks the field', () {
+    const detail = XflowProposalDetail(id: 1, code: 'PAY-1', title: '预付款',
+      status: 'pending', summary: '', beaconId: '', ownerName: '', amountText: '',
+      formValues: {}, products: [], slots: [], createdById: 7, raw: {});
+    final fields = [XflowField.fromJson({'key': 'memo', 'type': 'text', 'label': '用途'})];
+    final sections = buildFieldSections(fields, {
+      'memo': '采购',
+      'linkedProposal': linkedProposalIntakePayload(id: 22, code: 'PI-22', title: '原提案'),
+    }, detail);
+    final links = sections.expand((s) => s.items).where((f) => f.key == 'linkedProposal');
+    expect(links, hasLength(1));
+    expect(links.single.value, contains('原提案'));
+    expect(links.single.field.readonly, isTrue);
+    expect(fields, hasLength(1));
+  });
+
   test('parseLinkedProposalId reads picker payload', () {
     expect(
       parseLinkedProposalId({

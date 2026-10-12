@@ -223,6 +223,7 @@ void main() {
       'product': '现金券',
       'projectName': '项目甲',
       'supplies': ['供给A'],
+      'supplyTagL1': '能源',
       'channelTagL1': '银行',
       'channels': ['渠道A'],
       'supplierPolicy': '供货政策',
@@ -2323,16 +2324,10 @@ void main() {
       '协作提案 · 复核中',
     );
     expect(
-      proposalIntakeCardTitle(
-        storedTitle: '协作提案',
-        fetchedTitle: '广西卡品提案',
-      ),
+      proposalIntakeCardTitle(storedTitle: '协作提案', fetchedTitle: '广西卡品提案'),
       '广西卡品提案',
     );
-    expect(
-      proposalIntakeCardTitle(storedTitle: '广西卡品提案'),
-      '广西卡品提案',
-    );
+    expect(proposalIntakeCardTitle(storedTitle: '广西卡品提案'), '广西卡品提案');
     expect(approvalCardTitleIsWeak('李博睿 - 协作提案'), isTrue);
     expect(approvalCardTitleIsWeak('广西卡品提案'), isFalse);
   });
@@ -3006,7 +3001,7 @@ void main() {
     expect(form['supplyPayer'], '');
   });
 
-  test('adding a second signed contract keeps the first contract fields', () {
+  test('adding a second signed contract joins recognized fields', () {
     final first = proposalIntakePatchFromContract(
       prefix: 'purchase',
       detail: {
@@ -3015,7 +3010,13 @@ void main() {
         'contractName': '框架采购合同',
         'partyA': '沙丘科技',
         'partyB': '供应商甲',
-        'proposalRelated': {'purchaseName': '现金券采购合同'},
+        'signDate': '2026-03-01',
+        'endDate': '2027-03-01',
+        'proposalRelated': {
+          'purchaseName': '现金券采购合同',
+          'purchaseCoreTerms': '月结 15 日',
+          'supplierPolicy': '预付后供货',
+        },
         'files': [
           {'fileName': '框架采购合同.pdf', 'objectKey': 'contracts/a.pdf'},
         ],
@@ -3028,8 +3029,14 @@ void main() {
         'id': 92,
         'contractNo': 'CG-2026-0002',
         'contractName': '另一份采购合同',
-        'partyA': '新甲方',
+        'partyA': '沙丘科技',
         'partyB': '新乙方',
+        'signDate': '2026-06-01',
+        'endDate': '2026-12-31',
+        'proposalRelated': {
+          'purchaseCoreTerms': '到货验收',
+          'supplierPolicy': '预付后供货',
+        },
         'files': [
           {'fileName': '补充协议.pdf', 'objectKey': 'contracts/b.pdf'},
         ],
@@ -3038,9 +3045,14 @@ void main() {
 
     expect(form['purchaseContractId'], 91);
     expect(form['purchaseContractIds'], [91, 92]);
-    expect(form['purchaseNo'], 'CG-2026-0001');
-    expect(form['purchaseName'], '现金券采购合同');
+    expect(form['purchaseNo'], 'CG-2026-0001，CG-2026-0002');
+    expect(form['purchaseName'], '现金券采购合同，另一份采购合同');
     expect(form['purchaseOurParty'], '沙丘科技');
+    expect(form['purchaseCounterparty'], '供应商甲，新乙方');
+    expect(form['purchaseSignDate'], '2026-03-01，2026-06-01');
+    expect(form['purchaseValidPeriod'], '2027-03-01，2026-12-31');
+    expect(form['purchaseCoreTerms'], '月结 15 日，到货验收');
+    expect(form['supplierPolicy'], '预付后供货');
     expect(form['purchaseFileName'], '框架采购合同.pdf');
     expect(
       proposalIntakeContractFiles(
@@ -3055,6 +3067,115 @@ void main() {
         'purchase',
       ).map((item) => item['id']),
       [91, 92],
+    );
+    expect(proposalIntakeVisibleContractTotal(form), 2);
+  });
+
+  test('manual contract edits stay put when another contract is added', () {
+    final first = proposalIntakeRememberContractSnapshot(
+      form: proposalIntakePatchFromContract(
+        prefix: 'purchase',
+        detail: {
+          'id': 91,
+          'contractNo': 'CG-2026-0001',
+          'contractName': '框架采购合同',
+          'partyA': '沙丘科技',
+          'partyB': '供应商甲',
+        },
+      ),
+      prefix: 'purchase',
+    );
+    first['purchaseName'] = '用户改过的合同名称';
+    final form = proposalIntakeAppendSelectedContract(
+      first,
+      prefix: 'purchase',
+      detail: {
+        'id': 92,
+        'contractNo': 'CG-2026-0002',
+        'contractName': '另一份采购合同',
+        'partyA': '新甲方',
+        'partyB': '新乙方',
+      },
+    );
+
+    expect(form['purchaseName'], '用户改过的合同名称');
+    expect(form['purchaseNo'], 'CG-2026-0001，CG-2026-0002');
+    expect(form['purchaseOurParty'], '沙丘科技，新甲方');
+  });
+
+  test('removing a contract rejoins the remaining recognized fields', () {
+    final first = proposalIntakePatchFromContract(
+      prefix: 'sales',
+      detail: {
+        'id': 22,
+        'contractNo': 'XS-1',
+        'contractName': '销售框架合同',
+        'partyA': '沙丘科技',
+        'partyB': '渠道甲',
+        'proposalRelated': {'salesInvoiceType': '增值税专用发票'},
+      },
+    );
+    final joined = proposalIntakeAppendSelectedContract(
+      {'salesMode': '已签署合同', ...first},
+      prefix: 'sales',
+      detail: {
+        'id': 33,
+        'contractNo': 'XS-2',
+        'contractName': '补充协议',
+        'partyA': '沙丘科技',
+        'partyB': '渠道乙',
+        'proposalRelated': {'salesInvoiceType': '增值税普通发票'},
+      },
+    );
+    expect(joined['salesNo'], 'XS-1，XS-2');
+    expect(joined['salesInvoiceType'], '增值税专用发票');
+
+    final refs = proposalIntakeSelectedContractRefs(joined, 'sales');
+    final kept = proposalIntakeRefreshJoinedContractFields(
+      proposalIntakeSetSelectedContracts(
+        joined,
+        prefix: 'sales',
+        ids: const [22],
+        refs: [refs.first],
+      ),
+      prefix: 'sales',
+    );
+    expect(kept['salesNo'], 'XS-1');
+    expect(kept['salesName'], '销售框架合同');
+    expect(kept['salesCounterparty'], '渠道甲');
+    expect(proposalIntakeVisibleContractTotal(kept), 1);
+  });
+
+  test('contract count follows selected contracts and uploaded files', () {
+    expect(
+      proposalIntakeVisibleContractTotal({
+        'purchaseMode': '已签署合同',
+        'purchaseName': '人事管理服务合同',
+        'purchaseContractIds': [1, 2],
+        'salesMode': '已签署合同',
+        'salesName': '设备销售合同',
+        'salesContractId': 3,
+      }),
+      3,
+    );
+    expect(
+      proposalIntakeVisibleContractTotal({
+        'purchaseMode': '未签署合同',
+        'purchaseName': '草稿采购',
+        'purchaseFiles': [
+          {'fileName': 'a.pdf', 'objectKey': 'a'},
+          {'fileName': 'b.pdf', 'objectKey': 'b'},
+        ],
+        'salesName': '',
+      }),
+      2,
+    );
+    expect(
+      proposalIntakeVisibleContractTotal({
+        'purchaseName': '只有名称',
+        'salesName': '',
+      }),
+      1,
     );
   });
 
@@ -3496,73 +3617,82 @@ void main() {
     expect(proposalIntakeTechnologyHistory(row.form).single.platform, '旧平台');
   });
 
-  test('copying a business product also copies linked products and settlements', () {
-    const source = ProposalSkuDetailRow(
-      id: 'sku-1',
-      productName: '湖北中石油50元加油券包',
-      couponKind: '权益',
-      platformStatus: 'created',
-      partnerProductCode: 'OLD-1',
-      settlements: [
-        ProposalSkuSettleRow(
-          id: 'st-main',
-          terms: ProposalFinanceSettleTerms(settleRatio: '0.9'),
-        ),
-      ],
-    );
-    const child = ProposalSkuDetailRow(
-      id: 'child-1',
-      productName: '满200减20',
-      parentSkuId: 'sku-1',
-      faceValue: '20',
-      settlements: [
-        ProposalSkuSettleRow(
-          id: 'st-child',
-          kind: 'cost',
-          terms: ProposalFinanceSettleTerms(settleUnitPrice: '12.2'),
-        ),
-      ],
-    );
-    final copied = proposalIntakeCopyBusinessProducts(
-      source: source,
-      count: 2,
-      mains: const [source],
-      children: const [child],
-      quantities: const {'child-1': 2},
-      idSeed: 10,
-    );
+  test(
+    'copying a business product also copies linked products and settlements',
+    () {
+      const source = ProposalSkuDetailRow(
+        id: 'sku-1',
+        productName: '湖北中石油50元加油券包',
+        couponKind: '权益',
+        platformStatus: 'created',
+        partnerProductCode: 'OLD-1',
+        settlements: [
+          ProposalSkuSettleRow(
+            id: 'st-main',
+            terms: ProposalFinanceSettleTerms(settleRatio: '0.9'),
+          ),
+        ],
+      );
+      const child = ProposalSkuDetailRow(
+        id: 'child-1',
+        productName: '满200减20',
+        parentSkuId: 'sku-1',
+        faceValue: '20',
+        settlements: [
+          ProposalSkuSettleRow(
+            id: 'st-child',
+            kind: 'cost',
+            terms: ProposalFinanceSettleTerms(settleUnitPrice: '12.2'),
+          ),
+        ],
+      );
+      final copied = proposalIntakeCopyBusinessProducts(
+        source: source,
+        count: 2,
+        mains: const [source],
+        children: const [child],
+        quantities: const {'child-1': 2},
+        idSeed: 10,
+      );
 
-    expect(copied.mains, hasLength(3));
-    expect(copied.mains[1].id, isNot(source.id));
-    expect(copied.mains[2].id, isNot(copied.mains[1].id));
-    expect(copied.mains[1].productName, '湖北中石油50元加油券包（副本）');
-    expect(copied.mains[2].productName, '湖北中石油50元加油券包（副本2）');
-    expect(copied.mains[1].platformStatus, isEmpty);
-    expect(copied.mains[1].partnerProductCode, isEmpty);
-    expect(copied.mains[1].settlements.single.id, isNot('st-main'));
-    expect(copied.mains[1].settlements.single.terms.settleRatio, '0.9');
-    expect(copied.mains[2].settlements.single.id, isNot(copied.mains[1].settlements.single.id));
+      expect(copied.mains, hasLength(3));
+      expect(copied.mains[1].id, isNot(source.id));
+      expect(copied.mains[2].id, isNot(copied.mains[1].id));
+      expect(copied.mains[1].productName, '湖北中石油50元加油券包（副本）');
+      expect(copied.mains[2].productName, '湖北中石油50元加油券包（副本2）');
+      expect(copied.mains[1].platformStatus, isEmpty);
+      expect(copied.mains[1].partnerProductCode, isEmpty);
+      expect(copied.mains[1].settlements.single.id, isNot('st-main'));
+      expect(copied.mains[1].settlements.single.terms.settleRatio, '0.9');
+      expect(
+        copied.mains[2].settlements.single.id,
+        isNot(copied.mains[1].settlements.single.id),
+      );
 
-    final firstChildren = copied.children
-        .where((row) => row.parentSkuId == copied.mains[1].id)
-        .toList();
-    final secondChildren = copied.children
-        .where((row) => row.parentSkuId == copied.mains[2].id)
-        .toList();
-    expect(firstChildren, hasLength(1));
-    expect(secondChildren, hasLength(1));
-    expect(firstChildren.single.productName, '满200减20');
-    expect(firstChildren.single.faceValue, '20');
-    expect(firstChildren.single.settlements.single.terms.settleUnitPrice, '12.2');
-    expect(firstChildren.single.settlements.single.id, isNot('st-child'));
-    expect(
-      secondChildren.single.settlements.single.id,
-      isNot(firstChildren.single.settlements.single.id),
-    );
-    expect(copied.quantities[firstChildren.single.id], 2);
-    expect(copied.quantities[secondChildren.single.id], 2);
-    expect(copied.children.where((row) => row.id == 'child-1'), hasLength(1));
-  });
+      final firstChildren = copied.children
+          .where((row) => row.parentSkuId == copied.mains[1].id)
+          .toList();
+      final secondChildren = copied.children
+          .where((row) => row.parentSkuId == copied.mains[2].id)
+          .toList();
+      expect(firstChildren, hasLength(1));
+      expect(secondChildren, hasLength(1));
+      expect(firstChildren.single.productName, '满200减20');
+      expect(firstChildren.single.faceValue, '20');
+      expect(
+        firstChildren.single.settlements.single.terms.settleUnitPrice,
+        '12.2',
+      );
+      expect(firstChildren.single.settlements.single.id, isNot('st-child'));
+      expect(
+        secondChildren.single.settlements.single.id,
+        isNot(firstChildren.single.settlements.single.id),
+      );
+      expect(copied.quantities[firstChildren.single.id], 2);
+      expect(copied.quantities[secondChildren.single.id], 2);
+      expect(copied.children.where((row) => row.id == 'child-1'), hasLength(1));
+    },
+  );
 
   test('append technology record copies the live tech snapshot', () {
     final next = proposalIntakeAppendTechnologyRecord({
@@ -4397,6 +4527,8 @@ void main() {
     expect(empty, contains('请选择产品（标签一）'));
     expect(empty, isNot(contains('请选择子分类')));
     expect(empty, contains('请选择供给（标签二）'));
+    expect(empty, contains('请选择标签二一级'));
+    expect(empty, isNot(contains('请选择标签二二级')));
     expect(empty, contains('请选择标签三一级'));
     expect(empty, isNot(contains('请选择渠道（标签三）')));
     expect(empty, contains('请填写盈利计算说明'));
@@ -4433,6 +4565,7 @@ void main() {
       'product': '智能投放平台',
       'projectName': '华东区域智能投放项目',
       'supplies': ['头部媒体供给'],
+      'supplyTagL1': '能源',
       'channelTagL1': '银行',
       'channels': ['直客渠道'],
       'supplierPolicy': '供货政策',
@@ -5012,9 +5145,13 @@ void main() {
         {'id': 'child-1', 'productName': '加油100'},
       ],
     };
-    final fields = {for (final key in kProposalTechnologyReviewFields) key: true};
+    final fields = {
+      for (final key in kProposalTechnologyReviewFields) key: true,
+    };
     expect(
-      proposalIntakeTechnologyReviewGaps({'technologyItems': fields}, form: form),
+      proposalIntakeTechnologyReviewGaps({
+        'technologyItems': fields,
+      }, form: form),
       ['业务平台产品'],
     );
     expect(

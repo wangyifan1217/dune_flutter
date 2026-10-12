@@ -7,13 +7,13 @@ import 'proposal_intake_models.dart';
 ///
 /// 财务部不再手填金额：每个产品（主产品、子产品都拆）各选收入公式和
 /// 项目 / 业务 / 税务成本项及公式，按产品分别测算再加总，
-/// 利润 = 收入 − 采购成本 − 项目成本 − 业务成本 − 税务成本（采购成本取自供给侧结算）。
+/// 利润 = 收入 − 项目成本 − 业务成本 − 税务成本。
 /// 经营成本整单只选类型，不计金额、不进利润。
 /// 字典（收入公式、成本项、成本公式）由后端 `options.finance.formulaCatalog`
 /// 下发；后端没给时用本文件里的兜底字典。
 
 /// 利润是否测算。收入公式里的业务量、补贴、利差等提案取不到真实值（见 test/proposal_finance_formula_mock_test.dart），
-/// 算出的利润不可信，先停掉：不显示利润 / 毛利率、不回写表单，成本（采购 / 项目 / 业务 / 税务）照常测算。
+/// 算出的利润不可信，先停掉：不显示利润 / 毛利率；项目、业务、税务成本和利润仍按当前口径测算回写。
 /// 改成 true 即恢复利润块和各处利润数字。
 const kProposalFinanceShowProfit = false;
 
@@ -393,8 +393,7 @@ class ProposalFinanceFormulaCatalog {
     );
   }
 
-  static final ProposalFinanceFormulaCatalog fallback =
-      _buildFallbackCatalog();
+  static final ProposalFinanceFormulaCatalog fallback = _buildFallbackCatalog();
 }
 
 // ---------------------------------------------------------------------------
@@ -436,22 +435,23 @@ const _kProjectCostFormulas = <ProposalFinanceFormula>[
 const _kPromotionTierFormula = ProposalFinanceFormula(
   code: 'PROMO_TIER',
   name: '阶梯推广费',
-  expression: '按推广商配置：按固定比例（年化规模 × 比例），或年阶梯（按年化规模分档），或连续月序配置（各月份段按月规模阶梯或固定比例，逐月加总 12 个月）',
+  expression:
+      '按推广商配置：按固定比例（年化规模 × 比例），或年阶梯（按年化规模分档），或连续月序配置（各月份段按月规模阶梯或固定比例，逐月加总 12 个月）',
   kind: ProposalFinanceFormulaKind.tiered,
 );
 
 const _kBusinessCostFormulas = <ProposalFinanceFormula>[
   ProposalFinanceFormula(
     code: 'BIZ_NET_10',
-    name: '（收入 − 采购 − 项目成本）× 10%',
-    expression: '(收入 − 采购成本 − 项目成本) × 10%',
+    name: '（收入 − 项目成本）× 10%',
+    expression: '(收入 − 项目成本) × 10%',
     kind: ProposalFinanceFormulaKind.netOpRate,
     rate: 0.10,
   ),
   ProposalFinanceFormula(
     code: 'BIZ_NET_45',
-    name: '（收入 − 采购 − 项目成本）× 45%',
-    expression: '(收入 − 采购成本 − 项目成本) × 45%',
+    name: '（收入 − 项目成本）× 45%',
+    expression: '(收入 − 项目成本) × 45%',
     kind: ProposalFinanceFormulaKind.netOpRate,
     rate: 0.45,
   ),
@@ -480,14 +480,14 @@ const _kIncomeTaxFormulas = <ProposalFinanceFormula>[
   ProposalFinanceFormula(
     code: 'TAX_INCOME_25',
     name: '应税利润 × 25%',
-    expression: '(收入 − 采购成本 − 项目成本 − 业务成本) × 25%',
+    expression: '(收入 − 项目成本 − 业务成本) × 25%',
     kind: ProposalFinanceFormulaKind.pretaxRate,
     rate: 0.25,
   ),
   ProposalFinanceFormula(
     code: 'TAX_INCOME_15',
     name: '应税利润 × 15%（高新技术企业）',
-    expression: '(收入 − 采购成本 − 项目成本 − 业务成本) × 15%',
+    expression: '(收入 − 项目成本 − 业务成本) × 15%',
     kind: ProposalFinanceFormulaKind.pretaxRate,
     rate: 0.15,
   ),
@@ -522,7 +522,8 @@ ProposalCostTypeOption _projectCostOption(String name) {
       formulas: [_kPromotionTierFormula],
       defaultFormula: 'PROMO_TIER',
       tiered: true,
-      hint: '推广费按推广商配置：选按固定比例、年阶梯，或连续月序配置（如第 1–3 个月阶梯、第 4 个月及以后固定比例）。年阶梯按年化规模分档；月序档位按月规模。档位单位万元，比例写小数（0.5 即 50%）。',
+      hint:
+          '推广费按推广商配置：选按固定比例、年阶梯，或连续月序配置（如第 1–3 个月阶梯、第 4 个月及以后固定比例）。年阶梯按年化规模分档；月序档位按月规模。档位单位万元，比例写小数（0.5 即 50%）。',
     );
   }
   return ProposalCostTypeOption(
@@ -598,22 +599,13 @@ ProposalFinanceFormulaCatalog _buildFallbackCatalog() {
         _f('3', '销售面值*结算比例', '销售(面值) * 结算比例'),
         _f('4', _kFormula4, _kFormula4),
         _f('8', '核销实际支付金额*结算比例', '核销实际支付金额 * 结算比例'),
-        _f(
-          '9',
-          '按下发统计结算单价*结算比例',
-          '按下发统计结算单价 * 结算比例',
-          _kUnitRatioMethod,
-        ),
+        _f('9', '按下发统计结算单价*结算比例', '按下发统计结算单价 * 结算比例', _kUnitRatioMethod),
         _f('11', '兑换金额*结算比例', '兑换金额 * 结算比例'),
         _f('12', '积分/返费采购款*结算比例', '积分/返费采购款 * 结算比例'),
         _f('21', '（券包销售款-推广费+利差）*结算比例', '（券包销售款-推广费+利差） * 结算比例'),
         _f('23', '按下发统计结算单价', '按下发统计结算单价', _kUnitMethod),
         _f('24', '按核销统计结算单价', '按核销统计结算单价', _kUnitMethod),
-        _f(
-          '34',
-          '（券包销售款-推广费+利差-渠道侧N）*结算比例',
-          '（券包销售款-推广费+利差-渠道侧N）*结算比例',
-        ),
+        _f('34', '（券包销售款-推广费+利差-渠道侧N）*结算比例', '（券包销售款-推广费+利差-渠道侧N）*结算比例'),
         _f('39', '（销售-退款）实际支付金额*结算比例', '（销售-退款）实际支付金额 × 结算比例'),
       ],
     ),
@@ -632,7 +624,10 @@ ProposalFinanceFormulaCatalog _buildFallbackCatalog() {
         formulasKey: 'costItemFormulas',
         filler: '产品结算里的应付行自动带出；其余由填写人补选，提交后财务部负责人二确认',
         hint: '金额按产品结算算，比例、票种、税率以产品结算为准。',
-        items: [for (final name in _kDefaultProjectCostNames) _projectCostOption(name)],
+        items: [
+          for (final name in _kDefaultProjectCostNames)
+            _projectCostOption(name),
+        ],
       ),
       ProposalCostCategory(
         key: kProposalCostCategoryBusiness,
@@ -641,9 +636,10 @@ ProposalFinanceFormulaCatalog _buildFallbackCatalog() {
         amountsKey: 'businessCostItemAmounts',
         totalKey: 'businessCost',
         formulasKey: 'businessCostItemFormulas',
-        filler: '市场部负责人一在财务复核时选择；负责人二不可见',
+        filler: '财务部负责人一多选公式；仅财务部负责人一和最终审批人可见',
         items: [
-          for (final name in _kDefaultBusinessCostNames) _businessCostOption(name),
+          for (final name in _kDefaultBusinessCostNames)
+            _businessCostOption(name),
         ],
       ),
       const ProposalCostCategory(
@@ -779,7 +775,9 @@ class ProposalPromotionSegment {
   factory ProposalPromotionSegment.fromJson(Object? raw) {
     final map = _mapOf(raw);
     final from = _num(map['fromMonth']).round();
-    final to = _str(map['toMonth']).isEmpty ? null : _num(map['toMonth']).round();
+    final to = _str(map['toMonth']).isEmpty
+        ? null
+        : _num(map['toMonth']).round();
     return ProposalPromotionSegment(
       fromMonth: from < 1 ? 1 : from,
       toMonth: to,
@@ -814,7 +812,9 @@ class ProposalPromotionSegment {
     double? rate,
   }) => ProposalPromotionSegment(
     fromMonth: fromMonth ?? this.fromMonth,
-    toMonth: identical(toMonth, _promotionUnset) ? this.toMonth : toMonth as int?,
+    toMonth: identical(toMonth, _promotionUnset)
+        ? this.toMonth
+        : toMonth as int?,
     type: type ?? this.type,
     mode: mode ?? this.mode,
     tiers: tiers ?? this.tiers,
@@ -869,7 +869,9 @@ class ProposalPromotionSegment {
         final part = (volume < upper ? volume : upper) - lower;
         if (part <= 0) continue;
         fee += part * list[i].rate;
-        parts.add('${_wan(part)} × ${proposalFormatPromotionRate(list[i].rate)}');
+        parts.add(
+          '${_wan(part)} × ${proposalFormatPromotionRate(list[i].rate)}',
+        );
       }
       return (
         fee: fee,
@@ -909,9 +911,7 @@ class ProposalPromotionTierPlan {
 
   /// 新建时的默认：年阶梯一档，起点 0。
   static const annualSegments = [
-    ProposalPromotionSegment(
-      tiers: [ProposalPromotionTier(from: 0, rate: 0)],
-    ),
+    ProposalPromotionSegment(tiers: [ProposalPromotionTier(from: 0, rate: 0)]),
   ];
 
   /// 新建时的默认：第 1–3 个月阶梯，第 4 个月及以后固定比例。
@@ -938,9 +938,8 @@ class ProposalPromotionTierPlan {
       segments.isEmpty ||
       segments.every((segment) => segment.tiered && segment.tiers.isEmpty);
 
-  String get label => promoter.isNotEmpty
-      ? promoter
-      : (name.isNotEmpty ? name : '推广商未填');
+  String get label =>
+      promoter.isNotEmpty ? promoter : (name.isNotEmpty ? name : '推广商未填');
 
   double get fixedRate => segments.isEmpty ? 0 : segments.first.rate;
 
@@ -1103,11 +1102,13 @@ List<ProposalPromotionTierPlan> proposalPromotionPlansOf(
   return [_namedPlan(legacy, 0)];
 }
 
-ProposalPromotionTierPlan _namedPlan(ProposalPromotionTierPlan plan, int index) =>
-    plan.copyWith(
-      id: plan.id.isEmpty ? 'p${index + 1}' : plan.id,
-      name: plan.name.isEmpty ? proposalPromotionPlanDefaultName(index) : plan.name,
-    );
+ProposalPromotionTierPlan _namedPlan(
+  ProposalPromotionTierPlan plan,
+  int index,
+) => plan.copyWith(
+  id: plan.id.isEmpty ? 'p${index + 1}' : plan.id,
+  name: plan.name.isEmpty ? proposalPromotionPlanDefaultName(index) : plan.name,
+);
 
 /// 新增一套阶梯方案时用的 id：不与已有的重复。
 String proposalPromotionPlanNextId(List<ProposalPromotionTierPlan> plans) {
@@ -1163,9 +1164,8 @@ class ProposalFinanceBucket {
   final ProposalCostCategory category;
   final List<ProposalFinanceLine> lines;
 
-  double get total => proposalRoundWan(
-    lines.fold<double>(0, (sum, line) => sum + line.amount),
-  );
+  double get total =>
+      proposalRoundWan(lines.fold<double>(0, (sum, line) => sum + line.amount));
 
   List<String> get names => [for (final line in lines) line.name];
 }
@@ -1188,7 +1188,7 @@ class ProposalFinanceEvaluation {
   final double salesScale;
 
   /// 采购成本：付给供给侧的采购款（供给侧结算「关联产品年化规模 × 比例」）。
-  /// 收入是渠道结算全额，不扣这笔利润会虚高。
+  /// 兼容旧结构；当前销售提案已取消采购成本，此项始终为 0。
   final ProposalFinanceLine procurement;
 
   /// 按产品的测算；整组的收入、成本、利润是它们的加总。
@@ -1210,10 +1210,9 @@ class ProposalFinanceEvaluation {
 
   double total(String key) => buckets[key]?.total ?? 0;
 
-  /// 成本合计 = 采购成本 + 项目 / 业务 / 税务（经营成本只选类型，金额为 0）。
+  /// 成本合计 = 项目 / 业务 / 税务（经营成本只选类型，金额为 0）。
   double get costTotal => proposalRoundWan(
-    procurement.amount +
-        buckets.values.fold<double>(0, (sum, bucket) => sum + bucket.total),
+    buckets.values.fold<double>(0, (sum, bucket) => sum + bucket.total),
   );
 }
 
@@ -1243,9 +1242,10 @@ class ProposalProductFinanceEvaluation {
   }
 
   bool get hasPromotion =>
-      evaluation.bucket(kProposalCostCategoryProject)?.lines.any(
-        (line) => line.name == '推广费',
-      ) ??
+      evaluation
+          .bucket(kProposalCostCategoryProject)
+          ?.lines
+          .any((line) => line.name == '推广费') ??
       false;
 }
 
@@ -1350,7 +1350,10 @@ Set<String> proposalFinanceSettledProjectNames(
   List<String> costNames = const [],
 }) {
   return {
-    for (final name in proposalMatchedProjectCostNames(form, costNames: costNames))
+    for (final name in proposalMatchedProjectCostNames(
+      form,
+      costNames: costNames,
+    ))
       proposalProjectCostDisplayName(name),
   };
 }
@@ -1363,7 +1366,10 @@ String _projectSettleSource(
   final display = proposalProjectCostDisplayName(name);
   final aliases = proposalProjectCostNamesOf(display);
   final labels = <String>[];
-  for (final hit in proposalPayableProjectCostHits(form, costNames: costNames)) {
+  for (final hit in proposalPayableProjectCostHits(
+    form,
+    costNames: costNames,
+  )) {
     if (!aliases.contains(hit.costName)) continue;
     final ratio = hit.terms.displayRatio.trim();
     final price = hit.terms.displayUnitPrice.trim();
@@ -1383,9 +1389,14 @@ String _projectSettleFormulaLabel(
   String name, {
   List<String> costNames = const [],
 }) {
-  final aliases = proposalProjectCostNamesOf(proposalProjectCostDisplayName(name));
+  final aliases = proposalProjectCostNamesOf(
+    proposalProjectCostDisplayName(name),
+  );
   final labels = <String>[];
-  for (final hit in proposalPayableProjectCostHits(form, costNames: costNames)) {
+  for (final hit in proposalPayableProjectCostHits(
+    form,
+    costNames: costNames,
+  )) {
     if (!aliases.contains(hit.costName)) continue;
     final text = hit.terms.displayFormula.trim();
     if (text.isNotEmpty && !labels.contains(text)) labels.add(text);
@@ -1861,9 +1872,9 @@ Map<String, dynamic> _withInheritedPayables(
     if (settlements is List) ...settlements,
     for (var i = 0; i < inherited.length; i++)
       <String, dynamic>{
-        ...inherited[i].terms.toJson(),
-        'id': '${sku.id}-inherited-${i + 1}',
-      }
+          ...inherited[i].terms.toJson(),
+          'id': '${sku.id}-inherited-${i + 1}',
+        }
         ..remove('scale')
         ..remove('scalePeriod'),
   ];
@@ -2010,29 +2021,11 @@ ProposalFinanceEvaluation _aggregateFinance({
     );
   }
   double total(String key) => buckets[key]?.total ?? 0;
-  final procurements = [for (final e in evals) e.procurement];
-  final procurementAmount = proposalRoundWan(
-    procurements.fold<double>(0, (sum, line) => sum + line.amount),
-  );
-  final procurementLine = procurements.length == 1
-      ? procurements.single
-      : ProposalFinanceLine(
-          name: '采购成本',
-          amount: procurementAmount,
-          substitution: [
-            for (var i = 0; i < products.length; i++)
-              if (procurements[i].amount != 0)
-                '${products[i].name} ${_wan(procurements[i].amount)}',
-          ].join(' + '),
-          source: '取自供给侧结算',
-          missing: {for (final line in procurements) ...line.missing}.toList(),
-        );
+  const procurementLine = ProposalFinanceLine(name: '采购成本', amount: 0);
   final p = total(kProposalCostCategoryProject);
   final b = total(kProposalCostCategoryBusiness);
   final t = total(kProposalCostCategoryTax);
-  final profit = proposalRoundWan(
-    revenueAmount - procurementAmount - p - b - t,
-  );
+  final profit = proposalRoundWan(revenueAmount - p - b - t);
   final margin = scale > 0 ? proposalRoundWan(profit / scale * 100) : null;
   return ProposalFinanceEvaluation(
     salesScale: scale,
@@ -2043,7 +2036,7 @@ ProposalFinanceEvaluation _aggregateFinance({
     buckets: buckets,
     profit: profit,
     profitSubstitution:
-        '${_wan(revenueAmount)} − ${_wan(procurementAmount)} − ${_wan(p)} − ${_wan(b)} − ${_wan(t)} = ${_wan(profit)} 万元',
+        '${_wan(revenueAmount)} − ${_wan(p)} − ${_wan(b)} − ${_wan(t)} = ${_wan(profit)} 万元',
     margin: margin,
     marginSubstitution: margin == null
         ? '销售规模为空，暂不能算'
@@ -2128,9 +2121,8 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
   }
   final revenue = revenueLine.amount;
 
-  // ---- 采购成本（付给供给侧） ----
-  final procurementLine = _evaluateProcurement(form, owner: owner);
-  final procurement = procurementLine.amount;
+  // 兼容旧结构，销售提案不再计入采购成本。
+  const procurementLine = ProposalFinanceLine(name: '采购成本', amount: 0);
 
   // ---- 成本 ----
   final totals = <String, double>{};
@@ -2160,6 +2152,21 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
         );
         continue;
       }
+      if (key == kProposalCostCategoryTax &&
+          form['businessCostRedacted'] == true &&
+          proposalFinanceItemFormula(form, category, name)?.kind ==
+              ProposalFinanceFormulaKind.pretaxRate) {
+        lines.add(
+          ProposalFinanceLine(
+            name: name,
+            formula: proposalFinanceItemFormula(form, category, name),
+            amount: 0,
+            pending: true,
+            substitution: '应税基数含受限业务成本，仅财务部负责人一和最终审批人可查看金额',
+          ),
+        );
+        continue;
+      }
       lines.add(
         _evaluateCostLine(
           form,
@@ -2167,7 +2174,6 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
           formula: proposalFinanceItemFormula(form, category, name),
           scale: scale,
           revenue: revenue,
-          procurement: procurement,
           project: totals[kProposalCostCategoryProject] ?? 0,
           // 经营成本只选类型、不计金额，公式里按 0 计。
           operating: 0,
@@ -2181,11 +2187,11 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
     totals[key] = bucket.total;
   }
 
-  // ---- 利润 = 收入 − 采购 − 项目 − 业务 − 税务 ----
+  // ---- 利润 = 收入 − 项目 − 业务 − 税务 ----
   final p = totals[kProposalCostCategoryProject] ?? 0;
   final b = totals[kProposalCostCategoryBusiness] ?? 0;
   final t = totals[kProposalCostCategoryTax] ?? 0;
-  final profit = proposalRoundWan(revenue - procurement - p - b - t);
+  final profit = proposalRoundWan(revenue - p - b - t);
   final margin = scale > 0 ? proposalRoundWan(profit / scale * 100) : null;
   return ProposalFinanceEvaluation(
     salesScale: scale,
@@ -2199,85 +2205,11 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
     },
     profit: profit,
     profitSubstitution:
-        '${_wan(revenue)} − ${_wan(procurement)} − ${_wan(p)} − ${_wan(b)} − ${_wan(t)} = ${_wan(profit)} 万元',
+        '${_wan(revenue)} − ${_wan(p)} − ${_wan(b)} − ${_wan(t)} = ${_wan(profit)} 万元',
     margin: margin,
     marginSubstitution: margin == null
         ? '销售规模为空，暂不能算'
         : '${_wan(profit)} ÷ ${_wan(scale)} × 100% = ${_wan(margin)}%',
-  );
-}
-
-/// 采购成本：付给供给侧的采购款。
-///
-/// - 供给侧结算勾了产品：本范围内被勾到的产品，按「该产品年化规模 × 该条比例」加总；
-///   别的产品被勾、这个没被勾，这个产品不算采购（采购记在被勾的产品上）。
-/// - 供给侧结算一条都没勾产品：按年化规模 × 第一条比例，只记在主产品上，子产品不重复算。
-/// - 供给侧结算没填比例：按 0 计并标缺项，利润不完整。
-ProposalFinanceLine _evaluateProcurement(
-  Map<String, dynamic> form, {
-  required String owner,
-}) {
-  const name = '采购成本';
-  final rows = proposalPurchaseSettleTerms(form);
-  if (rows.isEmpty) {
-    return const ProposalFinanceLine(
-      name: name,
-      amount: 0,
-      substitution: '供给侧结算还没填比例，采购成本按 0 计，利润偏高',
-      missing: ['供给侧结算比例'],
-    );
-  }
-  final ids = {for (final sku in proposalIntakeSkuDetails(form)) sku.id};
-  final linked = [
-    for (final terms in rows)
-      if (terms.skuIds.isNotEmpty) terms,
-  ];
-  if (linked.isEmpty) {
-    if (owner == kProposalProductFinanceChildren) {
-      return const ProposalFinanceLine(
-        name: name,
-        amount: 0,
-        substitution: '供给侧结算没有勾选产品，采购成本记在主产品上',
-      );
-    }
-    final scale = proposalEffectiveSalesScale(form);
-    final ratio = proposalParseSettleRatio(rows.first.displayRatio);
-    final amount = proposalRoundWan(scale * ratio);
-    return ProposalFinanceLine(
-      name: name,
-      amount: amount,
-      substitution:
-          '${_wan(scale)} × ${rows.first.displayRatio.trim()} = ${_wan(amount)} 万元',
-      source: '取自供给侧结算 · 比例 ${rows.first.displayRatio.trim()}',
-      missing: scale > 0 ? const [] : const ['销售规模'],
-    );
-  }
-  var sum = 0.0;
-  final parts = <String>[];
-  for (final terms in linked) {
-    final hit = [
-      for (final id in terms.skuIds)
-        if (ids.contains(id)) id,
-    ];
-    if (hit.isEmpty) continue;
-    final scale = proposalAssociatedSalesScale(form, hit);
-    final ratio = proposalParseSettleRatio(terms.displayRatio);
-    sum += scale * ratio;
-    parts.add('${_wan(scale)} × ${terms.displayRatio.trim()}');
-  }
-  if (parts.isEmpty) {
-    return const ProposalFinanceLine(
-      name: name,
-      amount: 0,
-      substitution: '供给侧结算没有勾到这个产品，采购记在被勾选的产品上',
-    );
-  }
-  final amount = proposalRoundWan(sum);
-  return ProposalFinanceLine(
-    name: name,
-    amount: amount,
-    substitution: '${parts.join(' + ')} = ${_wan(amount)} 万元',
-    source: '取自供给侧结算',
   );
 }
 
@@ -2369,16 +2301,9 @@ ProposalFinanceLine _evaluateCostLine(
   required double operating,
   required double business,
   required double? Function(String name) settleCost,
-  double procurement = 0,
 }) {
-  // 毛利口径的公式（业务成本、所得税）基数先扣采购成本：收入 − 采购 − …
-  final buy = procurement > 0 ? ' − ${_wan(procurement)}' : '';
   if (formula == null) {
-    return ProposalFinanceLine(
-      name: name,
-      amount: 0,
-      missing: const ['计算公式'],
-    );
+    return ProposalFinanceLine(name: name, amount: 0, missing: const ['计算公式']);
   }
   final rate = formula.rate;
   ProposalFinanceLine line(
@@ -2411,10 +2336,7 @@ ProposalFinanceLine _evaluateCostLine(
           return line(0, '产品成本结算里没有「$name」，按 0 计', ['「$name」成本结算']);
         }
         final detail = proposalProjectCostFormulaSubstitution(form, name);
-        return line(
-          settled,
-          detail.isEmpty ? '= ${_wan(settled)} 万元' : detail,
-        );
+        return line(settled, detail.isEmpty ? '= ${_wan(settled)} 万元' : detail);
       }
     case ProposalFinanceFormulaKind.settleRevenue:
       {
@@ -2448,36 +2370,31 @@ ProposalFinanceLine _evaluateCostLine(
       }
     case ProposalFinanceFormulaKind.grossRate:
       {
-        final amount = math.max(0.0, revenue - procurement - project) * rate;
+        final amount = math.max(0.0, revenue - project) * rate;
         return line(
           amount,
-          '(${_wan(revenue)}$buy − ${_wan(project)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
+          '(${_wan(revenue)} − ${_wan(project)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
         );
       }
     case ProposalFinanceFormulaKind.netOpRate:
       {
-        final amount =
-            math.max(0.0, revenue - procurement - project - operating) * rate;
+        final amount = math.max(0.0, revenue - project - operating) * rate;
         return line(
           amount,
           operating > 0
-              ? '(${_wan(revenue)}$buy − ${_wan(project)} − ${_wan(operating)}) × ${_pct(rate)} = ${_wan(amount)} 万元'
-              : '(${_wan(revenue)}$buy − ${_wan(project)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
+              ? '(${_wan(revenue)} − ${_wan(project)} − ${_wan(operating)}) × ${_pct(rate)} = ${_wan(amount)} 万元'
+              : '(${_wan(revenue)} − ${_wan(project)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
         );
       }
     case ProposalFinanceFormulaKind.pretaxRate:
       {
         final amount =
-            math.max(
-              0.0,
-              revenue - procurement - project - business - operating,
-            ) *
-            rate;
+            math.max(0.0, revenue - project - business - operating) * rate;
         return line(
           amount,
           operating > 0
-              ? '(${_wan(revenue)}$buy − ${_wan(project)} − ${_wan(business)} − ${_wan(operating)}) × ${_pct(rate)} = ${_wan(amount)} 万元'
-              : '(${_wan(revenue)}$buy − ${_wan(project)} − ${_wan(business)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
+              ? '(${_wan(revenue)} − ${_wan(project)} − ${_wan(business)} − ${_wan(operating)}) × ${_pct(rate)} = ${_wan(amount)} 万元'
+              : '(${_wan(revenue)} − ${_wan(project)} − ${_wan(business)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
         );
       }
     case ProposalFinanceFormulaKind.vat:
@@ -2525,9 +2442,9 @@ Map<String, dynamic> _seedSuggestedItems(
       next = Map<String, dynamic>.from(next)..[project.namesKey] = matched;
     }
   }
-  // 税务成本不再让人选：有规模就带印花税，有销售税率就带对应口径的增值税（在已选的基础上补齐）。
+  // 税务成本仅在用户尚未选择时提供建议；手动取消后不再自动加回。
   final tax = catalog.category(kProposalCostCategoryTax);
-  if (tax != null) {
+  if (tax != null && !proposalFinanceCategoryTouched(form, tax.key)) {
     final suggested = proposalEnsureAutoTaxItemNames(next);
     if (suggested.isNotEmpty) {
       next = Map<String, dynamic>.from(next)..[tax.namesKey] = suggested;
@@ -2589,8 +2506,8 @@ Map<String, dynamic> proposalApplyFinanceFormulas(
     };
     next[category.totalKey] = bucket.total;
   }
-  // 利润停算时不回写利润 / 毛利率，服务端已有值原样保留。
-  if (!redacted && kProposalFinanceShowProfit) {
+  // 展示开关不影响测算回写；脱敏用户不覆盖服务端利润。
+  if (!redacted) {
     next['profit'] = eval.profit;
     next['margin'] = eval.margin ?? 0;
   }
@@ -2648,8 +2565,6 @@ String proposalFinanceBucketSummary(ProposalFinanceBucket? bucket) {
   return [
     '合计 ${_wan(bucket.total)} 万元',
     for (final line in bucket.lines)
-      line.pending
-          ? '${line.name} 未配置阶梯'
-          : '${line.name} ${_wan(line.amount)}',
+      line.pending ? '${line.name} 未配置阶梯' : '${line.name} ${_wan(line.amount)}',
   ].join(' · ');
 }

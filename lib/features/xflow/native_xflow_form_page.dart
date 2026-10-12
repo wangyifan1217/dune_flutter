@@ -7,6 +7,9 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
+import '../proposal_intake/proposal_intake_overlay.dart';
+import 'xflow_detail_logic.dart';
+import 'proposal_reference_picker.dart';
 import 'xflow_approval_flow_ui.dart';
 import 'xflow_form_styles.dart';
 import 'xflow_form_renderer.dart';
@@ -28,11 +31,15 @@ class NativeXflowFormPage extends StatefulWidget {
     this.editBusinessType = 'PROPOSAL',
     this.backScreen = 'B3',
     this.onDeleted,
+    this.initialLinkedProposal,
+    this.service,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final String templateKey;
+  final Map<String, dynamic>? initialLinkedProposal;
+  final XflowService? service;
   final int? editProposalId;
 
   /// 第二个参数为业务类型；非 PROPOSAL 时应跳转动态审批详情。
@@ -63,6 +70,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   String? _error;
   String? _ccError;
   bool _submitting = false;
+  bool _checkingPolicy = false;
+  bool get _proposalLinkRequired =>
+      _template?.raw['proposalLinkRequired'] == true;
   bool _submitSucceeded = false;
   int? _draftProposalId;
 
@@ -204,7 +214,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _service = XflowService(
+    _service = widget.service ?? XflowService(
       session: widget.session,
       templateKey: widget.templateKey,
     );
@@ -406,13 +416,18 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       );
       // 先挂上模板，便于 _localDraftBusinessType 取到真实业务类型。
       _template = template;
-      final local = await _service.loadLocalDraft(
-        businessType: _localDraftBusinessType,
-        businessId: widget.editProposalId,
-      );
+      final local = widget.initialLinkedProposal != null && !_isEditing
+          ? <String, dynamic>{}
+          : await _service.loadLocalDraft(
+              businessType: _localDraftBusinessType,
+              businessId: widget.editProposalId,
+            );
       _values
         ..clear()
         ..addAll(local);
+      if (widget.initialLinkedProposal != null && !_isEditing) {
+        _values['linkedProposal'] = widget.initialLinkedProposal;
+      }
       XflowProposalDetail? detail;
       if (_isDynamicSubmission) {
         final submission = await _service.fetchSubmissionDetail(
@@ -528,6 +543,28 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   }
 
   Future<void> _submit() async {
+    if (_submitting || _checkingPolicy) return;
+    setState(() => _checkingPolicy = true);
+    try {
+      final fresh = applyElectronicReimbursementTemplate(
+        await _service.fetchTemplateDetail(templateKey: widget.templateKey),
+      );
+      if (!mounted) return;
+      // Refresh rules without reloading or clearing user-entered form values.
+      setState(() => _template = fresh);
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          '读取审批规则失败：${friendlyErrorText(e)}',
+          kind: DunesToastKind.error,
+        );
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _checkingPolicy = false);
+    }
+    if (!mounted) return;
     final miss = _missingRequired();
     if (miss.isNotEmpty) {
       showDunesToast(
@@ -579,6 +616,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
           businessId: widget.editProposalId,
           reusedDraft: true,
         );
+        if (!mounted) return;
         showDunesToast(context, '已提交审批');
         widget.onSubmitted(widget.editProposalId!, 'PROPOSAL');
         return;
@@ -609,6 +647,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         businessId: pid > 0 ? pid : _activeDraftId,
         reusedDraft: pid > 0 && pid == (_activeDraftId ?? 0),
       );
+      if (!mounted) return;
       showDunesToast(context, '已提交审批');
       if (pid > 0) widget.onSubmitted(pid, businessType);
     } catch (e) {
@@ -764,6 +803,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       businessType: _localDraftBusinessType,
       businessId: _activeDraftId,
     );
+    if (!mounted) return;
     if (!XflowService.hasMeaningfulDraftValues(draft)) {
       showDunesToast(
         context,
@@ -809,6 +849,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         proposalId: _draftProposalId ?? widget.editProposalId,
         templateKey: widget.templateKey,
       );
+      if (!mounted) return;
       final pid = _int(res['proposalId'] ?? res['businessId'] ?? res['id']);
       if (pid <= 0) {
         showDunesToast(context, '草稿保存失败，无法推送', kind: DunesToastKind.error);
@@ -1062,6 +1103,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                 ],
                               ),
                             ),
+                            if (_proposalLinkRequired) _proposalReferenceCard(),
                             XflowFormRenderer(
                               fields: _isDelegatedPendingInitiate
                                   ? _template!.fields
@@ -1075,7 +1117,13 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                           );
                                         })
                                         .toList(growable: false)
-                                  : _template!.fields,
+                                  : _template!.fields
+                                        .where(
+                                          (f) =>
+                                              !_proposalLinkRequired ||
+                                              f.key != 'linkedProposal',
+                                        )
+                                        .toList(),
                               values: _values,
                               layout: _template!.layout,
                               service: _service,
@@ -1121,8 +1169,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
             ),
             XflowXfActionBar(
               label: _submitLabel,
-              loading: _submitting,
-              onPressed: _submitting ? null : _submit,
+              loading: _submitting || _checkingPolicy,
+              onPressed: _submitting || _checkingPolicy ? null : _submit,
               secondaryLabel: _canDeleteDraft ? '删除草稿' : null,
               secondaryDanger: true,
               onSecondaryPressed: _canDeleteDraft && !_submitting
@@ -1154,5 +1202,75 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   int _int(dynamic value) {
     if (value is num) return value.toInt();
     return int.tryParse('$value') ?? 0;
+  }
+
+  Widget _proposalReferenceCard() {
+    final raw = _values['linkedProposal'];
+    final id = parseLinkedProposalId(raw);
+    final kind = raw is Map ? raw['kind'] : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '业务审批依据 · 已完成提案',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (kind != null)
+                Text(
+                  kind == 'purchase' ? '采购提案' : '销售提案',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              if (id > 0 &&
+                  linkedProposalOpensIntake(parseLinkedProposalSource(raw)))
+                TextButton(
+                  onPressed: () => showProposalIntakeOverlay(
+                    context: context,
+                    session: widget.session,
+                    proposalId: id,
+                  ),
+                  child: const Text('查看提案'),
+                ),
+            ],
+          ),
+        ),
+        XflowFormRenderer(
+          fields: _template!.fields
+              .where((f) => f.key == 'linkedProposal')
+              .toList(),
+          values: _values,
+          layout: const {},
+          service: _service,
+          showProgressCard: false,
+          showActionBar: false,
+          fieldOverride: (_) => ProposalReferencePicker(
+            service: _service,
+            value: raw,
+            onChanged: (value) {
+              setState(() {
+                _values['linkedProposal'] = value;
+                _recompute();
+              });
+              _scheduleAutosave();
+              _scheduleApprovalPreview();
+            },
+          ),
+          onChanged: (key, value) {
+            setState(() {
+              _values[key] = value;
+              _recompute();
+            });
+            _scheduleAutosave();
+            _scheduleApprovalPreview();
+          },
+        ),
+        const SizedBox(height: 12),
+      ],
+    );
   }
 }

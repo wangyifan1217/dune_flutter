@@ -2713,7 +2713,12 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
       return;
     }
     widget.onChanged(
-      linkedProposalIntakePayload(id: id, code: code, title: title),
+      linkedProposalIntakePayload(
+        id: id,
+        code: code,
+        title: title,
+        kind: '${row['kind'] ?? ''}',
+      ),
     );
     final label = code.isNotEmpty && title.isNotEmpty
         ? '$code · $title'
@@ -2880,7 +2885,8 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
                     .toString()
                     .trim();
                 if (code.isNotEmpty && title.isNotEmpty) {
-                  return '$code · $title';
+                  final kind = row['kind'] == 'purchase' ? '采购' : '销售';
+                  return '${widget.mineApproved ? '' : '[$kind] '}$code · $title';
                 }
                 return code.isNotEmpty ? code : title;
               },

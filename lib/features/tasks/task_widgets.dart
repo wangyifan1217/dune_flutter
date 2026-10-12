@@ -867,6 +867,7 @@ class TaskWorkbenchCard extends StatelessWidget {
     this.onShare,
     this.groupMode = false,
     this.groupTrailingAction,
+    this.onSubtasks,
     this.statusHint,
     this.approveLabel = '通过',
     this.rejectLabel = '驳回',
@@ -882,9 +883,176 @@ class TaskWorkbenchCard extends StatelessWidget {
   final VoidCallback? onShare;
   final bool groupMode;
   final Widget? groupTrailingAction;
+  final VoidCallback? onSubtasks;
   final String? statusHint;
   final String approveLabel;
   final String rejectLabel;
+
+  Widget _compactGoal(BuildContext context) {
+    final color = DunesColors.resolve(context, _statusColor);
+    return Material(
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: DunesColors.resolve(context, DunesColors.border),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 3,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      task.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  TaskMetaChip(
+                    text: task.overdue ? '已逾期' : taskStatusLabel(task.status),
+                    color: color,
+                  ),
+                  if (onShare != null)
+                    IconButton(
+                      tooltip: '转发到 IM',
+                      onPressed: onShare,
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 32,
+                        height: 32,
+                      ),
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.ios_share_rounded, size: 17),
+                    ),
+                ],
+              ),
+              if (task.hasPendingChange)
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: TaskMetaChip(
+                    text: taskPendingChangeLabel(task.pendingChangeKind),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFB45309),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 7),
+              Wrap(
+                spacing: 12,
+                runSpacing: 4,
+                children: [
+                  if (task.ownerName.isNotEmpty)
+                    _TaskInfoItem(
+                      icon: Icons.person_outline,
+                      text: '负责人 ${task.ownerName}',
+                    ),
+                  if (task.creatorName.isNotEmpty)
+                    _TaskInfoItem(
+                      icon: Icons.edit_note_rounded,
+                      text: '创建人 ${task.creatorName}',
+                    ),
+                ],
+              ),
+              if (_period != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: _TaskInfoItem(
+                    icon: Icons.event_outlined,
+                    text: _period!,
+                  ),
+                ),
+              const SizedBox(height: 9),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      task.subtaskCount > 0
+                          ? '子任务 ${taskSubtaskProgressLabel(task)}'
+                          : '暂无子任务',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${task.progressPct}%',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              TaskProgressBar(
+                progressPct: task.progressPct,
+                overdue: task.overdue,
+                completed: task.status == 'completed',
+                height: 5,
+                showLabel: false,
+              ),
+              const SizedBox(height: 5),
+              Row(
+                children: [
+                  if (onSubtasks != null)
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        foregroundColor: kTaskPurple,
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                      ),
+                      onPressed: onSubtasks,
+                      icon: const Icon(Icons.account_tree_outlined, size: 15),
+                      label: const Text('子任务', style: TextStyle(fontSize: 12)),
+                    ),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: kTaskPurple,
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                    ),
+                    onPressed: onTap,
+                    child: const Text('查看详情', style: TextStyle(fontSize: 12)),
+                  ),
+                  if (groupTrailingAction != null)
+                    Flexible(child: groupTrailingAction!),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   String? get _period {
     String fmt(DateTime value) => formatTaskYmd(value.toLocal());
@@ -913,6 +1081,9 @@ class TaskWorkbenchCard extends StatelessWidget {
     final belong = task.parentTitle.trim();
     final contextLine = taskCardContextLine(task);
     final statusColor = _statusColor;
+    if (groupMode && !pending && onApprove == null && onReject == null) {
+      return _compactGoal(context);
+    }
     return Material(
       color: DunesColors.resolve(
         context,
@@ -1155,6 +1326,12 @@ class TaskWorkbenchCard extends StatelessWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
+                    if (groupMode && onSubtasks != null)
+                      TextButton.icon(
+                        onPressed: onSubtasks,
+                        icon: const Icon(Icons.account_tree_outlined, size: 16),
+                        label: const Text('子任务'),
+                      ),
                     if (pending || onApprove != null)
                       FilledButton(
                         style: FilledButton.styleFrom(
@@ -1181,7 +1358,7 @@ class TaskWorkbenchCard extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 2,
                   children: [
-                    if (groupTrailingAction != null) groupTrailingAction!,
+                    ?groupTrailingAction,
                     TextButton.icon(
                       style: TextButton.styleFrom(
                         foregroundColor: kTaskPurple,

@@ -1489,6 +1489,9 @@ abstract final class LhKColors {
 
   /// 主线（7 日均线 = 走势线）：灯塔品牌紫，压在蜡烛上。
   static const trend = Color(0xFF7565C7);
+
+  /// 实际值线：深墨灰，跟红绿蜡烛、紫均线、蓝黄带都分得开。
+  static const actual = Color(0xFF3B4150);
   static const nxFast = fast;
   static const nxSlow = slow;
   static const dif = fast;
@@ -2429,19 +2432,622 @@ void _trendDashedLine(
   }
 }
 
+/// K 线入口那张迷你卡的「皮」：白卡 + 淡紫发丝边 + 紫色柔投影。
+/// 大图里的控件（周期选中格、下拉、统计条、明细牌…）都用这一套，跟入口呼应。
+BoxDecoration _lhKCardDeco(
+  BuildContext ctx, {
+  double radius = 6,
+  bool strong = false,
+}) {
+  return BoxDecoration(
+    color: DunesColors.resolve(ctx, Colors.white, role: DunesColorRole.surface),
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(
+      color: DunesColors.resolve(
+        ctx,
+        const Color(0xFFE2D8F0),
+        role: DunesColorRole.border,
+      ),
+      width: 0.7,
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: _LhPlum.deep.withAlpha(strong ? 40 : 30),
+        blurRadius: strong ? 12 : 6,
+        spreadRadius: -1,
+        offset: Offset(0, strong ? 4 : 2),
+      ),
+      BoxShadow(
+        color: _LhPlum.deep.withAlpha(16),
+        blurRadius: 1.5,
+        offset: const Offset(0, 0.5),
+      ),
+    ],
+  );
+}
+
+/// 入口卡后面那张淡紫卡的渐变。
+const LinearGradient _lhKBackGradient = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [Color(0xFFF1ECFB), Color(0xFFE6DEF6)],
+);
+
+/// 后面叠一张淡紫卡（往右上错开、微微转一点），跟入口那张一样 ——
+/// 「能翻 / 能切」的控件（下拉、明细牌）都用它，表示后面还有一叠。
+class _LhKStack extends StatelessWidget {
+  const _LhKStack({
+    required this.child,
+    this.radius = 6,
+    this.dx = 2.5,
+    this.dy = -2.5,
+    this.angle = 0.05,
+  });
+
+  final Widget child;
+  final double radius;
+  final double dx;
+  final double dy;
+  final double angle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Transform(
+              alignment: Alignment.bottomLeft,
+              transform: Matrix4.translationValues(dx, dy, 0)..rotateZ(angle),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: _lhKBackGradient,
+                  borderRadius: BorderRadius.circular(radius),
+                  border: Border.all(
+                    color: const Color(0xFFDCD0F0),
+                    width: 0.7,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        child,
+      ],
+    );
+  }
+}
+
+/// 入口卡右下角那颗「四分之一圆」角标。放在卡片右下角（Positioned
+/// right: 0 / bottom: 0），按 [cardRadius] 自己裁成卡片的圆角。
+class _LhKCorner extends StatelessWidget {
+  const _LhKCorner({
+    this.size = 10,
+    this.cardRadius = 6,
+    this.color = _LhPlum.primary,
+  });
+
+  final double size;
+  final double cardRadius;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(
+        size: Size.square(size),
+        painter: _LhKCornerPainter(color: color, cardRadius: cardRadius),
+      ),
+    );
+  }
+}
+
+class _LhKCornerPainter extends CustomPainter {
+  const _LhKCornerPainter({required this.color, required this.cardRadius});
+
+  final Color color;
+  final double cardRadius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = size.width;
+    canvas.save();
+    canvas.clipRRect(
+      RRect.fromLTRBAndCorners(
+        -r,
+        -r,
+        r,
+        r,
+        bottomRight: Radius.circular(cardRadius),
+      ),
+    );
+    final disc = Path()
+      ..moveTo(r, 0)
+      ..arcToPoint(Offset(0, r), radius: Radius.circular(r), clockwise: false)
+      ..lineTo(r, r)
+      ..close();
+    canvas.drawPath(disc, Paint()..color = color);
+    final rim = Path()
+      ..moveTo(r, r * 0.1)
+      ..arcToPoint(
+        Offset(r * 0.1, r),
+        radius: Radius.circular(r * 0.9),
+        clockwise: false,
+      );
+    canvas.drawPath(
+      rim,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.6
+        ..color = Color.lerp(color, Colors.white, 0.3)!,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _LhKCornerPainter old) =>
+      old.color != color || old.cardRadius != cardRadius;
+}
+
+/// 一根小蜡烛（影线 + 实体），代替 ▲ / ▼：涨红跌绿。
+class _LhKCandleGlyph extends StatelessWidget {
+  const _LhKCandleGlyph({required this.up, required this.color});
+
+  final bool up;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size(5, 11),
+      painter: _LhKCandleGlyphPainter(up: up, color: color),
+    );
+  }
+}
+
+class _LhKCandleGlyphPainter extends CustomPainter {
+  const _LhKCandleGlyphPainter({required this.up, required this.color});
+
+  final bool up;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 0.9;
+    final cx = size.width / 2;
+    canvas.drawLine(Offset(cx, 0.5), Offset(cx, size.height - 0.5), p);
+    final top = up ? 2.0 : 3.5;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(0.4, top, size.width - 0.4, top + 5.5),
+        const Radius.circular(0.7),
+      ),
+      p,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _LhKCandleGlyphPainter old) =>
+      old.up != up || old.color != color;
+}
+
+/// 大图右上角的「收起」：跟入口同一张迷你卡，蜡烛变成淡紫占位，
+/// 角标箭头朝里（↙）—— 从哪张卡出来，就收回哪张卡。
+class _LhKCollapseButton extends StatelessWidget {
+  const _LhKCollapseButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '收起 K 线大图',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 5, 4, 5),
+          child: _LhKStack(
+            radius: 5,
+            dx: 2.5,
+            dy: -2.5,
+            child: Container(
+              width: 32,
+              height: 15,
+              decoration: _lhKCardDeco(context, radius: 5),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4.4),
+                child: const CustomPaint(
+                  size: Size(32, 15),
+                  painter: _LhMiniKPainter(
+                    values: [],
+                    loading: true,
+                    inward: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 「本期合计」行右侧的 K 线入口：一张会动的迷你 K 线卡。
+///   · 蜡烛是最近几天的真实利润（开 = 前一天，收 = 当天），最后一根按今天比
+///     昨天涨红跌绿；紫色趋势线 + 浅蓝 NX 带跟大图同一套元素；
+///   · 后面叠一张淡紫卡，暗示「能抽出来」；按下时前卡往里压、后卡扇开；
+///   · 右下角四分之一圆角标贴边，带 ↗。
+class _LhMiniKButton extends StatefulWidget {
+  const _LhMiniKButton({
+    required this.values,
+    required this.loading,
+    required this.onTap,
+  });
+
+  final List<double> values;
+  final bool loading;
+  final ValueChanged<Rect?> onTap;
+
+  @override
+  State<_LhMiniKButton> createState() => _LhMiniKButtonState();
+}
+
+class _LhMiniKButtonState extends State<_LhMiniKButton> {
+  static const double _w = 40;
+  static const double _h = 19;
+  bool _down = false;
+
+  void _setDown(bool v) {
+    if (_down == v) return;
+    setState(() => _down = v);
+  }
+
+  void _fire() {
+    LighthouseFeedback.instance.play(LighthouseFeedbackKind.expand);
+    final ro = context.findRenderObject();
+    Rect? r;
+    if (ro is RenderBox && ro.hasSize && ro.attached) {
+      r = ro.localToGlobal(const Offset(0, 3)) & const Size(_w, _h);
+    }
+    widget.onTap(r);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    );
+    final edge = DunesColors.resolve(
+      context,
+      const Color(0xFFE2D8F0),
+      role: DunesColorRole.border,
+    );
+    const dur = Duration(milliseconds: 140);
+    return Semantics(
+      button: true,
+      label: '打开 K 线大图',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _setDown(true),
+        onTapUp: (_) => _setDown(false),
+        onTapCancel: () => _setDown(false),
+        onTap: _fire,
+        child: SizedBox(
+          width: _w + 4,
+          height: _h + 3,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // 后面那张：淡紫，往右上斜一点。
+              Positioned(
+                left: 3,
+                top: 0,
+                child: AnimatedContainer(
+                  duration: dur,
+                  curve: Curves.easeOut,
+                  width: _w,
+                  height: _h,
+                  transformAlignment: Alignment.bottomLeft,
+                  transform: Matrix4.rotationZ(_down ? 0.11 : 0.06),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFFF1ECFB), Color(0xFFE6DEF6)],
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: const Color(0xFFDCD0F0),
+                      width: 0.7,
+                    ),
+                  ),
+                ),
+              ),
+              // 前面那张：白卡 + 迷你 K 线。
+              Positioned(
+                left: 0,
+                top: 3,
+                child: AnimatedContainer(
+                  duration: dur,
+                  curve: Curves.easeOut,
+                  width: _w,
+                  height: _h,
+                  transformAlignment: Alignment.center,
+                  transform: _down
+                      ? (Matrix4.identity()
+                          ..setEntry(3, 2, 0.006)
+                          ..rotateX(0.22)
+                          ..scale(0.95, 0.95, 1.0))
+                      : Matrix4.identity(),
+                  decoration: BoxDecoration(
+                    color: surface,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: edge, width: 0.7),
+                    boxShadow: _down
+                        ? [
+                            BoxShadow(
+                              color: _LhPlum.deep.withAlpha(30),
+                              blurRadius: 2,
+                              offset: const Offset(0, 0.5),
+                            ),
+                          ]
+                        : [
+                            BoxShadow(
+                              color: _LhPlum.deep.withAlpha(44),
+                              blurRadius: 6,
+                              spreadRadius: -1,
+                              offset: const Offset(0, 2),
+                            ),
+                            BoxShadow(
+                              color: _LhPlum.deep.withAlpha(22),
+                              blurRadius: 1.5,
+                              offset: const Offset(0, 0.5),
+                            ),
+                          ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(5.4),
+                    child: CustomPaint(
+                      size: const Size(_w, _h),
+                      painter: _LhMiniKPainter(
+                        values: widget.values,
+                        loading: widget.loading,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 迷你 K 线：在 64×30 的设计坐标里画，再整体缩到实际尺寸。
+class _LhMiniKPainter extends CustomPainter {
+  const _LhMiniKPainter({
+    required this.values,
+    required this.loading,
+    this.inward = false,
+  });
+
+  final List<double> values;
+  final bool loading;
+
+  /// 收起钮：角标箭头朝里（↙），占位蜡烛用淡紫。
+  final bool inward;
+
+  // 加载中的灰色占位（x, 影线上, 影线下, 实体上, 实体高）。
+  static const List<List<double>> _ghost = [
+    [5, 19, 26, 21, 4], [10, 17, 25, 18.5, 5], [15, 18, 24, 19, 3],
+    [20, 14, 22, 15.5, 5], [25, 12, 19, 13, 4], [30, 13, 19, 14, 3.5],
+    [35, 9, 17, 10.5, 5], [40, 7, 14, 8, 4], [45, 5, 11, 6, 3.5],
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 64, size.height / 30);
+
+    final grid = Paint()
+      ..color = const Color(0xFFF1EFF4)
+      ..strokeWidth = 0.6;
+    canvas.drawLine(const Offset(0, 10.5), const Offset(64, 10.5), grid);
+    canvas.drawLine(const Offset(0, 20.5), const Offset(64, 20.5), grid);
+
+    final wick = Paint()..strokeWidth = 0.8;
+    final body = Paint();
+
+    if (loading || values.length < 3) {
+      final ghost = inward ? const Color(0xFFDCD3EE) : const Color(0xFFE9E5F0);
+      wick.color = ghost;
+      body.color = ghost;
+      for (final c in _ghost) {
+        canvas.drawLine(Offset(c[0], c[1]), Offset(c[0], c[2]), wick);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(c[0] - 1.5, c[3], 3, c[4]),
+            const Radius.circular(0.5),
+          ),
+          body,
+        );
+      }
+    } else {
+      final closes = values.length > 10
+          ? values.sublist(values.length - 10)
+          : values;
+      final k = closes.length - 1; // 蜡烛根数（第一个点只当开盘）
+      var lo = closes.reduce(math.min);
+      var hi = closes.reduce(math.max);
+      if ((hi - lo).abs() < 1e-9) {
+        lo -= 1;
+        hi += 1;
+      }
+      double y(double v) => 26.5 - (v - lo) / (hi - lo) * 20.5;
+      double x(int i) => 45 - (k - 1 - i) * 5.0;
+
+      // 趋势：3 点均线（前面不足 3 个就用已有的）。
+      final trend = <Offset>[];
+      for (var i = 0; i < k; i++) {
+        final j = i + 1;
+        final from = math.max(0, j - 2);
+        var sum = 0.0;
+        for (var t = from; t <= j; t++) {
+          sum += closes[t];
+        }
+        trend.add(Offset(x(i), y(sum / (j - from + 1))));
+      }
+      final tail = Offset(x(k - 1) + 2, trend.last.dy);
+
+      // NX 带：趋势线下方一条浅蓝实色带。
+      final band = Path()..moveTo(trend.first.dx - 2, trend.first.dy + 2.2);
+      for (final p in trend) {
+        band.lineTo(p.dx, p.dy + 2.2);
+      }
+      band.lineTo(tail.dx, tail.dy + 2.2);
+      band.lineTo(tail.dx, tail.dy + 6.5);
+      for (final p in trend.reversed) {
+        band.lineTo(p.dx, p.dy + 6.5);
+      }
+      band.lineTo(trend.first.dx - 2, trend.first.dy + 6.5);
+      band.close();
+      canvas.drawPath(band, Paint()..color = const Color(0xFFEAF1FC));
+
+      for (var i = 0; i < k; i++) {
+        final o = closes[i];
+        final c = closes[i + 1];
+        final up = c >= o;
+        final col = up ? LhKColors.up : LhKColors.down;
+        wick.color = col;
+        body.color = col;
+        final yo = y(o);
+        final yc = y(c);
+        var top = math.min(yo, yc);
+        var bot = math.max(yo, yc);
+        if (bot - top < 1.4) {
+          final m = (top + bot) / 2;
+          top = m - 0.7;
+          bot = m + 0.7;
+        }
+        final cx = x(i);
+        canvas.drawLine(
+          Offset(cx, math.max(1.5, top - 1.8)),
+          Offset(cx, math.min(29, bot + 1.8)),
+          wick,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTRB(cx - 1.5, top, cx + 1.5, bot),
+            const Radius.circular(0.5),
+          ),
+          body,
+        );
+      }
+
+      final line = Path()..moveTo(trend.first.dx, trend.first.dy);
+      for (final p in trend.skip(1)) {
+        line.lineTo(p.dx, p.dy);
+      }
+      line.lineTo(tail.dx, tail.dy);
+      canvas.drawPath(
+        line,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.6
+          ..strokeJoin = StrokeJoin.round
+          ..strokeCap = StrokeCap.round
+          ..color = Colors.white,
+      );
+      canvas.drawPath(
+        line,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.3
+          ..strokeJoin = StrokeJoin.round
+          ..strokeCap = StrokeCap.round
+          ..color = LhKColors.trend,
+      );
+      canvas.drawCircle(tail, 2.2, Paint()..color = Colors.white);
+      canvas.drawCircle(tail, 1.6, Paint()..color = LhKColors.trend);
+    }
+
+    // 右下角：贴边的四分之一圆角标 + ↗。
+    final corner = Path()
+      ..moveTo(64, 14)
+      ..arcToPoint(
+        const Offset(48, 30),
+        radius: const Radius.circular(16),
+        clockwise: false,
+      )
+      ..lineTo(64, 30)
+      ..close();
+    canvas.drawPath(corner, Paint()..color = _LhPlum.primary);
+    final rim = Path()
+      ..moveTo(64, 15.6)
+      ..arcToPoint(
+        const Offset(49.6, 30),
+        radius: const Radius.circular(14.4),
+        clockwise: false,
+      );
+    canvas.drawPath(
+      rim,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.6
+        ..color = const Color(0xFF9C86E8),
+    );
+    final arrow = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = inward ? 2.0 : 1.3
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = Colors.white;
+    canvas.drawLine(const Offset(55.4, 26.6), const Offset(59.6, 22.4), arrow);
+    canvas.drawPath(
+      inward
+          ? (Path()
+              ..moveTo(55.3, 23.4)
+              ..lineTo(55.3, 26.7)
+              ..lineTo(58.6, 26.7))
+          : (Path()
+              ..moveTo(56.6, 22.3)
+              ..lineTo(59.7, 22.3)
+              ..lineTo(59.7, 25.4)),
+      arrow,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _LhMiniKPainter old) =>
+      old.loading != loading ||
+      old.inward != inward ||
+      !listEquals(old.values, values);
+}
+
 // ── Lines painter (heavy, but RepaintBoundary'd; only repaints on data change) ─
 //   v16 · 视觉降噪（见 lighthouse_hero_metric.dart 顶部「趋势图 v16」）：
 //     上层主图 —— 只放同一根真轴上的东西：规模主线 + 差额带 + 规模族另一条；
 //     底部小柱 —— 利润等各自归一的上下文序列，共用横轴、永不交叉；
 //     当月未走完 —— 虚线连到月末预测 + 进度胶囊，不再画半个月的假断崖；
 //     每个日期默认画空心点；末端点单独加重。整宽 MAX/MIN 虚线不画。
-/// 走势大图的出场舞台：卡片从产品汇总那张 Hero 卡上「翻」起来 ——
-///   · 位置 / 大小：从 Hero 卡的矩形飞到屏幕正中（跟 Hero 卡等宽），带一点过冲；
+/// 走势大图的出场舞台：卡片从「本期合计」行那张迷你 K 线卡里「抽」出来 ——
+///   · 位置 / 大小：从迷你卡的位置边放大边飞到屏幕正中（跟 Hero 卡等宽），带一点过冲；
 ///   · 3D：绕 X 轴从后仰 60° 弹性立起（ElasticOut，落定时轻轻晃两下），
 ///     半路再带一点 Y 轴侧倾，像一张牌被抽出来翻到眼前；
 ///   · 投影随「离纸面的高度」变深变大；
 ///   · 落定后一道斜向高光从左扫到右。
-/// 收起时反过来：折回 Hero 卡的位置、淡出。
+/// 收起时反过来：缩回迷你卡的位置、淡出。
 /// 卡片内容按最终尺寸排一次版，动画里只做缩放，不在每一帧重排图表。
 class _LhPopStage extends StatelessWidget {
   const _LhPopStage({
@@ -2449,10 +3055,14 @@ class _LhPopStage extends StatelessWidget {
     required this.fromRect,
     required this.onDismiss,
     required this.child,
+    this.originRect,
   });
 
   final Animation<double> animation;
   final Rect? fromRect;
+
+  /// 点的那张迷你 K 线卡的位置：大卡从这里长出来、收起时缩回这里。
+  final Rect? originRect;
   final VoidCallback onDismiss;
   final Widget child;
 
@@ -2478,7 +3088,15 @@ class _LhPopStage extends StatelessWidget {
     );
     final top = pad.top + 12 + (usableH - height) / 2;
     final to = Rect.fromLTWH(left, top, width, height);
-    final from = fromRect ?? to.deflate(36);
+    // 起点按大卡的长宽比缩小、对准迷你卡中心，缩放过程不变形。
+    final origin = originRect;
+    final from = origin != null
+        ? Rect.fromCenter(
+            center: origin.center,
+            width: to.width * 0.16,
+            height: to.height * 0.16,
+          )
+        : (fromRect ?? to.deflate(36));
     final radius = BorderRadius.circular(lighthouseHeroCardRadius + 2);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -2543,7 +3161,28 @@ class _LhPopStage extends StatelessWidget {
                         ],
                       ),
                       child: Stack(
+                        clipBehavior: Clip.none,
                         children: [
+                          // 跟入口卡一样：后面叠一张淡紫卡，往右上错开一点。
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: Transform(
+                                alignment: Alignment.bottomLeft,
+                                transform: Matrix4.translationValues(6, -6, 0)
+                                  ..rotateZ(0.008),
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: _lhKBackGradient,
+                                    borderRadius: radius,
+                                    border: Border.all(
+                                      color: const Color(0xFFDCD0F0),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                           Positioned.fill(
                             child: FittedBox(fit: BoxFit.fill, child: card),
                           ),
@@ -2607,7 +3246,11 @@ class _TrendLinesPainter extends CustomPainter {
     this.nx,
     this.macdDif,
     this.macdDea,
+    this.showActual = false,
   });
+
+  /// K 线模式：把每天的真实值连成一条细线（跟蜡烛收盘对齐），压在均线下面。
+  final bool showActual;
 
   /// 日 K：主线改画成蜡烛（昨日 → 今日，涨红跌绿），配两条均线 + 中间的带。
   /// 一天只有一个数，没有日内高低，所以不画影线 —— 不编造没有的数据。
@@ -2750,14 +3393,29 @@ class _TrendLinesPainter extends CustomPainter {
     final left = padH;
     final right = size.width - padH;
     if (candles) {
-      // 看盘软件那种：背后几条浅灰实线当刻度，纵轴读数贴在线上（图层外画）。
+      // 看盘软件那种「数据框」：主图区铺一层极浅的紫白底 + 一圈发丝框，
+      // 里面横竖浅灰格子；纵轴读数贴在框外左侧（图层外画）。
+      final frame = Rect.fromLTRB(0.4, plotTop, size.width - 0.4, plotBottom);
+      canvas.drawRect(frame, Paint()..color = const Color(0xFFFCFBFE));
       final rule = Paint()
-        ..color = const Color(0xFFECEBEF)
-        ..strokeWidth = 0.7;
+        ..color = const Color(0xFFEDEBF2)
+        ..strokeWidth = 0.6;
       for (final f in lighthouseCandleGridFractions) {
+        if (f <= 0) continue;
         final gy = plotTop + (plotBottom - plotTop) * f;
         canvas.drawLine(Offset(0, gy), Offset(size.width, gy), rule);
       }
+      for (var k = 1; k < 6; k++) {
+        final gx = size.width * k / 6;
+        canvas.drawLine(Offset(gx, plotTop), Offset(gx, plotBottom), rule);
+      }
+      canvas.drawRect(
+        frame,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8
+          ..color = const Color(0xFFE3DEEC),
+      );
     } else {
       _trendDashedLine(
         canvas,
@@ -2925,6 +3583,52 @@ class _TrendLinesPainter extends CustomPainter {
           );
         } else {
           canvas.drawRRect(rect, Paint()..color = col);
+        }
+      }
+
+      // 实际值线：每天的真实值直连（不做平滑，是几就是几），墨色细线 + 白衬底。
+      if (showActual) {
+        final pts = <Offset>[
+          for (var i = 0; i < m; i++)
+            if (heroPts[i].isFinite)
+              Offset(
+                xOf(i),
+                yOf(heroPts[i], heroBounds)
+                    .clamp(plotTop, plotBottom)
+                    .toDouble(),
+              ),
+        ];
+        if (pts.length >= 2) {
+          final path = Path()..moveTo(pts.first.dx, pts.first.dy);
+          for (final p in pts.skip(1)) {
+            path.lineTo(p.dx, p.dy);
+          }
+          canvas.drawPath(
+            path,
+            Paint()
+              ..color = Colors.white
+              ..strokeWidth = 2.4
+              ..style = PaintingStyle.stroke
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round,
+          );
+          canvas.drawPath(
+            path,
+            Paint()
+              ..color = LhKColors.actual
+              ..strokeWidth = 1.1
+              ..style = PaintingStyle.stroke
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round,
+          );
+          if (step >= 7) {
+            final dot = Paint()..color = LhKColors.actual;
+            final ring = Paint()..color = Colors.white;
+            for (final p in pts) {
+              canvas.drawCircle(p, 2.0, ring);
+              canvas.drawCircle(p, 1.3, dot);
+            }
+          }
         }
       }
 
@@ -3364,6 +4068,28 @@ class _TrendLinesPainter extends CustomPainter {
       final laneBottom = geo.laneBottom;
       final mid = (laneTop + laneBottom) / 2;
       final half = (laneBottom - laneTop) / 2;
+      // 副图也套一个数据框，跟主图一样的底色、格子、发丝框。
+      final laneRect = Rect.fromLTRB(
+        0.4,
+        laneTop,
+        size.width - 0.4,
+        laneBottom,
+      );
+      canvas.drawRect(laneRect, Paint()..color = const Color(0xFFFCFBFE));
+      final laneRule = Paint()
+        ..color = const Color(0xFFEDEBF2)
+        ..strokeWidth = 0.6;
+      for (var k = 1; k < 6; k++) {
+        final gx = size.width * k / 6;
+        canvas.drawLine(Offset(gx, laneTop), Offset(gx, laneBottom), laneRule);
+      }
+      canvas.drawRect(
+        laneRect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8
+          ..color = const Color(0xFFE3DEEC),
+      );
       canvas.drawLine(
         Offset(0, mid),
         Offset(size.width, mid),
@@ -3493,6 +4219,7 @@ class _TrendLinesPainter extends CustomPainter {
       old.forecastLo != forecastLo ||
       old.forecastHi != forecastHi ||
       old.candles != candles ||
+      old.showActual != showActual ||
       old.dotScale != dotScale ||
       !identical(old.maFast, maFast) ||
       !identical(old.nx, nx) ||
@@ -8063,8 +8790,9 @@ class _TrendChart extends StatefulWidget {
   /// 图例那一行最右侧挂的控件（全屏大图的缩放 / 收起）。
   final Widget? legendTrailing;
 
-  /// 非空时「本期合计」那一行右侧出一颗放大钮（只在主 Hero 点日时传）。
-  final VoidCallback? onExpand;
+  /// 非空时「本期合计」那一行右侧出一张迷你 K 线卡（只在主 Hero 传）。
+  /// 回传卡片在屏幕上的位置，大图从这里「抽」出来。
+  final ValueChanged<Rect?>? onExpand;
 
   /// 全屏大图：双指捏合 / 滚轮 / 触控板缩放一屏点数，底部带全程缩略导航条。
   /// 需配合 [viewportCount] >= 2。
@@ -8504,8 +9232,12 @@ class _TrendChartState extends State<_TrendChart>
   /// K 线左侧纵轴栏宽：刻度数、现价牌、光标读数都坐在这一栏里，不压蜡烛。
   static const double _kCandleAxisGutter = 36;
 
-  /// NX 牛熊带开关（图例里那颗「牛熊线」）。
-  bool _showNx = true;
+  /// 图例里每条线一颗小眼睛：关掉就不画。
+  bool _showActual = true;
+  bool _showTrend = true;
+  bool _showNxFast = true;
+  bool _showNxSlow = true;
+  bool get _showNx => _showNxFast || _showNxSlow;
 
   /// 默认挂着的「最新一天」明细牌被点掉了（本次打开内不再自动出现）。
   bool _hideDefaultCard = false;
@@ -9469,32 +10201,16 @@ class _TrendChartState extends State<_TrendChart>
     }
 
     final up = prev.isFinite && v >= prev;
-    return Container(
+    return _LhKStack(
+      radius: 7,
+      dx: 3,
+      dy: -3,
+      child: Stack(
+        children: [
+    Container(
       width: 150,
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 7),
-      decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
-        ),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            _LhPlum.line,
-            role: DunesColorRole.border,
-          ),
-          width: 0.7,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: _LhPlum.deep.withAlpha(26),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.fromLTRB(8, 6, 10, 8),
+      decoration: _lhKCardDeco(context, radius: 7, strong: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -9535,6 +10251,14 @@ class _TrendChartState extends State<_TrendChart>
               context,
               hist >= 0 ? LhKColors.barUp : LhKColors.barDown,
             ),
+          ),
+        ],
+      ),
+    ),
+          const Positioned(
+            right: 0,
+            bottom: 0,
+            child: _LhKCorner(size: 12, cardRadius: 7),
           ),
         ],
       ),
@@ -9616,29 +10340,53 @@ class _TrendChartState extends State<_TrendChart>
       letterSpacing: -0.1,
       context: context,
     );
-    return Container(
-      height: 22,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: LhKColors.tint(c, 0.92),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: LhKColors.tint(c, 0.7), width: 0.6),
-      ),
-      child: Text.rich(
-        TextSpan(
-          children: [
-            TextSpan(text: '较$vs  ', style: muted.copyWith(fontSize: 9.5)),
+    return Stack(
+      children: [
+        Container(
+          height: 22,
+          padding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: LhKColors.tint(c, 0.94),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: LhKColors.tint(c, 0.72), width: 0.7),
+            boxShadow: [
+              BoxShadow(
+                color: c.withAlpha(28),
+                blurRadius: 5,
+                spreadRadius: -1,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text.rich(
             TextSpan(
-              text: '${up ? '▲' : '▼'} ${up ? '+' : '−'}${_money(d.abs())}',
-              style: strong,
+              children: [
+                TextSpan(text: '较$vs ', style: muted.copyWith(fontSize: 9.5)),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: _LhKCandleGlyph(up: up, color: c),
+                  ),
+                ),
+                TextSpan(
+                  text: '${up ? '+' : '−'}${_money(d.abs())}',
+                  style: strong,
+                ),
+                if (pct.isNotEmpty) TextSpan(text: ' ·$pct', style: strong),
+              ],
             ),
-            if (pct.isNotEmpty) TextSpan(text: ' ·$pct', style: strong),
-          ],
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+        Positioned(
+          right: 0,
+          bottom: 0,
+          child: _LhKCorner(size: 8, cardRadius: 6, color: c),
+        ),
+      ],
     );
   }
 
@@ -9719,44 +10467,62 @@ class _TrendChartState extends State<_TrendChart>
         final narrow = box.maxWidth < 440;
         Widget row(List<Widget> xs) =>
             SizedBox(height: 18, child: Row(children: xs));
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: DunesColors.resolve(
-              context,
-              const Color(0xFFF7F7F9),
-              role: DunesColorRole.surface,
+        return Stack(
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(9, 3, 13, 3),
+              decoration: _lhKCardDeco(context, radius: 8),
+              child: narrow
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        row(cells.sublist(0, 3)),
+                        row(cells.sublist(3)),
+                      ],
+                    )
+                  : row(cells),
             ),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: narrow
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [row(cells.sublist(0, 3)), row(cells.sublist(3))],
-                )
-              : row(cells),
+            const Positioned(
+              right: 0,
+              bottom: 0,
+              child: _LhKCorner(size: 10, cardRadius: 8),
+            ),
+          ],
         );
       },
     );
   }
 
-  /// 日 K 图例：紫线 = 7 日均线，金线 = 30 日均线，红 / 绿蜡烛 = 比前一天高 / 低。
+  /// K 线图例：每条线一颗「小眼睛」——实际值 / 均线 / NX快 / NX慢，点一下开关。
+  /// 开着是一张白卡（跟入口卡同一套皮），关掉变淡紫灰、字和色块都淡下去。
   Widget _candleLegend() {
     final style = LhTypography.sans(
       size: 9,
-      color: DunesColors.resolve(context, LhColors.mute2),
-      weight: FontWeight.w500,
+      color: DunesColors.resolve(context, LhColors.ink2),
+      weight: FontWeight.w600,
       letterSpacing: 0.2,
       context: context,
     );
-    Widget bandSwatch(Color c) => Container(
+    final dim = style.copyWith(
+      color: DunesColors.resolve(context, LhColors.mute2).withAlpha(140),
+      fontWeight: FontWeight.w500,
+    );
+    Widget lineSwatch(Color c, bool on) => Container(
+      width: 12,
+      height: 2.4,
+      decoration: BoxDecoration(
+        color: on ? c : LhKColors.tint(c, 0.62),
+        borderRadius: BorderRadius.circular(1.2),
+      ),
+    );
+    Widget bandSwatch(Color c, bool on) => Container(
       width: 12,
       height: 7,
       decoration: BoxDecoration(
-        color: LhKColors.tint(c, _showNx ? 0.82 : 0.94),
+        color: LhKColors.tint(c, on ? 0.82 : 0.95),
         borderRadius: BorderRadius.circular(2),
         border: Border.all(
-          color: _showNx ? c : LhKColors.tint(c, 0.6),
+          color: on ? c : LhKColors.tint(c, 0.62),
           width: 0.9,
         ),
       ),
@@ -9769,102 +10535,136 @@ class _TrendChartState extends State<_TrendChart>
         borderRadius: BorderRadius.circular(1),
       ),
     );
-    final dim = style.copyWith(
-      color: DunesColors.resolve(context, LhColors.mute2).withAlpha(120),
-    );
-    final narrow = MediaQuery.sizeOf(context).width < 430;
-    return SizedBox(
-      height: 16,
-      child: Row(
-        children: [
-          Container(
-            width: 12,
-            height: 2.5,
-            decoration: BoxDecoration(
-              color: LhKColors.trend,
-              borderRadius: BorderRadius.circular(1.5),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(_unit.fastLabel, style: style),
-          const SizedBox(width: 8),
-          // 牛熊线开关：点这一段整体开 / 关蓝黄两条带。
-          Semantics(
-            button: true,
-            toggled: _showNx,
-            label: '牛熊线',
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
-                setState(() => _showNx = !_showNx);
-              },
-              child: Container(
-                height: 16,
-                padding: const EdgeInsets.symmetric(horizontal: 5),
-                decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    _showNx ? const Color(0xFFF2F3F5) : Colors.transparent,
-                    role: DunesColorRole.surface,
-                  ),
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(
+    Widget toggle(
+      String label,
+      Widget Function(bool on) swatch,
+      bool on,
+      VoidCallback flip,
+    ) {
+      return Semantics(
+        button: true,
+        toggled: on,
+        label: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
+            setState(flip);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOut,
+            height: 16,
+            padding: const EdgeInsets.symmetric(horizontal: 5),
+            decoration: on
+                ? _lhKCardDeco(context, radius: 5)
+                : BoxDecoration(
                     color: DunesColors.resolve(
                       context,
-                      const Color(0xFFE2E3E8),
-                      role: DunesColorRole.border,
+                      const Color(0xFFF4F2F8),
+                      role: DunesColorRole.surface,
                     ),
-                    width: 0.6,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFEAE5F3),
+                        role: DunesColorRole.border,
+                      ),
+                      width: 0.7,
+                    ),
                   ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                swatch(on),
+                const SizedBox(width: 3),
+                Text(label, style: on ? style : dim),
+                const SizedBox(width: 3),
+                Icon(
+                  on
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  size: 10,
+                  color: on
+                      ? DunesColors.resolve(context, _LhPlum.deep)
+                      : DunesColors.resolve(
+                          context,
+                          LhColors.mute2,
+                        ).withAlpha(140),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    bandSwatch(LhKColors.nxFast),
-                    const SizedBox(width: 3),
-                    Text('NX快', style: _showNx ? style : dim),
-                    const SizedBox(width: 6),
-                    bandSwatch(LhKColors.nxSlow),
-                    const SizedBox(width: 3),
-                    Text('NX慢', style: _showNx ? style : dim),
-                    const SizedBox(width: 4),
-                    Icon(
-                      _showNx
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                      size: 10,
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final narrow = MediaQuery.sizeOf(context).width < 430;
+    final hintStyle = LhTypography.sans(
+      size: 9,
+      color: DunesColors.resolve(context, LhColors.mute2).withAlpha(140),
+      weight: FontWeight.w500,
+      letterSpacing: 0.2,
+      context: context,
+    );
+    return SizedBox(
+      height: 20,
+      child: Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  toggle(
+                    '实际值',
+                    (on) => lineSwatch(LhKColors.actual, on),
+                    _showActual,
+                    () => _showActual = !_showActual,
+                  ),
+                  const SizedBox(width: 5),
+                  toggle(
+                    _unit.fastLabel,
+                    (on) => lineSwatch(LhKColors.trend, on),
+                    _showTrend,
+                    () => _showTrend = !_showTrend,
+                  ),
+                  const SizedBox(width: 5),
+                  toggle(
+                    'NX快',
+                    (on) => bandSwatch(LhKColors.nxFast, on),
+                    _showNxFast,
+                    () => _showNxFast = !_showNxFast,
+                  ),
+                  const SizedBox(width: 5),
+                  toggle(
+                    'NX慢',
+                    (on) => bandSwatch(LhKColors.nxSlow, on),
+                    _showNxSlow,
+                    () => _showNxSlow = !_showNxSlow,
+                  ),
+                  const SizedBox(width: 9),
+                  box(LhKColors.up),
+                  const SizedBox(width: 2),
+                  box(LhKColors.down),
+                  const SizedBox(width: 4),
+                  Text(
+                    '比${_unit.prevAny}高 / 低',
+                    maxLines: 1,
+                    style: hintStyle.copyWith(
                       color: DunesColors.resolve(context, LhColors.mute2),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          box(LhKColors.up),
-          const SizedBox(width: 2),
-          box(LhKColors.down),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              '比${_unit.prevAny}高 / 低',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: style,
-            ),
-          ),
-          const Spacer(),
-          if (!narrow)
-          Flexible(
-            child: Text(
-              '拖动平移 · 双指缩放',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-              style: dim,
-            ),
-          ),
+          if (!narrow) ...[
+            const SizedBox(width: 8),
+            Text('拖动平移 · 双指缩放', maxLines: 1, style: hintStyle),
+          ],
         ],
       ),
     );
@@ -9981,16 +10781,11 @@ class _TrendChartState extends State<_TrendChart>
                   ),
                 ),
             ],
-            child: Container(
+            child: _LhKStack(
+              radius: 6,
+              child: Container(
               padding: const EdgeInsets.fromLTRB(7, 2, 3, 2),
-              decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  const Color(0xFFF2F3F5),
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(6),
-              ),
+              decoration: _lhKCardDeco(context, radius: 6),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -10003,12 +10798,13 @@ class _TrendChartState extends State<_TrendChart>
                 ],
               ),
             ),
+            ),
           );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         labelWidget,
-        const SizedBox(width: 6),
+        const SizedBox(width: 8),
         Flexible(
           child: Text(
             '${neg ? '−' : ''}${_fmtHeroAbs(v.abs())}${_fmtHeroUnit(v.abs())}',
@@ -10036,57 +10832,24 @@ class _TrendChartState extends State<_TrendChart>
     );
   }
 
-  /// 「本期合计」那一行右侧的放大钮：淡紫雾面 + 紫发丝边，跟选中格同一套皮。
-  /// 占位高度压在 13px 以内，不把图例往下顶。
-  Widget _trendExpandButton(VoidCallback onTap) {
-    return Semantics(
-      button: true,
-      label: '放大走势图',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          LighthouseFeedback.instance.play(LighthouseFeedbackKind.expand);
-          onTap();
-        },
-        child: SizedBox(
-          width: 30,
-          height: 13,
-          child: OverflowBox(
-            maxHeight: 22,
-            alignment: Alignment.centerRight,
-            child: Container(
-              width: 22,
-              height: 18,
-              decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  _LhPlum.mist,
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: DunesColors.resolve(
-                    context,
-                    _LhPlum.primary,
-                    role: DunesColorRole.border,
-                  ).withAlpha(56),
-                  width: 0.8,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: _LhPlum.deep.withAlpha(18),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Icon(
-                Icons.open_in_full_rounded,
-                size: 10.5,
-                color: DunesColors.resolve(context, _LhPlum.primary),
-              ),
-            ),
-          ),
+  /// 「本期合计」那一行右侧的入口：一张迷你 K 线卡（最近几天的利润），
+  /// 后面叠一张淡紫卡，右下角贴一个紫色角标。占位高度压在 13px 以内。
+  Widget _trendExpandButton(ValueChanged<Rect?> onTap) {
+    final tail = <double>[];
+    for (var i = widget.profit.length - 1; i >= 0 && tail.length < 10; i--) {
+      final v = widget.profit[i];
+      if (v.isFinite) tail.insert(0, v);
+    }
+    return SizedBox(
+      width: 48,
+      height: 13,
+      child: OverflowBox(
+        maxHeight: 26,
+        alignment: Alignment.centerRight,
+        child: _LhMiniKButton(
+          values: tail,
+          loading: tail.length < 3,
+          onTap: onTap,
         ),
       ),
     );
@@ -10355,15 +11118,17 @@ class _TrendChartState extends State<_TrendChart>
           ).pts;
           List<double> cutMa(List<double> l) =>
               l.isEmpty ? l : l.sublist(lo, math.min(hi + 1, l.length));
-          maFast = cutMa(_trendMovingAverage(full, _unit.fast));
+          maFast = _showTrend
+              ? cutMa(_trendMovingAverage(full, _unit.fast))
+              : null;
           maSlow = cutMa(_trendMovingAverage(full, _unit.slow));
           final w = _nxWindows;
           if (_showNx) {
             nxBands = [
-              cutMa(_trendEma(full, w.fa)),
-              cutMa(_trendEma(full, w.fb)),
-              cutMa(_trendEma(full, w.sa)),
-              cutMa(_trendEma(full, w.sb)),
+              _showNxFast ? cutMa(_trendEma(full, w.fa)) : const <double>[],
+              _showNxFast ? cutMa(_trendEma(full, w.fb)) : const <double>[],
+              _showNxSlow ? cutMa(_trendEma(full, w.sa)) : const <double>[],
+              _showNxSlow ? cutMa(_trendEma(full, w.sb)) : const <double>[],
             ];
           }
           final macd = _trendMacd(full);
@@ -10755,6 +11520,7 @@ class _TrendChartState extends State<_TrendChart>
                                 candles: widget.candles,
                                 maFast: maFast,
                                 nx: nxBands,
+                                showActual: _showActual,
                                 macdDif: macdDif,
                                 macdDea: macdDea,
                                 maSlow: maSlow,
@@ -21117,7 +21883,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     });
   }
 
-  void _openHeroTrendFullscreen() {
+  void _openHeroTrendFullscreen([Rect? origin]) {
     if (_heroFullscreenOpen || _heroTrendArgs == null) return;
     _heroFullscreenOpen = true;
     _heroFullscreenMetric = null;
@@ -21142,6 +21908,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               child: _LhPopStage(
                 animation: anim,
                 fromRect: fromRect,
+                originRect: origin,
                 onDismiss: () {
                   LighthouseFeedback.instance.play(
                     LighthouseFeedbackKind.collapse,
@@ -21179,16 +21946,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       height: 30,
       child: Row(
         children: [
-          // 看盘软件那种灰分段：浅灰凹槽，选中是一枚白片 + 轻投影，深色字。
+          // 分段：淡紫灰凹槽，选中那一格是一张「入口迷你卡」—— 白卡 + 发丝边 +
+          // 紫色柔投影，右下角贴一颗紫色四分之一圆。
           Container(
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
               color: DunesColors.resolve(
                 ctx,
-                const Color(0xFFF2F3F5),
+                const Color(0xFFF4F2F8),
                 role: DunesColorRole.surface,
               ),
               borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  ctx,
+                  const Color(0xFFEAE5F3),
+                  role: DunesColorRole.border,
+                ),
+                width: 0.6,
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -21207,46 +21983,46 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         );
                         _applyPeriod(period: key, offset: 0);
                       },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 160),
-                        curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: _period == key
-                              ? DunesColors.resolve(
-                                  ctx,
-                                  LhColors.paper,
-                                  role: DunesColorRole.surface,
-                                )
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(7),
-                          boxShadow: _period == key
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.black.withAlpha(20),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 1),
+                      child: Stack(
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            curve: Curves.easeOutCubic,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            alignment: Alignment.center,
+                            decoration: _period == key
+                                ? _lhKCardDeco(ctx, radius: 7)
+                                : BoxDecoration(
+                                    borderRadius: BorderRadius.circular(7),
+                                    border: Border.all(
+                                      color: Colors.transparent,
+                                      width: 0.7,
+                                    ),
                                   ),
-                                ]
-                              : null,
-                        ),
-                        child: Text(
-                          label,
-                          style: LhTypography.sans(
-                            size: 11,
-                            color: _period == key
-                                ? DunesColors.resolve(ctx, LhColors.ink)
-                                : DunesColors.resolve(
-                                    ctx,
-                                    const Color(0xFF8A8D94),
-                                  ),
-                            weight: _period == key
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            context: ctx,
+                            child: Text(
+                              label,
+                              style: LhTypography.sans(
+                                size: 11,
+                                color: _period == key
+                                    ? DunesColors.resolve(ctx, _LhPlum.deep)
+                                    : DunesColors.resolve(
+                                        ctx,
+                                        const Color(0xFF8A8D94),
+                                      ),
+                                weight: _period == key
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                context: ctx,
+                              ),
+                            ),
                           ),
-                        ),
+                          if (_period == key)
+                            const Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: _LhKCorner(size: 8, cardRadius: 7),
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -21413,24 +22189,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ),
                   ),
               ],
-              child: Container(
+              child: _LhKStack(
+                radius: 7,
+                child: Container(
                 padding: const EdgeInsets.fromLTRB(8, 3, 4, 3),
-                decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    ctx,
-                    _LhPlum.mist,
-                    role: DunesColorRole.surface,
-                  ),
-                  borderRadius: BorderRadius.circular(7),
-                  border: Border.all(
-                    color: DunesColors.resolve(
-                      ctx,
-                      _LhPlum.primary,
-                      role: DunesColorRole.border,
-                    ).withAlpha(60),
-                    width: 0.7,
-                  ),
-                ),
+                decoration: _lhKCardDeco(ctx, radius: 7),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -21452,8 +22215,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   ],
                 ),
               ),
+              ),
             ),
-            if (parts.isNotEmpty) const SizedBox(width: 4),
+            if (parts.isNotEmpty) const SizedBox(width: 6),
           ],
           if (parts.isEmpty && !canPickGroup)
             chip('全部', muted: true)
@@ -21472,26 +22236,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     void close() {
       LighthouseFeedback.instance.play(LighthouseFeedbackKind.collapse);
       Navigator.of(ctx).maybePop();
-    }
-
-    Widget ctrl(IconData icon, String label, VoidCallback onTap) {
-      return Semantics(
-        button: true,
-        label: label,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: SizedBox(
-            width: 26,
-            height: 22,
-            child: Icon(
-              icon,
-              size: 13,
-              color: DunesColors.resolve(ctx, _LhPlum.deep),
-            ),
-          ),
-        ),
-      );
     }
 
     return GestureDetector(
@@ -21580,13 +22324,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         ),
                         // 收起钉在卡片最右上角。
                         Positioned(
-                          top: 11,
-                          right: 4,
-                          child: ctrl(
-                            Icons.close_fullscreen_rounded,
-                            '收起',
-                            close,
-                          ),
+                          top: 9,
+                          right: 6,
+                          child: _LhKCollapseButton(onTap: close),
                         ),
                       ],
                     ),

@@ -7,10 +7,15 @@ import 'proposal_intake_models.dart';
 ///
 /// 财务部不再手填金额：每个产品（主产品、子产品都拆）各选收入公式和
 /// 项目 / 业务 / 税务成本项及公式，按产品分别测算再加总，
-/// 利润 = 收入 − 项目成本 − 业务成本 − 税务成本。
+/// 利润 = 收入 − 采购成本 − 项目成本 − 业务成本 − 税务成本（采购成本取自供给侧结算）。
 /// 经营成本整单只选类型，不计金额、不进利润。
 /// 字典（收入公式、成本项、成本公式）由后端 `options.finance.formulaCatalog`
 /// 下发；后端没给时用本文件里的兜底字典。
+
+/// 利润是否测算。收入公式里的业务量、补贴、利差等提案取不到真实值（见 test/proposal_finance_formula_mock_test.dart），
+/// 算出的利润不可信，先停掉：不显示利润 / 毛利率、不回写表单，成本（采购 / 项目 / 业务 / 税务）照常测算。
+/// 改成 true 即恢复利润块和各处利润数字。
+const kProposalFinanceShowProfit = false;
 
 const kProposalRevenueFormulaKey = 'revenueFormula';
 const kProposalRevenueFormulaGroupKey = 'revenueFormulaGroup';
@@ -438,15 +443,15 @@ const _kPromotionTierFormula = ProposalFinanceFormula(
 const _kBusinessCostFormulas = <ProposalFinanceFormula>[
   ProposalFinanceFormula(
     code: 'BIZ_NET_10',
-    name: '（收入 − 项目成本）× 10%',
-    expression: '(收入 − 项目成本) × 10%',
+    name: '（收入 − 采购 − 项目成本）× 10%',
+    expression: '(收入 − 采购成本 − 项目成本) × 10%',
     kind: ProposalFinanceFormulaKind.netOpRate,
     rate: 0.10,
   ),
   ProposalFinanceFormula(
     code: 'BIZ_NET_45',
-    name: '（收入 − 项目成本）× 45%',
-    expression: '(收入 − 项目成本) × 45%',
+    name: '（收入 − 采购 − 项目成本）× 45%',
+    expression: '(收入 − 采购成本 − 项目成本) × 45%',
     kind: ProposalFinanceFormulaKind.netOpRate,
     rate: 0.45,
   ),
@@ -475,14 +480,14 @@ const _kIncomeTaxFormulas = <ProposalFinanceFormula>[
   ProposalFinanceFormula(
     code: 'TAX_INCOME_25',
     name: '应税利润 × 25%',
-    expression: '(收入 − 项目成本 − 业务成本) × 25%',
+    expression: '(收入 − 采购成本 − 项目成本 − 业务成本) × 25%',
     kind: ProposalFinanceFormulaKind.pretaxRate,
     rate: 0.25,
   ),
   ProposalFinanceFormula(
     code: 'TAX_INCOME_15',
     name: '应税利润 × 15%（高新技术企业）',
-    expression: '(收入 − 项目成本 − 业务成本) × 15%',
+    expression: '(收入 − 采购成本 − 项目成本 − 业务成本) × 15%',
     kind: ProposalFinanceFormulaKind.pretaxRate,
     rate: 0.15,
   ),
@@ -1177,9 +1182,14 @@ class ProposalFinanceEvaluation {
     required this.margin,
     required this.marginSubstitution,
     this.products = const [],
+    this.procurement = const ProposalFinanceLine(name: '采购成本', amount: 0),
   });
 
   final double salesScale;
+
+  /// 采购成本：付给供给侧的采购款（供给侧结算「关联产品年化规模 × 比例」）。
+  /// 收入是渠道结算全额，不扣这笔利润会虚高。
+  final ProposalFinanceLine procurement;
 
   /// 按产品的测算；整组的收入、成本、利润是它们的加总。
   final List<ProposalProductFinanceEvaluation> products;
@@ -1200,8 +1210,10 @@ class ProposalFinanceEvaluation {
 
   double total(String key) => buckets[key]?.total ?? 0;
 
+  /// 成本合计 = 采购成本 + 项目 / 业务 / 税务（经营成本只选类型，金额为 0）。
   double get costTotal => proposalRoundWan(
-    buckets.values.fold<double>(0, (sum, bucket) => sum + bucket.total),
+    procurement.amount +
+        buckets.values.fold<double>(0, (sum, bucket) => sum + bucket.total),
   );
 }
 
@@ -1793,6 +1805,10 @@ Map<String, dynamic> proposalFinanceSkuScope(
     'childProducts': const <Map<String, dynamic>>[],
     'channelSkus': const <Map<String, dynamic>>[],
     'products': const <Map<String, dynamic>>[],
+    // 「products」也是供给产品的旧别名：清掉之前先把供给产品落到 supplyProducts，采购成本才算得到。
+    'supplyProducts': [
+      for (final row in proposalIntakeSupplyProducts(scope)) row.toJson(),
+    ],
     'packs': const <Map<String, dynamic>>[],
     'couponPacks': const <Map<String, dynamic>>[],
     'sharedSettlements': [
@@ -1889,6 +1905,7 @@ ProposalFinanceEvaluation proposalEvaluateFinance(
         dict: dict,
         costCatalog: costCatalog,
         costNames: costNames,
+        owner: owner,
       );
   final skus = [
     for (final sku in proposalIntakeSkuDetails(form))
@@ -1920,6 +1937,18 @@ ProposalFinanceEvaluation proposalEvaluateFinance(
     dict: dict,
   );
 }
+
+/// 把若干产品（可同时含主产品和子产品）的测算加总成一份，
+/// 页面顶部的成本 / 利润和下面按产品列出的各行用同一份数，不会对不上。
+ProposalFinanceEvaluation proposalAggregateProductFinance({
+  required double salesScale,
+  required List<ProposalProductFinanceEvaluation> products,
+  ProposalFinanceFormulaCatalog? catalog,
+}) => _aggregateFinance(
+  salesScale: salesScale,
+  products: products,
+  dict: catalog ?? ProposalFinanceFormulaCatalog.fallback,
+);
 
 ProposalFinanceEvaluation _aggregateFinance({
   required double salesScale,
@@ -1981,20 +2010,40 @@ ProposalFinanceEvaluation _aggregateFinance({
     );
   }
   double total(String key) => buckets[key]?.total ?? 0;
+  final procurements = [for (final e in evals) e.procurement];
+  final procurementAmount = proposalRoundWan(
+    procurements.fold<double>(0, (sum, line) => sum + line.amount),
+  );
+  final procurementLine = procurements.length == 1
+      ? procurements.single
+      : ProposalFinanceLine(
+          name: '采购成本',
+          amount: procurementAmount,
+          substitution: [
+            for (var i = 0; i < products.length; i++)
+              if (procurements[i].amount != 0)
+                '${products[i].name} ${_wan(procurements[i].amount)}',
+          ].join(' + '),
+          source: '取自供给侧结算',
+          missing: {for (final line in procurements) ...line.missing}.toList(),
+        );
   final p = total(kProposalCostCategoryProject);
   final b = total(kProposalCostCategoryBusiness);
   final t = total(kProposalCostCategoryTax);
-  final profit = proposalRoundWan(revenueAmount - p - b - t);
+  final profit = proposalRoundWan(
+    revenueAmount - procurementAmount - p - b - t,
+  );
   final margin = scale > 0 ? proposalRoundWan(profit / scale * 100) : null;
   return ProposalFinanceEvaluation(
     salesScale: scale,
     revenueGroup: evals.first.revenueGroup,
     revenueGroups: evals.first.revenueGroups,
     revenue: revenueLine,
+    procurement: procurementLine,
     buckets: buckets,
     profit: profit,
     profitSubstitution:
-        '${_wan(revenueAmount)} − ${_wan(p)} − ${_wan(b)} − ${_wan(t)} = ${_wan(profit)} 万元',
+        '${_wan(revenueAmount)} − ${_wan(procurementAmount)} − ${_wan(p)} − ${_wan(b)} − ${_wan(t)} = ${_wan(profit)} 万元',
     margin: margin,
     marginSubstitution: margin == null
         ? '销售规模为空，暂不能算'
@@ -2009,6 +2058,7 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
   required ProposalFinanceFormulaCatalog dict,
   List<ProposalCostItemOption> costCatalog = const [],
   List<String> costNames = const [],
+  String owner = kProposalProductFinanceMain,
 }) {
   final scale = proposalEffectiveSalesScale(form);
   final rollup = proposalProductScaleRollup(form);
@@ -2078,6 +2128,10 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
   }
   final revenue = revenueLine.amount;
 
+  // ---- 采购成本（付给供给侧） ----
+  final procurementLine = _evaluateProcurement(form, owner: owner);
+  final procurement = procurementLine.amount;
+
   // ---- 成本 ----
   final totals = <String, double>{};
   final buckets = <String, ProposalFinanceBucket>{};
@@ -2113,6 +2167,7 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
           formula: proposalFinanceItemFormula(form, category, name),
           scale: scale,
           revenue: revenue,
+          procurement: procurement,
           project: totals[kProposalCostCategoryProject] ?? 0,
           // 经营成本只选类型、不计金额，公式里按 0 计。
           operating: 0,
@@ -2126,28 +2181,103 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
     totals[key] = bucket.total;
   }
 
-  // ---- 利润 ----
+  // ---- 利润 = 收入 − 采购 − 项目 − 业务 − 税务 ----
   final p = totals[kProposalCostCategoryProject] ?? 0;
   final b = totals[kProposalCostCategoryBusiness] ?? 0;
   final t = totals[kProposalCostCategoryTax] ?? 0;
-  final profit = proposalRoundWan(revenue - p - b - t);
+  final profit = proposalRoundWan(revenue - procurement - p - b - t);
   final margin = scale > 0 ? proposalRoundWan(profit / scale * 100) : null;
   return ProposalFinanceEvaluation(
     salesScale: scale,
     revenueGroup: resolved.group,
     revenueGroups: dict.groupsForSources(proposalFinanceSyncSources(form)),
     revenue: revenueLine,
+    procurement: procurementLine,
     buckets: {
       for (final key in kProposalCostCategoryDisplayOrder)
         if (buckets[key] != null) key: buckets[key]!,
     },
     profit: profit,
     profitSubstitution:
-        '${_wan(revenue)} − ${_wan(p)} − ${_wan(b)} − ${_wan(t)} = ${_wan(profit)} 万元',
+        '${_wan(revenue)} − ${_wan(procurement)} − ${_wan(p)} − ${_wan(b)} − ${_wan(t)} = ${_wan(profit)} 万元',
     margin: margin,
     marginSubstitution: margin == null
         ? '销售规模为空，暂不能算'
         : '${_wan(profit)} ÷ ${_wan(scale)} × 100% = ${_wan(margin)}%',
+  );
+}
+
+/// 采购成本：付给供给侧的采购款。
+///
+/// - 供给侧结算勾了产品：本范围内被勾到的产品，按「该产品年化规模 × 该条比例」加总；
+///   别的产品被勾、这个没被勾，这个产品不算采购（采购记在被勾的产品上）。
+/// - 供给侧结算一条都没勾产品：按年化规模 × 第一条比例，只记在主产品上，子产品不重复算。
+/// - 供给侧结算没填比例：按 0 计并标缺项，利润不完整。
+ProposalFinanceLine _evaluateProcurement(
+  Map<String, dynamic> form, {
+  required String owner,
+}) {
+  const name = '采购成本';
+  final rows = proposalPurchaseSettleTerms(form);
+  if (rows.isEmpty) {
+    return const ProposalFinanceLine(
+      name: name,
+      amount: 0,
+      substitution: '供给侧结算还没填比例，采购成本按 0 计，利润偏高',
+      missing: ['供给侧结算比例'],
+    );
+  }
+  final ids = {for (final sku in proposalIntakeSkuDetails(form)) sku.id};
+  final linked = [
+    for (final terms in rows)
+      if (terms.skuIds.isNotEmpty) terms,
+  ];
+  if (linked.isEmpty) {
+    if (owner == kProposalProductFinanceChildren) {
+      return const ProposalFinanceLine(
+        name: name,
+        amount: 0,
+        substitution: '供给侧结算没有勾选产品，采购成本记在主产品上',
+      );
+    }
+    final scale = proposalEffectiveSalesScale(form);
+    final ratio = proposalParseSettleRatio(rows.first.displayRatio);
+    final amount = proposalRoundWan(scale * ratio);
+    return ProposalFinanceLine(
+      name: name,
+      amount: amount,
+      substitution:
+          '${_wan(scale)} × ${rows.first.displayRatio.trim()} = ${_wan(amount)} 万元',
+      source: '取自供给侧结算 · 比例 ${rows.first.displayRatio.trim()}',
+      missing: scale > 0 ? const [] : const ['销售规模'],
+    );
+  }
+  var sum = 0.0;
+  final parts = <String>[];
+  for (final terms in linked) {
+    final hit = [
+      for (final id in terms.skuIds)
+        if (ids.contains(id)) id,
+    ];
+    if (hit.isEmpty) continue;
+    final scale = proposalAssociatedSalesScale(form, hit);
+    final ratio = proposalParseSettleRatio(terms.displayRatio);
+    sum += scale * ratio;
+    parts.add('${_wan(scale)} × ${terms.displayRatio.trim()}');
+  }
+  if (parts.isEmpty) {
+    return const ProposalFinanceLine(
+      name: name,
+      amount: 0,
+      substitution: '供给侧结算没有勾到这个产品，采购记在被勾选的产品上',
+    );
+  }
+  final amount = proposalRoundWan(sum);
+  return ProposalFinanceLine(
+    name: name,
+    amount: amount,
+    substitution: '${parts.join(' + ')} = ${_wan(amount)} 万元',
+    source: '取自供给侧结算',
   );
 }
 
@@ -2239,7 +2369,10 @@ ProposalFinanceLine _evaluateCostLine(
   required double operating,
   required double business,
   required double? Function(String name) settleCost,
+  double procurement = 0,
 }) {
+  // 毛利口径的公式（业务成本、所得税）基数先扣采购成本：收入 − 采购 − …
+  final buy = procurement > 0 ? ' − ${_wan(procurement)}' : '';
   if (formula == null) {
     return ProposalFinanceLine(
       name: name,
@@ -2315,31 +2448,36 @@ ProposalFinanceLine _evaluateCostLine(
       }
     case ProposalFinanceFormulaKind.grossRate:
       {
-        final amount = math.max(0.0, revenue - project) * rate;
+        final amount = math.max(0.0, revenue - procurement - project) * rate;
         return line(
           amount,
-          '(${_wan(revenue)} − ${_wan(project)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
+          '(${_wan(revenue)}$buy − ${_wan(project)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
         );
       }
     case ProposalFinanceFormulaKind.netOpRate:
       {
-        final amount = math.max(0.0, revenue - project - operating) * rate;
+        final amount =
+            math.max(0.0, revenue - procurement - project - operating) * rate;
         return line(
           amount,
           operating > 0
-              ? '(${_wan(revenue)} − ${_wan(project)} − ${_wan(operating)}) × ${_pct(rate)} = ${_wan(amount)} 万元'
-              : '(${_wan(revenue)} − ${_wan(project)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
+              ? '(${_wan(revenue)}$buy − ${_wan(project)} − ${_wan(operating)}) × ${_pct(rate)} = ${_wan(amount)} 万元'
+              : '(${_wan(revenue)}$buy − ${_wan(project)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
         );
       }
     case ProposalFinanceFormulaKind.pretaxRate:
       {
         final amount =
-            math.max(0.0, revenue - project - business - operating) * rate;
+            math.max(
+              0.0,
+              revenue - procurement - project - business - operating,
+            ) *
+            rate;
         return line(
           amount,
           operating > 0
-              ? '(${_wan(revenue)} − ${_wan(project)} − ${_wan(business)} − ${_wan(operating)}) × ${_pct(rate)} = ${_wan(amount)} 万元'
-              : '(${_wan(revenue)} − ${_wan(project)} − ${_wan(business)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
+              ? '(${_wan(revenue)}$buy − ${_wan(project)} − ${_wan(business)} − ${_wan(operating)}) × ${_pct(rate)} = ${_wan(amount)} 万元'
+              : '(${_wan(revenue)}$buy − ${_wan(project)} − ${_wan(business)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
         );
       }
     case ProposalFinanceFormulaKind.vat:
@@ -2387,10 +2525,9 @@ Map<String, dynamic> _seedSuggestedItems(
       next = Map<String, dynamic>.from(next)..[project.namesKey] = matched;
     }
   }
+  // 税务成本不再让人选：有规模就带印花税，有销售税率就带对应口径的增值税（在已选的基础上补齐）。
   final tax = catalog.category(kProposalCostCategoryTax);
-  if (tax != null &&
-      !proposalFinanceCategoryTouched(form, tax.key) &&
-      proposalFinanceSelectedNames(form, tax).isEmpty) {
+  if (tax != null) {
     final suggested = proposalEnsureAutoTaxItemNames(next);
     if (suggested.isNotEmpty) {
       next = Map<String, dynamic>.from(next)..[tax.namesKey] = suggested;
@@ -2452,7 +2589,8 @@ Map<String, dynamic> proposalApplyFinanceFormulas(
     };
     next[category.totalKey] = bucket.total;
   }
-  if (!redacted) {
+  // 利润停算时不回写利润 / 毛利率，服务端已有值原样保留。
+  if (!redacted && kProposalFinanceShowProfit) {
     next['profit'] = eval.profit;
     next['margin'] = eval.margin ?? 0;
   }

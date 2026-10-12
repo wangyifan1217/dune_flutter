@@ -11,7 +11,7 @@ import 'proposal_intake_ui.dart';
 
 /// 测算金额、代入过程是否显示。先屏蔽，财务部分只显示每个产品选的收入公式和成本公式；
 /// 改成 true 即恢复金额、代入、构成条和「利润」块。
-const kProposalFinanceShowEstimates = false;
+const kProposalFinanceShowEstimates = true;
 
 /// 财务部下半部分：按产品列出收入公式和成本公式，视觉上与顶部年化测算 hero 一致。
 ///
@@ -169,6 +169,8 @@ abstract final class _K {
   static const business = Color(0xFF4A83C4);
   static const operating = Color(0xFF3B8B5A);
   static const tax = Color(0xFFB07A2B);
+  static const costInk = Color(0xFFB8641E);
+  static const procurement = Color(0xFF8C5A3C);
 }
 
 Color _categoryColor(String key) => switch (key) {
@@ -319,6 +321,8 @@ class ProposalFinanceBlockShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 放在左右分栏右侧时，左边格子已经写了块名，这里不再重复标题。
+    final inSplit = _FinanceSplitScope.of(context);
     return Container(
       decoration: BoxDecoration(
         color: _surface(context, Colors.white),
@@ -335,6 +339,7 @@ class ProposalFinanceBlockShell extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (!inSplit) ...[
                 Row(
                   children: [
                     Icon(icon, size: 15, color: _c(context, _K.heroInk)),
@@ -351,6 +356,7 @@ class ProposalFinanceBlockShell extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 6),
+                ],
                 band,
               ],
             ),
@@ -383,7 +389,11 @@ class ProposalFinanceRow extends StatefulWidget {
     this.initiallyOpen = false,
     this.forceOpen = false,
     this.titleWidth = 132,
+    this.summaryStrong = false,
   });
+
+  /// 摘要是这一行的重点（如结算规则）：深色加粗、可两行，而不是灰色小字。
+  final bool summaryStrong;
 
   final String title;
   final double titleWidth;
@@ -447,9 +457,16 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
         ? null
         : Text(
             widget.summary,
-            maxLines: _open ? 3 : 1,
+            maxLines: _open ? 3 : (widget.summaryStrong ? 2 : 1),
             overflow: TextOverflow.ellipsis,
-            style: _sans(context, size: 11.5, color: _K.text2),
+            style: widget.summaryStrong
+                ? _sans(
+                    context,
+                    size: 12.5,
+                    weight: FontWeight.w600,
+                    color: _K.ink,
+                  )
+                : _sans(context, size: 11.5, color: _K.text2),
           );
     final value = widget.value.isEmpty
         ? const SizedBox.shrink()
@@ -528,13 +545,25 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
 // 成本
 // ---------------------------------------------------------------------------
 
+/// 成本块的三种用法。
+/// - [full]：原来的按产品选公式（保留，暂不在页面上用）；
+/// - [result]：市场部「成本测算」——结算写好就自动算，只读出结果，不用填；
+/// - [inputs]：财务部「经营与周转」——只剩经营成本类型、月周转次数两项要填。
+enum ProposalFinanceCostPanelMode { full, result, inputs }
+
 class ProposalFinanceCostPanel extends StatelessWidget {
-  const ProposalFinanceCostPanel({super.key, required this.config});
+  const ProposalFinanceCostPanel({
+    super.key,
+    required this.config,
+    this.mode = ProposalFinanceCostPanelMode.full,
+  });
 
   final ProposalFinanceBoardConfig config;
+  final ProposalFinanceCostPanelMode mode;
 
   @override
   Widget build(BuildContext context) {
+    if (mode == ProposalFinanceCostPanelMode.inputs) return _inputsPanel(context);
     final eval = config.evaluation;
     final sealed = config.businessSealed;
     final buckets = eval.buckets.values.toList();
@@ -542,7 +571,10 @@ class ProposalFinanceCostPanel extends StatelessWidget {
         sealed && bucket.category.key == kProposalCostCategoryBusiness
         ? 0
         : bucket.total;
-    final total = buckets.fold<double>(0, (sum, b) => sum + shown(b));
+    // 成本合计含采购成本（付给供给侧的采购款）。
+    final total =
+        eval.procurement.amount +
+        buckets.fold<double>(0, (sum, b) => sum + shown(b));
     final scale = eval.salesScale;
     final products = config.products;
 
@@ -553,63 +585,66 @@ class ProposalFinanceCostPanel extends StatelessWidget {
                 : '共 ${products.length} 个产品 · 按产品选择收入公式和成本公式',
             style: _sans(context, size: 11.5, color: _K.text2),
           )
-        : Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text.rich(
-              TextSpan(
-                text: _wan(total),
-                style: _mono(context, size: 18, weight: FontWeight.w700),
-                children: [
-                  TextSpan(
-                    text: ' 万 · 年化成本',
-                    style: _sans(context, size: 11, color: _K.grey),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(),
-            if (scale > 0)
-              Text(
-                '占规模 ${_wan(total / scale * 100)}%',
-                style: _mono(context, size: 11.5, color: _K.heroInk),
-              ),
-          ],
-        ),
-        if (sealed)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              '不含已加密的业务成本',
-              style: _sans(context, size: 11, color: _K.grey),
-            ),
-          ),
-        const SizedBox(height: 8),
-        _CompositionBar(
-          parts: [
-            for (final bucket in buckets)
-              if (!(sealed &&
-                  bucket.category.key == kProposalCostCategoryBusiness))
-                (bucket.category.name, shown(bucket), _categoryColor(bucket.category.key)),
-          ],
-        ),
-      ],
-    );
+        : ProposalFinanceBand(
+            value: _wan(total),
+            unit: '万',
+            label: '年化成本',
+            color: _K.ink,
+            trailing: scale > 0
+                ? ProposalFinanceTag(
+                    '占规模 ${_wan(total / scale * 100)}%',
+                    color: _K.heroInk,
+                    fill: const Color(0xFFDCE4F6),
+                  )
+                : null,
+            sub: sealed ? '不含已加密的业务成本' : '',
+          );
 
+    // 外层是成本类（项目 / 业务 / 税务），每一类点开后按产品列出；产品包在成本里面。
+    // 利润块关掉时，收入公式也放在这里（按产品）。
+    if (mode == ProposalFinanceCostPanelMode.result) {
+      return config.wrapAll(
+        [kProposalFinanceCostAnchor, kProposalFinanceProfitAnchor],
+        ProposalFinanceBlockShell(
+          icon: Icons.receipt_long_outlined,
+          title: '成本测算',
+          band: band,
+          rows: [
+            _procurementRow(context),
+            for (final key in const [
+              kProposalCostCategoryProject,
+              kProposalCostCategoryBusiness,
+              kProposalCostCategoryTax,
+            ])
+              if (config.catalog.category(key) != null)
+                // 业务成本是内部分摊，结算里没有：还原成按产品选（市场部负责人一在复核时选），其余按结算自动算。
+                key == kProposalCostCategoryBusiness
+                    ? config.wrap(
+                        proposalFinanceCategoryAnchor(key),
+                        _categoryRow(context, key),
+                      )
+                    : _resultCategoryRow(context, key),
+          ],
+        ),
+      );
+    }
     final rows = <Widget>[
-      for (var i = 0; i < products.length; i++)
-        i == 0
-            // hero 跳「收入 / 各类成本」时落到第一个产品。
-            ? config.wrapAll(const [
-                'revenue',
-                'costItems',
-                'businessCost',
-                'taxCost',
-              ], _productRow(context, i, products[i]))
-            : _productRow(context, i, products[i]),
+      // 利润块关掉（或金额不展示）时，收入公式放在成本块第一行：业务成本、所得税要用到收入。
+      if (!config.showEstimates || !kProposalFinanceShowProfit)
+        config.wrap('revenue', proposalFinanceRevenueRow(context, config)),
+      // 采购成本放第一行：金额最大，取自供给侧结算，不用选。
+      if (config.showEstimates)
+        config.wrap('procurementCost', _procurementRow(context)),
+      for (final key in const [
+        kProposalCostCategoryProject,
+        kProposalCostCategoryBusiness,
+        kProposalCostCategoryTax,
+      ])
+        if (config.catalog.category(key) != null)
+          config.wrap(
+            proposalFinanceCategoryAnchor(key),
+            _categoryRow(context, key),
+          ),
       config.wrap('operatingCost', _operatingRow(context)),
       config.wrap('turnoverTimes', _turnoverRow(context)),
     ];
@@ -617,7 +652,7 @@ class ProposalFinanceCostPanel extends StatelessWidget {
       [
         kProposalFinanceCostAnchor,
         // 利润块屏蔽时，hero 跳「利润 / 毛利率」落到这里。
-        if (!config.showEstimates) ...[
+        if (!config.showEstimates || !kProposalFinanceShowProfit) ...[
           kProposalFinanceProfitAnchor,
           'profit',
           'margin',
@@ -632,39 +667,206 @@ class ProposalFinanceCostPanel extends StatelessWidget {
     );
   }
 
-  Widget _productRow(
-    BuildContext context,
-    int index,
-    ProposalProductFinanceEvaluation product,
-  ) {
-    final eval = product.evaluation;
-    final sealed = config.businessSealed;
-    int count(String key) => eval.bucket(key)?.lines.length ?? 0;
-    final summary = [
-      eval.revenue.formula?.name ?? '未选收入公式',
-      '项目 ${count(kProposalCostCategoryProject)} 项',
-      sealed ? '业务 已加密' : '业务 ${count(kProposalCostCategoryBusiness)} 项',
-      '税务 ${count(kProposalCostCategoryTax)} 项',
-    ].join(' · ');
-    final hasIssue =
-        config.showEstimates &&
-        (eval.revenue.missing.isNotEmpty ||
-            eval.buckets.values.any(
-              (b) => b.lines.any((line) => line.missing.isNotEmpty),
-            ));
+  /// 只读的一类成本：合计 + 各项摘要；点开是每一项的金额和代入算式。全部按结算规则自动算。
+  Widget _resultCategoryRow(BuildContext context, String key) {
+    final category = config.catalog.category(key)!;
+    final sealed =
+        config.businessSealed && key == kProposalCostCategoryBusiness;
+    final bucket = config.evaluation.bucket(key);
+    final lines = bucket?.lines ?? const <ProposalFinanceLine>[];
+    final missing = {for (final l in lines) ...l.missing};
     return ProposalFinanceRow(
-      key: ValueKey('finance-product-${product.skuId}'),
-      title: '${index + 1}、${product.name}',
-      titleWidth: 220,
-      accent: product.isChild ? _K.business : ProposalPalette.purple,
+      title: category.name,
+      accent: _categoryColor(key),
+      summary: sealed
+          ? '已加密，负责人二不可查看'
+          : lines.isEmpty
+          ? (key == kProposalCostCategoryProject
+                ? '产品结算里还没有应付行'
+                : '无')
+          : [for (final l in lines) '${l.name} ${_wan(l.amount)}'].join(' · '),
+      value: sealed ? '已加密' : '${_wan(bucket?.total ?? 0)} 万',
+      tag: missing.isEmpty || sealed
+          ? null
+          : ProposalFinanceTag(
+              '缺 ${missing.join('、')}',
+              color: ProposalPalette.amber,
+              fill: ProposalPalette.amberSoft,
+            ),
+      forceOpen: config.focusKeys.contains(proposalFinanceCategoryAnchor(key)),
+      detail: sealed || lines.isEmpty
+          ? null
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final l in lines)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                l.name,
+                                style: _sans(
+                                  context,
+                                  size: 12,
+                                  weight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${_wan(l.amount)} 万',
+                              style: _mono(context, size: 12),
+                            ),
+                          ],
+                        ),
+                        if (l.substitution.isNotEmpty)
+                          Text(
+                            l.substitution,
+                            style: _mono(
+                              context,
+                              size: 11,
+                              weight: FontWeight.w500,
+                              color: _K.text2,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  /// 财务部「经营与周转」：只剩两项要填 —— 经营成本类型（只选类型）、月周转次数（算周转资金）。
+  Widget _inputsPanel(BuildContext context) {
+    final times = config.turnoverTimes;
+    final cash = config.turnoverCash;
+    return config.wrapAll(
+      const ['operatingCost', 'turnoverTimes', 'turnoverCash'],
+      ProposalFinanceBlockShell(
+        icon: Icons.tune_rounded,
+        title: '经营与周转',
+        band: ProposalFinanceBand(
+          value: cash == null ? '—' : _wan(cash),
+          unit: cash == null ? '' : '万',
+          label: '周转资金',
+          trailing: times == null || times <= 0
+              ? null
+              : ProposalFinanceTag(
+                  '月周转 ${_wan(times)} 次',
+                  color: _K.heroInk,
+                  fill: const Color(0xFFDCE4F6),
+                ),
+        ),
+        rows: [
+          config.wrap('operatingCost', _operatingRow(context)),
+          config.wrap('turnoverTimes', _turnoverRow(context)),
+        ],
+      ),
+    );
+  }
+
+  /// 一类成本一行：合计 + 各产品摘要；点开后按产品分段，每段是这个产品这一类的成本项和公式。
+  Widget _categoryRow(BuildContext context, String key) {
+    final category = config.catalog.category(key)!;
+    final products = config.products;
+    final show = config.showEstimates;
+    final sealed =
+        config.businessSealed && key == kProposalCostCategoryBusiness;
+    final reviewKind = key == kProposalCostCategoryBusiness
+        ? ''
+        : ProposalFinanceFormulaBoardKeys.reviewKeyOf(key);
+    final total = sealed
+        ? 0.0
+        : products.fold<double>(
+            0,
+            (sum, p) => sum + (p.evaluation.bucket(key)?.total ?? 0),
+          );
+    final summary = sealed
+        ? '已加密，负责人二不可查看'
+        : products.isEmpty
+        ? '请先在科技部添加业务产品'
+        : [
+            for (var i = 0; i < products.length; i++)
+              () {
+                final bucket = products[i].evaluation.bucket(key);
+                final count = bucket?.lines.length ?? 0;
+                final name = '${i + 1}、${products[i].name}';
+                if (count == 0) return '$name 无';
+                return show
+                    ? '$name ${_wan(bucket!.total)}'
+                    : '$name $count 项';
+              }(),
+          ].join(' · ');
+    final hasIssue =
+        show &&
+        !sealed &&
+        products.any(
+          (p) => (p.evaluation.bucket(key)?.lines ?? const <ProposalFinanceLine>[])
+              .any((line) => line.missing.isNotEmpty),
+        );
+    return ProposalFinanceRow(
+      key: ValueKey('finance-category-$key'),
+      title: category.name,
+      accent: _categoryColor(key),
       summary: summary,
-      value: config.showEstimates ? '${_wan(eval.revenue.amount)} 万' : '',
-      tag: hasIssue
+      value: show && !sealed ? '${_wan(total)} 万' : '',
+      tag: sealed
+          ? const ProposalFinanceTag('已加密', color: _K.red, fill: Color(0xFFF5E5DC))
+          : hasIssue
           ? const ProposalFinanceTag('有缺项', color: ProposalPalette.amber, fill: ProposalPalette.amberSoft)
-          : ProposalFinanceTag(product.isChild ? '子产品' : '主产品'),
-      collapsedReview: config.reviewStatus?.call('sku:${product.skuId}'),
-      initiallyOpen: config.products.length == 1,
-      detail: _ProductDetail(config: config, product: product),
+          : null,
+      collapsedReview: reviewKind.isEmpty
+          ? null
+          : config.reviewStatus?.call('kind:$reviewKind'),
+      forceOpen: config.focusKeys.contains(proposalFinanceCategoryAnchor(key)),
+      detail: sealed || products.isEmpty
+          ? null
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < products.length; i++)
+                  _ProductCategorySection(
+                    config: config,
+                    product: products[i],
+                    index: i,
+                    categoryKey: key,
+                  ),
+              ],
+            ),
+    );
+  }
+
+  /// 采购成本：供给侧结算「关联产品年化规模 × 比例」，自动算、不用选；没填供给侧比例时标缺项。
+  Widget _procurementRow(BuildContext context) {
+    final line = config.evaluation.procurement;
+    final missing = line.missing.isNotEmpty;
+    return ProposalFinanceRow(
+      key: const ValueKey('finance-procurement-row'),
+      title: '采购成本',
+      accent: _K.procurement,
+      summary: missing
+          ? line.substitution
+          : (line.source.isNotEmpty ? line.source : line.substitution),
+      value: '${_wan(line.amount)} 万',
+      tag: missing
+          ? const ProposalFinanceTag(
+              '缺供给侧比例',
+              color: ProposalPalette.amber,
+              fill: ProposalPalette.amberSoft,
+            )
+          : null,
+      forceOpen: config.focusKeys.contains('procurementCost'),
+      detail: line.substitution.isEmpty
+          ? null
+          : _Trace(
+              formula: '供给侧结算：关联产品年化规模 × 比例，加总',
+              substitution: line.substitution,
+            ),
     );
   }
 
@@ -761,71 +963,6 @@ abstract final class ProposalFinanceFormulaBoardKeys {
     kProposalCostCategoryTax => 'taxCost',
     _ => categoryKey,
   };
-}
-
-/// 成本构成条：四类成本按金额占比排成一条，下面一行图例。
-class _CompositionBar extends StatelessWidget {
-  const _CompositionBar({required this.parts});
-
-  final List<(String, double, Color)> parts;
-
-  @override
-  Widget build(BuildContext context) {
-    final positive = [
-      for (final part in parts)
-        if (part.$2 > 0) part,
-    ];
-    final total = positive.fold<double>(0, (sum, part) => sum + part.$2);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: SizedBox(
-            height: 6,
-            child: total <= 0
-                ? Container(color: _surface(context, const Color(0xFFDCD6EA)))
-                : Row(
-                    children: [
-                      for (var i = 0; i < positive.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 2),
-                        Expanded(
-                          flex: (positive[i].$2 / total * 1000).round().clamp(1, 1000),
-                          child: Container(color: _c(context, positive[i].$3)),
-                        ),
-                      ],
-                    ],
-                  ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 12,
-          runSpacing: 4,
-          children: [
-            for (final part in parts)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      color: _c(context, part.$3),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(part.$1, style: _sans(context, size: 11, color: _K.text2)),
-                  const SizedBox(width: 4),
-                  Text(_wan(part.$2), style: _mono(context, size: 11)),
-                ],
-              ),
-          ],
-        ),
-      ],
-    );
-  }
 }
 
 class _CategoryDetail extends StatelessWidget {
@@ -935,47 +1072,125 @@ class _PickButton extends StatelessWidget {
   }
 }
 
-/// 一个产品展开后的内容：收入公式 → 项目成本 → 业务成本 → 税务成本，每段旁边是这段的复核。
-class _ProductDetail extends StatelessWidget {
-  const _ProductDetail({required this.config, required this.product});
+/// 成本类里的一个产品：「1、产品名 主产品 · 金额 · 复核」，下面是这个产品这一类的成本项和公式。
+class _ProductCategorySection extends StatelessWidget {
+  const _ProductCategorySection({
+    required this.config,
+    required this.product,
+    required this.index,
+    required this.categoryKey,
+  });
 
   final ProposalFinanceBoardConfig config;
   final ProposalProductFinanceEvaluation product;
+  final int index;
+  final String categoryKey;
 
-  Widget _section(
-    BuildContext context, {
-    required String title,
-    required Color color,
-    required Widget child,
-    String reviewKind = '',
-    String trailing = '',
-  }) {
-    final review = reviewKind.isEmpty
-        ? null
-        : config.reviewToggle?.call(
-            proposalFinanceProductReviewKey(product.skuId, reviewKind),
+  @override
+  Widget build(BuildContext context) {
+    final key = categoryKey;
+    final skuId = product.skuId;
+    final show = config.showEstimates;
+    final bucket = product.evaluation.bucket(key);
+    if (bucket == null) return const SizedBox.shrink();
+    final category = bucket.category;
+    final editable =
+        config.canEditProduct(skuId, key) && config.onCostItemsChanged != null;
+    final reviewKind = key == kProposalCostCategoryBusiness
+        ? ''
+        : ProposalFinanceFormulaBoardKeys.reviewKeyOf(key);
+    final Widget body = bucket.lines.isEmpty &&
+            !editable &&
+            key == kProposalCostCategoryBusiness
+        ? Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              config.businessWaitingText,
+              style: _sans(context, size: 12, color: _K.grey),
+            ),
+          )
+        : _CategoryDetail(
+            bucket: bucket,
+            editable: editable,
+            // 项目成本只跟产品结算的应付行走，财务模块不能再增删。
+            allowItemEdit: editable && key != kProposalCostCategoryProject,
+            showEstimates: show,
+            onItemsChanged: editable && key != kProposalCostCategoryProject
+                ? (names) => config.onCostItemsChanged!(skuId, category, names)
+                : null,
+            onFormula: config.onCostFormula == null || !editable
+                ? null
+                : (name, code) =>
+                      config.onCostFormula!(skuId, category, name, code),
+            promotionPlans: product.promotionPlans,
+            onPromotionPlans: editable && config.onPromotionPlans != null
+                ? (plans) => config.onPromotionPlans!(skuId, plans)
+                : null,
           );
+    return _ProductSection(
+      index: index,
+      product: product,
+      color: _categoryColor(key),
+      trailing: show ? '${_wan(bucket.total)} 万' : '',
+      review: reviewKind.isEmpty
+          ? null
+          : config.reviewToggle?.call(
+              proposalFinanceProductReviewKey(skuId, reviewKind),
+            ),
+      child: body,
+    );
+  }
+}
+
+/// 产品分段的外壳：左侧一条色线，标题「1、产品名」+ 主 / 子产品 + 金额 + 复核。
+class _ProductSection extends StatelessWidget {
+  const _ProductSection({
+    required this.index,
+    required this.product,
+    required this.color,
+    required this.child,
+    this.trailing = '',
+    this.review,
+  });
+
+  final int index;
+  final ProposalProductFinanceEvaluation product;
+  final Color color;
+  final Widget child;
+  final String trailing;
+  final Widget? review;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(top: 4),
-      padding: const EdgeInsets.only(left: 8),
-      decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: _c(context, color), width: 2)),
-      ),
+      margin: const EdgeInsets.only(top: 8),
+      padding: EdgeInsets.only(top: index == 0 ? 0 : 8),
+      decoration: index == 0
+          ? null
+          : BoxDecoration(
+              border: Border(
+                top: BorderSide(color: _border(context, _K.rowLine)),
+              ),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Text(
-                title,
-                style: _sans(context, size: 12, weight: FontWeight.w700, color: _K.text2),
+              Flexible(
+                child: Text(
+                  '${index + 1}、${product.name}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _sans(context, size: 12.5, weight: FontWeight.w700),
+                ),
               ),
-              if (trailing.isNotEmpty) ...[
-                const SizedBox(width: 6),
-                Text(trailing, style: _mono(context, size: 12)),
-              ],
+              const SizedBox(width: 6),
+              ProposalFinanceTag(product.isChild ? '子产品' : '主产品'),
               const Spacer(),
-              ?review,
+              if (trailing.isNotEmpty)
+                Text(trailing, style: _mono(context, size: 12)),
+              if (review != null) ...[const SizedBox(width: 6), review!],
             ],
           ),
           child,
@@ -983,92 +1198,67 @@ class _ProductDetail extends StatelessWidget {
       ),
     );
   }
+}
 
-  @override
-  Widget build(BuildContext context) {
-    final eval = product.evaluation;
-    final skuId = product.skuId;
-    final show = config.showEstimates;
-    final children = <Widget>[
-      _section(
-        context,
-        title: '收入',
-        color: ProposalPalette.purple,
-        reviewKind: 'revenue',
-        trailing: show ? '${_wan(eval.revenue.amount)} 万' : '',
-        child: _RevenueFormulaPicker(
-          config: config,
-          evaluation: eval,
-          onRevenueFormula:
-              config.canEditProduct(skuId, 'revenue') &&
-                  config.onRevenueFormula != null
-              ? (group, code) => config.onRevenueFormula!(skuId, group, code)
-              : null,
-        ),
-      ),
-    ];
-    for (final key in kProposalCostCategoryOrder) {
-      final bucket = eval.bucket(key);
-      if (bucket == null) continue;
-      final category = bucket.category;
-      final sealed =
-          config.businessSealed && key == kProposalCostCategoryBusiness;
-      final editable =
-          config.canEditProduct(skuId, key) &&
-          config.onCostItemsChanged != null &&
-          !sealed;
-      children.add(
-        _section(
-          context,
-          title: category.name,
-          color: _categoryColor(key),
-          reviewKind: key == kProposalCostCategoryBusiness
-              ? ''
-              : ProposalFinanceFormulaBoardKeys.reviewKeyOf(key),
-          trailing: show && !sealed ? '${_wan(bucket.total)} 万' : '',
-          child: sealed
-              ? Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '已加密，负责人二不可查看',
-                    style: _sans(context, size: 12, color: _K.grey),
+/// 收入一行：合计 + 各产品公式；点开后按产品选收入公式（每个产品单独复核）。
+Widget proposalFinanceRevenueRow(
+  BuildContext context,
+  ProposalFinanceBoardConfig config,
+) {
+  final products = config.products;
+  final show = config.showEstimates;
+  final revenue = config.evaluation.revenue;
+  final hasIssue =
+      show && products.any((p) => p.evaluation.revenue.missing.isNotEmpty);
+  return ProposalFinanceRow(
+    key: const ValueKey('finance-revenue-row'),
+    title: '收入',
+    accent: ProposalPalette.purple,
+    summary: products.isEmpty
+        ? '请先在科技部添加业务产品'
+        : [
+            for (var i = 0; i < products.length; i++)
+              '${i + 1}、${products[i].evaluation.revenue.formula?.name ?? '未选公式'}',
+          ].join(' · '),
+    value: show ? '${_wan(revenue.amount)} 万' : '',
+    tag: hasIssue
+        ? const ProposalFinanceTag('有缺项', color: ProposalPalette.amber, fill: ProposalPalette.amberSoft)
+        : null,
+    collapsedReview: config.reviewStatus?.call('kind:revenue'),
+    forceOpen: config.focusKeys.contains('revenue'),
+    detail: products.isEmpty
+        ? _Trace(substitution: revenue.substitution)
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < products.length; i++)
+                _ProductSection(
+                  index: i,
+                  product: products[i],
+                  color: ProposalPalette.purple,
+                  trailing: show
+                      ? '${_wan(products[i].evaluation.revenue.amount)} 万'
+                      : '',
+                  review: config.reviewToggle?.call(
+                    proposalFinanceProductReviewKey(products[i].skuId, 'revenue'),
                   ),
-                )
-              : bucket.lines.isEmpty && !editable &&
-                    key == kProposalCostCategoryBusiness
-              ? Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    config.businessWaitingText,
-                    style: _sans(context, size: 12, color: _K.grey),
+                  child: _RevenueFormulaPicker(
+                    config: config,
+                    evaluation: products[i].evaluation,
+                    onRevenueFormula:
+                        config.canEditProduct(products[i].skuId, 'revenue') &&
+                            config.onRevenueFormula != null
+                        ? (group, code) => config.onRevenueFormula!(
+                            products[i].skuId,
+                            group,
+                            code,
+                          )
+                        : null,
                   ),
-                )
-              : _CategoryDetail(
-                  bucket: bucket,
-                  editable: editable,
-                  // 项目成本只跟产品结算的应付行走，财务模块不能再增删。
-                  allowItemEdit:
-                      editable && key != kProposalCostCategoryProject,
-                  showEstimates: show,
-                  onItemsChanged: editable && key != kProposalCostCategoryProject
-                      ? (names) =>
-                            config.onCostItemsChanged!(skuId, category, names)
-                      : null,
-                  onFormula: config.onCostFormula == null || !editable
-                      ? null
-                      : (name, code) =>
-                            config.onCostFormula!(skuId, category, name, code),
-                  promotionPlans: product.promotionPlans,
-                  onPromotionPlans:
-                      editable && config.onPromotionPlans != null
-                      ? (plans) => config.onPromotionPlans!(skuId, plans)
-                      : null,
                 ),
-        ),
-      );
-    }
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
-  }
+            ],
+          ),
+  );
 }
 
 /// 收入公式：可改时是下拉（按产品业务平台筛过的渠道侧公式），只读时写公式名和编码。
@@ -1325,6 +1515,71 @@ class _CostLine extends StatelessWidget {
               onChanged: onPromotionPlans,
             ),
           if (showEstimates) _Missing(line.missing),
+        ],
+      ),
+    );
+  }
+}
+
+/// 产品结算「应付」里的推广费阶梯：应付行写了「推广费」时出现。
+/// 不配置 → 按应付行的比例算；配置了 → 按阶梯算（固定比例 / 年阶梯 / 连续月序），应付行比例不再使用。
+class ProposalPromotionPlanField extends StatelessWidget {
+  const ProposalPromotionPlanField({
+    super.key,
+    required this.plans,
+    this.monthlyScale,
+    this.amountText = '',
+    this.onChanged,
+  });
+
+  final List<ProposalPromotionTierPlan> plans;
+  final double? monthlyScale;
+  final String amountText;
+  final ValueChanged<List<ProposalPromotionTierPlan>>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = plans.any((plan) => !plan.isEmpty);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: _surface(context, _K.heroBg),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _border(context, _K.heroBorder)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                '应付 · 推广费阶梯',
+                style: _sans(
+                  context,
+                  size: 12.5,
+                  weight: FontWeight.w700,
+                  color: _K.heroInk,
+                ),
+              ),
+              const SizedBox(width: 6),
+              ProposalFinanceTag(active ? '按阶梯算' : '按应付比例算'),
+              const Spacer(),
+              if (amountText.isNotEmpty)
+                Text(amountText, style: _mono(context, size: 12.5)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            active
+                ? '推广费按下面的阶梯算，上面「推广费」应付行的比例不再使用。'
+                : '不配置就按上面「推广费」应付行的比例算；按月规模分档、或不同月份比例不同时在这里配置。',
+            style: _sans(context, size: 11.5, color: _K.text2),
+          ),
+          _PromotionPlansEditor(
+            plans: plans,
+            monthlyScale: monthlyScale,
+            onChanged: onChanged,
+          ),
         ],
       ),
     );
@@ -2226,23 +2481,17 @@ class ProposalFinanceProfitPanel extends StatelessWidget {
       ],
     );
 
-    // 收入公式按产品在上面选，这里只汇总各产品的收入。
-    final revenueRow = ProposalFinanceRow(
-      title: '收入',
-      accent: ProposalPalette.purple,
-      summary: revenue.formula?.name ?? '各产品按各自公式',
-      value: '${_wan(revenue.amount)} 万',
-      tag: revenue.missing.isEmpty
-          ? null
-          : const ProposalFinanceTag('有缺项', color: ProposalPalette.amber, fill: ProposalPalette.amberSoft),
-      detail: _RevenueDetail(config: config),
+    // 收入：外层一行，点开按产品选收入公式（产品包在收入里面）。
+    final revenueRow = config.wrap(
+      'revenue',
+      proposalFinanceRevenueRow(context, config),
     );
     final profitRow = config.wrap(
       'profit',
       ProposalFinanceRow(
         title: '利润',
         accent: _K.red,
-        summary: '收入 − 项目 − 业务 − 税务',
+        summary: '收入 − 采购 − 项目 − 业务 − 税务',
         value: sealed ? '—' : '${_wan(profit)} 万',
         valueColor: !sealed && profit < 0 ? _K.red : _K.ink,
         review: config.reviewToggle?.call('profit'),
@@ -2286,34 +2535,401 @@ class ProposalFinanceProfitPanel extends StatelessWidget {
   }
 }
 
-class _RevenueDetail extends StatelessWidget {
-  const _RevenueDetail({required this.config});
 
-  final ProposalFinanceBoardConfig config;
+/// 块顶统一版式（以「利润」块为准）：左边大数 + 灰色「单位 · 名称」，右上一个标签，
+/// 下面一行灰色等宽小字（等式或说明）。产品结算、成本、利润、市场部、科技部的块都用它。
+class ProposalFinanceBand extends StatelessWidget {
+  const ProposalFinanceBand({
+    super.key,
+    required this.value,
+    this.unit = '',
+    this.label = '',
+    this.color = _K.ink,
+    this.sub = '',
+    this.trailing,
+    this.numeric = true,
+  });
+
+  final String value;
+  final String unit;
+  final String label;
+  final Color color;
+  final String sub;
+  final Widget? trailing;
+
+  /// 数字用等宽大字；文字（如提案名、平台名）用无衬线粗体。
+  final bool numeric;
 
   @override
   Widget build(BuildContext context) {
-    final products = config.products;
-    if (products.isEmpty) {
-      final line = config.evaluation.revenue;
-      return _Trace(substitution: line.substitution);
-    }
+    final tail = [
+      if (unit.isNotEmpty) unit,
+      if (label.isNotEmpty) label,
+    ].join(' · ');
+    final empty = value.trim().isEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < products.length; i++) ...[
-          Padding(
-            padding: EdgeInsets.only(top: i == 0 ? 0 : 8),
-            child: Text(
-              '${i + 1}、${products[i].name} · '
-              '${products[i].evaluation.revenue.formula?.name ?? '未选收入公式'}',
-              style: _sans(context, size: 12, weight: FontWeight.w600),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  text: empty ? '未填写' : value,
+                  style: numeric && !empty
+                      ? _mono(context, size: 18, color: color)
+                      : _sans(
+                          context,
+                          size: 15,
+                          weight: FontWeight.w700,
+                          color: empty ? _K.grey : color,
+                        ),
+                  children: [
+                    if (tail.isNotEmpty)
+                      TextSpan(
+                        text: ' $tail',
+                        style: _sans(context, size: 11, color: _K.grey),
+                      ),
+                  ],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+          ],
+        ),
+        if (sub.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            sub,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: _mono(
+              context,
+              size: 11.5,
+              weight: FontWeight.w500,
+              color: _K.text2,
             ),
           ),
-          _Trace(substitution: products[i].evaluation.revenue.substitution),
-          _Missing(products[i].evaluation.revenue.missing),
         ],
       ],
+    );
+  }
+}
+
+/// 块顶多个数并排强化（如「1 个产品  3 条结算  2 个关联产品」）：数字等宽大字、单位灰色小字。
+class ProposalFinanceStatBand extends StatelessWidget {
+  const ProposalFinanceStatBand({
+    super.key,
+    required this.stats,
+    this.color = _K.ink,
+    this.trailing,
+  });
+
+  final List<(String, String)> stats;
+  final Color color;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  for (var i = 0; i < stats.length; i++) ...[
+                    if (i > 0) const TextSpan(text: '    '),
+                    TextSpan(
+                      text: stats[i].$1,
+                      style: _mono(context, size: 20, color: color),
+                    ),
+                    TextSpan(
+                      text: ' ${stats[i].$2}',
+                      style: _sans(
+                        context,
+                        size: 11.5,
+                        weight: FontWeight.w500,
+                        color: _K.text2,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              maxLines: 1,
+            ),
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 财务部左右分栏：左边「产品结算 / 成本 / 利润」三格摘要，点一格右边出现那一块。
+// ---------------------------------------------------------------------------
+
+/// 左边一格：图标 + 块名、一个大数、一行小字。
+class ProposalFinanceSplitTab {
+  const ProposalFinanceSplitTab({
+    required this.id,
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.unit = '',
+    this.sub = '',
+    this.color = _K.heroInk,
+  });
+
+  final String id;
+  final IconData icon;
+  final String label;
+  final String value;
+  final String unit;
+  final String sub;
+  final Color color;
+}
+
+/// 右侧内容在分栏里：块壳子据此去掉自己的标题行。
+class _FinanceSplitScope extends InheritedWidget {
+  const _FinanceSplitScope({required super.child});
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_FinanceSplitScope>() != null;
+
+  @override
+  bool updateShouldNotify(_FinanceSplitScope oldWidget) => false;
+}
+
+/// 「资产走势」那种版式：左边一列格子，右边是选中那格的内容。
+/// 宽屏格子宽一些；手机上格子收窄、数字自动缩小；特别窄（< 300）时格子横排在上面。
+class ProposalFinanceSplit extends StatelessWidget {
+  const ProposalFinanceSplit({
+    super.key,
+    required this.tabs,
+    required this.selected,
+    required this.onSelect,
+    required this.detail,
+    this.footer,
+  });
+
+  /// 左边格子下面的附加内容（负责人 / 复核人）。
+  final Widget? footer;
+
+  final List<ProposalFinanceSplitTab> tabs;
+  final String selected;
+  final ValueChanged<String> onSelect;
+  final Widget detail;
+
+  /// 当前位置是否在分栏右侧：块壳子据此去掉标题和上边距。
+  static bool isInside(BuildContext context) => _FinanceSplitScope.of(context);
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final width = box.maxWidth;
+        final pane = AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          layoutBuilder: (current, previous) => Stack(
+            alignment: Alignment.topCenter,
+            children: [...previous, ?current],
+          ),
+          child: KeyedSubtree(
+            key: ValueKey('finance-split-$selected'),
+            child: _FinanceSplitScope(child: detail),
+          ),
+        );
+        Widget tile(ProposalFinanceSplitTab tab, {required bool dense}) =>
+            _FinanceSplitTile(
+              tab: tab,
+              selected: tab.id == selected,
+              dense: dense,
+              onTap: () => onSelect(tab.id),
+            );
+
+        if (width < 300) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var i = 0; i < tabs.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 6),
+                    Expanded(child: tile(tabs[i], dense: true)),
+                  ],
+                ],
+              ),
+              if (footer != null) ...[const SizedBox(height: 6), footer!],
+              const SizedBox(height: 8),
+              pane,
+            ],
+          );
+        }
+        final dense = width < 420;
+        final railWidth = dense ? 92.0 : (width < 640 ? 112.0 : 136.0);
+        final gap = dense ? 6.0 : 10.0;
+        return Container(
+          padding: EdgeInsets.all(dense ? 6 : 8),
+          decoration: BoxDecoration(
+            color: _surface(context, const Color(0xFFFAF9FD)),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border(context, const Color(0xFFE7E3F2))),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: railWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < tabs.length; i++) ...[
+                      if (i > 0) SizedBox(height: gap),
+                      tile(tabs[i], dense: dense),
+                    ],
+                    if (footer != null) ...[SizedBox(height: gap), footer!],
+                  ],
+                ),
+              ),
+              SizedBox(width: gap),
+              Expanded(child: pane),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _FinanceSplitTile extends StatelessWidget {
+  const _FinanceSplitTile({
+    required this.tab,
+    required this.selected,
+    required this.dense,
+    required this.onTap,
+  });
+
+  final ProposalFinanceSplitTab tab;
+  final bool selected;
+  final bool dense;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // 与主 hero 同一套淡色：选中是淡蓝灰底 + 细边，图标、名称用 hero 墨蓝，数字深灰；不再按块上色。
+    const accent = _K.heroInk;
+    const soft = _K.heroBg;
+    const edge = _K.heroBorder;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: EdgeInsets.fromLTRB(dense ? 8 : 10, 9, dense ? 6 : 8, 10),
+          decoration: BoxDecoration(
+            color: _surface(context, selected ? soft : Colors.white),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _border(context, selected ? edge : _K.rowLine),
+              width: selected ? 1.4 : 1,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: .06),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 20,
+                    height: 20,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _surface(
+                        context,
+                        selected ? const Color(0xFFDCE4F6) : _K.heroBg,
+                      ),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      tab.icon,
+                      size: 13,
+                      color: _c(context, selected ? accent : _K.grey),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      tab.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _sans(
+                        context,
+                        size: dense ? 11.5 : 12.5,
+                        weight: FontWeight.w600,
+                        color: selected ? accent : _K.text2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: dense ? 5 : 7),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: tab.value,
+                        style: _mono(
+                          context,
+                          size: dense ? 17 : 19,
+                          weight: FontWeight.w700,
+                          color: _K.ink,
+                        ),
+                      ),
+                      if (tab.unit.isNotEmpty)
+                        TextSpan(
+                          text: ' ${tab.unit}',
+                          style: _sans(
+                            context,
+                            size: dense ? 10 : 11,
+                            weight: FontWeight.w500,
+                            color: _K.grey,
+                          ),
+                        ),
+                    ],
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

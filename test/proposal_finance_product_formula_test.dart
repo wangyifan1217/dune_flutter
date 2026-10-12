@@ -157,14 +157,14 @@ void main() {
     expect((entries['a'] as Map)['revenueFormula'], 'R1');
   });
 
-  test('per product review keys cover main and child products', () {
+  test('cost is auto-estimated: per product formula reviews are not required', () {
     final keys = proposalIntakeFinanceReviewKeys({
       'skuDetails': [_sku('a', '产品A', '1200')],
       'childProducts': [_sku('c', '子产品C', '100')],
     });
     for (final kind in kProposalProductFormulaReviewKinds) {
-      expect(keys, contains(proposalIntakeProductFormulaReviewKey('a', kind)));
-      expect(keys, contains(proposalIntakeProductFormulaReviewKey('c', kind)));
+      expect(keys, isNot(contains(proposalIntakeProductFormulaReviewKey('a', kind))));
+      expect(keys, isNot(contains(proposalIntakeProductFormulaReviewKey('c', kind))));
     }
     expect(keys, isNot(contains('profit')));
     expect(keys, isNot(contains('margin')));

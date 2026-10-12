@@ -32,7 +32,7 @@ const kProposalListFiguresEnabled = true;
   final scale = rollup?.salesScale ?? scaleValue;
   var margin = '';
   if (scale > 0) {
-    // 与财务部同一套公式：利润 = 收入 − 项目 − 业务 − 经营 − 税务。
+    // 与财务部同一套公式：利润 = 收入 − 采购 − 项目 − 业务 − 税务。
     // 已存的毛利率优先；业务成本被加密时没有毛利率，不自己补算（补算会漏掉业务成本）。
     if (proposalIntakeFormHasText(scope, 'margin')) {
       margin = proposalFormatWan(proposalFinanceAmount(scope, 'margin'));
@@ -122,14 +122,14 @@ class ProposalEstimateSummaryData {
   /// 收入（按财务部所选收入公式测算）。
   final double? revenue;
 
-  /// 旧字段：电子券采购成本已取消，恒为 null，仅为兼容保留。
+  /// 采购成本：付给供给侧的采购款（供给侧结算 关联产品年化规模 × 比例），与财务部同一份测算。
   final double? procurement;
   final double? projectCost;
   final double? businessCost;
   final double? operatingCost;
   final double? taxCost;
 
-  /// 利润 = 收入 − 项目成本 − 业务成本 − 经营成本 − 税务成本（与财务部一致）。
+  /// 利润 = 收入 − 采购成本 − 项目成本 − 业务成本 − 税务成本（与财务部一致）。
   final double? profit;
 
   /// 毛利率（%）= 利润 ÷ 规模。
@@ -139,8 +139,9 @@ class ProposalEstimateSummaryData {
   final int skuCount;
   final String faceRange;
 
-  /// 原型里的「收入（利差）」。电子券采购成本取消后即为收入。
-  double? get spread => revenue;
+  /// 原型里的「收入（利差）」= 收入 − 采购成本。
+  double? get spread =>
+      revenue == null ? null : revenue! - (procurement ?? 0);
 
   double? get monthlyScale => scale == null ? null : scale! / 12;
   double? get monthlyProfit => profit == null ? null : profit! / 12;
@@ -151,8 +152,21 @@ class ProposalEstimateSummaryData {
     return value / s * 100;
   }
 
+  /// 「= 采购 a + 项目 b + 业务 c + 税务 d」，利润停算时 hero 大卡下面这一行。
+  String get costBreakdown {
+    String part(String name, double? v) =>
+        v == null ? '' : '$name ${proposalEstimateWan(v)}';
+    final parts = [
+      part('采购', procurement),
+      part('项目', projectCost),
+      part('业务', businessCost),
+      part('税务', taxCost),
+    ].where((item) => item.isNotEmpty).toList();
+    return parts.isEmpty ? '成本合计 —' : '= ${parts.join(' + ')}';
+  }
+
   double? get costTotal {
-    final parts = [projectCost, businessCost, operatingCost, taxCost];
+    final parts = [procurement, projectCost, businessCost, operatingCost, taxCost];
     if (parts.every((v) => v == null)) return null;
     return parts.fold<double>(0, (sum, v) => sum + (v ?? 0));
   }
@@ -360,7 +374,11 @@ class ProposalEstimateSummary extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: _t(context, '年化利润 · 实时测算', weight: FontWeight.w700),
+                  child: _t(
+                    context,
+                    kProposalFinanceShowProfit ? '年化利润 · 实时测算' : '年化规模',
+                    weight: FontWeight.w700,
+                  ),
                 ),
                 _t(context, '边填边算', size: 10, color: _C.heroInk),
               ],
@@ -369,10 +387,14 @@ class ProposalEstimateSummary extends StatelessWidget {
           const SizedBox(height: 6),
           _t(
             context,
-            proposalEstimateWan(data.profit),
+            proposalEstimateWan(
+              kProposalFinanceShowProfit ? data.profit : data.scale,
+            ),
             size: phone ? 32 : 38,
             weight: FontWeight.w700,
-            color: data.profit == null ? _C.grey : _C.red,
+            color: (kProposalFinanceShowProfit ? data.profit : data.scale) == null
+                ? _C.grey
+                : (kProposalFinanceShowProfit ? _C.red : _C.ink),
             mono: true,
             tail: [
               TextSpan(
@@ -383,11 +405,13 @@ class ProposalEstimateSummary extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           InkWell(
-            onTap: _openerFor('利润', null),
+            onTap: _openerFor(kProposalFinanceShowProfit ? '利润' : '年化规模', null),
             borderRadius: BorderRadius.circular(4),
             child: _t(
               context,
-              '= 收入 ${proposalEstimateWan(spread)} − 成本合计 ${proposalEstimateWan(data.costTotal)}  明细 ›',
+              kProposalFinanceShowProfit
+                  ? '= 收入 ${proposalEstimateWan(spread)} − 成本合计 ${proposalEstimateWan(data.costTotal)}  明细 ›'
+                  : '月均 ${proposalEstimateWan(data.monthlyScale)} 万${data.rating == '—' ? '' : ' · 评级 ${data.rating}'}  来自 市场部 ›',
               size: 11,
               color: _C.text2,
               maxLines: 2,
@@ -397,6 +421,7 @@ class ProposalEstimateSummary extends StatelessWidget {
       ),
     );
     final cells = <_Cell>[
+      if (kProposalFinanceShowProfit)
       _Cell(
         '年化规模',
         proposalEstimateWan(data.scale),
@@ -415,16 +440,18 @@ class ProposalEstimateSummary extends StatelessWidget {
           '',
         ),
         _Cell('项目成本', proposalEstimateWan(data.projectCost), '万', '来自 财务部', ''),
-        _Cell(
-          '毛利率',
-          data.margin == null ? '—' : data.margin!.toStringAsFixed(2),
-          '%',
-          '利润 ÷ 规模',
-          '',
-          null,
-          data.margin != null && data.margin! < 0 ? _C.red : _C.ink,
-        ),
-        _Cell('月均利润', proposalEstimateWan(data.monthlyProfit), '万', '÷12', ''),
+        if (kProposalFinanceShowProfit) ...[
+          _Cell(
+            '毛利率',
+            data.margin == null ? '—' : data.margin!.toStringAsFixed(2),
+            '%',
+            '利润 ÷ 规模',
+            '',
+            null,
+            data.margin != null && data.margin! < 0 ? _C.red : _C.ink,
+          ),
+          _Cell('月均利润', proposalEstimateWan(data.monthlyProfit), '万', '÷12', ''),
+        ],
       ],
       _Cell(
         '周转资金',
@@ -782,24 +809,34 @@ class ProposalFlowCard extends StatelessWidget {
           ),
         );
     final finished = byId['end']?.state == ProposalIntakeProgressState.done;
+    // 没有人在办（比如前一关刚过、下一关还没轮到）：就说下一步等谁。
+    final next = blocked.isEmpty && !finished
+        ? steps
+              .where(
+                (step) =>
+                    step.state == ProposalIntakeProgressState.pending &&
+                    step.id != 'end',
+              )
+              .firstOrNull
+        : null;
     final worst = blocked.isEmpty ? null : blocked.first.waited(now);
     final headColor = blocked.isEmpty
-        ? _C.green
+        ? (next == null ? _C.green : const Color(0xFF6B4FD8))
         : (blocked.first.state == ProposalIntakeProgressState.rejected
               ? _C.red
               : severity(worst));
+    // 一句话：卡在谁、卡了多久；同时卡在几处时只点名等得最久的，其余展开看。
     final headline = blocked.isEmpty
-        ? (finished ? '已全部通过' : '暂无卡点')
+        ? (finished
+              ? '已全部通过'
+              : (next == null ? '暂无卡点' : '下一步 · 等${who(next)}'))
         : [
-            for (final step in blocked)
-              [
-                step.state == ProposalIntakeProgressState.rejected
-                    ? '驳回待改 · ${who(step)}'
-                    : '卡在 ${who(step)}',
-                if (step.waited(now) != null)
-                  '已 ${proposalIntakeWaitedText(step.waited(now))}',
-              ].join(' · '),
-          ].join('；');
+            blocked.first.state == ProposalIntakeProgressState.rejected
+                ? '驳回待改 · ${who(blocked.first)}'
+                : '卡在 ${who(blocked.first)}',
+            if (worst != null) '已 ${proposalIntakeWaitedText(worst)}',
+            if (blocked.length > 1) '另 ${blocked.length - 1} 处',
+          ].join(' · ');
     final todo = blocked.isEmpty ? '' : blocked.first.action.trim();
 
     // ---- 线上的节点 ----
@@ -1035,11 +1072,11 @@ class ProposalFlowCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      // 默认只有一行「卡在谁 · 多久」，点「详情」才展开节点线和四方复核。
+      child: _FlowFold(
+        toggleStyle: style(11, _C.text2, weight: FontWeight.w600),
+        header: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text('流程', style: style(13, _C.ink, weight: FontWeight.w700)),
               const SizedBox(width: 10),
@@ -1057,28 +1094,25 @@ class ProposalFlowCard extends StatelessWidget {
                     ),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        headline,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: style(12, headColor, weight: FontWeight.w700),
-                      ),
-                      if (todo.isNotEmpty)
-                        Text(
-                          '要做：$todo',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: style(10.5, _C.text2),
-                        ),
-                    ],
+                  child: Text(
+                    headline,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: style(12, headColor, weight: FontWeight.w700),
                   ),
                 ),
               ),
             ],
           ),
+        detail: [
+          if (todo.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                '要做：$todo',
+                style: style(11, _C.text2),
+              ),
+            ),
           const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, box) {
@@ -1117,6 +1151,62 @@ class ProposalFlowCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// 流程卡的折叠：一行头 + 右侧「详情 / 收起」，展开后才显示 [detail]。
+class _FlowFold extends StatefulWidget {
+  const _FlowFold({
+    required this.header,
+    required this.detail,
+    required this.toggleStyle,
+  });
+
+  final Widget header;
+  final List<Widget> detail;
+  final TextStyle toggleStyle;
+
+  @override
+  State<_FlowFold> createState() => _FlowFoldState();
+}
+
+class _FlowFoldState extends State<_FlowFold> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: widget.header),
+            const SizedBox(width: 6),
+            InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () => setState(() => _open = !_open),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_open ? '收起' : '详情', style: widget.toggleStyle),
+                    Icon(
+                      _open
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 16,
+                      color: widget.toggleStyle.color,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (_open) ...widget.detail,
+      ],
     );
   }
 }
@@ -1374,7 +1464,8 @@ class _CompactEstimateState extends State<_CompactEstimate> {
                     : _jump(ProposalIntakeNavSection.tech, d.channelKey),
               ),
             ]),
-          if (!kProposalFinanceShowEstimates) ...[
+          // 利润停算时，左边只放年化规模（不放成本）。
+          if (!kProposalFinanceShowEstimates || !kProposalFinanceShowProfit) ...[
             if (d.product.isNotEmpty || d.channel.isNotEmpty)
               const SizedBox(height: 8),
             Align(
@@ -1473,7 +1564,9 @@ class _CompactEstimateState extends State<_CompactEstimate> {
                     ),
                     const SizedBox(width: 5),
                     _t(
-                      _compact ? '年化利润' : '年化利润 · 测算',
+                      kProposalFinanceShowProfit
+                          ? (_compact ? '年化利润' : '年化利润 · 测算')
+                          : (_compact ? '年化成本' : '年化成本 · 测算'),
                       size: _compact ? 11 : 12,
                       weight: FontWeight.w700,
                       color: _C.heroInk,
@@ -1484,13 +1577,20 @@ class _CompactEstimateState extends State<_CompactEstimate> {
             ),
             const SizedBox(height: 6),
             _t(
-              proposalEstimateWan(d.profit),
+              proposalEstimateWan(kProposalFinanceShowProfit ? d.profit : d.costTotal),
               // 手机上大数长了（如 12,345.0）收一档，免得被省略。
               size: _compact
-                  ? (proposalEstimateWan(d.profit).length > 6 ? 18 : 22)
+                  ? (proposalEstimateWan(
+                              kProposalFinanceShowProfit ? d.profit : d.costTotal,
+                            ).length >
+                            6
+                        ? 18
+                        : 22)
                   : 28,
               weight: FontWeight.w700,
-              color: d.profit == null ? _C.grey : _C.red,
+              color: (kProposalFinanceShowProfit ? d.profit : d.costTotal) == null
+                  ? _C.grey
+                  : (kProposalFinanceShowProfit ? _C.red : _C.ink),
               mono: true,
               tail: [
                 TextSpan(
@@ -1501,14 +1601,16 @@ class _CompactEstimateState extends State<_CompactEstimate> {
             ),
             const SizedBox(height: 6),
             _t(
-              _pct(d.margin),
+              _pct(kProposalFinanceShowProfit ? d.margin : d.pctOfScale(d.costTotal)),
               size: _compact ? 10 : 11,
               weight: FontWeight.w700,
               mono: true,
               maxLines: 2,
               tail: [
                 TextSpan(
-                  text: _compact ? ' 毛利率' : ' 毛利率 · 利润÷规模',
+                  text: kProposalFinanceShowProfit
+                      ? (_compact ? ' 毛利率' : ' 毛利率 · 利润÷规模')
+                      : (_compact ? ' 占规模' : ' 占规模 · 成本÷规模'),
                   style: _st(
                     size: _compact ? 10 : 11,
                     color: _C.text2,
@@ -1521,10 +1623,12 @@ class _CompactEstimateState extends State<_CompactEstimate> {
             // 算式可点：跳到下方财务部「利润」块。
             InkWell(
               key: const ValueKey('proposal-estimate-hero-formula'),
-              onTap: _s._openerFor('利润', null),
+              onTap: _s._openerFor(kProposalFinanceShowProfit ? '利润' : '成本', null),
               borderRadius: BorderRadius.circular(4),
               child: _t(
-                '= 收入 ${proposalEstimateWan(d.spread)} − 成本合计 ${proposalEstimateWan(d.costTotal)}  明细 ›',
+                kProposalFinanceShowProfit
+                    ? '= 收入 ${proposalEstimateWan(d.spread)} − 成本合计 ${proposalEstimateWan(d.costTotal)}  明细 ›'
+                    : '${d.costBreakdown}  明细 ›',
                 size: _compact ? 9 : 10,
                 color: _C.text2,
                 maxLines: 3,
@@ -1583,7 +1687,8 @@ class _CompactEstimateState extends State<_CompactEstimate> {
           _pct(d.pctOfScale(d.projectCost)),
           _C.purpleLight,
         ),
-        ('利润', proposalEstimateWan(d.profit), _pct(d.margin), _C.red),
+        if (kProposalFinanceShowProfit)
+          ('利润', proposalEstimateWan(d.profit), _pct(d.margin), _C.red),
       ],
       ('月均规模', proposalEstimateWan(d.monthlyScale), '÷12', _C.markIdle),
       (
@@ -1619,9 +1724,9 @@ class _CompactEstimateState extends State<_CompactEstimate> {
           [
             _Bar('年化规模', d.scale, _C.purple),
             _Bar('收入（利差）', spread, _C.purpleLight),
-            _Bar('利润', profit, _C.red),
+            if (kProposalFinanceShowProfit) _Bar('利润', profit, _C.red),
           ],
-          '规模 → 收入 → 利润 · 年化',
+          kProposalFinanceShowProfit ? '规模 → 收入 → 利润 · 年化' : '规模 → 收入 · 年化',
         );
       case '月均规模':
         if (!kProposalFinanceShowEstimates) {
@@ -1634,7 +1739,8 @@ class _CompactEstimateState extends State<_CompactEstimate> {
           [
             _Bar('月均规模', d.monthlyScale, _C.purple),
             _Bar('月均收入', spread == null ? null : spread / 12, _C.purpleLight),
-            _Bar('月均利润', d.monthlyProfit, _C.red),
+            if (kProposalFinanceShowProfit)
+              _Bar('月均利润', d.monthlyProfit, _C.red),
           ],
           '每月 · 年化 ÷ 12',
         );
@@ -1651,6 +1757,17 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       default:
         if (!kProposalFinanceShowEstimates) {
           return ([_Bar('年化规模', d.scale, _C.purple)], '年化规模 · 来自市场部');
+        }
+        if (!kProposalFinanceShowProfit) {
+          return (
+            [
+              _Bar('采购成本', d.procurement, _C.purple),
+              _Bar('项目成本', d.projectCost, _C.purpleLight),
+              _Bar('业务成本', d.businessCost, _C.purpleLight),
+              _Bar('税务成本', d.taxCost, _C.purpleLight),
+            ],
+            '成本构成 · 年化',
+          );
         }
         final profitLift = profit != null && profit > 0 ? profit : 0.0;
         return (
@@ -2285,7 +2402,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
           '成本合计',
           proposalEstimateWan(d.costTotal),
           '万',
-          '项目 + 业务 + 经营 + 税务',
+          '采购 + 项目 + 业务 + 税务',
         ),
         _cell(
           '项目成本',
@@ -2308,31 +2425,34 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       ],
     );
     final profitCells = [
-      _cell(
-        '利润',
-        proposalEstimateWan(d.profit),
-        '万',
-        '收入 − 四类成本',
-        color: _C.red,
-      ),
-      _cell('月均利润', proposalEstimateWan(d.monthlyProfit), '万', '÷12'),
+      if (kProposalFinanceShowProfit) ...[
+        _cell(
+          '利润',
+          proposalEstimateWan(d.profit),
+          '万',
+          '收入 − 采购 − 各项成本',
+          color: _C.red,
+        ),
+        _cell('月均利润', proposalEstimateWan(d.monthlyProfit), '万', '÷12'),
+      ],
       _cell(
         '收入',
-        proposalEstimateWan(spread),
+        proposalEstimateWan(d.revenue),
         '万',
-        d.pctOfScale(spread) == null
+        d.pctOfScale(d.revenue) == null
             ? ''
-            : '规模 × ${_pct(d.pctOfScale(spread))}',
+            : '规模 × ${_pct(d.pctOfScale(d.revenue))}',
       ),
       _cell('税务成本', proposalEstimateWan(d.taxCost), '万', ''),
-      _cell(
-        '毛利率',
-        d.margin == null ? '—' : d.margin!.toStringAsFixed(2),
-        '%',
-        '利润 ÷ 规模',
-        color: d.margin != null && d.margin! < 0 ? _C.red : _C.ink,
-        divider: false,
-      ),
+      if (kProposalFinanceShowProfit)
+        _cell(
+          '毛利率',
+          d.margin == null ? '—' : d.margin!.toStringAsFixed(2),
+          '%',
+          '利润 ÷ 规模',
+          color: d.margin != null && d.margin! < 0 ? _C.red : _C.ink,
+          divider: false,
+        ),
       _cell(
         '成本率',
         d.pctOfScale(d.costTotal) == null
@@ -2344,12 +2464,12 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       ),
     ];
     final profit = _section(
-      '利润',
+      kProposalFinanceShowProfit ? '利润' : '收入与税',
       Icons.trending_up_rounded,
       profitCells,
       columns: 2,
-      result: true,
-      onTap: _s._openerFor('利润', null),
+      result: kProposalFinanceShowProfit,
+      onTap: _s._openerFor(kProposalFinanceShowProfit ? '利润' : '收入', null),
     );
     if (_stacked) {
       return Column(

@@ -16,6 +16,20 @@ void main() {
       oil: const {'totalAssets': 100},
       petro: const {'totalAssets': 200},
       total: const {'totalAssets': 300},
+      entitiesByProvince: const {
+        '中油BP': [
+          LighthouseFundPoolEntity(
+            rowKey: 'bp-1',
+            provinceName: '中油BP',
+            provinceKey: '中油BP',
+            supplierName: '中油BP主体',
+            counterpartyName: '测试对方主体',
+            ourEntityName: '测试我方主体',
+            category: lighthouseAssetCategoryOil,
+            amountsJson: {'totalAssets': 100},
+          ),
+        ],
+      },
     );
 
     final rows = lighthouseSupplyProvinceRows(
@@ -26,6 +40,7 @@ void main() {
 
     expect(rows.map((row) => row['name']), ['中油BP']);
     expect(rows.single[lighthouseAssetOnlyKey], isTrue);
+    expect(rows.single['children'], isNull);
 
     final overview = lighthouseSupplyAssetFooter(rows, snapshot);
     expect(

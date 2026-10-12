@@ -25,7 +25,7 @@ const kProposalRevenueFormulaTitle = '收入';
 const kProposalRevenueFormula = '按所选渠道侧结算公式代入：业务量取年化规模，结算比例取产品销售结算';
 const kProposalSalesScaleFormula = '市场部基础信息填写的年化规模';
 const kProposalProcurementFormula = '各供给规则：关联产品年化规模 × 该条比例，加总';
-const kProposalProfitFormula = '收入 − 项目成本 − 业务成本 − 税务成本';
+const kProposalProfitFormula = '收入 − 采购成本 − 项目成本 − 业务成本 − 税务成本';
 const kProposalMarginFormula = '利润 ÷ 规模';
 const kProposalTurnoverCashFormula = '年化规模 ÷ 12 ÷ 月周转次数';
 

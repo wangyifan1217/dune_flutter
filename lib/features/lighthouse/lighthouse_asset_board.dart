@@ -29,9 +29,6 @@ import 'lighthouse_theme.dart';
 /// 省级合并行 / 主体子行 / 资管独有行上的标记。
 const String lighthouseAssetOnlyKey = 'assetOnly';
 
-/// 省级合并行带主体子行时的标记：子行不是产品三级，不能点进三级详情。
-const String lighthouseSupplyEntityChildrenKey = 'supplyEntityChildren';
-
 /// 排序字段：总资产。不在列定义里，只作为供给「全部」视图的默认排序。
 const String lighthouseTotalAssetsSortKey = 'totalAssets';
 
@@ -227,10 +224,8 @@ LighthouseFundPoolAmounts? lighthouseFundPoolForRow(
   return lighthouseLookupFundPool(byProvince, name);
 }
 
-/// 资产走势的 scope：主体子行 → entity:rowKey；其余 → province:省 key。
+/// 资产走势的 scope：供给只保留省级走势。
 String? lighthouseAssetTrendScopeForRow(Map<String, dynamic> row) {
-  final entityKey = row['fundPoolEntityKey']?.toString() ?? '';
-  if (entityKey.isNotEmpty) return 'entity:$entityKey';
   final scope = row['assetTrendScope']?.toString() ?? '';
   if (scope.isNotEmpty) return scope;
   final key = lighthouseProvinceKey(row['name']?.toString() ?? '');
@@ -252,7 +247,8 @@ const Set<String> _kNonAdditiveKeys = <String>{
 /// 供给「全部」视图：账本行（省 × 供给分类 × 交易标识）按省合并成一行。
 ///
 /// [attachAssets] 为 true 时（没开 HUN / 交易类型筛选）挂上总资产、
-/// 主体子行，并补上账本里没有、资管里有的真实省级行（例如中油BP）。
+/// 并补上账本里没有、资管里有的真实省级行（例如中油BP）。
+/// 供给页只展示省级资产，不再把资管主体拆成供给侧子行。
 /// 「中石化」是资管接口用于全国中石化汇总的伪省份，只进入顶部资产总览，
 /// 不能再作为省份卡片补到列表末尾。
 /// HUN / 交易类型筛的是账本，资产没法跟着筛，所以开了筛选就不挂资产。
@@ -382,23 +378,6 @@ void _attachAssets(
   row['totalAssets'] = _num(amounts['totalAssets']);
   row['assetCategory'] = snapshot.provinceCategory[key] ?? '';
   row['assetTrendScope'] = 'province:$key';
-  final entities = snapshot.entitiesByProvince[key];
-  if (entities == null || entities.isEmpty) return;
-  row[lighthouseSupplyEntityChildrenKey] = true;
-  row['children'] = <Map<String, dynamic>>[
-    for (final e in entities)
-      <String, dynamic>{
-        'name': e.displayName,
-        'group': '',
-        lighthouseAssetOnlyKey: true,
-        'counterpartyName': e.counterpartyName,
-        'ourEntityName': e.ourEntityName,
-        'assetCategory': e.category,
-        'totalAssets': e.totalAssets,
-        'fundPool': e.amountsJson,
-        'fundPoolEntityKey': e.rowKey,
-      },
-  ];
 }
 
 // ── 底部三行 ───────────────────────────────────────────────────────

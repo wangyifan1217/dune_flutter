@@ -11284,8 +11284,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Map<String, dynamic> _discountsByName = const {};
   bool _fundPoolLoading = false;
   Map<String, LighthouseFundPoolAmounts> _fundPoolByProvince = const {};
+  // 顶部资产总览当前聚焦的曲线：scale / revenue / profit；null = 全部。
+  String? _supplyAssetSoloKey;
+  // 顶部资产走势当前点中的日期；null = 最新一期。
+  int? _supplyAssetPointIndex;
 
-  /// 资管标签二主体快照：省级合计、各省供给侧主体、底部石油 / 石化 / 总资产。
+  /// 资管标签二快照：省级合计、底部石油 / 石化 / 总资产。
   LighthouseFundPoolSnapshot _fundPoolSnapshot =
       LighthouseFundPoolSnapshot.empty;
   // 资金卡末尾那两格：按「现在」取的当月 / 当日利润，按省份加总。
@@ -14698,7 +14702,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
     if (_supplyProvinceViewActive) {
       // 标签二「全部」：账本行（省 × 供给分类 × 交易标识）按省合并成一行，
-      // 挂上资管总资产和各省供给侧主体。HUN / 交易类型筛的是账本，资产跟不过去，
+      // 挂上资管总资产。HUN / 交易类型筛的是账本，资产跟不过去，
       // 开了这两个筛选就只合并、不挂资产。
       return lighthouseSupplyProvinceRows(
         rows,
@@ -26918,7 +26922,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   ///
   /// 返回 null = 该行没有这个口径的数据源，列表上显示「—」而不是 0.00万。
   double? _rowMetricValueOrNull(Map<String, dynamic> r, String key) {
-    // 资管独有行（供给侧主体、中油BP 等账本里没有的省）：只有资产，没有经营指标，
+    // 资管独有省级行（中油BP 等）：只有资产，没有经营指标，
     // 显示「—」而不是 0。
     if (r[lighthouseAssetOnlyKey] == true &&
         key != lighthouseTotalAssetsSortKey) {
@@ -36851,20 +36855,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// 资管独有行的紧凑卡：名称 + 对方主体 + 总资产 / 票税，外加一句口径说明。
-  /// 点总资产 / 票税照常展开资金池明细和资产走势；有供给侧主体时照常可展开。
+  /// 资管独有省级行的紧凑卡：名称 + 总资产 / 票税，外加一句口径说明。
   Widget _buildAssetOnlyLedgerCard(
     Map<String, dynamic> r, {
     required String name,
-    required bool isChildRow,
-    required Color groupColor,
     required double summaryCellH,
     required String fundPoolKey,
     required String? fundPoolPanel,
     required String? fundPoolTrace,
-    required List<Map<String, dynamic>> l3Children,
-    required bool l3Open,
-    required VoidCallback onToggleL3,
   }) {
     final amounts = lighthouseFundPoolForRow(r, _fundPoolByProvince);
     final counterparty = r['counterpartyName']?.toString().trim() ?? '';
@@ -36876,32 +36874,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final logo =
         lighthouseCategoryBrandAsset(name) ??
         lighthouseCategoryBrandAsset(counterparty);
-    final note = isChildRow ? '供给侧主体 · 销售额、利润等按省记账，不拆到主体' : '账本里没有这一项 · 只列资管资产';
+    const note = '账本里没有这一项 · 只列资管资产';
     final mute = DunesColors.resolve(context, LhColors.mute2);
     return Padding(
-      padding: isChildRow
-          ? const EdgeInsets.fromLTRB(6, 0, 8, 6)
-          : const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: isChildRow
-              ? lighthouseProductL3ChildFill(groupColor, context: context)
-              : DunesColors.resolve(
-                  context,
-                  Colors.white,
-                  role: DunesColorRole.surface,
-                ),
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isChildRow
-                ? lighthouseProductL3ChildBorder(groupColor, context: context)
-                : DunesColors.resolve(
-                    context,
-                    _LhPlum.line,
-                    role: DunesColorRole.border,
-                  ),
-            width: isChildRow ? 1.1 : 0.8,
+            color: DunesColors.resolve(
+              context,
+              _LhPlum.line,
+              role: DunesColorRole.border,
+            ),
+            width: 0.8,
           ),
         ),
         child: Column(
@@ -36991,14 +36983,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ],
               ),
             ),
-            if (l3Children.isNotEmpty)
-              _buildProductL3Bar(
-                children: l3Children,
-                open: l3Open,
-                groupColor: groupColor,
-                kicker: '供给侧',
-                onTap: onToggleL3,
-              ),
             if (fundPoolPanel != null)
               _buildSupplyFundPoolDetails(
                 amounts,
@@ -37058,6 +37042,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         lighthouseAssetCategoryPetro => '中石化',
         _ => '全部',
       };
+      _supplyAssetPointIndex = null;
       _setGroupFilter(group);
     }
 
@@ -37164,32 +37149,39 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ],
                   ),
                   const SizedBox(height: 3),
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: parts.number,
-                          style: LhTypography.number(
-                            size: 15.5,
-                            color: DunesColors.resolve(
-                              context,
-                              active ? LhColors.ink : LhColors.ink2,
+                  // 数字与上方字段名共用同一左边线；21 = 16pt 标识 + 5pt 间距。
+                  Padding(
+                    padding: const EdgeInsets.only(left: 21),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: parts.number,
+                            style: LhTypography.number(
+                              size: 15.5,
+                              color: DunesColors.resolve(
+                                context,
+                                active ? LhColors.ink : LhColors.ink2,
+                              ),
+                              context: context,
                             ),
-                            context: context,
                           ),
-                        ),
-                        TextSpan(
-                          text: parts.unit,
-                          style: LhTypography.sans(
-                            size: 8.5,
-                            color: DunesColors.resolve(context, LhColors.mute2),
-                            context: context,
+                          TextSpan(
+                            text: parts.unit,
+                            style: LhTypography.sans(
+                              size: 8.5,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute2,
+                              ),
+                              context: context,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -37248,7 +37240,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Widget contentFor(BoxConstraints cons) {
       final compact = cons.maxWidth < 620;
       final railWidth = compact ? 94.0 : 112.0;
-      const chartHeight = 56.0;
+      const chartHeight = 64.0;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -37304,7 +37296,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ),
           const SizedBox(height: 6),
           SizedBox(
-            height: compact ? 166 : 160,
+            height: compact ? 188 : 182,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -37398,32 +37390,229 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             .toList();
         final labels = [for (final point in points) point.label];
         final total = [for (final point in points) point.total!];
-        final hasPrincipal = points.every((point) => point.principal != null);
-        final hasProfit = points.every((point) => point.profit != null);
-        return _TrendChart(
-          labels: labels,
-          scale: total,
-          scaleLabel: '总资产',
-          periodScale: total.isEmpty ? null : total.last,
-          revenue: hasPrincipal
-              ? [for (final point in points) point.principal!]
-              : const <double>[],
-          revenueLabel: '原资产',
-          periodRevenue: hasPrincipal ? points.last.principal : null,
-          cost: const <double>[],
-          profit: hasProfit
-              ? [for (final point in points) point.profit!]
-              : const <double>[],
-          profitLabel: '增值 / 利润',
-          periodProfit: hasProfit ? points.last.profit : null,
-          rangeLabel: _selectedRangeLabel,
-          title: '$scopeLabel走势',
-          showHeader: false,
-          showLegend: true,
-          showExtremeLabels: false,
-          showScrubHint: false,
-          chartHeight: chartHeight,
-          fitHeight: false,
+        final hasPrincipal =
+            points.isNotEmpty &&
+            points.every((point) => point.principal != null);
+        final hasProfit =
+            points.isNotEmpty && points.every((point) => point.profit != null);
+        final principal = hasPrincipal
+            ? [for (final point in points) point.principal!]
+            : const <double>[];
+        final profit = hasProfit
+            ? [for (final point in points) point.profit!]
+            : const <double>[];
+        final pickedIndex =
+            _supplyAssetPointIndex != null &&
+                _supplyAssetPointIndex! >= 0 &&
+                _supplyAssetPointIndex! < points.length
+            ? _supplyAssetPointIndex!
+            : (points.isEmpty ? null : points.length - 1);
+        final pickedPoint = pickedIndex == null ? null : points[pickedIndex];
+        final emphasisColor = switch (_supplyAssetSoloKey) {
+          'revenue' => const Color(lighthouseRevenueAccentValue),
+          'profit' => const Color(lighthouseProfitAccentValue),
+          _ => const Color(lighthouseScaleAccentValue),
+        };
+
+        Widget alignedLegendRow(
+          String seriesKey,
+          String label,
+          double? value,
+          Color color,
+        ) {
+          final parts = lighthouseFormatFundPoolWanParts(value);
+          final active = _supplyAssetSoloKey == seriesKey;
+          final dimmed = _supplyAssetSoloKey != null && !active;
+          return Semantics(
+            button: true,
+            selected: active,
+            label: active ? '显示全部资产曲线' : '只看$label曲线',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                LighthouseFeedback.instance.play(
+                  active
+                      ? LighthouseFeedbackKind.collapse
+                      : LighthouseFeedbackKind.select,
+                );
+                setState(() {
+                  _supplyAssetSoloKey = lighthouseTrendSoloAfterTap(
+                    _supplyAssetSoloKey,
+                    seriesKey,
+                  );
+                });
+              },
+              child: AnimatedOpacity(
+                opacity: dimmed ? 0.5 : 1,
+                duration: const Duration(milliseconds: 160),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  height: 22,
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    color: active
+                        ? DunesColors.resolve(
+                            context,
+                            _LhPlum.mist,
+                            role: DunesColorRole.surface,
+                          )
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 14,
+                        child: Center(
+                          child: Container(
+                            width: 10,
+                            height: 2.5,
+                            decoration: BoxDecoration(
+                              color: DunesColors.resolveNullable(
+                                context,
+                                color,
+                                role: DunesColorRole.surface,
+                              ),
+                              borderRadius: BorderRadius.circular(1.5),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      SizedBox(
+                        width: 62,
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: LhTypography.sans(
+                            size: 9.5,
+                            color: DunesColors.resolve(context, LhColors.ink2),
+                            weight: FontWeight.w600,
+                            height: 1,
+                            context: context,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: parts.number,
+                                style:
+                                    LhTypography.number(
+                                      size: 11,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        LhColors.ink,
+                                      ),
+                                      context: context,
+                                    ).copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      height: 1,
+                                    ),
+                              ),
+                              TextSpan(
+                                text: parts.unit,
+                                style: LhTypography.sans(
+                                  size: 8.5,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.mute2,
+                                  ),
+                                  height: 1,
+                                  context: context,
+                                ),
+                              ),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.paper,
+                  role: DunesColorRole.surface,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  alignedLegendRow(
+                    'scale',
+                    '总资产',
+                    pickedPoint?.total,
+                    const Color(lighthouseScaleAccentValue),
+                  ),
+                  alignedLegendRow(
+                    'revenue',
+                    '原资产',
+                    hasPrincipal ? pickedPoint?.principal : null,
+                    const Color(lighthouseRevenueAccentValue),
+                  ),
+                  alignedLegendRow(
+                    'profit',
+                    '增值 / 利润',
+                    hasProfit ? pickedPoint?.profit : null,
+                    const Color(lighthouseProfitAccentValue),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: _TrendChart(
+                labels: labels,
+                scale: total,
+                scaleLabel: '总资产',
+                periodScale: total.isEmpty ? null : total.last,
+                revenue: principal,
+                revenueLabel: '原资产',
+                periodRevenue: hasPrincipal ? points.last.principal : null,
+                cost: const <double>[],
+                profit: profit,
+                profitLabel: '增值 / 利润',
+                periodProfit: hasProfit ? points.last.profit : null,
+                rangeLabel: _selectedRangeLabel,
+                title: '$scopeLabel走势',
+                showHeader: false,
+                showLegend: false,
+                showExtremeLabels: false,
+                showScrubHint: false,
+                chartHeight: chartHeight,
+                fitHeight: true,
+                emphasisColor: emphasisColor,
+                soloKey: _supplyAssetSoloKey,
+                onSoloChanged: (key) {
+                  if (_supplyAssetSoloKey == key) return;
+                  setState(() => _supplyAssetSoloKey = key);
+                },
+                selectedIndex: _supplyAssetPointIndex,
+                onSelectedIndexChanged: (index) {
+                  if (_supplyAssetPointIndex == index) return;
+                  setState(() => _supplyAssetPointIndex = index);
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -38631,7 +38820,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final fundPoolTrace = _fundPoolTraces[fundPoolKey];
     final isFundPoolExpanded = fundPoolPanel != null;
     final isAnyExpanded = isExpanded || isFundPoolExpanded;
-    // 资管独有行（中油BP、全国中石化、供给侧主体）账本里没有，进不了二级页。
+    // 资管独有省级行（例如中油BP）账本里没有，进不了二级页。
     final isAssetOnlyRow = r[lighthouseAssetOnlyKey] == true;
     final canDefaultOpen =
         allowDefaultDetailOpen &&
@@ -38717,46 +38906,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         (l3SearchHit
             ? !_expandedProductL3.contains(l3Key)
             : _expandedProductL3.contains(l3Key));
-    // 资管独有行（供给侧主体、中油BP 等）：账本里没有这一行，销售额 / 利润等
+    // 资管独有省级行（中油BP 等）：账本里没有这一行，销售额 / 利润等
     // 本来就不存在。不再套账本卡片画一排「—」（读起来像「拆下去是 0」），
-    // 改成只讲资产的紧凑卡，并写明经营指标按省记账、不拆到主体。
+    // 改成只讲资产的紧凑卡。
     if (isAssetOnlyRow && lighthouseLedgerShowsFundPoolPreview(tab)) {
       return [
         _buildAssetOnlyLedgerCard(
           r,
           name: name,
-          isChildRow: isChildRow,
-          groupColor: groupColor,
           summaryCellH: summaryCellH,
           fundPoolKey: fundPoolKey,
           fundPoolPanel: fundPoolPanel,
           fundPoolTrace: fundPoolTrace,
-          l3Children: l3Children,
-          l3Open: l3Open,
-          onToggleL3: () {
-            setState(() {
-              if (!_expandedProductL3.remove(l3Key)) {
-                _expandedProductL3.add(l3Key);
-                _productL3VisibleCount[l3Key] = _productL3BatchSize;
-              }
-            });
-          },
         ),
-        if (l3Open)
-          _buildProductL3ChildList(
-            parent: r,
-            children: l3Children,
-            groupColor: groupColor,
-            cols: cols,
-            pinnedW: pinnedW,
-            rowH: rowH,
-            summaryCellH: summaryCellH,
-            tab: tab,
-            trendKeyPrefix: prefix,
-            listKey: l3Key,
-            searchQuery: _ledgerSearchActive ? _ledgerSearch : '',
-            onChildTap: null,
-          ),
       ];
     }
     return [
@@ -39023,9 +39185,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         children: l3Children,
                         open: l3Open,
                         groupColor: groupColor,
-                        kicker: r[lighthouseSupplyEntityChildrenKey] == true
-                            ? '供给侧'
-                            : '细分',
+                        kicker: '细分',
                         onTap: () {
                           final opening = !_expandedProductL3.contains(l3Key);
                           LighthouseFeedback.instance.play(
@@ -39060,22 +39220,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             ? null
                             : lighthouseFundPoolForRow(r, _fundPoolByProvince),
                         fundPoolPanel,
-                        // 供给侧主体对不上账本供给分类，没有本月 / 本日利润。
-                        externals: isChildRow && isAssetOnlyRow
-                            ? const <String, double?>{
-                                'profitMonth': null,
-                                'profitDay': null,
-                              }
-                            : {
-                                'profitMonth': lighthouseLookupProvinceAmount(
-                                  _fundPoolProfitMonth,
-                                  name,
-                                ),
-                                'profitDay': lighthouseLookupProvinceAmount(
-                                  _fundPoolProfitDay,
-                                  name,
-                                ),
-                              },
+                        externals: {
+                          'profitMonth': lighthouseLookupProvinceAmount(
+                            _fundPoolProfitMonth,
+                            name,
+                          ),
+                          'profitDay': lighthouseLookupProvinceAmount(
+                            _fundPoolProfitDay,
+                            name,
+                          ),
+                        },
                         traced: fundPoolTrace,
                         onTraceTap: (metricKey) {
                           setState(() {
@@ -39122,10 +39276,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           trendKeyPrefix: prefix,
           listKey: l3Key,
           searchQuery: _ledgerSearchActive ? _ledgerSearch : '',
-          // 供给侧主体不是产品三级，没有可进的明细页。
-          onChildTap: r[lighthouseSupplyEntityChildrenKey] == true
-              ? null
-              : _productL3ChildTapFor(r),
+          onChildTap: _productL3ChildTapFor(r),
         ),
     ];
   }

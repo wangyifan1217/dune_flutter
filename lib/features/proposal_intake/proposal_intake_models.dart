@@ -4870,9 +4870,10 @@ List<String> proposalIntakeProductFormulaReviewKeys(Map<String, dynamic> form) {
 }
 
 /// 财务部负责人二要逐条复核完的全部项。
+/// 成本改为按结算规则自动测算（市场部「成本测算」只读展示），不再按产品选公式，
+/// 所以按产品的公式复核项（sku:<id>:revenue|costItems|taxCost）不再要求。
 List<String> proposalIntakeFinanceReviewKeys(Map<String, dynamic> form) => [
   ...kProposalFinanceLineReviewKeys,
-  ...proposalIntakeProductFormulaReviewKeys(form),
   ...proposalIntakeSkuSettleReviewKeys(form),
 ];
 

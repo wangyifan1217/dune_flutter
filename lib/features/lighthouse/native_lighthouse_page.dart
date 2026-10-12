@@ -10207,54 +10207,86 @@ class _TrendChartState extends State<_TrendChart>
       dy: -3,
       child: Stack(
         children: [
-    Container(
-      width: 150,
-      padding: const EdgeInsets.fromLTRB(8, 6, 10, 8),
-      decoration: _lhKCardDeco(context, radius: 7, strong: true),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: LhTypography.mono(
-              size: 9.5,
-              color: DunesColors.resolve(context, _LhPlum.deep),
-              weight: FontWeight.w800,
-              letterSpacing: 0.3,
-              context: context,
-            ),
-          ),
           Container(
-            margin: const EdgeInsets.only(top: 4, bottom: 1),
-            height: 0.6,
-            color: DunesColors.resolve(
-              context,
-              _LhPlum.line,
-              role: DunesColorRole.surface,
+            width: 150,
+            padding: const EdgeInsets.fromLTRB(8, 6, 10, 8),
+            decoration: _lhKCardDeco(context, radius: 7, strong: true),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: LhTypography.mono(
+                      size: 9.5,
+                      color: DunesColors.resolve(context, _LhPlum.deep),
+                      weight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                      context: context,
+                    ),
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.only(top: 4, bottom: 1),
+                  height: 0.6,
+                  color: DunesColors.resolve(
+                    context,
+                    _LhPlum.line,
+                    role: DunesColorRole.surface,
+                  ),
+                ),
+                row('当${u.avg.substring(0, 1)}', _money(v)),
+                row(
+                  '较${u.prevAny}',
+                  chg(),
+                  color: prev.isFinite
+                      ? DunesColors.resolve(
+                          context,
+                          up ? LhKColors.up : LhKColors.down,
+                        )
+                      : null,
+                ),
+                row(
+                  'NX快',
+                  _money(f),
+                  color: DunesColors.resolve(context, LhKColors.nxFast),
+                ),
+                row(
+                  'NX慢',
+                  _money(sl),
+                  color: DunesColors.resolve(context, LhKColors.nxSlow),
+                ),
+                row(
+                  'MACD',
+                  '${hist >= 0 ? '+' : '−'}${_fmtHeroShort(hist.abs())}',
+                  color: DunesColors.resolve(
+                    context,
+                    hist >= 0 ? LhKColors.barUp : LhKColors.barDown,
+                  ),
+                ),
+              ],
             ),
           ),
-          row('当${u.avg.substring(0, 1)}', _money(v)),
-          row(
-            '较${u.prevAny}',
-            chg(),
-            color: prev.isFinite
-                ? DunesColors.resolve(context, up ? LhKColors.up : LhKColors.down)
-                : null,
-          ),
-          row('NX快', _money(f), color: DunesColors.resolve(context, LhKColors.nxFast)),
-          row('NX慢', _money(sl), color: DunesColors.resolve(context, LhKColors.nxSlow)),
-          row(
-            'MACD',
-            '${hist >= 0 ? '+' : '−'}${_fmtHeroShort(hist.abs())}',
-            color: DunesColors.resolve(
-              context,
-              hist >= 0 ? LhKColors.barUp : LhKColors.barDown,
+          Positioned(
+            top: 0,
+            right: 0,
+            child: Semantics(
+              button: true,
+              label: '关闭',
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 13,
+                  color: DunesColors.resolve(context, LhColors.mute2),
+                ),
+              ),
             ),
           ),
-        ],
-      ),
-    ),
           const Positioned(
             right: 0,
             bottom: 0,

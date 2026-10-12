@@ -1368,11 +1368,13 @@ _SeriesRange? _robustCandleRange(List<double> pts, int a, int b) {
     final qLo = q(0.015);
     final qHi = q(0.985);
     final core = math.max(qHi - qLo, 1e-9);
-    if (hi > qHi + core * 0.35) hi = qHi;
-    if (lo < qLo - core * 0.35) lo = qLo;
+    // 只裁「真的离谱」的那一两天（甩出大多数 1.5 倍以上）；普通的高点照常画全。
+    if (hi > qHi + core * 1.5) hi = qHi + core * 0.5;
+    if (lo < qLo - core * 1.5) lo = qLo - core * 0.5;
   }
   final span = math.max(hi - lo, hi.abs() * 0.1 + 1e-9);
-  return _SeriesRange(lo - span * 0.06, hi + span * 0.06);
+  // 上面多留 22% 的空：最高那根蜡烛停在图高八成左右，不顶到天花板。
+  return _SeriesRange(lo - span * 0.10, hi + span * 0.22);
 }
 
 /// 只换掉主线那一条（核销 / 销售共轴时一对一起换）的值域。
@@ -7987,7 +7989,11 @@ class _TrendChart extends StatefulWidget {
     this.initialFromMonth,
     this.initialVisible,
     this.candleUnit = 'day',
+    this.statusStamp,
   });
+
+  /// 没点中某天时，图例行最左边写什么（全屏大图传数据时间；null = 「本期合计」）。
+  final String? statusStamp;
 
   /// 打开时一屏看几个点（周 / 月 / 季 / 年线用；日线走 [initialFromMonth]）。
   final int? initialVisible;
@@ -8404,6 +8410,41 @@ class _TrendChartState extends State<_TrendChart>
     if (month == null || day == null) return null;
     if (month < 1 || month > 12 || day < 1 || day > 31) return null;
     return (month: month, day: day);
+  }
+
+  /// 每个点的年份：标签只有「月.日」，从最新一天（今年）往回推，
+  /// 月份往回走时突然变大（1 月 → 12 月）就是跨年了。
+  List<int?> _labelYears = const [];
+
+  static List<int?> _inferYears(
+    List<({int month, int day})?> md,
+    int latestYear,
+  ) {
+    final out = List<int?>.filled(md.length, null);
+    var year = latestYear;
+    int? laterMonth;
+    for (var i = md.length - 1; i >= 0; i--) {
+      final d = md[i];
+      if (d == null) continue;
+      if (laterMonth != null && d.month > laterMonth) year--;
+      out[i] = year;
+      laterMonth = d.month;
+    }
+    return out;
+  }
+
+  /// 全屏大图里点中某天：写全「2026年9月16日」（不带时分）。
+  /// 周 / 月 / 季 / 年线或解析不出日期时，沿用原标签。
+  String _fullDateLabel(int i) {
+    if (widget.candleUnit == 'day' &&
+        i >= 0 &&
+        i < _labelMD.length &&
+        i < _labelYears.length) {
+      final d = _labelMD[i];
+      final y = _labelYears[i];
+      if (d != null && y != null) return '$y年${d.month}月${d.day}日';
+    }
+    return i >= 0 && i < _pointLabels.length ? _pointLabels[i] : '';
   }
 
   bool _isMonthStart(int i) =>
@@ -8825,6 +8866,7 @@ class _TrendChartState extends State<_TrendChart>
       ),
     );
     _labelMD = [for (final l in widget.labels) _parseMonthDay(l)];
+    _labelYears = _inferYears(_labelMD, DateTime.now().year);
     // K 线不再削峰（会把 3 万和 22 万的顶压得差不多高）：画真值，
     // 极端日交给 _robustCandleRange 裁在图沿。
     if (widget.zoomable && !widget.candles) {
@@ -9326,7 +9368,9 @@ class _TrendChartState extends State<_TrendChart>
     final sl = _trendEma(real, w.sa)[i];
     final macd = _trendMacd(real);
     final hist = 2 * (macd.dif[i] - macd.dea[i]);
-    final label = i < _pointLabels.length ? _pointLabels[i] : '';
+    final label = widget.legendCompact
+        ? _fullDateLabel(i)
+        : (i < _pointLabels.length ? _pointLabels[i] : '');
     final keyStyle = LhTypography.sans(
       size: 9,
       color: DunesColors.resolve(context, LhColors.mute2),
@@ -11212,9 +11256,12 @@ class _TrendChartState extends State<_TrendChart>
     final rVal = isSelected ? at(_series.revenue, si) : _totRev;
     final cVal = isSelected ? at(_series.cost, si) : _totCost;
     final pVal = isSelected ? at(_series.profit, si) : _totProf;
+    // 全屏大图没点中某天时，不写「本期合计」，写数据时间（2026年10月12日 19:22）。
     final statusText = (isSelected && si < _pointLabels.length)
-        ? _pointLabels[si]
-        : '本期合计';
+        ? (widget.legendCompact ? _fullDateLabel(si) : _pointLabels[si])
+        : (widget.legendCompact && widget.statusStamp != null
+              ? widget.statusStamp!
+              : '本期合计');
 
     final sVal = isSelected ? at(_series.scale, si) : _totScale;
     final sAltVal = isSelected ? at(_series.scaleAlt, si) : _totScaleAlt;
@@ -20890,6 +20937,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Rect.fromLTRB(r.left + inset, r.top, r.right - inset, r.bottom);
   }
 
+  /// 数据时间：最近一次拉到数据的时刻（北京时间），没有就用现在。
+  String get _heroDataStamp {
+    final t = _lastSyncedAt ?? _nowCST();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${t.year}年${t.month}月${t.day}日 ${two(t.hour)}:${two(t.minute)}';
+  }
+
   /// 走势大图在等新数据（切分组 / 切周期）：先转圈，不画旧数据。
   bool _heroFullscreenAwaiting = false;
 
@@ -21571,6 +21625,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               : null,
           initialVisible: fullscreen ? _heroFullscreenInitialVisible : null,
           candleUnit: _period,
+          statusStamp: fullscreen ? _heroDataStamp : null,
           onExpand: !fullscreen && _heroCanOpenFullscreen
               ? _openHeroTrendFullscreen
               : null,
@@ -22258,8 +22313,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             // 产品汇总没有银行余额时，整块内容就会落在卡正中。
                             children: [
                               if (_tab == 'netTa') _buildNetTABankBalanceLine(),
+                              // 大数块高度是定死的：选毛利率时多一行「利润 ÷ 核销额」，
+                              // 内容会比格子高几个像素（底部溢出黄黑条）。放不下时整块
+                              // 按比例缩一点点（4px ≈ 3%，肉眼看不出），不再溢出。
                               Expanded(
-                                child: Column(
+                                child: LayoutBuilder(
+                                  builder: (context, mastheadBox) => FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: SizedBox(
+                                      width: mastheadBox.maxWidth,
+                                      child: Column(
+                                  mainAxisSize: MainAxisSize.min,
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -22584,6 +22649,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                       ),
                                     ),
                                   ],
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                               if (!flatHero && _tab != 'netTa') ...[

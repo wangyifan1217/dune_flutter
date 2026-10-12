@@ -354,6 +354,27 @@ class ProposalFinanceFormulaCatalog {
     return null;
   }
 
+  /// 收入、项目成本、业务成本共用的计算公式，按编码去重。
+  List<ProposalFinanceFormula> get settlementFormulas {
+    final byCode = <String, ProposalFinanceFormula>{};
+    for (final group in revenueGroups) {
+      for (final formula in group.formulas) {
+        if (formula.code.trim().isEmpty) continue;
+        byCode.putIfAbsent(formula.code, () => formula);
+      }
+    }
+    return byCode.values.toList(growable: false);
+  }
+
+  ProposalFinanceFormula? formulaByCode(String code) {
+    final key = code.trim();
+    if (key.isEmpty) return null;
+    for (final formula in settlementFormulas) {
+      if (formula.code == key) return formula;
+    }
+    return null;
+  }
+
   /// 产品业务平台对应的公式组；一个都对不上时返回全部组。
   List<ProposalRevenueFormulaGroup> groupsForSources(Set<String> sources) {
     final hits = [
@@ -1118,6 +1139,31 @@ String proposalPromotionPlanNextId(List<ProposalPromotionTierPlan> plans) {
     n++;
   }
   return 'p$n';
+}
+
+/// All settlement costs share the promotion tier editor and evaluation rules.
+List<ProposalPromotionTierPlan> proposalSettleTierPlans(
+  ProposalFinanceSettleTerms terms,
+) {
+  if (terms.tierPlans.isNotEmpty) return terms.tierPlans;
+  if (terms.settleTiers.isEmpty) return const [];
+  return [
+    ProposalPromotionTierPlan(
+      id: 'legacy',
+      strategy: kProposalPromotionStrategyAnnual,
+      segments: [
+        ProposalPromotionSegment(
+          tiers: [
+            for (final tier in terms.settleTiers)
+              ProposalPromotionTier(
+                from: double.tryParse(tier.from) ?? 0,
+                rate: double.tryParse(tier.rate) ?? 0,
+              ),
+          ],
+        ),
+      ],
+    ),
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -1946,6 +1992,7 @@ ProposalFinanceEvaluation proposalEvaluateFinance(
     salesScale: proposalEffectiveSalesScale(form),
     products: products,
     dict: dict,
+    proposalForm: form,
   );
 }
 
@@ -1955,16 +2002,19 @@ ProposalFinanceEvaluation proposalAggregateProductFinance({
   required double salesScale,
   required List<ProposalProductFinanceEvaluation> products,
   ProposalFinanceFormulaCatalog? catalog,
+  Map<String, dynamic>? proposalForm,
 }) => _aggregateFinance(
   salesScale: salesScale,
   products: products,
   dict: catalog ?? ProposalFinanceFormulaCatalog.fallback,
+  proposalForm: proposalForm,
 );
 
 ProposalFinanceEvaluation _aggregateFinance({
   required double salesScale,
   required List<ProposalProductFinanceEvaluation> products,
   required ProposalFinanceFormulaCatalog dict,
+  Map<String, dynamic>? proposalForm,
 }) {
   final evals = [for (final p in products) p.evaluation];
   final scale = salesScale > 0
@@ -2021,6 +2071,69 @@ ProposalFinanceEvaluation _aggregateFinance({
     );
   }
   double total(String key) => buckets[key]?.total ?? 0;
+  if (proposalForm != null) {
+    final business = dict.category(kProposalCostCategoryBusiness);
+    if (business != null) {
+      final ratio = _effectiveSettleRatio(proposalForm, scale, revenueAmount);
+      final redacted = proposalForm['businessCostRedacted'] == true;
+      final codes = [
+        for (final item in _listOf(proposalForm['businessFormulaCodes']))
+          if (_str(item).isNotEmpty) _str(item),
+      ];
+      buckets[kProposalCostCategoryBusiness] = ProposalFinanceBucket(
+        category: business,
+        lines: [
+          for (final code in codes)
+            if (dict.formulaByCode(code) case final formula?)
+              _proposalBusinessFormulaLine(
+                formula,
+                scale: scale,
+                ratio: ratio,
+                redacted: redacted,
+              ),
+        ],
+      );
+    }
+  }
+  if (proposalForm != null) {
+    final category = dict.category(kProposalCostCategoryTax);
+    if (category != null) {
+      final taxForm = proposalTaxForm(proposalForm);
+      final names = proposalFinanceSelectedNames(
+        _seedSuggestedItems(taxForm, dict, costNames: const []),
+        category,
+      );
+      buckets[kProposalCostCategoryTax] = ProposalFinanceBucket(
+        category: category,
+        lines: [
+          for (final name in names)
+            if (proposalForm['businessCostRedacted'] == true &&
+                proposalFinanceItemFormula(taxForm, category, name)?.kind ==
+                    ProposalFinanceFormulaKind.pretaxRate)
+              ProposalFinanceLine(
+                name: name,
+                formula: proposalFinanceItemFormula(taxForm, category, name),
+                amount: 0,
+                pending: true,
+                substitution: '应税基数含受限业务成本，金额仅限授权人员查看',
+              )
+            else
+              _evaluateCostLine(
+                taxForm,
+                name: name,
+                formula: proposalFinanceItemFormula(taxForm, category, name),
+                scale: scale,
+                revenue: revenueAmount,
+                project: total(kProposalCostCategoryProject),
+                operating: 0,
+                business: total(kProposalCostCategoryBusiness),
+                settleCost: (name) =>
+                    proposalEstimateProjectCostAmount(proposalForm, name),
+              ),
+        ],
+      );
+    }
+  }
   const procurementLine = ProposalFinanceLine(name: '采购成本', amount: 0);
   final p = total(kProposalCostCategoryProject);
   final b = total(kProposalCostCategoryBusiness);
@@ -2043,6 +2156,73 @@ ProposalFinanceEvaluation _aggregateFinance({
         : '${_wan(profit)} ÷ ${_wan(scale)} × 100% = ${_wan(margin)}%',
     products: products,
   );
+}
+
+ProposalFinanceLine _proposalBusinessFormulaLine(
+  ProposalFinanceFormula formula, {
+  required double scale,
+  required double ratio,
+  required bool redacted,
+}) {
+  if (redacted) {
+    return ProposalFinanceLine(
+      name: formula.name,
+      formula: formula,
+      amount: 0,
+      pending: true,
+      substitution: '业务成本仅财务部负责人一和最终审批人可查看',
+    );
+  }
+  if (_isUnitPriceFormula(formula)) {
+    final amount = proposalRoundWan(scale * ratio);
+    return ProposalFinanceLine(
+      name: formula.name,
+      formula: formula,
+      amount: amount,
+      substitution: scale > 0
+          ? '年化规模 ${_wan(scale)} × 单价 ÷ 面值（折合 ${_pct(ratio)}）= ${_wan(amount)} 万元'
+          : '',
+      missing: scale > 0 ? const [] : const ['销售规模'],
+    );
+  }
+  final eval = _evaluateRevenueExpression(
+    formula.expression.isEmpty ? formula.name : formula.expression,
+    base: scale,
+    ratio: ratio,
+    costOf: (_) => null,
+  );
+  final amount = eval.ok ? eval.amount : proposalRoundWan(scale * ratio);
+  return ProposalFinanceLine(
+    name: formula.name,
+    formula: formula,
+    amount: amount,
+    substitution: eval.ok
+        ? '${eval.display} = ${_wan(amount)} 万元'
+        : '公式无法自动代入，按 年化规模 × 结算比例：${_wan(scale)} × ${_pct(ratio)} = ${_wan(amount)} 万元',
+    missing: [
+      if (scale <= 0) '销售规模',
+      if (ratio <= 0) '结算比例',
+      ...eval.missing,
+    ],
+  );
+}
+
+/// Prefer proposal selections; migrate old per-product tax choices only when no proposal choice exists.
+Map<String, dynamic> proposalTaxForm(Map<String, dynamic> form) {
+  if (form.containsKey('taxCostItems')) return Map<String, dynamic>.from(form);
+  final names = <String>{};
+  final formulas = <String, dynamic>{};
+  for (final raw in _productFormulasOf(form).values) {
+    final entry = _mapOf(raw);
+    if (entry['taxCostItems'] is List)
+      names.addAll((entry['taxCostItems'] as List).whereType<String>());
+    formulas.addAll(_mapOf(entry['taxCostItemFormulas']));
+  }
+  return {
+    ...form,
+    if (names.isNotEmpty) 'taxCostItems': names.toList(),
+    if (formulas.isNotEmpty) 'taxCostItemFormulas': formulas,
+  };
 }
 
 /// 一个测算范围（通常是单个产品）按所选公式算收入、成本、利润。
@@ -2223,6 +2403,42 @@ ProposalFinanceLine _evaluateProjectLine(
   required List<String> costNames,
 }) {
   final item = category.resolveItem(name);
+  final tierHits = proposalPayableProjectCostHits(
+    form,
+    costNames: costNames,
+  ).where((hit) => hit.costName == name && hit.terms.settleByTier).toList();
+  if (tierHits.isNotEmpty) {
+    final scale = proposalEffectiveSalesScale(form);
+    final results = [
+      for (final hit in tierHits)
+        for (final plan in proposalSettleTierPlans(hit.terms))
+          plan.evaluate(scale),
+    ];
+    final amount = proposalRoundWan(
+      results.fold<double>(0, (sum, result) => sum + result.amount),
+    );
+    return ProposalFinanceLine(
+      name: name,
+      formula: ProposalFinanceFormula(
+        code: 'SETTLEMENT_TIER',
+        name: '按结算阶梯规则计算',
+        expression: '年化规模 × 阶梯或月份折扣',
+        kind: ProposalFinanceFormulaKind.tiered,
+      ),
+      amount: amount,
+      locked: true,
+      pending: results.isEmpty,
+      source: [
+        for (final hit in tierHits)
+          for (final plan in proposalSettleTierPlans(hit.terms))
+            '${plan.promoter.isEmpty ? name : plan.promoter} · ${plan.summary}',
+      ].join('；'),
+      substitution: results.isEmpty
+          ? '尚未配置阶梯规则'
+          : results.map((r) => r.substitution).join('\n'),
+      missing: results.isEmpty ? const ['阶梯规则'] : const [],
+    );
+  }
   if (item.tiered) {
     // 推广费：每个产品一个推广商；没配但产品结算里有应付行，按产品结算；都没有按 0 计。
     final allPlans = proposalPromotionPlansOf(form);

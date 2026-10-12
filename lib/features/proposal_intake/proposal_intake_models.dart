@@ -2628,6 +2628,9 @@ String proposalIntakeTaskBannerBody(
   if (awaitingModuleConfirm && action == 'review_tech') {
     return '字段旁的「已复核」还不算过。请到科技部最底部点「确认本板块通过」。点保存不会结束复核。';
   }
+  if (action == 'review_finance_module') {
+    return '先在财务部成本里多选业务成本公式（与收入、项目成本同一套），再到本板块最底部点「整个板块复核通过」。也可直接整板块驳回。';
+  }
   if (proposalIntakeActionIsModuleReview(action)) {
     return '看完内容后，到本板块最底部点「整个板块复核通过」。也可直接整板块驳回。';
   }
@@ -2638,10 +2641,10 @@ String proposalIntakeTaskBannerBody(
     'review_finance_interface' => '到财务技术接口处点复核。',
     'review_contract' => '到合同处点复核。也可直接整板块驳回。',
     'president_confirm' => '审批进度和其他人看到的一样。看完各板块后，到页面底部点「确认通过」或「驳回」。',
-    'fill' => '先填市场部和产品，科技字段一并填。填完后点右上角「通知财务填写」。定位条带「填」的就是当前板块。',
+    'fill' => '先填市场部、科技与产品，并在财务部填好产品结算。填完后点右上角「通知财务填写」。定位条带「填」的就是当前板块。',
     'fill_tech' => '到科技部填写平台、能力和产品。财务技术接口由财务部负责人二填写。定位条带「填」的就是当前板块。',
-    'notify_market2' => '等财务部负责人二填完财务技术接口和项目成本后，点右上角「确认并提交复核」。',
-    'fill_finance_interface' => '到科技部勾选财务技术接口，再到财务部核对项目成本。定位条带「填」的就是当前板块。',
+    'notify_market2' => '等财务部负责人二填完财务技术接口后，点右上角「确认并提交复核」。',
+    'fill_finance_interface' => '到科技部勾选财务技术接口。产品结算已由填写人填好，可到财务部核对。定位条带「填」的就是当前板块。',
     'revise' => '最终人驳回后流程从头开始。改完后重新通知财务填写。',
     'revise_module' => '按驳回意见改对应板块，改完后点右上角重新提交复核。',
     'start_review' => '内容改完后点右上角重新提交复核。',
@@ -3049,7 +3052,9 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'initiate',
       role: '提交人',
       name: initiatorName,
-      action: leftFilling ? '填写市场、科技与产品 · 点右上角「通知财务填写」' : '发起',
+      action: leftFilling
+          ? '填写市场、科技、产品与结算 · 点右上角「通知财务填写」'
+          : '发起',
       title: initiatorName == '未指定' ? '提交人 发起' : '$initiatorName 发起',
       state: initiateState,
       doneStatus: '已发起',
@@ -3075,7 +3080,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'fill_finance_interface',
       role: '财务部负责人二',
       name: ownerName('financeOwner2'),
-      action: '填写财务技术接口和项目成本',
+      action: '填写财务技术接口',
       state: fillState(current: inTechFill),
       time: handoffAt,
       currentTime: handoffAt,
@@ -3085,7 +3090,9 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'start_review',
       role: inStartReview ? '提交人' : '填写人',
       name: initiatorName,
-      action: inStartReview ? '重新提交复核 · 点右上角重新提交复核' : '财务填完后，点右上角「确认并提交复核」',
+      action: inStartReview
+          ? '重新提交复核 · 点右上角重新提交复核'
+          : '财务技术接口填完后，点右上角「确认并提交复核」',
       state: startReviewState(),
       time: handoffAt,
       currentTime: handoffAt,
@@ -3113,7 +3120,9 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'review_contract',
       role: '财务部负责人二',
       name: ownerName('financeOwner2'),
-      action: purchase ? '到合同处点「点此复核」' : '到主产品合计及产品「填写结算」的收入/成本旁点「点此复核」',
+      action: purchase
+          ? '到合同处点「点此复核」'
+          : '到产品「填写结算」的收入/成本旁逐条复核，采购/销售合同也要复核完',
       state: reviewerState(
         'purchaseContractCompleted',
         rejected: contractRejected,
@@ -3128,7 +3137,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
         id: 'review_finance_module',
         role: '财务部负责人一',
         name: ownerName('financeOwner1'),
-        action: '到财务部底部点「整个板块复核通过」',
+        action: '在成本里选好业务成本公式，再到财务部底部点「整个板块复核通过」',
         state: reviewerState('financeCompleted', active: finance2Done),
         time: reviewedAt,
         // 财务整板块要等负责人二逐条复核完才开始。
@@ -3339,7 +3348,7 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeNotifyRecipients({
     case 'notify_tech':
       return _dedupeNotifyRecipients(
         [
-          owner('financeOwner2', '财务部负责人二', '请填写财务技术接口和项目成本'),
+          owner('financeOwner2', '财务部负责人二', '请填写财务技术接口'),
         ].whereType<ProposalIntakeNotifyRecipient>().toList(),
       );
     case 'notify_market2':
@@ -3449,7 +3458,7 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeRemindRecipients({
             people: people,
             prefix: 'financeOwner2',
             role: '财务部负责人二',
-            task: '请填写财务技术接口和项目成本',
+            task: '请填写财务技术接口',
           ),
         ].whereType<ProposalIntakeNotifyRecipient>().toList(),
       );
@@ -4662,6 +4671,7 @@ class ProposalFinanceSettleTerms {
     this.settleUnitPrice = '',
     this.priceMode = '',
     this.settleTiers = const [],
+    this.tierPlans = const [],
     this.scale = '',
     this.scalePeriod = '',
     this.skuIds = const [],
@@ -4689,6 +4699,7 @@ class ProposalFinanceSettleTerms {
   /// unit：只填结算单价。tier：下面展开阶梯规则。
   final String priceMode;
   final List<ProposalSettleTier> settleTiers;
+  final List<ProposalPromotionTierPlan> tierPlans;
 
   bool get settleByUnit => priceMode == kProposalSettlePriceModeUnit;
 
@@ -4821,6 +4832,7 @@ class ProposalFinanceSettleTerms {
     displayUnitPrice,
     priceMode,
     settleTiers.map((item) => '${item.from}:${item.rate}').join(','),
+    jsonEncode(tierPlans.map((plan) => plan.toJson()).toList()),
     scale,
     scalePeriod,
     skuIds.join(','),
@@ -4843,6 +4855,7 @@ class ProposalFinanceSettleTerms {
     String? settleUnitPrice,
     String? priceMode,
     List<ProposalSettleTier>? settleTiers,
+    List<ProposalPromotionTierPlan>? tierPlans,
     String? scale,
     String? scalePeriod,
     List<String>? skuIds,
@@ -4874,6 +4887,7 @@ class ProposalFinanceSettleTerms {
     settleUnitPrice: settleUnitPrice ?? this.settleUnitPrice,
     priceMode: priceMode ?? this.priceMode,
     settleTiers: settleTiers ?? this.settleTiers,
+    tierPlans: tierPlans ?? this.tierPlans,
     scale: scale ?? this.scale,
     scalePeriod: scalePeriod ?? this.scalePeriod,
     skuIds: skuIds ?? this.skuIds,
@@ -4914,6 +4928,8 @@ class ProposalFinanceSettleTerms {
     if (priceMode.isNotEmpty) 'priceMode': priceMode,
     if (settleTiers.isNotEmpty)
       'settleTiers': [for (final item in settleTiers) item.toJson()],
+    if (tierPlans.isNotEmpty)
+      'tierPlans': [for (final item in tierPlans) item.toJson()],
     'scale': scale,
     'scalePeriod': scalePeriod,
     'skuIds': skuIds,
@@ -4946,6 +4962,11 @@ class ProposalFinanceSettleTerms {
         kProposalSettlePriceModeTier => read('priceMode'),
         _ => '',
       },
+      tierPlans: [
+        for (final rawPlan
+            in (raw['tierPlans'] is List ? raw['tierPlans'] as List : const []))
+          if (rawPlan is Map) ProposalPromotionTierPlan.fromJson(rawPlan),
+      ],
       settleTiers: [
         for (final item
             in (raw['settleTiers'] is List
@@ -5103,6 +5124,7 @@ const kProposalProductFormulasFormKey = 'productFormulas';
 
 /// 财务部逐条复核的固定项（不含按产品的公式复核和结算复核）。
 const kProposalFinanceLineReviewKeys = <String>[
+  'taxCost',
   'turnoverCash',
   'turnoverTimes',
   'supplySettleMode',
@@ -5121,11 +5143,7 @@ const kProposalFinanceLineReviewKeys = <String>[
 ];
 
 /// 按产品复核的公式类：收入、项目成本、税务成本。业务成本由财务部负责人一选，不走逐条复核。
-const kProposalProductFormulaReviewKinds = <String>[
-  'revenue',
-  'costItems',
-  'taxCost',
-];
+const kProposalProductFormulaReviewKinds = <String>['revenue', 'costItems'];
 
 String proposalIntakeProductFormulaReviewKey(String skuId, String kind) =>
     'sku:$skuId:$kind';
@@ -7413,7 +7431,7 @@ List<String> proposalIntakeSalesMarketIssues(Map<String, dynamic> form) {
   }
   needRef('productRef', 'product', '产品（标签一）');
   needRef('projectRef', 'projectName', '项目名称（标签一二级）');
-  needList('supplies', '供给（标签二）');
+  needList('supplies', '标签二二级');
   needRef('supplyTagL1Ref', 'supplyTagL1', '标签二一级');
   needRef('channelTagL1Ref', 'channelTagL1', '标签三一级');
   need('supplierPolicy', '供货商政策');

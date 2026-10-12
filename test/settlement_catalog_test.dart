@@ -6,6 +6,45 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test('promoter names use the documented name endpoint and deduplicate', () async {
+    final client = MockClient((request) async {
+      expect(request.url.path, endsWith('/out/shaqiu/catalog/promoter-name'));
+      expect(request.url.query, isEmpty);
+      return http.Response(jsonEncode({'code': 200, 'data': ['B推广', 'A推广', 'A推广', ' ']}), 200, headers: {'content-type': 'application/json; charset=utf-8'});
+    });
+    final catalog = SettlementCatalogService(client: client);
+    expect(await catalog.fetchPromoterNames(), ['A推广', 'B推广']);
+    client.close();
+  });
+
+  test('promoter names fall back to supplier promoters when name endpoint is empty', () async {
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/promoter-name')) {
+        return http.Response('{"status":404}', 404);
+      }
+      expect(request.url.path, endsWith('/out/shaqiu/catalog/supplier'));
+      expect(request.url.queryParameters['entityKind'], 'PROMOTER');
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'data': [
+            {'supplierName': '成都和信联科技有限公司', 'entityKind': 'PROMOTER'},
+            {'supplierName': '成都和信联科技有限公司', 'shortName': '重复'},
+            {'supplierName': '广州唐贝网络科技有限公司'},
+            {'supplierName': ' '},
+          ],
+        }),
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    expect(await catalog.fetchPromoterNames(), [
+      '广州唐贝网络科技有限公司',
+      '成都和信联科技有限公司',
+    ]);
+    client.close();
+  });
   test('offline catalog returns empty lists', () async {
     final catalog = SettlementCatalogService.offline();
     expect(await catalog.fetchSyncSources(), isEmpty);

@@ -15,14 +15,14 @@ const kProposalFinanceShowEstimates = true;
 
 /// 财务部下半部分：按产品列出收入公式和成本公式，视觉上与顶部年化测算 hero 一致。
 ///
-/// 每个产品一行「1、xxx 产品」，展开后依次是收入公式、项目成本（推广费下一个推广商：固定比例或连续月序）、
-/// 业务成本、税务成本；下面是整单的经营成本类型和周转资金。
+/// 每个产品一行「1、xxx 产品」，展开后依次是收入公式、项目成本；
+/// 业务成本、税务成本按整份提案选择；下面是周转资金。
 /// 顶部 hero 点「成本 / 收入 …」会跳到这里。
 ///
 /// 谁能改什么由页面按角色传进 [ProposalFinanceBoardConfig]：
-/// - 填写人：收入公式、项目 / 税务成本、经营成本类型（产品结算里已有的项目成本自动带出、锁定）；
+/// - 填写人：收入公式、项目 / 税务成本（产品结算里已有的项目成本自动带出、锁定）；
 /// - 财务部负责人二：同上并按产品逐条复核；业务成本与利润对其加密；
-/// - 财务部负责人一：财务复核时按产品选业务成本；
+/// - 财务部负责人一：财务复核时整份提案多选业务成本公式；
 /// - 其他人：只读。
 class ProposalFinanceBoardConfig {
   const ProposalFinanceBoardConfig({
@@ -33,7 +33,7 @@ class ProposalFinanceBoardConfig {
     this.categoryEditable = const {},
     this.productEditable,
     this.businessSealed = false,
-    this.businessWaitingText = '由财务部负责人一在财务复核时选择',
+    this.businessWaitingText = '财务复核时由财务部负责人一选择公式',
     this.roleNote = '',
     this.reviewToggle,
     this.reviewStatus,
@@ -41,6 +41,7 @@ class ProposalFinanceBoardConfig {
     this.onRevenueFormula,
     this.onCostItemsChanged,
     this.onCostFormula,
+    this.onBusinessFormulas,
     this.operatingItems = const [],
     this.onOperatingItems,
     this.anchor,
@@ -105,6 +106,9 @@ class ProposalFinanceBoardConfig {
     String code,
   )?
   onCostFormula;
+
+  /// 业务成本公式（整份提案多选，和收入、项目成本同一套计算公式）。
+  final ValueChanged<List<String>>? onBusinessFormulas;
 
   /// 经营成本类型（整单一份，只选类型）。
   final List<String> operatingItems;
@@ -590,7 +594,7 @@ class ProposalFinanceCostPanel extends StatelessWidget {
         ? Text(
             products.isEmpty
                 ? '请先在科技部添加业务产品'
-                : '共 ${products.length} 个产品 · 按产品选择收入公式和成本公式',
+                : '共 ${products.length} 个产品 · 收入和项目成本按产品选 · 业务成本整份提案选一次',
             style: _sans(context, size: 11.5, color: _K.text2),
           )
         : ProposalFinanceBand(
@@ -618,7 +622,19 @@ class ProposalFinanceCostPanel extends StatelessWidget {
         ProposalFinanceBlockShell(
           icon: Icons.receipt_long_outlined,
           title: mode == ProposalFinanceCostPanelMode.result ? '成本测算' : '成本',
-          band: band,
+          band: config.roleNote.trim().isEmpty
+              ? band
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    band,
+                    const SizedBox(height: 6),
+                    Text(
+                      config.roleNote.trim(),
+                      style: _sans(context, size: 11.5, color: _K.text2),
+                    ),
+                  ],
+                ),
           rows: [
             if (mode == ProposalFinanceCostPanelMode.cost)
               config.wrap(
@@ -640,6 +656,8 @@ class ProposalFinanceCostPanel extends StatelessWidget {
                     readOnly: mode == ProposalFinanceCostPanelMode.result,
                   ),
                 ),
+            if (mode == ProposalFinanceCostPanelMode.cost)
+              config.wrap('turnoverTimes', _turnoverRow(context)),
           ],
         ),
       );
@@ -717,6 +735,91 @@ class ProposalFinanceCostPanel extends StatelessWidget {
     bool readOnly = false,
   }) {
     final category = config.catalog.category(key)!;
+    if (key == kProposalCostCategoryTax) {
+      final bucket =
+          config.evaluation.bucket(key) ??
+          ProposalFinanceBucket(category: category, lines: const []);
+      final editable = !readOnly && config.categoryEditable[key] == true;
+      return ProposalFinanceRow(
+        key: const ValueKey('finance-proposal-tax'),
+        title: category.name,
+        forceOpen: config.focusKeys.contains('taxCost'),
+        summary: bucket.names.isEmpty
+            ? '整份提案统一选择税务成本'
+            : '整份提案 · ${bucket.names.join('、')}',
+        value: config.showEstimates ? '${_wan(bucket.total)} 万' : '',
+        collapsedReview: config.reviewStatus?.call('taxCost'),
+        detail: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _CategoryDetail(
+              bucket: bucket,
+              editable: editable,
+              allowItemEdit: editable,
+              showEstimates: config.showEstimates,
+              onItemsChanged: editable && config.onCostItemsChanged != null
+                  ? (names) => config.onCostItemsChanged!('', category, names)
+                  : null,
+              onFormula: editable && config.onCostFormula != null
+                  ? (name, code) =>
+                        config.onCostFormula!('', category, name, code)
+                  : null,
+            ),
+            if (!readOnly && config.reviewToggle != null)
+              ?config.reviewToggle!('taxCost'),
+          ],
+        ),
+      );
+    }
+    if (key == kProposalCostCategoryBusiness) {
+      final bucket =
+          config.evaluation.bucket(key) ??
+          ProposalFinanceBucket(category: category, lines: const []);
+      final editable =
+          !readOnly &&
+          config.categoryEditable[key] == true &&
+          config.onBusinessFormulas != null;
+      final codes = [
+        for (final line in bucket.lines)
+          if (line.formula != null && line.formula!.code.isNotEmpty)
+            line.formula!.code,
+      ];
+      final waiting = bucket.names.isEmpty && !editable;
+      return ProposalFinanceRow(
+        key: const ValueKey('finance-proposal-business'),
+        title: category.name,
+        initiallyOpen: waiting,
+        forceOpen: config.focusKeys.contains('businessCost'),
+        summary: bucket.names.isEmpty
+            ? (editable ? '点开多选计算公式' : config.businessWaitingText)
+            : '整份提案 · ${bucket.names.join('、')}',
+        value: config.showEstimates && bucket.names.isNotEmpty
+            ? '${_wan(bucket.total)} 万'
+            : '',
+        tag: waiting
+            ? const ProposalFinanceTag(
+                '待选择',
+                color: ProposalPalette.amber,
+                fill: ProposalPalette.amberSoft,
+              )
+            : const ProposalFinanceTag('整份提案'),
+        collapsedReview: config.reviewStatus?.call('businessCost'),
+        detail: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ProposalBusinessFormulas(
+              formulas: config.catalog.settlementFormulas,
+              lines: bucket.lines,
+              selectedCodes: codes,
+              editable: editable,
+              showEstimates: config.showEstimates,
+              waitingText: config.businessWaitingText,
+              onChanged: editable ? config.onBusinessFormulas : null,
+            ),
+          ],
+        ),
+      );
+    }
     final products = config.products;
     final show = config.showEstimates;
     final sealed =
@@ -883,6 +986,125 @@ abstract final class ProposalFinanceFormulaBoardKeys {
     kProposalCostCategoryTax => 'taxCost',
     _ => categoryKey,
   };
+}
+
+/// 业务成本：整份提案多选，选项和收入、项目成本的计算公式是同一套。
+class _ProposalBusinessFormulas extends StatelessWidget {
+  const _ProposalBusinessFormulas({
+    required this.formulas,
+    required this.lines,
+    required this.selectedCodes,
+    required this.editable,
+    required this.showEstimates,
+    required this.waitingText,
+    this.onChanged,
+  });
+
+  final List<ProposalFinanceFormula> formulas;
+  final List<ProposalFinanceLine> lines;
+  final List<String> selectedCodes;
+  final bool editable;
+  final bool showEstimates;
+  final String waitingText;
+  final ValueChanged<List<String>>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final chosen = selectedCodes.toSet();
+    final remaining = [
+      for (final formula in formulas)
+        if (!chosen.contains(formula.code)) formula,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            editable
+                ? '整份提案选一次，不跟产品走。可多选。'
+                : lines.isEmpty
+                ? waitingText
+                : '整份提案统一测算，不跟产品走。',
+            style: _sans(context, size: 12, color: _K.grey),
+          ),
+        ),
+        if (lines.isEmpty && editable)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '尚未选择',
+              style: _sans(context, size: 12, color: _K.grey),
+            ),
+          ),
+        for (final line in lines)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    line.formula?.name ?? line.name,
+                    style: _sans(context, size: 12.5, weight: FontWeight.w600),
+                  ),
+                ),
+                if (showEstimates)
+                  Text(
+                    '${_wan(line.amount)} 万',
+                    style: _mono(context, size: 12),
+                  ),
+                if (onChanged != null && line.formula != null)
+                  IconButton(
+                    tooltip: '移除',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                    onPressed: () => onChanged!([
+                      for (final code in selectedCodes)
+                        if (code != line.formula!.code) code,
+                    ]),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: _c(context, _K.grey),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        if (onChanged != null && remaining.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: ProposalSelectField<String>(
+              value: null,
+              title: '业务成本计算公式',
+              hint: '选择计算公式，可多选',
+              searchable: true,
+              options: [
+                for (final formula in remaining)
+                  ProposalSelectOption(
+                    value: formula.code,
+                    label: formula.name,
+                    meta: [
+                      '编码 ${formula.code}',
+                      if (formula.settleMethodName.isNotEmpty)
+                        formula.settleMethodName,
+                      if (formula.expression.isNotEmpty) formula.expression,
+                    ].join(' · '),
+                  ),
+              ],
+              onSelected: (code) {
+                if (code == null || chosen.contains(code)) return;
+                onChanged!([...selectedCodes, code]);
+              },
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _CategoryDetail extends StatelessWidget {
@@ -1472,7 +1694,7 @@ class _CostLine extends StatelessWidget {
                   : formula.expression,
               substitution: line.substitution,
             ),
-          if (item.tiered)
+          if (item.tiered && !line.locked)
             _PromotionPlansEditor(
               plans: promotionPlans,
               monthlyScale: showEstimates ? line.promotionMonthlyScale : null,
@@ -1494,9 +1716,13 @@ class ProposalPromotionPlanField extends StatelessWidget {
     this.monthlyScale,
     this.amountText = '',
     this.onChanged,
+    this.costName = '推广费',
+    this.promoterOptions = const [],
   });
 
   final List<ProposalPromotionTierPlan> plans;
+  final String costName;
+  final List<String> promoterOptions;
   final double? monthlyScale;
   final String amountText;
   final ValueChanged<List<ProposalPromotionTierPlan>>? onChanged;
@@ -1514,10 +1740,12 @@ class ProposalPromotionPlanField extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
             children: [
               Text(
-                '项目成本（应付）.推广费阶梯',
+                '项目成本（应付）.$costName阶梯',
                 style: _sans(
                   context,
                   size: 12.5,
@@ -1527,20 +1755,19 @@ class ProposalPromotionPlanField extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               ProposalFinanceTag(active ? '按阶梯算' : '按应付比例算'),
-              const Spacer(),
               if (amountText.isNotEmpty)
                 Text(amountText, style: _mono(context, size: 12.5)),
             ],
           ),
           const SizedBox(height: 4),
           Text(
-            active
-                ? '推广费按下面的阶梯算，上面「推广费」应付行的比例不再使用。'
-                : '不配置就按上面「推广费」应付行的比例算；按月规模分档、或不同月份比例不同时在这里配置。',
+            active ? '按以下年阶梯或连续月份规则计算。' : '请配置年阶梯或连续月份规则。',
             style: _sans(context, size: 11.5, color: _K.text2),
           ),
           _PromotionPlansEditor(
             plans: plans,
+            promoterOptions: promoterOptions,
+            showPromoter: costName == '推广费',
             monthlyScale: monthlyScale,
             onChanged: onChanged,
           ),
@@ -1556,9 +1783,13 @@ class _PromotionPlansEditor extends StatelessWidget {
     required this.plans,
     this.monthlyScale,
     this.onChanged,
+    this.promoterOptions = const [],
+    this.showPromoter = true,
   });
 
   final List<ProposalPromotionTierPlan> plans;
+  final List<String> promoterOptions;
+  final bool showPromoter;
   final double? monthlyScale;
   final ValueChanged<List<ProposalPromotionTierPlan>>? onChanged;
 
@@ -1582,6 +1813,8 @@ class _PromotionPlansEditor extends StatelessWidget {
           _PromotionPlanEditor(
             key: ValueKey('promotion-plan-${plan.id}'),
             plan: plan,
+            promoterOptions: promoterOptions,
+            showPromoter: showPromoter,
             monthlyScale: monthlyScale,
             onChanged: editable ? (next) => onChanged?.call([next]) : null,
             onRemove: editable ? () => onChanged?.call(const []) : null,
@@ -1599,7 +1832,7 @@ class _PromotionPlansEditor extends StatelessWidget {
                   ),
                 ]),
                 icon: const Icon(Icons.add_rounded, size: 16),
-                label: const Text('配置推广商'),
+                label: Text(showPromoter ? '配置推广商' : '配置阶梯规则'),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   foregroundColor: _c(context, ProposalPalette.purpleDeep),
@@ -1710,9 +1943,13 @@ class _PromotionPlanEditor extends StatelessWidget {
     this.monthlyScale,
     this.onChanged,
     this.onRemove,
+    this.promoterOptions = const [],
+    this.showPromoter = true,
   });
 
   final ProposalPromotionTierPlan plan;
+  final List<String> promoterOptions;
+  final bool showPromoter;
   final double? monthlyScale;
   final ValueChanged<ProposalPromotionTierPlan>? onChanged;
   final VoidCallback? onRemove;
@@ -1754,54 +1991,65 @@ class _PromotionPlanEditor extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 40,
-                child: Text(
-                  '推广商',
-                  style: _sans(context, size: 11, color: _K.grey),
+          if (showPromoter)
+            Row(
+              children: [
+                SizedBox(
+                  width: 40,
+                  child: Text(
+                    '推广商',
+                    style: _sans(context, size: 11, color: _K.grey),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: editable
-                    ? SizedBox(
-                        height: 32,
-                        child: TextFormField(
-                          key: ValueKey('promotion-promoter-$id'),
-                          initialValue: plan.promoter,
+                Expanded(
+                  child: editable
+                      ? DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            'promotion-promoter-$id-${plan.promoter}',
+                          ),
+                          initialValue: plan.promoter.isEmpty
+                              ? null
+                              : plan.promoter,
+                          isExpanded: true,
+                          decoration: proposalInputDecoration(
+                            context: context,
+                            hint: '选择采购合同中的推广商',
+                          ),
+                          items: [
+                            for (final name in {
+                              ...promoterOptions,
+                              if (plan.promoter.isNotEmpty) plan.promoter,
+                            })
+                              DropdownMenuItem(
+                                value: name,
+                                child: Text(
+                                  name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                          onChanged: (name) => onChanged?.call(
+                            plan.copyWith(promoter: name ?? ''),
+                          ),
+                        )
+                      : Text(
+                          plan.label,
                           style: _sans(
                             context,
                             size: 12.5,
                             weight: FontWeight.w700,
                           ),
-                          decoration: proposalInputDecoration(
-                            context: context,
-                            hint: '填写推广商名称',
-                          ),
-                          onChanged: (text) => onChanged?.call(
-                            plan.copyWith(promoter: text.trim()),
-                          ),
                         ),
-                      )
-                    : Text(
-                        plan.label,
-                        style: _sans(
-                          context,
-                          size: 12.5,
-                          weight: FontWeight.w700,
-                        ),
-                      ),
-              ),
-              if (onRemove != null)
-                _promotionRemoveButton(
-                  context,
-                  tooltip: '删除这个推广商方案',
-                  icon: Icons.delete_outline_rounded,
-                  onPressed: onRemove!,
                 ),
-            ],
-          ),
+                if (onRemove != null)
+                  _promotionRemoveButton(
+                    context,
+                    tooltip: '删除这个推广商方案',
+                    icon: Icons.delete_outline_rounded,
+                    onPressed: onRemove!,
+                  ),
+              ],
+            ),
           const SizedBox(height: 6),
           _promotionChoices(
             context,

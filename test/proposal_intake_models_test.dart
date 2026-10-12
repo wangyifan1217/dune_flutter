@@ -2017,7 +2017,7 @@ void main() {
       row: row,
     );
     expect(items.map((item) => item.line).toList(), [
-      '财务部负责人二 李财务 · 请填写财务技术接口和项目成本',
+      '财务部负责人二 李财务 · 请填写财务技术接口',
     ]);
     expect(proposalIntakeNotifiedToast(items), '已通知：李财务（财务部负责人二）');
     final write = ProposalIntakeWriteResult.fromJson({
@@ -2093,14 +2093,14 @@ void main() {
     final items = proposalIntakeRemindRecipients(row: row);
     expect(items.map((item) => item.line).toList(), [
       '提交人 朱子姝 · 请财务填完后提交复核',
-      '财务部负责人二 李财务 · 请填写财务技术接口和项目成本',
+      '财务部负责人二 李财务 · 请填写财务技术接口',
     ]);
     expect(
       proposalIntakeNotifyRecipients(
         action: 'notify_tech',
         row: row,
       ).map((item) => item.task).toList(),
-      ['请填写财务技术接口和项目成本'],
+      ['请填写财务技术接口'],
     );
   });
 
@@ -4526,9 +4526,9 @@ void main() {
     expect(empty, isNot(contains('请填写子标题')));
     expect(empty, contains('请选择产品（标签一）'));
     expect(empty, isNot(contains('请选择子分类')));
-    expect(empty, contains('请选择供给（标签二）'));
+    expect(empty, contains('请选择标签二二级'));
     expect(empty, contains('请选择标签二一级'));
-    expect(empty, isNot(contains('请选择标签二二级')));
+    expect(empty, isNot(contains('请选择供给（标签二）')));
     expect(empty, contains('请选择标签三一级'));
     expect(empty, isNot(contains('请选择渠道（标签三）')));
     expect(empty, contains('请填写盈利计算说明'));
@@ -4656,7 +4656,7 @@ void main() {
     expect(_progressById(steps, 'initiate').statusText, '填写中');
     expect(
       _progressById(steps, 'initiate').action,
-      '填写市场、科技与产品 · 点右上角「通知财务填写」',
+      '填写市场、科技、产品与结算 · 点右上角「通知财务填写」',
     );
     expect(
       _progressById(steps, 'initiate').time,
@@ -4852,7 +4852,7 @@ void main() {
     expect(proposalIntakePendingReviewLabels(row), ['待石淼复核', '待邓艳丽复核']);
     expect(
       proposalIntakeProgressHeadline(steps),
-      '当前应由 市场部负责人一 石淼 · 到市场部底部点「整个板块复核通过」、当前应由 财务部负责人一 邓艳丽 · 到财务部底部点「整个板块复核通过」',
+      '当前应由 市场部负责人一 石淼 · 到市场部底部点「整个板块复核通过」、当前应由 财务部负责人一 邓艳丽 · 在成本里选好业务成本公式，再到财务部底部点「整个板块复核通过」',
     );
   });
 
@@ -5031,7 +5031,7 @@ void main() {
     final steps = proposalIntakeProgressSteps(row: row);
     expect(
       proposalIntakeProgressHeadline(steps),
-      '当前应由 填写人 朱子姝 · 补全科技与产品、当前应由 财务部负责人二 胡珏 · 填写财务技术接口和项目成本、当前应由 填写人 朱子姝 · 财务填完后，点右上角「确认并提交复核」',
+      '当前应由 填写人 朱子姝 · 补全科技与产品、当前应由 财务部负责人二 胡珏 · 填写财务技术接口、当前应由 填写人 朱子姝 · 财务技术接口填完后，点右上角「确认并提交复核」',
     );
   });
 

@@ -286,7 +286,7 @@ void main() {
     await tester.pumpWidget(_harness(1440));
     await tester.pump();
 
-    expect(find.text('供给（标签二）'), findsOneWidget);
+    expect(find.text('标签二二级'), findsOneWidget);
     expect(find.text('头部媒体供给'), findsNothing);
     await tester.tap(find.text('展开'));
     await tester.pumpAndSettle();
@@ -294,7 +294,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('标签二一级 sits beside 供给 and 标签二二级', (tester) async {
+  testWidgets('标签二一级 sits beside 标签二二级', (tester) async {
     tester.view.physicalSize = const Size(1440, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -305,12 +305,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final l1 = tester.getTopLeft(find.text('标签二一级'));
-    final supply = tester.getTopLeft(find.text('供给（标签二）'));
     final l2 = tester.getTopLeft(find.text('标签二二级'));
-    expect(l1.dy, closeTo(supply.dy, 12));
-    expect(supply.dy, closeTo(l2.dy, 12));
-    expect(l1.dx, lessThan(supply.dx));
-    expect(supply.dx, lessThan(l2.dx));
+    expect(l1.dy, closeTo(l2.dy, 12));
+    expect(l1.dx, lessThan(l2.dx));
+    expect(find.text('供给（标签二）'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -683,7 +681,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '供给（标签二）');
+    await _scrollUntil(tester, '标签二二级');
 
     expect(find.text('头部媒体供给'), findsWidgets);
     expect(find.text('中长尾流量供给'), findsNothing);
@@ -708,10 +706,16 @@ void main() {
 
     await tester.pumpWidget(_harness(1440));
     await tester.pump();
-    await _scrollUntil(tester, '供给（标签二）');
+    await tester.tap(find.text('展开 ▾'));
+    await tester.pumpAndSettle();
+    await _scrollUntil(tester, '标签二二级');
+    await tester.tap(
+      find.descendant(of: _fieldOf('标签二二级'), matching: find.text('展开')).first,
+    );
+    await tester.pumpAndSettle();
 
     final pillsFinder = find.descendant(
-      of: _fieldOf('供给（标签二）'),
+      of: _fieldOf('标签二二级'),
       matching: find.byType(ProposalPills),
     );
     expect(tester.widget<ProposalPills>(pillsFinder).single, isFalse);
@@ -749,7 +753,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '供给（标签二）');
+    await _scrollUntil(tester, '标签二二级');
 
     expect(find.text('已完成提案名称'), findsWidgets);
     expect(
@@ -3114,6 +3118,10 @@ void main() {
       find.descendant(of: dialog, matching: find.text('成本一')),
       findsOneWidget,
     );
+    expect(
+      find.descendant(of: dialog, matching: find.text('结算单价')),
+      findsOneWidget,
+    );
     await _tapVisible(
       tester,
       find.descendant(of: dialog, matching: find.text('按阶梯')),
@@ -3258,11 +3266,9 @@ void main() {
     );
     expect(ratio.enabled, isTrue);
     expect(find.text('填写后将清空结算单价'), findsOneWidget);
-    expect(find.text('按单价'), findsWidgets);
-    expect(find.text('按阶梯'), findsWidgets);
-    await _tapVisible(tester, find.text('按阶梯').first);
-    expect(find.text('阶梯规则'), findsWidgets);
-    expect(find.text('起点（万元）'), findsWidgets);
+    expect(find.text('结算单价'), findsWidgets);
+    expect(find.text('按单价'), findsNothing);
+    expect(find.text('按阶梯'), findsNothing);
   });
 
   test('product settle ratio formatter rejects percent sign', () {
@@ -4186,7 +4192,7 @@ void main() {
 
     final product = tester.getSize(_fieldOf('产品（标签一）').first);
     final project = tester.getSize(_fieldOf('项目名称（标签一二级）').first);
-    final supply = tester.getSize(_fieldOf('供给（标签二）').first);
+    final supply = tester.getSize(_fieldOf('标签二二级').first);
     expect(product.width, closeTo(project.width, 1));
     expect(product.width, closeTo(supply.width, 1));
     expect(product.width, greaterThan(300));

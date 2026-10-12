@@ -22,6 +22,7 @@ class CatalogRef {
   });
 
   final int? id;
+
   /// 资管雪花 id 原文字符串，避免 Flutter web 把 19 位 id 截断。
   final String idText;
   final String code;
@@ -66,8 +67,7 @@ class CatalogRef {
   }
 
   /// 业务平台积分/返费 code 相同，必须连 name 才能区分。
-  String get identity =>
-      '${resolvedIdText}|${code.trim()}|${name.trim()}';
+  String get identity => '${resolvedIdText}|${code.trim()}|${name.trim()}';
 
   CatalogRef copyWith({
     int? id,
@@ -99,12 +99,14 @@ class CatalogRef {
 
   Map<String, dynamic> toJson() {
     final out = <String, dynamic>{
-      if (_jsonId(resolvedIdText, id) != null) 'id': _jsonId(resolvedIdText, id),
+      if (_jsonId(resolvedIdText, id) != null)
+        'id': _jsonId(resolvedIdText, id),
       if (code.trim().isNotEmpty) 'code': code.trim(),
       if (name.trim().isNotEmpty) 'name': name.trim(),
       if (formulaExpression.trim().isNotEmpty)
         'formulaExpression': formulaExpression.trim(),
-      if (productSource.trim().isNotEmpty) 'productSource': productSource.trim(),
+      if (productSource.trim().isNotEmpty)
+        'productSource': productSource.trim(),
       if (settleMethod.trim().isNotEmpty) 'settleMethod': settleMethod.trim(),
       if (parentCode.trim().isNotEmpty) 'parentCode': parentCode.trim(),
       if (_jsonId(resolvedParentIdText, parentId) != null)
@@ -345,6 +347,7 @@ class ChannelProductHit {
   });
 
   final int? id;
+
   /// 资管雪花 id 原文，避免 web 把 19 位 id 截断。
   final String idText;
   final String productCode;
@@ -370,9 +373,7 @@ class ChannelProductHit {
   }
 
   bool get isEmpty =>
-      !hasId &&
-      productCode.trim().isEmpty &&
-      productName.trim().isEmpty;
+      !hasId && productCode.trim().isEmpty && productName.trim().isEmpty;
 
   bool get isNotEmpty => !isEmpty;
 
@@ -384,11 +385,8 @@ class ChannelProductHit {
   String get identity =>
       '${resolvedIdText}|${productCode.trim()}|${productName.trim()}';
 
-  CatalogRef get productRef => CatalogRef(
-    id: id,
-    code: productCode,
-    name: productName,
-  );
+  CatalogRef get productRef =>
+      CatalogRef(id: id, code: productCode, name: productName);
 
   CatalogRef? get channelRef {
     if ((channelId == null || channelId == 0) && channelName.trim().isEmpty) {
@@ -406,7 +404,9 @@ class ChannelProductHit {
     return CatalogRef(
       id: supplierId,
       code: supplierCode.trim(),
-      name: supplierName.trim().isEmpty ? supplierCode.trim() : supplierName.trim(),
+      name: supplierName.trim().isEmpty
+          ? supplierCode.trim()
+          : supplierName.trim(),
     );
   }
 
@@ -492,10 +492,7 @@ String catalogDateText(Object? value) {
   return text;
 }
 
-CatalogRef? catalogMatchByCode(
-  CatalogRef? current,
-  List<CatalogRef> options,
-) {
+CatalogRef? catalogMatchByCode(CatalogRef? current, List<CatalogRef> options) {
   if (current == null || current.isEmpty) return null;
   final code = current.code.trim();
   if (code.isNotEmpty) {
@@ -702,10 +699,8 @@ class ChannelProductPacketItem {
     return itemSyncSource.trim();
   }
 
-  ChannelProductSettlement get asSettlement => ChannelProductSettlement(
-    product: product,
-    items: settlementItems,
-  );
+  ChannelProductSettlement get asSettlement =>
+      ChannelProductSettlement(product: product, items: settlementItems);
 
   ChannelProductPacketItem copyWith({
     ChannelProductHit? product,
@@ -725,9 +720,12 @@ class ChannelProductPacketItem {
     if (raw is! Map) return const ChannelProductPacketItem();
     final map = Map<String, dynamic>.from(raw);
     final nestedProduct = map['product'];
-    final productJson = Map<String, dynamic>.from(
-      nestedProduct is Map ? nestedProduct : map,
-    )..['id'] = map['itemProductId'] ?? map['id'] ?? (nestedProduct is Map ? nestedProduct['id'] : null);
+    final productJson =
+        Map<String, dynamic>.from(nestedProduct is Map ? nestedProduct : map)
+          ..['id'] =
+              map['itemProductId'] ??
+              map['id'] ??
+              (nestedProduct is Map ? nestedProduct['id'] : null);
     final itemsRaw =
         map['settlementItems'] ??
         map['settlements'] ??
@@ -784,8 +782,10 @@ class SettlementCatalogService {
     String? assetBase,
   }) : _ownsClient = client == null,
        _client = client ?? http.Client(),
-       _assetBase = (assetBase ?? kProposalImportTemplateAssetBase)
-           .replaceAll(RegExp(r'/$'), '');
+       _assetBase = (assetBase ?? kProposalImportTemplateAssetBase).replaceAll(
+         RegExp(r'/$'),
+         '',
+       );
 
   factory SettlementCatalogService.offline() =>
       SettlementCatalogService(enabled: false);
@@ -867,7 +867,22 @@ class SettlementCatalogService {
     );
   }
 
-  /// 资管供应商一级（标签二一级）：出行、能源。
+  /// 推广商名称。文档上的 `/promoter-name` 生产尚未发布（404），
+  /// 空结果时改查供应商接口 `entityKind=PROMOTER`，按名称去重。
+  Future<List<String>> fetchPromoterNames() async {
+    final named = _distinctCatalogNames(
+      await _getList('/out/shaqiu/catalog/promoter-name'),
+    );
+    if (named.isNotEmpty) return named;
+    return _distinctCatalogNames(
+      await _getList(
+        '/out/shaqiu/catalog/supplier',
+        query: const {'entityKind': 'PROMOTER'},
+      ),
+    );
+  }
+
+  /// 资管供应商一级分类。
   Future<List<CatalogRef>> fetchSupplierCategoryL1() async {
     return _mapList(
       '/out/shaqiu/catalog/supplier-category/l1',
@@ -898,9 +913,7 @@ class SettlementCatalogService {
     return _mapList(
       '/out/shaqiu/catalog/project',
       CatalogRef.fromJson,
-      query: {
-        if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
-      },
+      query: {if (keyword.trim().isNotEmpty) 'keyword': keyword.trim()},
     );
   }
 
@@ -1012,7 +1025,9 @@ class SettlementCatalogService {
     return '';
   }
 
-  Future<ChannelProductSettlement?> fetchSupplierProductSettlement(int id) async {
+  Future<ChannelProductSettlement?> fetchSupplierProductSettlement(
+    int id,
+  ) async {
     if (id <= 0) return null;
     final data = await _getMap(
       '/out/shaqiu/catalog/supplier-product/settlement',
@@ -1093,6 +1108,19 @@ class SettlementCatalogService {
     ].where((item) => item.isNotEmpty).toList(growable: false);
   }
 
+  List<String> _distinctCatalogNames(List<dynamic> rows) {
+    final names = <String>{};
+    for (final row in rows) {
+      final name = switch (row) {
+        final String text => text.trim(),
+        final Map map => CatalogRef.fromJson(map).name.trim(),
+        _ => '',
+      };
+      if (name.isNotEmpty) names.add(name);
+    }
+    return names.toList()..sort();
+  }
+
   Future<List<dynamic>> _getList(
     String path, {
     Map<String, String>? query,
@@ -1111,10 +1139,7 @@ class SettlementCatalogService {
     return null;
   }
 
-  Future<Object?> _getData(
-    String path, {
-    Map<String, String>? query,
-  }) async {
+  Future<Object?> _getData(String path, {Map<String, String>? query}) async {
     if (!enabled) return null;
     try {
       final uri = Uri.parse(
@@ -1154,15 +1179,7 @@ const kProposalInvoiceTypes = <String>[
 bool proposalInvoiceDeductible(String invoiceType) =>
     invoiceType.contains('专用');
 
-const kProposalTaxRates = <String>[
-  '0%',
-  '1%',
-  '3%',
-  '5%',
-  '6%',
-  '9%',
-  '13%',
-];
+const kProposalTaxRates = <String>['0%', '1%', '3%', '5%', '6%', '9%', '13%'];
 
 /// 财务板块默认结算模式；后台「提案录入选项」未配置时使用。
 const kProposalPreSettleModes = <String>['预付款', '分期', '按月对账'];
@@ -1175,4 +1192,3 @@ const kProposalPreSettleCycles = <String>[
   '折扣应付已扣',
   '超长专辑抵扣',
 ];
-

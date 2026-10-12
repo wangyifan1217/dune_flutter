@@ -188,20 +188,15 @@ void main() {
       expect(line.missing, isNotEmpty, reason: '按 0 计了却没有缺项提示');
     });
 
-    test('业务成本：同时选渠道侧N、渠道侧H，不应各按全额基数叠加', () {
-      final one = _eval(mockProposal(business: ['渠道侧N']));
-      final two = _eval(mockProposal(business: ['渠道侧N', '渠道侧H']));
-      final b1 = one.total(kProposalCostCategoryBusiness);
-      final b2 = two.total(kProposalCostCategoryBusiness);
-      // ignore: avoid_print
-      print('业务成本 选1项 $b1 万；选2项 $b2 万');
-      expect(b2, lessThan(b1 * 2 - 0.01), reason: '每项都按 (收入−项目成本) 全额乘比例，选几项就翻几倍');
-    });
-
-    test('业务成本：渠道侧U / 供给侧U 默认 45%', () {
-      final eval = _eval(mockProposal(business: ['渠道侧U']));
-      final line = eval.buckets[kProposalCostCategoryBusiness]!.lines.single;
-      expect(line.formula?.code, 'BIZ_NET_45');
+    test('业务成本不跟着产品项走，按提案所选公式各算一次', () {
+      final followed = _eval(mockProposal(business: ['渠道侧N', '渠道侧H']));
+      expect(followed.total(kProposalCostCategoryBusiness), 0);
+      final selected = _eval(
+        mockProposal()..['businessFormulaCodes'] = ['8'],
+      );
+      final line = selected.buckets[kProposalCostCategoryBusiness]!.lines.single;
+      expect(line.formula?.code, '8');
+      expect(line.name, '核销实际支付金额*结算比例');
     });
 
     test('税务成本：增值税要用到销售结算税率；没填税率要标缺项', () {

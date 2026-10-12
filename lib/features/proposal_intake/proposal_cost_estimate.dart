@@ -1107,6 +1107,12 @@ double proposalPayableCostLineAmount(
   ProposalFinanceSettleTerms terms,
   List<String> skuIds,
 ) {
+  if (terms.settleByTier) {
+    final scale = proposalAssociatedSalesScale(form, skuIds);
+    return proposalSettleTierPlans(
+      terms,
+    ).fold<double>(0, (sum, plan) => sum + plan.evaluate(scale).amount);
+  }
   final share = _projectCostSettleShare(form, terms, skuIds);
   if (share <= 0) return 0;
   final scale = proposalAssociatedSalesScale(form, skuIds);
@@ -1559,6 +1565,71 @@ Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
     owner: kProposalProductFinanceChildren,
     finance: childFinance,
   );
+  final all = proposalAggregateProductFinance(
+    salesScale: proposalEffectiveSalesScale(form),
+    products: [
+      ...proposalEvaluateFinance(
+        proposalIntakeIsolatedFinanceScope(
+          next,
+          owner: kProposalProductFinanceMain,
+        ),
+        catalog: formulaCatalog,
+        costCatalog: costCatalog,
+        costNames: costNames,
+      ).products,
+      ...proposalEvaluateFinance(
+        childScope,
+        catalog: formulaCatalog,
+        costCatalog: costCatalog,
+        costNames: costNames,
+        owner: kProposalProductFinanceChildren,
+      ).products,
+    ],
+    catalog: formulaCatalog,
+    proposalForm: form,
+  );
+  final tax = all.bucket(kProposalCostCategoryTax);
+  if (tax != null) {
+    final main = proposalIntakeProductFinance(
+      next,
+      owner: kProposalProductFinanceMain,
+    );
+    main['taxCostItems'] = tax.names;
+    main['taxCostItemFormulas'] = {
+      for (final line in tax.lines)
+        if (line.formula != null) line.name: line.formula!.code,
+    };
+    main['taxCostItemAmounts'] = {
+      for (final line in tax.lines) line.name: line.amount,
+    };
+    main['taxCost'] = tax.total;
+    if (form['businessCostRedacted'] != true) {
+      main['profit'] = all.profit;
+      main['margin'] = all.margin ?? 0;
+    }
+    next = proposalIntakeWriteProductFinance(
+      next,
+      owner: kProposalProductFinanceMain,
+      finance: main,
+    );
+    final child = proposalIntakeProductFinance(
+      next,
+      owner: kProposalProductFinanceChildren,
+    );
+    for (final key in [
+      'taxCostItems',
+      'taxCostItemFormulas',
+      'taxCostItemAmounts',
+      'taxCost',
+    ]) {
+      child.remove(key);
+    }
+    next = proposalIntakeWriteProductFinance(
+      next,
+      owner: kProposalProductFinanceChildren,
+      finance: child,
+    );
+  }
   return next;
 }
 

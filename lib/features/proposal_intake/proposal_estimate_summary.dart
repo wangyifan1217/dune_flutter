@@ -719,7 +719,7 @@ class ProposalFlowCard extends StatelessWidget {
   /// 线上的节点分组：同一组里任一人卡住，节点就是「卡」。
   static const _groups = <(String, String, List<String>)>[
     ('initiate', '发起', ['initiate']),
-    ('fill', '科技 / 财务填写', ['fill_tech', 'fill_finance_interface']),
+    ('fill', '科技 / 财务接口', ['fill_tech', 'fill_finance_interface']),
     ('start', '提交复核', ['start_review']),
     (
       'review',
@@ -739,7 +739,7 @@ class ProposalFlowCard extends StatelessWidget {
   static const _reviewLabels = {
     'review_market': '市场部',
     'review_tech': '科技部',
-    'review_contract': '合同 · 财务逐条',
+    'review_contract': '结算 / 合同',
     'review_finance_module': '财务整板块',
   };
 

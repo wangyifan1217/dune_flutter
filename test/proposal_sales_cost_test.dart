@@ -86,13 +86,78 @@ Future<void> panel(
 }
 
 void main() {
+  test('all project cost types evaluate the shared tier rules and round trip', () {
+    final plan = ProposalPromotionTierPlan(id: 'p1', strategy: kProposalPromotionStrategyMonthSeq, segments: const [
+      ProposalPromotionSegment(fromMonth: 1, toMonth: 3, type: 'fixed', rate: .1),
+      ProposalPromotionSegment(fromMonth: 4, type: 'fixed', rate: .2),
+    ]);
+    final terms = ProposalFinanceSettleTerms(billType: '平台服务费', priceMode: kProposalSettlePriceModeTier, settleRatio: '.99', tierPlans: [plan]);
+    final restored = ProposalFinanceSettleTerms.fromJson(terms.toJson());
+    expect(restored.fingerprint, terms.fingerprint);
+    final form = sample();
+    final sku = Map<String, dynamic>.from((form['skuDetails'] as List).single);
+    sku['settlements'] = [
+      (sku['settlements'] as List).first,
+      {...restored.toJson(), 'id': 'tier', 'kind': 'cost'},
+    ];
+    form['skuDetails'] = [sku];
+    final evaluation = proposalEvaluateFinance(form);
+    expect(evaluation.total('project'), closeTo(175, .01));
+    expect(proposalEstimateProjectCostAmount(form, '平台服务费'), closeTo(175, .01));
+    expect(evaluation.bucket('project')!.lines.single.formula!.name, contains('阶梯'));
+  });
+  test('business formulas are chosen once for the proposal, not per product', () {
+    final followed = proposalEvaluateFinance(sample());
+    expect(followed.bucket('business')!.names, isEmpty);
+    final selected = proposalEvaluateFinance({
+      ...sample(),
+      'businessFormulaCodes': ['8', '3'],
+    });
+    final lines = selected.bucket('business')!.lines;
+    expect(lines.map((line) => line.formula?.code), ['8', '3']);
+    expect(lines.map((line) => line.name), isNot(contains('渠道侧N')));
+    expect(selected.total('business'), closeTo(lines[0].amount + lines[1].amount, 0.01));
+  });
+  test('proposal tax overrides old product selections and is assessed once', () {
+    final form = sample();
+    final first = Map<String, dynamic>.from((form['skuDetails'] as List).single);
+    form['skuDetails'] = [first, {...first, 'id': 'main-2', 'productName': '主产品B'}];
+    final tax = ProposalFinanceFormulaCatalog.fallback.category('tax')!;
+    final selected = proposalFinanceWriteSelection(form, tax, ['印花税']);
+    final evaluation = proposalEvaluateFinance(selected);
+    expect(evaluation.bucket('tax')!.names, ['印花税']);
+    expect(evaluation.total('tax'), closeTo(1, .01));
+    final keys = proposalIntakeFinanceReviewKeys(selected);
+    expect(keys, contains('taxCost'));
+    expect(keys, isNot(contains('sku:main-1:taxCost')));
+    expect(keys, isNot(contains('sku:main-2:taxCost')));
+  });
+  testWidgets('generic tier editor fits a phone and promotion selects contract names', (tester) async {
+    tester.view.physicalSize = const Size(390, 1500);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final plans = [const ProposalPromotionTierPlan(id: 'p1', segments: ProposalPromotionTierPlan.monthSeqSegments)];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(child: ProposalPromotionPlanField(costName: '平台服务费', plans: plans, onChanged: (_) {})))));
+    await tester.pumpAndSettle();
+    expect(find.text('年阶梯'), findsOneWidget);
+    expect(find.text('连续月序配置'), findsOneWidget);
+    expect(find.text('推广商'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(child: ProposalPromotionPlanField(plans: plans, promoterOptions: const ['A推广', '新增B推广'], onChanged: (_) {})))));
+    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('新增B推广'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
   test('procurement never enters sales cost, business basis or profit', () {
     final form = sample();
     final eval = proposalEvaluateFinance(form);
     expect(eval.procurement.amount, 0);
     expect(eval.procurement.missing, isEmpty);
     expect(eval.total('project'), 2);
-    expect(eval.total('business'), closeTo((900 - 2) * (.1 + .45), .011));
+    expect(eval.total('business'), 0);
     expect(
       eval.profit,
       closeTo(
@@ -112,21 +177,13 @@ void main() {
     'tax deselection stays empty and tax formulas can be selected together',
     () {
       final tax = ProposalFinanceFormulaCatalog.fallback.category('tax')!;
-      final form = proposalFinanceWriteProductEntry(
-        sample(),
-        'main-1',
-        (entry) => proposalFinanceWriteSelection(entry, tax, []),
-      );
+      final form = proposalFinanceWriteSelection(sample(), tax, []);
       expect(proposalEvaluateFinance(form).total('tax'), 0);
-      final selected = proposalFinanceWriteProductEntry(
-        form,
-        'main-1',
-        (entry) => proposalFinanceWriteSelection(entry, tax, ['印花税', '所得税']),
-      );
+      final selected = proposalFinanceWriteSelection(form, tax, ['印花税', '所得税']);
       expect(
         proposalEvaluateFinance(
           selected,
-        ).products.single.evaluation.bucket('tax')!.lines.map((l) => l.name),
+        ).bucket('tax')!.lines.map((l) => l.name),
         containsAll(['印花税', '所得税']),
       );
     },
@@ -296,8 +353,15 @@ void main() {
             of: find.byKey(const ValueKey('market-cost-result')),
             matching: find.text('业务成本'),
           ),
-          findsNothing,
+          findsOneWidget,
         );
+        expect(
+          find.textContaining('财务复核时由财务部负责人一选择公式'),
+          findsWidgets,
+        );
+        expect(find.text('待选择'), findsOneWidget);
+        expect(find.text('经营与周转'), findsNothing);
+        expect(find.text('经营成本'), findsNothing);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },

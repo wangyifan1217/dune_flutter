@@ -516,7 +516,8 @@ double xfPickerSuggestionMaxHeight(BuildContext context) {
   return (screen - keyboard - 200).clamp(128.0, 220.0);
 }
 
-/// 审批下拉建议列表：整行可点、长文案换行，按下即选中以免失焦收起。
+/// 审批下拉建议列表：整行可点、长文案换行。
+/// 点一下才选中，滑动只滚动；按下就选中的话，手机上无法下滑看更多选项。
 class XfPickerSuggestionList extends StatefulWidget {
   const XfPickerSuggestionList({
     super.key,
@@ -555,6 +556,7 @@ class _XfPickerSuggestionListState extends State<XfPickerSuggestionList> {
   @override
   Widget build(BuildContext context) {
     final maxHeight = widget.maxHeight ?? xfPickerSuggestionMaxHeight(context);
+    final overflowing = widget.itemCount * 49 > maxHeight;
     return TextFieldTapRegion(
       child: Material(
         color: DunesColors.resolve(
@@ -564,6 +566,7 @@ class _XfPickerSuggestionListState extends State<XfPickerSuggestionList> {
         ),
         borderRadius: BorderRadius.circular(8),
         child: Container(
+          height: overflowing ? maxHeight : null,
           constraints: BoxConstraints(maxHeight: maxHeight),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
@@ -577,7 +580,11 @@ class _XfPickerSuggestionListState extends State<XfPickerSuggestionList> {
           ),
           child: ListView.separated(
             padding: EdgeInsets.zero,
-            shrinkWrap: true,
+            primary: false,
+            shrinkWrap: !overflowing,
+            physics: overflowing
+                ? const ClampingScrollPhysics()
+                : const NeverScrollableScrollPhysics(),
             itemCount: widget.itemCount,
             separatorBuilder: (_, _) => Divider(
               height: 1,
@@ -600,30 +607,26 @@ class _XfPickerSuggestionListState extends State<XfPickerSuggestionList> {
                     : Colors.transparent,
                 child: InkWell(
                   onTap: () => widget.onSelect(index),
-                  child: Listener(
-                    behavior: HitTestBehavior.opaque,
-                    onPointerDown: (_) => widget.onSelect(index),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            label.isEmpty ? '（无标题）' : label,
-                            softWrap: true,
-                            style: DunesTypography.sans(
-                              fontSize: 13,
-                              height: 1.4,
-                              fontWeight: selected
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: DunesColors.resolve(
-                                context,
-                                DunesColors.text,
-                              ),
-                              context: context,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          label.isEmpty ? '（无标题）' : label,
+                          softWrap: true,
+                          style: DunesTypography.sans(
+                            fontSize: 13,
+                            height: 1.4,
+                            fontWeight: selected
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
                             ),
+                            context: context,
                           ),
                         ),
                       ),

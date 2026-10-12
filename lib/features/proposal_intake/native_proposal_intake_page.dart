@@ -20084,8 +20084,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
               ] else ...[
                 const SizedBox(height: 8),
+                // 比例框本身不再套标题（上面已有「结算比例」）。单价标题在自己的框上方，
+                // 两框底边对齐，避免单价标题把下划线顶下去。
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Expanded(
                       child: field(
@@ -20115,7 +20117,50 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(child: priceField),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(left: 2, bottom: 2),
+                            child: Text(
+                              '结算单价',
+                              style: TextStyle(
+                                color: DunesColors.resolve(
+                                  context,
+                                  ProposalPalette.text3,
+                                ),
+                                fontSize: 11,
+                                height: 1.2,
+                                letterSpacing: .2,
+                              ),
+                            ),
+                          ),
+                          field(
+                            '结算单价',
+                            terms.displayUnitPrice,
+                            (value) {
+                              final next = proposalIntakeApplySettleXor(
+                                terms,
+                                settleUnitPrice: value,
+                              );
+                              if (terms.displayRatio.isNotEmpty &&
+                                  next.displayRatio.isEmpty) {
+                                final key = '$keyPrefix-结算比例';
+                                _settleXorStamp[key] =
+                                    (_settleXorStamp[key] ?? 0) + 1;
+                              }
+                              return next;
+                            },
+                            hint: hasRatio && !hasPrice
+                                ? '填写后将清空结算比例'
+                                : null,
+                            bare: true,
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ],

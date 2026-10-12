@@ -367,4 +367,25 @@ void main() {
       },
     );
   }
+
+  testWidgets('cost amounts share one right edge', (tester) async {
+    tester.view.physicalSize = const Size(1100, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await panel(tester, sealed: false, mode: ProposalFinanceCostPanelMode.result);
+    final amounts = find.byWidgetPredicate((widget) {
+      if (widget is! Text) return false;
+      final data = widget.data;
+      return data != null && data.endsWith(' 万');
+    });
+    expect(amounts, findsWidgets);
+    final rights = [
+      for (var i = 0; i < amounts.evaluate().length; i++)
+        tester.getRect(amounts.at(i)).right,
+    ];
+    final edge = rights.first;
+    for (final right in rights) {
+      expect((right - edge).abs(), lessThan(2));
+    }
+  });
 }

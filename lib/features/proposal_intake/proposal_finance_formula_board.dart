@@ -386,6 +386,9 @@ class ProposalFinanceBlockShell extends StatelessWidget {
 }
 
 /// 一行一项：名称 · 摘要 · 金额 · 复核 · 展开箭头。展开后是公式、代入和可改的选择。
+const double _kFinanceChevron = 18;
+const double _kFinanceRowPadRight = 8;
+
 class ProposalFinanceRow extends StatefulWidget {
   const ProposalFinanceRow({
     super.key,
@@ -496,11 +499,11 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
             duration: const Duration(milliseconds: 150),
             child: Icon(
               Icons.chevron_right_rounded,
-              size: 18,
+              size: _kFinanceChevron,
               color: _c(context, _K.grey),
             ),
           )
-        : const SizedBox(width: 18);
+        : const SizedBox(width: _kFinanceChevron);
     final head = compact
         ? Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -508,9 +511,7 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
               Row(
                 children: [
                   Expanded(child: title),
-                  Flexible(
-                    child: FittedBox(fit: BoxFit.scaleDown, child: value),
-                  ),
+                  value,
                   chevron,
                 ],
               ),
@@ -539,13 +540,19 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
         InkWell(
           onTap: canOpen ? () => setState(() => _open = !_open) : null,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 9, 8, 9),
+            padding: const EdgeInsets.fromLTRB(14, 9, _kFinanceRowPadRight, 9),
             child: head,
           ),
         ),
         if (_open && widget.detail != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+            // 右边留出标题行的箭头，展开后的金额和标题行金额同一列。
+            padding: const EdgeInsets.fromLTRB(
+              14,
+              0,
+              _kFinanceRowPadRight + _kFinanceChevron,
+              6,
+            ),
             child: widget.detail,
           ),
       ],
@@ -1327,19 +1334,30 @@ class _ProductSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              Flexible(
-                child: Text(
-                  '${index + 1}、${product.name}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: _sans(context, size: 12.5, weight: FontWeight.w700),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '${index + 1}、${product.name}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _sans(
+                          context,
+                          size: 12.5,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    ProposalFinanceTag(product.isChild ? '子产品' : '主产品'),
+                  ],
                 ),
               ),
-              const SizedBox(width: 6),
-              ProposalFinanceTag(product.isChild ? '子产品' : '主产品'),
-              const Spacer(),
-              if (trailing.isNotEmpty)
+              if (trailing.isNotEmpty) ...[
+                const SizedBox(width: 8),
                 Text(trailing, style: _mono(context, size: 12)),
+              ],
               if (review != null) ...[const SizedBox(width: 6), review!],
             ],
           ),
@@ -1576,42 +1594,48 @@ class _CostLine extends StatelessWidget {
     }
     final head = Row(
       children: [
-        Flexible(
-          child: Text(
-            line.name,
-            overflow: TextOverflow.ellipsis,
-            style: _sans(context, size: 12.5, weight: FontWeight.w600),
+        Expanded(
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  line.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: _sans(context, size: 12.5, weight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(width: 6),
+              if (line.locked)
+                const ProposalFinanceTag(
+                  '产品结算',
+                  color: ProposalPalette.green,
+                  fill: ProposalPalette.greenSoft,
+                )
+              else if (item.tiered)
+                line.pending
+                    ? const ProposalFinanceTag(
+                        '推广商 · 未配置',
+                        color: ProposalPalette.amber,
+                        fill: ProposalPalette.amberSoft,
+                      )
+                    : ProposalFinanceTag(
+                        promotionPlans.length > 1
+                            ? '推广商 ${promotionPlans.length} 个'
+                            : (promotionPlans.isEmpty
+                                  ? '月序配置'
+                                  : promotionPlans.first.fixed
+                                  ? '固定比例'
+                                  : promotionPlans.first.annual
+                                  ? '年阶梯'
+                                  : '月序配置'),
+                        color: ProposalPalette.purpleDeep,
+                        fill: ProposalPalette.purpleSoft,
+                      ),
+            ],
           ),
         ),
-        const SizedBox(width: 6),
-        if (line.locked)
-          const ProposalFinanceTag(
-            '产品结算',
-            color: ProposalPalette.green,
-            fill: ProposalPalette.greenSoft,
-          )
-        else if (item.tiered)
-          line.pending
-              ? const ProposalFinanceTag(
-                  '推广商 · 未配置',
-                  color: ProposalPalette.amber,
-                  fill: ProposalPalette.amberSoft,
-                )
-              : ProposalFinanceTag(
-                  promotionPlans.length > 1
-                      ? '推广商 ${promotionPlans.length} 个'
-                      : (promotionPlans.isEmpty
-                            ? '月序配置'
-                            : promotionPlans.first.fixed
-                            ? '固定比例'
-                            : promotionPlans.first.annual
-                            ? '年阶梯'
-                            : '月序配置'),
-                  color: ProposalPalette.purpleDeep,
-                  fill: ProposalPalette.purpleSoft,
-                ),
-        const Spacer(),
-        if (showEstimates)
+        if (showEstimates) ...[
+          const SizedBox(width: 8),
           Text(
             line.pending ? '—' : '${_wan(line.amount)} 万',
             style: _mono(
@@ -1620,6 +1644,7 @@ class _CostLine extends StatelessWidget {
               color: line.pending ? _K.grey : _K.ink,
             ),
           ),
+        ],
         if (onRemove != null)
           IconButton(
             tooltip: '移除',
@@ -1632,14 +1657,12 @@ class _CostLine extends StatelessWidget {
               size: 16,
               color: _c(context, _K.grey),
             ),
-          )
-        else
-          const SizedBox(width: 8),
+          ),
       ],
     );
     return Container(
       margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 0, 8),
       decoration: BoxDecoration(
         color: _surface(context, Colors.white),
         borderRadius: BorderRadius.circular(8),
@@ -1651,7 +1674,7 @@ class _CostLine extends StatelessWidget {
           head,
           if (line.source.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 2, right: 10),
               child: Text(
                 line.source,
                 style: _sans(context, size: 11, color: _K.grey),
@@ -1680,7 +1703,7 @@ class _CostLine extends StatelessWidget {
             )
           else if (formula != null)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 2, right: 10),
               child: Text(
                 '公式：${formula.name}',
                 style: _sans(context, size: 11, color: _K.grey),

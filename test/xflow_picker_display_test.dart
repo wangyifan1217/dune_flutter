@@ -32,6 +32,47 @@ void main() {
     expect(display, '上海卓悦 · 厦门市东合传媒科技有限公司 · 6338181131');
   });
 
+  testWidgets('suggestion list can scroll inside a parent without selecting', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var picked = -1;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: [
+              XfPickerSuggestionList(
+                itemCount: 20,
+                labelOf: (i) => '选项${i + 1}',
+                onSelect: (i) => picked = i,
+              ),
+              const SizedBox(height: 600),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(find.text('选项1'), findsOneWidget);
+    expect(find.text('选项20'), findsNothing);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('选项20'),
+      80,
+      scrollable: find.descendant(
+        of: find.byType(XfPickerSuggestionList),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(picked, -1, reason: '下滑不能当成点选');
+    expect(find.text('选项20'), findsOneWidget);
+    await tester.tap(find.text('选项20'));
+    await tester.pump();
+    expect(picked, 19);
+  });
+
   testWidgets('suggestion list wraps long labels and selects on tap', (
     tester,
   ) async {

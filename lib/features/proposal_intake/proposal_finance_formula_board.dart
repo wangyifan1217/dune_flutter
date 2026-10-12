@@ -170,7 +170,6 @@ abstract final class _K {
   static const operating = Color(0xFF3B8B5A);
   static const tax = Color(0xFFB07A2B);
   static const costInk = Color(0xFFB8641E);
-  static const procurement = Color(0xFF8C5A3C);
 }
 
 Color _categoryColor(String key) => switch (key) {
@@ -181,7 +180,8 @@ Color _categoryColor(String key) => switch (key) {
   _ => _K.grey,
 };
 
-Color _c(BuildContext context, Color light) => DunesColors.resolve(context, light);
+Color _c(BuildContext context, Color light) =>
+    DunesColors.resolve(context, light);
 
 Color _surface(BuildContext context, Color light) =>
     DunesColors.resolve(context, light, role: DunesColorRole.surface);
@@ -219,7 +219,11 @@ TextStyle _sans(
 );
 
 class ProposalFinanceTag extends StatelessWidget {
-  const ProposalFinanceTag(this.text, {this.color = _K.text2, this.fill = const Color(0xFFF3F0F7)});
+  const ProposalFinanceTag(
+    this.text, {
+    this.color = _K.text2,
+    this.fill = const Color(0xFFF3F0F7),
+  });
 
   final String text;
   final Color color;
@@ -340,22 +344,22 @@ class ProposalFinanceBlockShell extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (!inSplit) ...[
-                Row(
-                  children: [
-                    Icon(icon, size: 15, color: _c(context, _K.heroInk)),
-                    const SizedBox(width: 6),
-                    Text(
-                      title,
-                      style: _sans(
-                        context,
-                        size: 13,
-                        weight: FontWeight.w700,
-                        color: _K.heroInk,
+                  Row(
+                    children: [
+                      Icon(icon, size: 15, color: _c(context, _K.heroInk)),
+                      const SizedBox(width: 6),
+                      Text(
+                        title,
+                        style: _sans(
+                          context,
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: _K.heroInk,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
                 ],
                 band,
               ],
@@ -363,7 +367,11 @@ class ProposalFinanceBlockShell extends StatelessWidget {
           ),
           for (var i = 0; i < rows.length; i++) ...[
             if (i > 0)
-              Divider(height: 1, thickness: 1, color: _border(context, _K.rowLine)),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: _border(context, _K.rowLine),
+              ),
             rows[i],
           ],
           ?footer,
@@ -471,9 +479,9 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
     final value = widget.value.isEmpty
         ? const SizedBox.shrink()
         : Text(
-      widget.value,
-      style: _mono(context, size: 13.5, color: widget.valueColor),
-    );
+            widget.value,
+            style: _mono(context, size: 13.5, color: widget.valueColor),
+          );
     // 收起时只显示复核状态，点开这一行才出现复核 / 驳回按钮。
     final review = widget.collapsedReview != null && canOpen && !_open
         ? widget.collapsedReview
@@ -497,10 +505,7 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
                 children: [
                   Expanded(child: title),
                   value,
-                  if (review != null) ...[
-                    const SizedBox(width: 6),
-                    review,
-                  ],
+                  if (review != null) ...[const SizedBox(width: 6), review],
                   chevron,
                 ],
               ),
@@ -514,10 +519,7 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
               Expanded(child: summary ?? const SizedBox.shrink()),
               const SizedBox(width: 10),
               value,
-              if (review != null) ...[
-                const SizedBox(width: 8),
-                review,
-              ],
+              if (review != null) ...[const SizedBox(width: 8), review],
               chevron,
             ],
           );
@@ -563,7 +565,8 @@ class ProposalFinanceCostPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (mode == ProposalFinanceCostPanelMode.inputs) return _inputsPanel(context);
+    if (mode == ProposalFinanceCostPanelMode.inputs)
+      return _inputsPanel(context);
     final eval = config.evaluation;
     final sealed = config.businessSealed;
     final buckets = eval.buckets.values.toList();
@@ -589,7 +592,8 @@ class ProposalFinanceCostPanel extends StatelessWidget {
             value: _wan(total),
             unit: '万',
             label: '年化成本',
-            color: _K.ink,
+            color: _K.text2,
+            compact: true,
             trailing: scale > 0
                 ? ProposalFinanceTag(
                     '占规模 ${_wan(total / scale * 100)}%',
@@ -677,13 +681,10 @@ class ProposalFinanceCostPanel extends StatelessWidget {
     final missing = {for (final l in lines) ...l.missing};
     return ProposalFinanceRow(
       title: category.name,
-      accent: _categoryColor(key),
       summary: sealed
           ? '已加密，负责人二不可查看'
           : lines.isEmpty
-          ? (key == kProposalCostCategoryProject
-                ? '产品结算里还没有应付行'
-                : '无')
+          ? (key == kProposalCostCategoryProject ? '产品结算里还没有应付行' : '无')
           : [for (final l in lines) '${l.name} ${_wan(l.amount)}'].join(' · '),
       value: sealed ? '已加密' : '${_wan(bucket?.total ?? 0)} 万',
       tag: missing.isEmpty || sealed
@@ -797,28 +798,34 @@ class ProposalFinanceCostPanel extends StatelessWidget {
                 final count = bucket?.lines.length ?? 0;
                 final name = '${i + 1}、${products[i].name}';
                 if (count == 0) return '$name 无';
-                return show
-                    ? '$name ${_wan(bucket!.total)}'
-                    : '$name $count 项';
+                return show ? '$name ${_wan(bucket!.total)}' : '$name $count 项';
               }(),
           ].join(' · ');
     final hasIssue =
         show &&
         !sealed &&
         products.any(
-          (p) => (p.evaluation.bucket(key)?.lines ?? const <ProposalFinanceLine>[])
-              .any((line) => line.missing.isNotEmpty),
+          (p) =>
+              (p.evaluation.bucket(key)?.lines ?? const <ProposalFinanceLine>[])
+                  .any((line) => line.missing.isNotEmpty),
         );
     return ProposalFinanceRow(
       key: ValueKey('finance-category-$key'),
       title: category.name,
-      accent: _categoryColor(key),
       summary: summary,
       value: show && !sealed ? '${_wan(total)} 万' : '',
       tag: sealed
-          ? const ProposalFinanceTag('已加密', color: _K.red, fill: Color(0xFFF5E5DC))
+          ? const ProposalFinanceTag(
+              '已加密',
+              color: _K.red,
+              fill: Color(0xFFF5E5DC),
+            )
           : hasIssue
-          ? const ProposalFinanceTag('有缺项', color: ProposalPalette.amber, fill: ProposalPalette.amberSoft)
+          ? const ProposalFinanceTag(
+              '有缺项',
+              color: ProposalPalette.amber,
+              fill: ProposalPalette.amberSoft,
+            )
           : null,
       collapsedReview: reviewKind.isEmpty
           ? null
@@ -848,7 +855,6 @@ class ProposalFinanceCostPanel extends StatelessWidget {
     return ProposalFinanceRow(
       key: const ValueKey('finance-procurement-row'),
       title: '采购成本',
-      accent: _K.procurement,
       summary: missing
           ? line.substitution
           : (line.source.isNotEmpty ? line.source : line.substitution),
@@ -880,9 +886,7 @@ class ProposalFinanceCostPanel extends StatelessWidget {
     return ProposalFinanceRow(
       title: '经营成本',
       accent: _K.operating,
-      summary: items.isEmpty
-          ? (editable ? '点开选择类型' : '未选择')
-          : items.join('、'),
+      summary: items.isEmpty ? (editable ? '点开选择类型' : '未选择') : items.join('、'),
       value: '',
       tag: const ProposalFinanceTag('只选类型'),
       review: config.reviewToggle?.call('operatingCost'),
@@ -899,9 +903,9 @@ class ProposalFinanceCostPanel extends StatelessWidget {
               for (final name in items) ProposalFinanceTag(name),
             ],
           ),
-      if (editable)
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
+          if (editable)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: _PickButton(
@@ -1045,7 +1049,10 @@ class _CategoryDetail extends StatelessWidget {
           ),
         ),
     ];
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
   }
 }
 
@@ -1099,7 +1106,8 @@ class _ProductCategorySection extends StatelessWidget {
     final reviewKind = key == kProposalCostCategoryBusiness
         ? ''
         : ProposalFinanceFormulaBoardKeys.reviewKeyOf(key);
-    final Widget body = bucket.lines.isEmpty &&
+    final Widget body =
+        bucket.lines.isEmpty &&
             !editable &&
             key == kProposalCostCategoryBusiness
         ? Padding(
@@ -1222,7 +1230,11 @@ Widget proposalFinanceRevenueRow(
           ].join(' · '),
     value: show ? '${_wan(revenue.amount)} 万' : '',
     tag: hasIssue
-        ? const ProposalFinanceTag('有缺项', color: ProposalPalette.amber, fill: ProposalPalette.amberSoft)
+        ? const ProposalFinanceTag(
+            '有缺项',
+            color: ProposalPalette.amber,
+            fill: ProposalPalette.amberSoft,
+          )
         : null,
     collapsedReview: config.reviewStatus?.call('kind:revenue'),
     forceOpen: config.focusKeys.contains('revenue'),
@@ -1240,7 +1252,10 @@ Widget proposalFinanceRevenueRow(
                       ? '${_wan(products[i].evaluation.revenue.amount)} 万'
                       : '',
                   review: config.reviewToggle?.call(
-                    proposalFinanceProductReviewKey(products[i].skuId, 'revenue'),
+                    proposalFinanceProductReviewKey(
+                      products[i].skuId,
+                      'revenue',
+                    ),
                   ),
                   child: _RevenueFormulaPicker(
                     config: config,
@@ -1293,7 +1308,9 @@ class _RevenueFormulaPicker extends StatelessWidget {
         ),
         if (onRevenueFormula != null)
           ProposalSelectField<String>(
-            value: formula == null || group == null ? null : '${group.key}|${formula.code}',
+            value: formula == null || group == null
+                ? null
+                : '${group.key}|${formula.code}',
             title: '收入计算公式',
             hint: '选择收入计算公式',
             searchable: true,
@@ -1315,7 +1332,10 @@ class _RevenueFormulaPicker extends StatelessWidget {
             onSelected: (value) {
               if (value == null || !value.contains('|')) return;
               final cut = value.indexOf('|');
-              onRevenueFormula!(value.substring(0, cut), value.substring(cut + 1));
+              onRevenueFormula!(
+                value.substring(0, cut),
+                value.substring(cut + 1),
+              );
             },
           )
         else
@@ -1325,7 +1345,9 @@ class _RevenueFormulaPicker extends StatelessWidget {
           ),
         if (show) ...[
           _Trace(
-            formula: formula == null || formula.detail.isEmpty ? '' : '公式：${formula.expression}',
+            formula: formula == null || formula.detail.isEmpty
+                ? ''
+                : '公式：${formula.expression}',
             substitution: line.substitution,
           ),
           _Missing(line.missing),
@@ -1400,7 +1422,11 @@ class _CostLine extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                 onPressed: onRemove,
-                icon: Icon(Icons.close_rounded, size: 15, color: _c(context, _K.grey)),
+                icon: Icon(
+                  Icons.close_rounded,
+                  size: 15,
+                  color: _c(context, _K.grey),
+                ),
               ),
           ],
         ),
@@ -1417,10 +1443,18 @@ class _CostLine extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         if (line.locked)
-          const ProposalFinanceTag('产品结算', color: ProposalPalette.green, fill: ProposalPalette.greenSoft)
+          const ProposalFinanceTag(
+            '产品结算',
+            color: ProposalPalette.green,
+            fill: ProposalPalette.greenSoft,
+          )
         else if (item.tiered)
           line.pending
-              ? const ProposalFinanceTag('推广商 · 未配置', color: ProposalPalette.amber, fill: ProposalPalette.amberSoft)
+              ? const ProposalFinanceTag(
+                  '推广商 · 未配置',
+                  color: ProposalPalette.amber,
+                  fill: ProposalPalette.amberSoft,
+                )
               : ProposalFinanceTag(
                   promotionPlans.length > 1
                       ? '推广商 ${promotionPlans.length} 个'
@@ -1438,7 +1472,11 @@ class _CostLine extends StatelessWidget {
         if (showEstimates)
           Text(
             line.pending ? '—' : '${_wan(line.amount)} 万',
-            style: _mono(context, size: 12.5, color: line.pending ? _K.grey : _K.ink),
+            style: _mono(
+              context,
+              size: 12.5,
+              color: line.pending ? _K.grey : _K.ink,
+            ),
           ),
         if (onRemove != null)
           IconButton(
@@ -1447,7 +1485,11 @@ class _CostLine extends StatelessWidget {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
             onPressed: onRemove,
-            icon: Icon(Icons.close_rounded, size: 16, color: _c(context, _K.grey)),
+            icon: Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: _c(context, _K.grey),
+            ),
           )
         else
           const SizedBox(width: 8),
@@ -1468,7 +1510,10 @@ class _CostLine extends StatelessWidget {
           if (line.source.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text(line.source, style: _sans(context, size: 11, color: _K.grey)),
+              child: Text(
+                line.source,
+                style: _sans(context, size: 11, color: _K.grey),
+              ),
             ),
           if (canChoose)
             Padding(
@@ -1503,7 +1548,10 @@ class _CostLine extends StatelessWidget {
           if (showEstimates)
             _Trace(
               // 产品结算带出的不再写公式（出处已经说明），只写代入。
-              formula: line.locked || formula == null || formula.expression == formula.name
+              formula:
+                  line.locked ||
+                      formula == null ||
+                      formula.expression == formula.name
                   ? ''
                   : formula.expression,
               substitution: line.substitution,
@@ -1609,7 +1657,10 @@ class _PromotionPlansEditor extends StatelessWidget {
         if (plan == null && !editable)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text('未配置推广商方案', style: _sans(context, size: 11.5, color: _K.grey)),
+            child: Text(
+              '未配置推广商方案',
+              style: _sans(context, size: 11.5, color: _K.grey),
+            ),
           ),
         if (plan != null)
           _PromotionPlanEditor(
@@ -1636,7 +1687,10 @@ class _PromotionPlansEditor extends StatelessWidget {
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   foregroundColor: _c(context, ProposalPalette.purpleDeep),
-                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  textStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -1756,7 +1810,9 @@ class _PromotionPlanEditor extends StatelessWidget {
     final segments = [...plan.segments];
     if (segments.isEmpty) {
       _setSegments(const [
-        ProposalPromotionSegment(tiers: [ProposalPromotionTier(from: 0, rate: 0)]),
+        ProposalPromotionSegment(
+          tiers: [ProposalPromotionTier(from: 0, rate: 0)],
+        ),
       ]);
       return;
     }
@@ -1786,7 +1842,10 @@ class _PromotionPlanEditor extends StatelessWidget {
             children: [
               SizedBox(
                 width: 40,
-                child: Text('推广商', style: _sans(context, size: 11, color: _K.grey)),
+                child: Text(
+                  '推广商',
+                  style: _sans(context, size: 11, color: _K.grey),
+                ),
               ),
               Expanded(
                 child: editable
@@ -1795,18 +1854,27 @@ class _PromotionPlanEditor extends StatelessWidget {
                         child: TextFormField(
                           key: ValueKey('promotion-promoter-$id'),
                           initialValue: plan.promoter,
-                          style: _sans(context, size: 12.5, weight: FontWeight.w700),
+                          style: _sans(
+                            context,
+                            size: 12.5,
+                            weight: FontWeight.w700,
+                          ),
                           decoration: proposalInputDecoration(
                             context: context,
                             hint: '填写推广商名称',
                           ),
-                          onChanged: (text) =>
-                              onChanged?.call(plan.copyWith(promoter: text.trim())),
+                          onChanged: (text) => onChanged?.call(
+                            plan.copyWith(promoter: text.trim()),
+                          ),
                         ),
                       )
                     : Text(
                         plan.label,
-                        style: _sans(context, size: 12.5, weight: FontWeight.w700),
+                        style: _sans(
+                          context,
+                          size: 12.5,
+                          weight: FontWeight.w700,
+                        ),
                       ),
               ),
               if (onRemove != null)
@@ -1862,7 +1930,10 @@ class _PromotionPlanEditor extends StatelessWidget {
                 children: [
                   SizedBox(
                     width: 40,
-                    child: Text('比例', style: _sans(context, size: 11, color: _K.grey)),
+                    child: Text(
+                      '比例',
+                      style: _sans(context, size: 11, color: _K.grey),
+                    ),
                   ),
                   SizedBox(
                     width: 120,
@@ -1870,7 +1941,9 @@ class _PromotionPlanEditor extends StatelessWidget {
                         ? _promotionInput(
                             context,
                             key: 'promotion-$id-fixed-rate',
-                            initial: proposalFormatPromotionRate(plan.fixedRate),
+                            initial: proposalFormatPromotionRate(
+                              plan.fixedRate,
+                            ),
                             hint: '0.5',
                             onText: (text) => _setSegments([
                               ProposalPromotionSegment(
@@ -1881,7 +1954,11 @@ class _PromotionPlanEditor extends StatelessWidget {
                           )
                         : Text(
                             proposalFormatPromotionRate(plan.fixedRate),
-                            style: _mono(context, size: 12, weight: FontWeight.w700),
+                            style: _mono(
+                              context,
+                              size: 12,
+                              weight: FontWeight.w700,
+                            ),
                           ),
                   ),
                 ],
@@ -1904,14 +1981,19 @@ class _PromotionPlanEditor extends StatelessWidget {
                 segment: plan.segments[i],
                 volume: monthlyScale,
                 onChanged: editable
-                    ? (segment) => _setSegments([...plan.segments]..[i] = segment)
+                    ? (segment) =>
+                          _setSegments([...plan.segments]..[i] = segment)
                     : null,
                 onRemove: editable && plan.segments.length > 1
                     ? () => _setSegments([...plan.segments]..removeAt(i))
                     : null,
               ),
             if (editable)
-              _promotionAddButton(context, label: '添加月份段', onPressed: _addSegment),
+              _promotionAddButton(
+                context,
+                label: '添加月份段',
+                onPressed: _addSegment,
+              ),
           ],
         ],
       ),
@@ -1997,86 +2079,99 @@ class _PromotionSegmentEditor extends StatelessWidget {
               children: [
                 SizedBox(
                   width: 40,
-                  child: Text('月份', style: _sans(context, size: 11, color: _K.grey)),
+                  child: Text(
+                    '月份',
+                    style: _sans(context, size: 11, color: _K.grey),
+                  ),
                 ),
-              Text('第', style: _sans(context, size: 11, color: _K.grey)),
-              SizedBox(
-                width: 48,
-                child: editable
-                    ? _promotionInput(
-                        context,
-                        key: '$keyPrefix-from-month',
-                        initial: '${segment.fromMonth}',
-                        hint: '1',
-                        integer: true,
-                        onText: (text) {
-                          final from = _promotionMonth(text);
-                          final to = segment.toMonth;
-                          onChanged!(
-                            segment.copyWith(
-                              fromMonth: from,
-                              toMonth: to == null || to >= from ? to : from,
-                            ),
-                          );
-                        },
-                      )
-                    : Text(
-                        '${segment.fromMonth}',
-                        style: _mono(context, size: 12, weight: FontWeight.w700),
-                      ),
-              ),
-              Text('个月至', style: _sans(context, size: 11, color: _K.grey)),
-              if (!openEnded) ...[
+                Text('第', style: _sans(context, size: 11, color: _K.grey)),
                 SizedBox(
                   width: 48,
                   child: editable
                       ? _promotionInput(
                           context,
-                          key: '$keyPrefix-to-month',
-                          initial: '${segment.toMonth}',
-                          hint: '3',
+                          key: '$keyPrefix-from-month',
+                          initial: '${segment.fromMonth}',
+                          hint: '1',
                           integer: true,
                           onText: (text) {
-                            if (text.isEmpty) {
-                              onChanged!(segment.copyWith(toMonth: null));
-                              return;
-                            }
-                            final to = _promotionMonth(
-                              text,
-                              fallback: segment.fromMonth,
-                            );
+                            final from = _promotionMonth(text);
+                            final to = segment.toMonth;
                             onChanged!(
                               segment.copyWith(
-                                toMonth: to < segment.fromMonth
-                                    ? segment.fromMonth
-                                    : to,
+                                fromMonth: from,
+                                toMonth: to == null || to >= from ? to : from,
                               ),
                             );
                           },
                         )
                       : Text(
-                          '${segment.toMonth}',
-                          style: _mono(context, size: 12, weight: FontWeight.w700),
+                          '${segment.fromMonth}',
+                          style: _mono(
+                            context,
+                            size: 12,
+                            weight: FontWeight.w700,
+                          ),
                         ),
                 ),
-                Text('个月', style: _sans(context, size: 11, color: _K.grey)),
-              ],
-              ProposalChoiceChip(
-                label: '及以后',
-                selected: openEnded,
-                enabled: editable,
-                onSelected: editable
-                    ? (on) => onChanged!(
-                        segment.copyWith(toMonth: on ? null : segment.fromMonth),
-                      )
-                    : null,
-              ),
-              if (onRemove != null)
-                _promotionRemoveButton(
-                  context,
-                  tooltip: '删除这段月份',
-                  onPressed: onRemove!,
+                Text('个月至', style: _sans(context, size: 11, color: _K.grey)),
+                if (!openEnded) ...[
+                  SizedBox(
+                    width: 48,
+                    child: editable
+                        ? _promotionInput(
+                            context,
+                            key: '$keyPrefix-to-month',
+                            initial: '${segment.toMonth}',
+                            hint: '3',
+                            integer: true,
+                            onText: (text) {
+                              if (text.isEmpty) {
+                                onChanged!(segment.copyWith(toMonth: null));
+                                return;
+                              }
+                              final to = _promotionMonth(
+                                text,
+                                fallback: segment.fromMonth,
+                              );
+                              onChanged!(
+                                segment.copyWith(
+                                  toMonth: to < segment.fromMonth
+                                      ? segment.fromMonth
+                                      : to,
+                                ),
+                              );
+                            },
+                          )
+                        : Text(
+                            '${segment.toMonth}',
+                            style: _mono(
+                              context,
+                              size: 12,
+                              weight: FontWeight.w700,
+                            ),
+                          ),
+                  ),
+                  Text('个月', style: _sans(context, size: 11, color: _K.grey)),
+                ],
+                ProposalChoiceChip(
+                  label: '及以后',
+                  selected: openEnded,
+                  enabled: editable,
+                  onSelected: editable
+                      ? (on) => onChanged!(
+                          segment.copyWith(
+                            toMonth: on ? null : segment.fromMonth,
+                          ),
+                        )
+                      : null,
                 ),
+                if (onRemove != null)
+                  _promotionRemoveButton(
+                    context,
+                    tooltip: '删除这段月份',
+                    onPressed: onRemove!,
+                  ),
               ],
             ),
             const SizedBox(height: 6),
@@ -2107,7 +2202,10 @@ class _PromotionSegmentEditor extends StatelessWidget {
                 children: [
                   SizedBox(
                     width: 40,
-                    child: Text('比例', style: _sans(context, size: 11, color: _K.grey)),
+                    child: Text(
+                      '比例',
+                      style: _sans(context, size: 11, color: _K.grey),
+                    ),
                   ),
                   SizedBox(
                     width: 120,
@@ -2118,12 +2216,18 @@ class _PromotionSegmentEditor extends StatelessWidget {
                             initial: proposalFormatPromotionRate(segment.rate),
                             hint: '0.5',
                             onText: (text) => onChanged!(
-                              segment.copyWith(rate: double.tryParse(text) ?? 0),
+                              segment.copyWith(
+                                rate: double.tryParse(text) ?? 0,
+                              ),
                             ),
                           )
                         : Text(
                             proposalFormatPromotionRate(segment.rate),
-                            style: _mono(context, size: 12, weight: FontWeight.w700),
+                            style: _mono(
+                              context,
+                              size: 12,
+                              weight: FontWeight.w700,
+                            ),
                           ),
                   ),
                   const SizedBox(width: 8),
@@ -2219,7 +2323,9 @@ class _PromotionSegmentEditor extends StatelessWidget {
                           ? _promotionInput(
                               context,
                               key: '$keyPrefix-rate-$i-${tiers.length}',
-                              initial: proposalFormatPromotionRate(tiers[i].rate),
+                              initial: proposalFormatPromotionRate(
+                                tiers[i].rate,
+                              ),
                               hint: '0.5',
                               onText: (text) =>
                                   _setTier(i, rate: double.tryParse(text) ?? 0),
@@ -2370,7 +2476,10 @@ class _CostItemPickerDialogState extends State<_CostItemPickerDialog> {
             if (category.hint.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(category.hint, style: _sans(context, size: 12, color: _K.grey)),
+                child: Text(
+                  category.hint,
+                  style: _sans(context, size: 12, color: _K.grey),
+                ),
               ),
             if (widget.allowCustom)
               Padding(
@@ -2401,7 +2510,9 @@ class _CostItemPickerDialogState extends State<_CostItemPickerDialog> {
                     : (on) => _toggle(name, on == true),
                 controlAffinity: ListTileControlAffinity.leading,
                 title: Text(name),
-                subtitle: _subtitleOf(name) == null ? null : Text(_subtitleOf(name)!),
+                subtitle: _subtitleOf(name) == null
+                    ? null
+                    : Text(_subtitleOf(name)!),
               ),
           ],
         ),
@@ -2476,7 +2587,12 @@ class ProposalFinanceProfitPanel extends StatelessWidget {
           sealed
               ? '利润含业务成本，负责人二不可查看'
               : '= 收入 ${_wan(revenue.amount)} − 成本 ${_wan(eval.costTotal)}',
-          style: _mono(context, size: 11.5, weight: FontWeight.w500, color: _K.text2),
+          style: _mono(
+            context,
+            size: 11.5,
+            weight: FontWeight.w500,
+            color: _K.text2,
+          ),
         ),
       ],
     );
@@ -2535,7 +2651,6 @@ class ProposalFinanceProfitPanel extends StatelessWidget {
   }
 }
 
-
 /// 块顶统一版式（以「利润」块为准）：左边大数 + 灰色「单位 · 名称」，右上一个标签，
 /// 下面一行灰色等宽小字（等式或说明）。产品结算、成本、利润、市场部、科技部的块都用它。
 class ProposalFinanceBand extends StatelessWidget {
@@ -2548,6 +2663,7 @@ class ProposalFinanceBand extends StatelessWidget {
     this.sub = '',
     this.trailing,
     this.numeric = true,
+    this.compact = false,
   });
 
   final String value;
@@ -2559,6 +2675,9 @@ class ProposalFinanceBand extends StatelessWidget {
 
   /// 数字用等宽大字；文字（如提案名、平台名）用无衬线粗体。
   final bool numeric;
+
+  /// 普通信息块使用紧凑字号，避免与页面主指标争夺视觉层级。
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -2578,7 +2697,12 @@ class ProposalFinanceBand extends StatelessWidget {
                 TextSpan(
                   text: empty ? '未填写' : value,
                   style: numeric && !empty
-                      ? _mono(context, size: 18, color: color)
+                      ? _mono(
+                          context,
+                          size: compact ? 14 : 18,
+                          weight: compact ? FontWeight.w600 : FontWeight.w700,
+                          color: color,
+                        )
                       : _sans(
                           context,
                           size: 15,
@@ -2784,7 +2908,9 @@ class ProposalFinanceSplit extends StatelessWidget {
           decoration: BoxDecoration(
             color: _surface(context, const Color(0xFFFAF9FD)),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border(context, const Color(0xFFE7E3F2))),
+            border: Border.all(
+              color: _border(context, const Color(0xFFE7E3F2)),
+            ),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,

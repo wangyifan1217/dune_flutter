@@ -8,6 +8,7 @@
 // 这里只放纯数据逻辑（可单测）：历史页的累积、与 summary.metrics 的拼接、
 // 视窗换算。页面状态与请求在 native_lighthouse_page.dart。
 
+import 'dart:convert';
 import 'dart:math' as math;
 
 /// 单个账本实体已经向前加载的历史。series 使用行 trend 的原始键
@@ -165,6 +166,51 @@ class LighthouseHeroHistory {
   final int version;
 
   int get length => keys.length;
+
+  /// 落盘用：只存拼好的数据，不存 loading / error 这类瞬时状态。
+  String toJsonString() => jsonEncode({
+    'requestKey': requestKey,
+    'keys': keys,
+    'labels': labels,
+    'series': series,
+    'costBillSeries': costBillSeries,
+    'hasMore': hasMore,
+  });
+
+  /// 读盘；格式不对返回 null（当没缓存）。
+  static LighthouseHeroHistory? fromJsonString(String raw) {
+    try {
+      final m = jsonDecode(raw);
+      if (m is! Map) return null;
+      Map<String, List<double>> seriesOf(Object? v) {
+        if (v is! Map) return const <String, List<double>>{};
+        return {
+          for (final e in v.entries)
+            if (e.value is List) '${e.key}': _doubleList(e.value),
+        };
+      }
+
+      final keys = _stringList(m['keys']);
+      final labels = _stringList(m['labels']);
+      final requestKey = m['requestKey']?.toString() ?? '';
+      if (requestKey.isEmpty || keys.length != labels.length) return null;
+      final series = seriesOf(m['series']);
+      for (final v in series.values) {
+        if (v.length != keys.length) return null;
+      }
+      return LighthouseHeroHistory(
+        requestKey: requestKey,
+        keys: keys,
+        labels: labels,
+        series: series,
+        costBillSeries: seriesOf(m['costBillSeries']),
+        hasMore: m['hasMore'] != false,
+        version: 1,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   LighthouseHeroHistory copyWith({
     bool? loading,

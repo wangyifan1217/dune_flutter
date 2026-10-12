@@ -7919,7 +7919,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           controller: controller,
           autofocus: true,
           onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-          decoration: proposalInputDecoration(context: context),
+          decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
+            context: context),
         ),
         actions: [
           TextButton(
@@ -7952,7 +7954,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           controller: controller,
           autofocus: true,
           onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-          decoration: proposalInputDecoration(context: context),
+          decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
+            context: context),
         ),
         actions: [
           TextButton(
@@ -13857,6 +13861,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ? _writeRevenue(owner, value)
             : _writeProductFinanceValue(owner, key, value, rebuild: false),
         decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
           context: context,
           hint: revenueEditable ? '默认按结算测算，可改' : null,
         ),
@@ -16115,6 +16120,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               onTapOutside: (_) =>
                   FocusManager.instance.primaryFocus?.unfocus(),
               decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
                 context: context,
                 hint: '新增数量',
               ),
@@ -18535,6 +18541,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   FocusManager.instance.primaryFocus?.unfocus(),
               onChanged: onChanged,
               decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
                 context: context,
                 hint: hint,
                 tone: tone,
@@ -19696,6 +19703,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                           ? (value) => write(i, from: value.trim())
                           : null,
                       decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
                         context: context,
                         hint: '0',
                       ),
@@ -19718,6 +19726,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                           ? (value) => write(i, rate: value.trim())
                           : null,
                       decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
                         context: context,
                         hint: '0.08',
                       ),
@@ -19809,6 +19818,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     initialValue: value,
                     enabled: false,
                     decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
                       context: context,
                       hint: hint ?? '已选另一项，此项不可填',
                       readOnly: true,
@@ -19822,7 +19832,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               onTapOutside: (_) =>
                   FocusManager.instance.primaryFocus?.unfocus(),
               onChanged: (next) => onChanged(write(next.trim())),
-              decoration: proposalInputDecoration(context: context, hint: hint),
+              decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
+            context: context, hint: hint),
             );
       if (bare) return input;
       return ProposalField(label: label, child: input);
@@ -20430,6 +20442,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         child: InputDecorator(
                           decoration:
                               proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
                                 context: context,
                                 hint: _uploadingProductFile
                                     ? '上传中…'
@@ -21002,7 +21015,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             : () => unawaited(_openContractSourceFile(prefix, file)),
         borderRadius: BorderRadius.circular(8),
         child: InputDecorator(
-          decoration: proposalInputDecoration(context: context, readOnly: true),
+          decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
+            context: context, readOnly: true),
           child: Row(
             children: [
               Icon(
@@ -21075,6 +21090,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             child: InputDecorator(
               decoration:
                   proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
                     context: context,
                     hint: uploading ? '上传中…' : '选择 PDF / Word 文件',
                     readOnly: !enabled,
@@ -21106,6 +21122,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         : files.isEmpty
         ? InputDecorator(
             decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
               context: context,
               readOnly: true,
             ),
@@ -22370,6 +22387,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         child: InputDecorator(
           decoration:
               proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
                 context: context,
                 hint: hint,
                 readOnly: !enabled,
@@ -22497,6 +22515,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   )
                 : null,
             decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
               context: context,
               hint: hint,
               readOnly: !enabled,
@@ -22593,6 +22612,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 }
               : null,
           decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
             context: context,
             readOnly: !enabled,
             tone: tone,
@@ -23917,7 +23937,9 @@ class _ProposalAddOptionDialogState extends State<_ProposalAddOptionDialog> {
         autofocus: true,
         onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
         onSubmitted: (_) => _submit(),
-        decoration: proposalInputDecoration(context: context),
+        decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
+            context: context),
       ),
       actions: [
         TextButton(
@@ -24479,6 +24501,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                     onTapOutside: (_) =>
                         FocusManager.instance.primaryFocus?.unfocus(),
                     decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
                       context: context,
                       hint: '门槛',
                     ),
@@ -24507,6 +24530,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                     onTapOutside: (_) =>
                         FocusManager.instance.primaryFocus?.unfocus(),
                     decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
                       context: context,
                       hint: '优惠',
                     ),
@@ -24543,7 +24567,9 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
               keyboardType: keyboardType,
               onTapOutside: (_) =>
                   FocusManager.instance.primaryFocus?.unfocus(),
-              decoration: proposalInputDecoration(context: context, hint: hint),
+              decoration: proposalInputDecoration(
+            forceUnderline: kProposalPrototypeFormEnabled,
+            context: context, hint: hint),
             ),
     );
   }

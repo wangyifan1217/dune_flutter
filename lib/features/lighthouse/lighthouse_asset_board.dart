@@ -602,6 +602,19 @@ class LighthouseAssetTrend {
   }
 }
 
+double? lighthouseAssetTrendTotalAtDate(
+  LighthouseAssetTrend? trend,
+  String date, {
+  double? fallback,
+}) {
+  if (trend == null || date.isEmpty) return fallback;
+  for (final point in trend.points) {
+    if (point.asOfDate == date || point.key == date)
+      return point.total ?? fallback;
+  }
+  return fallback;
+}
+
 // ── 资产走势面板（许总：资产 / 总额 / 增值 三条线）──────────────────
 //
 // 一张卡回答三个问题：
@@ -655,6 +668,40 @@ class LighthouseAssetTrendLoader extends StatefulWidget {
   /// 有缓存时先画出来，后台再拉新的。
   static final Map<String, LighthouseAssetTrend> _cache =
       <String, LighthouseAssetTrend>{};
+  static final Map<String, Future<LighthouseAssetTrend>> _pending =
+      <String, Future<LighthouseAssetTrend>>{};
+
+  static String _cacheKey(String scope, String period) => '$scope|$period';
+
+  static LighthouseAssetTrend? cached(String scope, String period) =>
+      _cache[_cacheKey(scope, period)];
+
+  /// 顶部三张资产卡共用这份请求与缓存，切换日期时可同步读取三类资产。
+  static Future<LighthouseAssetTrend> prefetch({
+    required LighthouseService service,
+    required String scope,
+    required String period,
+    bool refresh = false,
+  }) {
+    final key = _cacheKey(scope, period);
+    final cached = _cache[key];
+    if (!refresh && cached != null) {
+      return Future<LighthouseAssetTrend>.value(cached);
+    }
+    return _pending.putIfAbsent(key, () async {
+      try {
+        final raw = await service.fetchFundPoolSeries(
+          scope: scope,
+          granularity: period,
+        );
+        final parsed = LighthouseAssetTrend.parse(raw);
+        _cache[key] = parsed;
+        return parsed;
+      } finally {
+        _pending.remove(key);
+      }
+    });
+  }
 
   @override
   State<LighthouseAssetTrendLoader> createState() =>
@@ -666,7 +713,8 @@ class _LighthouseAssetTrendLoaderState
   LighthouseAssetTrend? _data;
   bool _loading = true;
 
-  String get _key => '${widget.scope}|${widget.period}';
+  String get _key =>
+      LighthouseAssetTrendLoader._cacheKey(widget.scope, widget.period);
 
   @override
   void initState() {
@@ -689,14 +737,13 @@ class _LighthouseAssetTrendLoaderState
   Future<void> _load() async {
     final scope = widget.scope;
     final period = widget.period;
-    final key = _key;
     try {
-      final raw = await widget.service.fetchFundPoolSeries(
+      final parsed = await LighthouseAssetTrendLoader.prefetch(
+        service: widget.service,
         scope: scope,
-        granularity: period,
+        period: period,
+        refresh: _data != null,
       );
-      final parsed = LighthouseAssetTrend.parse(raw);
-      LighthouseAssetTrendLoader._cache[key] = parsed;
       if (!mounted || scope != widget.scope || period != widget.period) return;
       setState(() {
         _data = parsed;

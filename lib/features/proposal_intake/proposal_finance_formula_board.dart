@@ -1890,7 +1890,11 @@ Widget _promotionInput(
       initialValue: initial,
       keyboardType: TextInputType.numberWithOptions(decimal: !integer),
       style: _mono(context, size: 12, weight: FontWeight.w500),
-      decoration: proposalInputDecoration(context: context, hint: hint),
+      decoration: proposalInputDecoration(
+        context: context,
+        hint: hint,
+        forceUnderline: true,
+      ),
       onChanged: (text) => onText(text.trim()),
     ),
   );

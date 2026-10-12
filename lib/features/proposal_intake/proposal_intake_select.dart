@@ -474,13 +474,14 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
       focusNode: _focus,
       enabled: _enabled,
       readOnly: !_canSearch,
+      // 和文本框同一行高、同一字重：一行，文字垂直居中，长了省略（点开下拉看全）。
       minLines: 1,
-      maxLines: MediaQuery.sizeOf(context).width < 620 ? 1 : 2,
+      maxLines: 1,
+      textAlignVertical: TextAlignVertical.center,
       style: TextStyle(
         fontSize: 13,
         height: 1.35,
         color: DunesColors.resolve(context, ProposalPalette.text),
-        fontWeight: FontWeight.w500,
       ),
       decoration:
           proposalInputDecoration(
@@ -489,8 +490,8 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
             readOnly: !_enabled,
           ).copyWith(
             suffixIconConstraints: const BoxConstraints(
-              minWidth: 36,
-              minHeight: 36,
+              minWidth: 24,
+              minHeight: 24,
             ),
             suffixIcon: Row(
               mainAxisSize: MainAxisSize.min,
@@ -500,19 +501,19 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
+                      minWidth: 24,
+                      minHeight: 24,
                     ),
                     onPressed: () => _choose(null),
-                    icon: const Icon(Icons.close_rounded, size: 16),
+                    icon: const Icon(Icons.close_rounded, size: 14),
                     color: DunesColors.resolve(context, ProposalPalette.text3),
                   ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
+                    minWidth: 24,
+                    minHeight: 24,
                   ),
                   onPressed: _enabled
                       ? () {
@@ -524,11 +525,11 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                     _enabled
                         ? Icons.expand_more_rounded
                         : Icons.lock_outline_rounded,
-                    size: _enabled ? 19 : 15,
+                    size: _enabled ? 17 : 14,
                     color: DunesColors.resolve(context, ProposalPalette.text3),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 2),
               ],
             ),
           ),

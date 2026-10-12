@@ -2,6 +2,34 @@ import 'package:dunes_app/features/lighthouse/lighthouse_asset_board.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('资产节点日期可同步匹配其他资产分类', () {
+    final trend = LighthouseAssetTrend(
+      points: const [
+        LighthouseAssetTrendPoint(
+          key: '2026-10-10',
+          label: '.10',
+          asOfDate: '2026-10-10',
+          total: 3992,
+        ),
+        LighthouseAssetTrendPoint(
+          key: '2026-10-11',
+          label: '.11',
+          asOfDate: '2026-10-11',
+          total: 4125,
+        ),
+      ],
+      profitAvailable: true,
+      restricted: false,
+      stats: const {},
+    );
+
+    expect(lighthouseAssetTrendTotalAtDate(trend, '2026-10-10'), 3992);
+    expect(
+      lighthouseAssetTrendTotalAtDate(trend, '2026-10-09', fallback: 4449),
+      4449,
+    );
+  });
+
   test('全国中石化只进入资产总览，不补成省份卡片', () {
     final snapshot = LighthouseFundPoolSnapshot(
       provinceNames: const {'中油BP': '中油BP', '中石化': '中石化'},

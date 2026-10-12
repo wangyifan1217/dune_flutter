@@ -732,40 +732,7 @@ class ProposalField extends StatelessWidget {
         children: [
           SizedBox(
             width: labelWidth,
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFF5B556A),
-                    ),
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
-                ),
-                if (required)
-                  Text(
-                    ' *',
-                    style: TextStyle(
-                      color: DunesColors.resolve(
-                        context,
-                        const Color(0xFFC0563F),
-                      ),
-                      fontSize: 12,
-                      height: 1.4,
-                    ),
-                  ),
-                if ((formula ?? '').trim().isNotEmpty)
-                  ProposalFormulaQuestionMark(
-                    title: label,
-                    formula: formula!.trim(),
-                    detail: formulaDetail ?? '',
-                  ),
-              ],
-            ),
+            child: _editLabel(context, labelWidth),
           ),
           SizedBox(width: narrow ? 8 : 10),
           Expanded(
@@ -781,6 +748,71 @@ class ProposalField extends StatelessWidget {
           if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         ],
       ),
+    );
+  }
+
+  /// 填写行的名称：和只读行一样一行写完，所有格子名称列对齐、行高一致。
+  /// 放不下时先换短名称（去掉括号说明），还放不下按比例缩小；悬停看全称。
+  Widget _editLabel(BuildContext context, double labelWidth) {
+    final hasFormula = (formula ?? '').trim().isNotEmpty;
+    final available = labelWidth - (hasFormula ? 15 : 0);
+    double widthOf(String text) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: '$text${required ? ' *' : ''}',
+          style: const TextStyle(fontSize: 12),
+        ),
+        maxLines: 1,
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      final w = painter.width;
+      painter.dispose();
+      return w;
+    }
+
+    final shown = widthOf(label) <= available ? label : compactLabel(label);
+    final text = Text.rich(
+      TextSpan(
+        text: shown,
+        children: [
+          if (required)
+            TextSpan(
+              text: ' *',
+              style: TextStyle(
+                color: DunesColors.resolve(context, const Color(0xFFC0563F)),
+              ),
+            ),
+        ],
+      ),
+      maxLines: 1,
+      style: TextStyle(
+        color: DunesColors.resolve(context, const Color(0xFF5B556A)),
+        fontSize: 12,
+        height: 1.4,
+      ),
+    );
+    return Row(
+      children: [
+        Flexible(
+          child: () {
+            final fitted = FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: text,
+            );
+            return shown == label
+                ? fitted
+                : Tooltip(message: label, child: fitted);
+          }(),
+        ),
+        if (hasFormula)
+          ProposalFormulaQuestionMark(
+            title: label,
+            formula: formula!.trim(),
+            detail: formulaDetail ?? '',
+          ),
+      ],
     );
   }
 
@@ -1557,8 +1589,12 @@ InputDecoration proposalInputDecoration({
   String? hint,
   bool readOnly = false,
   ProposalFieldTone tone = ProposalFieldTone.fill,
+  /// 表单里的输入框统一用「底部虚线」样式（和下拉框一样）。页面拿的是外层 context，
+  /// 不在 [ProposalSimpleViewScope] 里，所以由调用方直接指定。
+  bool forceUnderline = false,
 }) {
-  if (context != null && ProposalSimpleViewScope.of(context)) {
+  if (forceUnderline ||
+      (context != null && ProposalSimpleViewScope.of(context))) {
     // 原型：无外框，底部紫色虚线；聚焦变紫色实线。
     return DunesColors.inputDecoration(
       context,

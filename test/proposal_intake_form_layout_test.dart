@@ -3080,7 +3080,7 @@ void main() {
   });
 
   testWidgets(
-    'product settlement uses admin unit-price formulas and xor-locks ratio',
+    'product settlement uses catalog formulas and xor-locks ratio',
     (tester) async {
       tester.view.physicalSize = const Size(1440, 2400);
       tester.view.devicePixelRatio = 1;
@@ -3111,15 +3111,20 @@ void main() {
         ),
       );
       await tester.pump();
+      await _tapVisible(tester, find.byKey(const ValueKey('proposal-nav-finance')));
       await _scrollUntil(tester, '产品结算');
-      await _tapVisible(tester, find.text('填写结算').first);
+      await _tapVisible(tester, find.text('填写结算').last);
       final formula = _childInField<ProposalSelectField<CatalogRef>>(
         tester,
         '计算公式',
       );
       expect(
         formula.options.map((item) => item.label),
-        containsAll(['按核销统计结算单价', '按销售统计结算单价']),
+        containsAll(['按核销统计结算单价', '按下发统计结算单价']),
+      );
+      expect(
+        formula.options.map((item) => item.label),
+        isNot(contains('按销售统计结算单价')),
       );
       final ratio = tester.widget<TextFormField>(
         find.descendant(

@@ -344,8 +344,7 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                       ),
                     )
                   else
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: maxHeight),
+                    Flexible(
                       child: ListView.builder(
                         padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
                         shrinkWrap: true,

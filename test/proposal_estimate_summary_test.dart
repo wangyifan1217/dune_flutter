@@ -13,10 +13,7 @@ ProposalIntakeOptions _options() => ProposalIntakeOptions.fromJson({
 });
 
 Widget _form(ProposalIntakeRow row, {double width = 1440}) {
-  final auth = AuthSession.fromJson(const {
-    'userId': 11,
-    'displayName': '王奕凡',
-  });
+  final auth = AuthSession.fromJson(const {'userId': 11, 'displayName': '王奕凡'});
   return MaterialApp(
     home: Scaffold(
       body: SizedBox(
@@ -102,15 +99,15 @@ void main() {
   test('list figures follow the same estimate as the detail page', () {
     expect(proposalEstimateListFigures(const {}), (scale: '', margin: ''));
     // 利润 = 100 − 80 − 6 = 14；14 ÷ 1200 = 1.17%。
-    expect(
-      proposalEstimateListFigures(_filledForm),
-      (scale: '1200', margin: '1.17'),
-    );
+    expect(proposalEstimateListFigures(_filledForm), (
+      scale: '1200',
+      margin: '1.17',
+    ));
     // 只有规模、收入还算不出来时不显示毛利率。
-    expect(
-      proposalEstimateListFigures(const {'salesScale': 860}),
-      (scale: '860', margin: ''),
-    );
+    expect(proposalEstimateListFigures(const {'salesScale': 860}), (
+      scale: '860',
+      margin: '',
+    ));
   });
 
   for (final width in [1440.0, 390.0]) {
@@ -135,27 +132,29 @@ void main() {
       );
       expect(tester.takeException(), isNull);
 
-      // 左：年化利润 · 测算
-      expect(_rich('年化利润 · 测算'), findsOneWidget);
-      expect(_rich('900.0 万'), findsOneWidget);
-      expect(_rich('1.0% 毛利率 · 利润÷规模'), findsOneWidget);
-      expect(_rich('= 收入 1,980.0 − 项目成本 1,080.0'), findsOneWidget);
-      expect(_rich('S 按年化规模自动 · ≥ 5,000万'), findsOneWidget);
-      // 右：测算合计 + 瀑布图
-      expect(_rich('测算合计   年化 · 万元'), findsOneWidget);
-      expect(_rich('收入（利差）'), findsNWidgets(2));
-      expect(_rich('2.2%'), findsOneWidget);
-      expect(_rich('7,500.0'), findsOneWidget);
+      // 公式金额先不展示：没有年化利润、收入、成本、毛利率、售价。
+      expect(_rich('年化利润 · 测算'), findsNothing);
+      expect(_rich('年化利润'), findsNothing);
+      expect(_rich('收入（利差）'), findsNothing);
+      expect(_rich('900.0 万'), findsNothing);
+      expect(find.text('售价'), findsNothing);
+      expect(find.text('成本合计'), findsNothing);
+      expect(find.text('毛利率'), findsNothing);
+      // 留下市场部规模、月均、周转资金、SKU 和评级。
+      expect(_rich('规模'), findsWidgets);
+      expect(_rich('年化规模'), findsWidgets);
+      expect(_rich('90,000.0'), findsWidgets);
+      expect(_rich('7,500.0'), findsWidgets);
+      expect(_rich('1,875.0'), findsWidgets);
       expect(_rich('4次/月'), findsOneWidget);
-      expect(_rich('−1,080.0'), findsOneWidget);
-      // 下：规模 / 成本 / 利润
-      expect(_rich('售价 →'), findsOneWidget);
-      expect(_rich('99.0%'), findsOneWidget);
+      expect(_rich('90,000.0万'), findsWidgets);
+      expect(_rich('1,875.0万'), findsOneWidget);
       expect(_rich('30个'), findsOneWidget);
-      expect(_rich('面值 10–500 元'), findsOneWidget);
-      expect(_rich('规模 × 2.2% 利差'), findsOneWidget);
-      expect(_rich('每月周转 4 次'), findsOneWidget);
-      expect(_rich('75.0万'), findsOneWidget);
+      expect(find.text('面值 10–500 元'), findsOneWidget);
+      expect(_rich('S  任务评级 · ≥ 5,000万'), findsOneWidget);
+      expect(_rich('90,000.0 万'), findsOneWidget);
+      expect(_rich('月均 7,500.0 万 · ÷12'), findsOneWidget);
+      expect(_rich('年化规模 · 月均 = 年化 ÷ 12'), findsOneWidget);
 
       final link = _rich('来自 市场部 · 规模 ›');
       await tester.ensureVisible(link);
@@ -176,23 +175,17 @@ void main() {
 
     final card = find.byKey(const ValueKey('proposal-estimate-summary'));
     expect(card, findsOneWidget);
-    // 利润 = 收入 100 − 采购 80 − 项目 6；利差 = 20；周转资金 = 1200 ÷ 12 ÷ 4。
-    expect(
-      find.descendant(of: card, matching: _rich('14.0 万')),
-      findsOneWidget,
-    );
+    // 公式金额先不展示。规模 1,200 万、周转资金 1,200 ÷ 12 ÷ 4 = 25 万仍在。
+    expect(find.descendant(of: card, matching: _rich('14.0 万')), findsNothing);
     expect(
       find.descendant(of: card, matching: _rich('= 收入 20.0 − 项目成本 6.0')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.descendant(of: card, matching: _rich('1,200.0万')),
       findsOneWidget,
     );
-    expect(
-      find.descendant(of: card, matching: _rich('25.0万')),
-      findsOneWidget,
-    );
+    expect(find.descendant(of: card, matching: _rich('25.0万')), findsOneWidget);
   });
 
   testWidgets('estimate link switches to the finance tab', (tester) async {
@@ -205,14 +198,19 @@ void main() {
     );
     await tester.pump();
     // 填报内容默认收起，财务部字段不显示。
-    expect(find.text('收入（万元）'), findsNothing);
+    expect(find.text('收入与成本公式'), findsNothing);
 
-    final link = _rich('来自 财务部 · 项目成本 ›');
+    final metric = find.byKey(const ValueKey('proposal-estimate-metric-周转资金'));
+    await tester.ensureVisible(metric);
+    await tester.tap(metric);
+    await tester.pump();
+
+    final link = _rich('来自 财务部 · 成本 · 周转资金 ›');
     await tester.ensureVisible(link);
     await tester.pump();
     await tester.tap(link);
     await tester.pumpAndSettle();
-    expect(find.text('收入（万元）'), findsOneWidget);
+    expect(find.text('收入与成本公式'), findsOneWidget);
   });
 
   testWidgets('estimate summary stays read-only in pending president', (
@@ -285,19 +283,13 @@ void main() {
     await tester.enterText(scaleInput.first, '2400');
     await tester.pump();
 
-    // 填写中是原型填写页的实时测算：年化规模、周转资金（2400 ÷ 12 ÷ 4）、毛利率（14 ÷ 2400 ≈ 0.58%）跟着变。
+    // 年化规模、周转资金（2400 ÷ 12 ÷ 4）跟着变。毛利率是公式金额，先不展示。
     expect(
       find.descendant(of: card, matching: _rich('2,400.0万')),
       findsOneWidget,
     );
-    expect(
-      find.descendant(of: card, matching: _rich('50.0万')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: card, matching: _rich('0.58%')),
-      findsOneWidget,
-    );
+    expect(find.descendant(of: card, matching: _rich('50.0万')), findsOneWidget);
+    expect(find.descendant(of: card, matching: _rich('0.58%')), findsNothing);
   });
 
   testWidgets('read-only values get the dashed underline only when viewing', (
@@ -314,10 +306,7 @@ void main() {
 
     await tester.pumpWidget(_form(_row(form: viewForm)));
     await tester.pump();
-    expect(
-      find.byKey(const ValueKey('proposal-view-underline')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('proposal-view-underline')), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(
@@ -329,10 +318,7 @@ void main() {
       find.byKey(const ValueKey('proposal-simple-content-toggle')),
     );
     await tester.pump();
-    expect(
-      find.byKey(const ValueKey('proposal-view-underline')),
-      findsWidgets,
-    );
+    expect(find.byKey(const ValueKey('proposal-view-underline')), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -434,7 +420,9 @@ void main() {
     expect(find.text('展开 ▾'), findsOneWidget);
     expect(find.text('业务板块'), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('proposal-simple-content-toggle')));
+    await tester.tap(
+      find.byKey(const ValueKey('proposal-simple-content-toggle')),
+    );
     await tester.pump();
     expect(find.text('收起 ▴'), findsOneWidget);
     expect(find.text('业务板块'), findsOneWidget);
@@ -444,7 +432,9 @@ void main() {
     expect(tester.takeException(), isNull);
 
     // 收起后点板块标签会自动展开。
-    await tester.tap(find.byKey(const ValueKey('proposal-simple-content-toggle')));
+    await tester.tap(
+      find.byKey(const ValueKey('proposal-simple-content-toggle')),
+    );
     await tester.pump();
     expect(find.text('业务板块'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('proposal-nav-tech')));

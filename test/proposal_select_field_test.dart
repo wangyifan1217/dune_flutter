@@ -90,4 +90,47 @@ void main() {
 
     expect(cleared, isTrue);
   });
+
+  testWidgets('long list keeps the add action visible', (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var added = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 320,
+              child: ProposalSelectField<int>(
+                value: null,
+                title: '产品',
+                options: [
+                  for (var i = 0; i < 20; i++)
+                    ProposalSelectOption(
+                      value: i,
+                      label: '产品 $i',
+                      meta: 'CODE_$i',
+                    ),
+                ],
+                addLabel: '新增产品',
+                onAdd: () => added = true,
+                onSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('+ 新增产品'), findsOneWidget);
+    await tester.tap(find.text('+ 新增产品'));
+    await tester.pumpAndSettle();
+    expect(added, isTrue);
+  });
 }

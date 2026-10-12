@@ -1963,8 +1963,10 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                   headerCell('评级', flex[2]),
                   const SizedBox(width: 10),
                   headerCell('年化规模', flex[3], right: true),
-                  const SizedBox(width: 10),
-                  headerCell('计划毛利率', flex[4], right: true),
+                  if (kProposalFinanceShowEstimates) ...[
+                    const SizedBox(width: 10),
+                    headerCell('计划毛利率', flex[4], right: true),
+                  ],
                   const SizedBox(width: 10),
                   headerCell('状态', flex[5]),
                   const SizedBox(width: 10),
@@ -2315,11 +2317,16 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                       ),
                     ),
                     divider(),
-                    metricCell(
-                      '计划毛利率',
-                      Text(margin, style: mono(13.5, weight: FontWeight.w800)),
-                    ),
-                    divider(),
+                    if (kProposalFinanceShowEstimates) ...[
+                      metricCell(
+                        '计划毛利率',
+                        Text(
+                          margin,
+                          style: mono(13.5, weight: FontWeight.w800),
+                        ),
+                      ),
+                      divider(),
+                    ],
                     metricCell(done ? '完成日期' : '当前节点', whoBlock),
                   ],
                 ),
@@ -2356,15 +2363,17 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
               ),
             ),
             const SizedBox(width: 10),
-            Expanded(
-              flex: flex[4],
-              child: Text(
-                margin,
-                textAlign: TextAlign.right,
-                style: mono(13.5, weight: FontWeight.w700),
+            if (kProposalFinanceShowEstimates) ...[
+              Expanded(
+                flex: flex[4],
+                child: Text(
+                  margin,
+                  textAlign: TextAlign.right,
+                  style: mono(13.5, weight: FontWeight.w700),
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
+              const SizedBox(width: 10),
+            ],
             Expanded(
               flex: flex[5],
               child: Align(alignment: Alignment.centerLeft, child: pill),
@@ -2605,7 +2614,7 @@ class _ProposalListTile extends StatelessWidget {
           ),
           TextSpan(text: ' 万  ·  ', style: metaStyle),
         ],
-        if (figures.margin.isNotEmpty) ...[
+        if (kProposalFinanceShowEstimates && figures.margin.isNotEmpty) ...[
           TextSpan(text: '毛利率 ', style: metaStyle),
           TextSpan(
             text:
@@ -3080,29 +3089,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   static const _financeReviewLabel = '财务部负责人二复核';
   static const _subtitleFillLabel = '财务部负责人二填写';
 
-  static const _kFinanceReviewKeys = <String>[
-    'revenue',
-    'profit',
-    'margin',
-    'turnoverCash',
-    'turnoverTimes',
-    'supplySettleMode',
-    'supplySettleCycle',
-    'supplyPayer',
-    'supplyPayAccount',
-    'channelSettleMode',
-    'channelSettleCycle',
-    'channelPayee',
-    'channelReceiveAccount',
-    'generalBusinessAccount',
-    'prepaidAccount',
-    'financeRemark',
-    'costItems',
-    'operatingCost',
-    'taxCost',
-    'proposalSubtitle',
-  ];
-
   late Map<String, dynamic> _serverForm;
 
   @override
@@ -3365,7 +3351,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   List<String> get _financeReviewKeys => _isPurchase
       ? const []
-      : [..._kFinanceReviewKeys, ...proposalIntakeSkuSettleReviewKeys(_form)];
+      : proposalIntakeFinanceReviewKeys(_form);
 
   bool get _canSeeHun => _isMarketOwner1;
 
@@ -5102,16 +5088,42 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return catalogMatchByCode(current, options);
   }
 
-  bool _formulaMatchesSettleXor(
-    CatalogRef item, {
-    required bool hasRatio,
-    required bool hasPrice,
+  /// 产品结算计算公式：资管 `/out/shaqiu/catalog/formula`。
+  /// 字典还没拉到时，用财务部同一套收入公式目录顶上，不再退回管理端写死的两个单价公式。
+  List<CatalogRef> _unifiedSettleFormulas({
+    required String syncSource,
+    required String productSource,
+    required _SettleCatalogBundle bundle,
   }) {
-    if (hasRatio == hasPrice) return true;
-    final method = item.settleMethod.trim();
-    if (method.isEmpty) return true;
-    if (hasPrice) return method == '2' || method == '5';
-    return method == '1' || method == '5';
+    if (bundle.formulas.isNotEmpty) return bundle.formulas;
+    if (productSource.trim().toUpperCase() == 'SUPPLIER') {
+      return const [];
+    }
+    final source = syncSource.trim();
+    final groups = widget.options.resolvedFinanceFormulaCatalog
+        .groupsForSources(source.isEmpty ? const {} : {source});
+    final seen = <String>{};
+    return [
+      for (final group in groups)
+        for (final formula in group.formulas)
+          if (formula.code.isNotEmpty && seen.add(formula.code))
+            CatalogRef(
+              code: formula.code,
+              name: formula.name,
+              formulaExpression: formula.expression,
+              productSource: productSource,
+              settleMethod: _settleMethodCodeOf(formula.settleMethodName),
+            ),
+    ];
+  }
+
+  String _settleMethodCodeOf(String name) {
+    final text = name.trim();
+    if (text.contains('单价') && text.contains('比例')) return '5';
+    if (text.contains('单价')) return '2';
+    if (text.contains('阶梯')) return '3';
+    if (text.contains('比例')) return '1';
+    return '';
   }
 
   List<CatalogRef> _withCurrent(List<CatalogRef> options, CatalogRef? current) {
@@ -5180,7 +5192,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       businessCost: known && !_businessCostSealed
           ? eval.total(kProposalCostCategoryBusiness)
           : null,
-      operatingCost: known ? eval.total(kProposalCostCategoryOperating) : null,
+      // 经营成本只选类型、不计金额。
+      operatingCost: null,
       taxCost: known ? eval.total(kProposalCostCategoryTax) : null,
       profit: profit,
       margin: _businessCostSealed ? null : eval.margin,
@@ -5190,10 +5203,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       faceRange: faceRange,
       product: _text('product').trim(),
       channel: _estimateChannelText(skus),
-      channelFromSku: _setOf('channels').isEmpty,
-      channelKey: _skuCommonFields(skus).containsKey('channelCategory')
-          ? 'skuCommon'
-          : 'skuDetails',
+      channelFromSku:
+          _marketChannelTagText().isEmpty && _setOf('channels').isEmpty,
+      channelKey: _marketChannelTagText().isNotEmpty
+          ? 'channelTagL1'
+          : (_skuCommonFields(skus).containsKey('channelCategory')
+                ? 'skuCommon'
+                : 'skuDetails'),
       platform: _platformShortName,
     );
   }
@@ -5208,8 +5224,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return cut.isEmpty ? raw : cut;
   }
 
-  /// 顶部年化利润卡的「渠道」：市场部渠道；没有时取各产品的渠道分类（标签三），再没有取渠道名。
+  /// 市场部「标签三一级 / 二级」。
+  String _marketChannelTagText() {
+    return [
+      (_marketChannelCategoryL1()?.label ?? '').trim(),
+      (_marketChannelCategoryL2()?.label ?? '').trim(),
+    ].where((item) => item.isNotEmpty).join(' / ');
+  }
+
+  /// 顶部年化利润卡的「渠道 · 标签三」：先用市场部标签三，没有再取市场部渠道、各产品渠道分类、渠道名。
   String _estimateChannelText(List<ProposalSkuDetailRow> skus) {
+    final tag = _marketChannelTagText();
+    if (tag.isNotEmpty) return tag;
     final channels = _setOf('channels');
     if (channels.isNotEmpty) return channels.join('、');
     final categories = <String>{
@@ -11058,7 +11084,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
           _marketSheetGroup(
             label: '产品',
-            description: '产品、子分类、项目与供给',
+            description: '产品、子分类、项目、供给与标签三',
             child: _fieldGrid(
               wide,
               [
@@ -11081,6 +11107,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                           .isEmpty
                       ? '请先选择业务板块'
                       : '请选择产品二级分类',
+                  addLabel: '新增产品',
                   onSelected: (value) {
                     _setMany({
                       'product': value?.name ?? '',
@@ -11104,6 +11131,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       ? '请先选择产品（标签一）'
                       : '请选择子分类（选填）',
                   emptyText: _productL3LoadingEmptyText(),
+                  addLabel: '新增子分类',
                   onSelected: (value) => _setMany({
                     'productL3': value?.name ?? '',
                     'productL3Ref': catalogRefToJson(value),
@@ -11120,6 +11148,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   searchable: true,
                   remoteSearch: true,
                   hint: '请选择或搜索项目',
+                  addLabel: '新增项目',
                   onQueryChanged: (query) => unawaited(_searchProjects(query)),
                   onSelected: (value) => _setMany({
                     'projectName': value?.name ?? '',
@@ -11133,6 +11162,40 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   '新增供给',
                   required: true,
                   resetReview: 'marketCompleted',
+                ),
+                _anchor(
+                  'channelTagL1',
+                  _catalogDropdownField(
+                  '标签三一级',
+                  current: _marketChannelCategoryL1(),
+                  options: _channelCategoryL1,
+                  required: true,
+                  resetReview: 'marketCompleted',
+                  hint: _channelCategoryL1.isEmpty
+                      ? '字典加载中或暂无分类'
+                      : '请选择标签三一级',
+                  emptyText: _channelCategoryL1.isEmpty ? '字典加载中或暂无分类' : null,
+                  addLabel: '新增标签三一级',
+                  onSelected: _setMarketChannelCategoryL1,
+                  ),
+                ),
+                _catalogDropdownField(
+                  '标签三二级',
+                  current: _marketChannelCategoryL2(),
+                  options: _channelCategoryL2Of(_marketChannelCategoryL1()),
+                  resetReview: 'marketCompleted',
+                  enabled: _marketChannelCategoryL1() != null,
+                  hint: _marketChannelCategoryL1() == null
+                      ? '请先选择标签三一级'
+                      : '请选择标签三二级',
+                  emptyText: _marketChannelCategoryL1() == null
+                      ? '请先选择标签三一级'
+                      : '该分类暂无二级',
+                  addLabel: '新增标签三二级',
+                  onSelected: (value) => _setMany({
+                    'channelTagL2': value?.name ?? '',
+                    'channelTagL2Ref': catalogRefToJson(value),
+                  }, resetReview: 'marketCompleted'),
                 ),
               ],
               columns: 3,
@@ -11423,7 +11486,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final scale = eval.salesScale;
     final margin = eval.margin;
     final costRate = scale > 0 && known ? eval.costTotal / scale * 100 : null;
-    final tiles = [
+    final tiles = <Widget>[
       _kpiTile(
         label: '年化规模',
         value: scale > 0 ? proposalFormatWan(scale) : '—',
@@ -11433,32 +11496,36 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         onTap: () =>
             _openEstimateField(ProposalIntakeNavSection.market, 'salesScale'),
       ),
-      _kpiTile(
-        label: '年化成本',
-        value: known && !_businessCostSealed
-            ? proposalFormatWan(eval.costTotal)
-            : (_businessCostSealed ? '已加密' : '—'),
-        sub: costRate == null || _businessCostSealed
-            ? '项目 · 业务 · 经营 · 税务'
-            : '占规模 ${proposalFormatWan(costRate)}%',
-        colors: const [Color(0xFFD9822B), Color(0xFFF4B860)],
-        icon: Icons.receipt_long_rounded,
-        onTap: () =>
-            _openEstimateField(ProposalIntakeNavSection.finance, 'financeCost'),
-      ),
-      _kpiTile(
-        label: '年化利润',
-        value: _businessCostSealed
-            ? '已加密'
-            : (known ? proposalFormatWan(eval.profit) : '—'),
-        sub: _businessCostSealed || margin == null
-            ? '收入 − 四类成本'
-            : '毛利率 ${proposalFormatWan(margin)}%',
-        colors: const [Color(0xFFB8406A), Color(0xFFE9786A)],
-        icon: Icons.savings_rounded,
-        onTap: () =>
-            _openEstimateField(ProposalIntakeNavSection.finance, 'profit'),
-      ),
+      if (kProposalFinanceShowEstimates) ...[
+        _kpiTile(
+          label: '年化成本',
+          value: known && !_businessCostSealed
+              ? proposalFormatWan(eval.costTotal)
+              : (_businessCostSealed ? '已加密' : '—'),
+          sub: costRate == null || _businessCostSealed
+              ? '项目 · 业务 · 经营 · 税务'
+              : '占规模 ${proposalFormatWan(costRate)}%',
+          colors: const [Color(0xFFD9822B), Color(0xFFF4B860)],
+          icon: Icons.receipt_long_rounded,
+          onTap: () => _openEstimateField(
+            ProposalIntakeNavSection.finance,
+            'financeCost',
+          ),
+        ),
+        _kpiTile(
+          label: '年化利润',
+          value: _businessCostSealed
+              ? '已加密'
+              : (known ? proposalFormatWan(eval.profit) : '—'),
+          sub: _businessCostSealed || margin == null
+              ? '收入 − 四类成本'
+              : '毛利率 ${proposalFormatWan(margin)}%',
+          colors: const [Color(0xFFB8406A), Color(0xFFE9786A)],
+          icon: Icons.savings_rounded,
+          onTap: () =>
+              _openEstimateField(ProposalIntakeNavSection.finance, 'profit'),
+        ),
+      ],
     ];
     return LayoutBuilder(
       builder: (context, box) {
@@ -11613,15 +11680,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   String _loopWan(double value) => '${proposalFormatWan(value)} 万';
 
+  /// 公式金额先不展示时，链路格只标明按公式，不写测算出来的万元。
+  String _loopFinanceAmount(double value, {required bool known}) =>
+      kProposalFinanceShowEstimates
+      ? (known ? _loopWan(value) : '')
+      : '按公式';
+
   /// 财务环节的链路格：收入 / 成本 / 利润（业务成本加密时利润不显示）。
   List<Widget> _financeLoopChips({bool withRevenue = true}) {
     final eval = _mainFinanceEvaluation;
     final known = eval.salesScale > 0 || eval.revenue.amount != 0;
+    final showAmounts = kProposalFinanceShowEstimates;
     return [
       if (withRevenue) ...[
         _loopChip(
           '财务 · 收入',
-          known ? _loopWan(eval.revenue.amount) : '',
+          _loopFinanceAmount(eval.revenue.amount, known: known),
           onTap: () =>
               _openEstimateField(ProposalIntakeNavSection.finance, 'revenue'),
         ),
@@ -11629,7 +11703,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ],
       _loopChip(
         '财务 · 成本',
-        known && !_businessCostSealed ? _loopWan(eval.costTotal) : '',
+        !showAmounts
+            ? '按公式'
+            : (known && !_businessCostSealed ? _loopWan(eval.costTotal) : ''),
         accent: const Color(0xFFB07A2B),
         onTap: () =>
             _openEstimateField(ProposalIntakeNavSection.finance, 'financeCost'),
@@ -11637,7 +11713,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _loopArrow,
       _loopChip(
         '财务 · 利润',
-        _businessCostSealed ? '已加密' : (known ? _loopWan(eval.profit) : ''),
+        !showAmounts
+            ? '按公式'
+            : (_businessCostSealed
+                  ? '已加密'
+                  : (known ? _loopWan(eval.profit) : '')),
         accent: const Color(0xFFC0563F),
         onTap: () =>
             _openEstimateField(ProposalIntakeNavSection.finance, 'profit'),
@@ -11669,7 +11749,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           _text('product'),
           _text('projectName'),
         ],
-        // 规模、成本、利润是提案最重要的三个数：三张大卡，点了跳到出处。
+        // 规模是市场部填写的；成本、利润是公式金额，测算金额先不展示时不放这两张卡。
         highlight: _anchor('salesScale', _kpiTriple()),
         checks: [
           ('提案名称', _filled('proposalName')),
@@ -11700,6 +11780,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           _setOf('supplies').join('、'),
           anchorKey: 'supplies',
           required: true,
+        ),
+        _simpleLine(
+          '标签三一级',
+          _marketChannelCategoryL1()?.label ?? '',
+          anchorKey: 'channelTagL1',
+          required: true,
+        ),
+        _simpleLine(
+          '标签三二级',
+          _marketChannelCategoryL2()?.label ?? '',
+          anchorKey: 'channelTagL2',
         ),
         _textField(
           '子标题',
@@ -12598,7 +12689,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           _loopArrow,
           _loopChip(
             '财务 · 项目成本',
-            _loopWan(_mainFinanceEvaluation.total(kProposalCostCategoryProject)),
+            kProposalFinanceShowEstimates
+                ? _loopWan(
+                    _mainFinanceEvaluation.total(kProposalCostCategoryProject),
+                  )
+                : '按公式',
             accent: const Color(0xFF6B4FD8),
             onTap: () =>
                 _openEstimateField(ProposalIntakeNavSection.finance, 'costItems'),
@@ -13116,23 +13211,24 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   child: _financeSimpleRows(wide),
                 ),
               ),
-              // 成本、利润两块：与顶部年化测算 hero 联动，点 hero 直接跳到这里。
+              // 按产品选收入公式和成本公式：与顶部年化测算 hero 联动，点 hero 直接跳到这里。
               _marketSheetGroup(
-                label: '成本',
-                description: '项目 · 业务 · 经营 · 税务 · 周转资金',
+                label: kProposalFinanceShowEstimates ? '成本' : '收入与成本公式',
+                description: '按产品：收入 · 项目 · 业务 · 税务；经营成本类型 · 周转资金',
                 child: Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: _financeCostPanel(kProposalProductFinanceMain),
                 ),
               ),
-              _marketSheetGroup(
-                label: '利润',
-                description: '收入 · 利润 · 毛利率',
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 4),
-                  child: _financeProfitPanel(kProposalProductFinanceMain),
+              if (kProposalFinanceShowEstimates)
+                _marketSheetGroup(
+                  label: '利润',
+                  description: '收入 · 利润 · 毛利率',
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                    child: _financeProfitPanel(kProposalProductFinanceMain),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -13159,12 +13255,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   ProposalFinanceFormulaCatalog get _financeFormulaCatalog =>
       widget.options.resolvedFinanceFormulaCatalog;
 
-  ProposalFinanceEvaluation _financeEvaluationOf(Map<String, dynamic> scope) {
+  ProposalFinanceEvaluation _financeEvaluationOf(
+    Map<String, dynamic> scope, {
+    String owner = kProposalProductFinanceMain,
+  }) {
     return proposalEvaluateFinance(
       scope,
       catalog: _financeFormulaCatalog,
       costCatalog: widget.options.costItemOptions,
       costNames: _projectCostItemNames,
+      owner: owner,
     );
   }
 
@@ -13180,17 +13280,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final notes = <String>[];
     if (_canEditAsSubmitter) {
       notes.add(
-        '填写人：选好收入公式和项目 / 经营 / 税务成本项即可，金额自动算；业务成本由市场部负责人一在财务复核时选择。',
+        '填写人：按产品选好收入公式和项目 / 税务成本项，并选经营成本类型；业务成本由市场部负责人一在财务复核时选择。',
       );
     } else if (_isOwner('financeOwner2')) {
       notes.add(
         _canEditUnreviewedFinance
-            ? '财务部负责人二：可调整收入公式和项目 / 经营 / 税务成本，并逐条复核；业务成本和利润对你加密。'
+            ? '财务部负责人二：可按产品调整收入公式和项目 / 税务成本，并逐条复核；业务成本和利润对你加密。'
             : '财务部负责人二：业务成本和利润对你加密。',
       );
     }
     if (_canEditBusinessCost) {
-      notes.add('市场部负责人一：请在「业务成本」里选择成本项和公式，利润随之更新。');
+      notes.add('市场部负责人一：请在每个产品的「业务成本」里选择成本项和公式。');
     }
     if (_isOwner('financeOwner1')) {
       notes.add('财务部负责人一：负责人二逐条复核完成后，在本板块底部整板块复核。');
@@ -13213,9 +13313,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     Map<String, dynamic> Function(Map<String, dynamic> finance) mutate,
   ) {
     final finance = mutate(proposalIntakeProductFinance(_form, owner: owner));
-    final form = _withEstimatedFinanceCosts(
+    _commitFinanceForm(
       proposalIntakeWriteProductFinance(_form, owner: owner, finance: finance),
     );
+  }
+
+  /// 改某个产品的公式选择：只写这个产品的，金额由测算统一重算后回写。
+  void _writeProductFormula(
+    String skuId,
+    Map<String, dynamic> Function(Map<String, dynamic> entry) mutate,
+  ) {
+    _commitFinanceForm(proposalFinanceWriteProductEntry(_form, skuId, mutate));
+  }
+
+  void _commitFinanceForm(Map<String, dynamic> next) {
+    final form = _withEstimatedFinanceCosts(next);
     final review = Map<String, dynamic>.from(_review)
       ..['financeCompleted'] = false;
     _markFormDirty();
@@ -13224,82 +13336,130 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     _emitChanged(_row);
   }
 
+  String _productFormulaReviewSection(String skuId, String kind) =>
+      'financeItem:${proposalIntakeProductFormulaReviewKey(skuId, kind)}';
+
+  /// 某个产品的某一段（收入 / 项目 / 业务 / 税务）当前用户能不能改；该段复核过就锁。
+  bool _productFormulaEditable(String skuId, String key) {
+    if (_showSelectedAsText) return false;
+    if (key == kProposalCostCategoryBusiness) return _canEditBusinessCost;
+    final kind = key == 'revenue'
+        ? 'revenue'
+        : ProposalFinanceFormulaBoardKeys.reviewKeyOf(key);
+    return _fillEnabled(
+      key == kProposalCostCategoryProject
+          ? _canEditProjectCostChips
+          : _canEditUnreviewedFinance,
+      resetReview: 'financeCompleted',
+      reviewSection: _productFormulaReviewSection(skuId, kind),
+    );
+  }
+
+  /// 全部产品的测算：主产品在前、子产品在后。
+  List<ProposalProductFinanceEvaluation> get _financeProductEvaluations {
+    final products = [..._mainFinanceEvaluation.products];
+    if (proposalIntakeHasChildProducts(_form)) {
+      products.addAll(
+        _financeEvaluationOf(
+          proposalIntakeIsolatedFinanceScope(
+            _form,
+            owner: kProposalProductFinanceChildren,
+          ),
+          owner: kProposalProductFinanceChildren,
+        ).products,
+      );
+    }
+    return products;
+  }
+
   /// 「成本」「利润」两块共用的配置：测算结果、各角色能改什么、复核、锚点。
   ProposalFinanceBoardConfig _financeBoardConfig(String owner) {
     final scope = proposalIntakeIsolatedFinanceScope(_form, owner: owner);
-    final evaluation = _financeEvaluationOf(scope);
+    final evaluation = _financeEvaluationOf(scope, owner: owner);
     final times = proposalFinanceAmount(scope, kProposalTurnoverTimesKey);
+    final editable = !_showSelectedAsText;
     return ProposalFinanceBoardConfig(
       evaluation: evaluation,
       catalog: _financeFormulaCatalog,
-      revenueEditable: _financeFormulaEditable(
-        owner,
-        _canEditUnreviewedFinance,
-        'revenue',
-      ),
+      products: _financeProductEvaluations,
+      revenueEditable: editable,
       categoryEditable: {
-        kProposalCostCategoryProject: _financeFormulaEditable(
-          owner,
-          _canEditProjectCostChips,
-          'costItems',
-        ),
-        kProposalCostCategoryBusiness:
-            !_showSelectedAsText && _canEditBusinessCost,
+        kProposalCostCategoryProject: editable,
+        kProposalCostCategoryBusiness: editable && _canEditBusinessCost,
         kProposalCostCategoryOperating: _financeFormulaEditable(
           owner,
           _canEditUnreviewedFinance,
           'operatingCost',
         ),
-        kProposalCostCategoryTax: _financeFormulaEditable(
-          owner,
-          _canEditUnreviewedFinance,
-          'taxCost',
-        ),
+        kProposalCostCategoryTax: editable,
       },
+      productEditable: _productFormulaEditable,
       businessSealed: _businessCostSealed,
       roleNote: _financeRoleNote,
-      promotionPlan: proposalPromotionTierPlanOf(scope),
-      onPromotionTiers: (plan) => _writeFinanceFormula(
-        owner,
-        (finance) => Map<String, dynamic>.from(finance)
-          ..[kProposalPromotionTiersKey] = plan.toJson(),
+      onPromotionPlans: (skuId, plans) => _writeProductFormula(
+        skuId,
+        (entry) => proposalFinanceWritePromotionPlans(entry, plans),
       ),
-      reviewStatus: (key) => switch (key) {
-        'profit' => _reviewStatusTag([
-          _financeReviewSection(owner, 'profit'),
-          _financeReviewSection(owner, 'margin'),
-        ]),
-        'businessCost' => null,
-        _ => _reviewStatusTag([_financeReviewSection(owner, key)]),
+      reviewStatus: (key) {
+        final parts = key.split(':');
+        if (parts.first == 'sku' && parts.length == 2) {
+          return _reviewStatusTag([
+            for (final kind in kProposalProductFormulaReviewKinds)
+              _productFormulaReviewSection(parts[1], kind),
+          ]);
+        }
+        if (parts.first == 'sku') return _reviewStatusTag(['financeItem:$key']);
+        return switch (key) {
+          'profit' => _reviewStatusTag([
+            _financeReviewSection(owner, 'profit'),
+            _financeReviewSection(owner, 'margin'),
+          ]),
+          'businessCost' => null,
+          _ => _reviewStatusTag([_financeReviewSection(owner, key)]),
+        };
       },
-      reviewToggle: (key) => switch (key) {
-        'profit' => _mergedReviewToggle([
-          _financeReviewSection(owner, 'profit'),
-          _financeReviewSection(owner, 'margin'),
-        ]),
-        // 业务成本由市场部负责人一填，不走财务部负责人二逐条复核。
-        'businessCost' => null,
-        _ => _rowReviewToggle(
-          _financeReviewSection(owner, key),
-          _financeReviewLabel,
-        ),
+      reviewToggle: (key) {
+        if (key.startsWith('sku:')) {
+          return _rowReviewToggle('financeItem:$key', _financeReviewLabel);
+        }
+        return switch (key) {
+          'profit' => _mergedReviewToggle([
+            _financeReviewSection(owner, 'profit'),
+            _financeReviewSection(owner, 'margin'),
+          ]),
+          // 业务成本由市场部负责人一填，不走财务部负责人二逐条复核。
+          'businessCost' => null,
+          _ => _rowReviewToggle(
+            _financeReviewSection(owner, key),
+            _financeReviewLabel,
+          ),
+        };
       },
-      onRevenueFormula: (group, code) => _writeFinanceFormula(
-        owner,
-        (finance) => proposalFinanceWriteRevenueFormula(
-          finance,
+      onRevenueFormula: (skuId, group, code) => _writeProductFormula(
+        skuId,
+        (entry) => proposalFinanceWriteRevenueFormula(
+          entry,
           groupKey: group,
           code: code,
         ),
       ),
-      onCostItemsChanged: (category, names) => _writeFinanceFormula(
-        owner,
-        (finance) => proposalFinanceWriteSelection(finance, category, names),
+      onCostItemsChanged: (skuId, category, names) => _writeProductFormula(
+        skuId,
+        (entry) => proposalFinanceWriteSelection(entry, category, names),
       ),
-      onCostFormula: (category, name, code) => _writeFinanceFormula(
-        owner,
-        (finance) =>
-            proposalFinanceWriteItemFormula(finance, category, name, code),
+      onCostFormula: (skuId, category, name, code) => _writeProductFormula(
+        skuId,
+        (entry) => proposalFinanceWriteItemFormula(entry, category, name, code),
+      ),
+      operatingItems: proposalCostSelectedNames(
+        _form,
+        kProposalOperatingCostItemsKey,
+      ),
+      onOperatingItems: (names) => _writeFinanceFormula(
+        kProposalProductFinanceMain,
+        (finance) => Map<String, dynamic>.from(finance)
+          ..[kProposalOperatingCostItemsKey] = names
+          ..remove('operatingCostItemFormulas'),
       ),
       // 子产品组不挂锚点，避免顶部 hero 跳到子产品那一份。
       anchor: owner == kProposalProductFinanceMain ? _anchor : null,
@@ -17351,6 +17511,36 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     ];
   }
 
+  // 存成 channelTag*：顶层 channelCategoryL1/L2 会被旧格式当成一条产品读出来。
+  CatalogRef? _marketChannelCategoryL1() {
+    final ref =
+        _formRef('channelTagL1Ref') ??
+        CatalogRef.fromName(_text('channelTagL1'));
+    return ref.isEmpty ? null : ref;
+  }
+
+  CatalogRef? _marketChannelCategoryL2() {
+    final ref =
+        _formRef('channelTagL2Ref') ??
+        CatalogRef.fromName(_text('channelTagL2'));
+    return ref.isEmpty ? null : ref;
+  }
+
+  void _setMarketChannelCategoryL1(CatalogRef? value) {
+    final l2 = _marketChannelCategoryL2();
+    final keep =
+        value != null &&
+        value.isNotEmpty &&
+        l2 != null &&
+        proposalIntakeChannelCategoryChildOf(l2, value);
+    _setMany({
+      'channelTagL1': value?.name ?? '',
+      'channelTagL1Ref': catalogRefToJson(value),
+      if (!keep) 'channelTagL2': '',
+      if (!keep) 'channelTagL2Ref': null,
+    }, resetReview: 'marketCompleted');
+  }
+
   ProposalSkuDetailRow _applyChannelCategoryL1(
     ProposalSkuDetailRow current,
     CatalogRef? value,
@@ -18714,24 +18904,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       );
     }
 
-    final hasRatio = terms.displayRatio.trim().isNotEmpty;
-    final hasPrice = terms.displayUnitPrice.trim().isNotEmpty;
-    final useAdminFormulas = !includeSalesFields && includeFormula;
-    final formulaOptions = useAdminFormulas
-        ? widget.options.resolvedUnitPriceFormulas
-        : [
-            for (final item in bundle.formulas)
-              if ((terms.settleModeRef == null ||
-                      terms.settleModeRef!.isEmpty ||
-                      item.settleMethod.isEmpty ||
-                      item.settleMethod == terms.settleModeRef!.code) &&
-                  _formulaMatchesSettleXor(
-                    item,
-                    hasRatio: hasRatio,
-                    hasPrice: hasPrice,
-                  ))
-                item,
-          ];
+    // 收入、成本共用同一份资管公式，不按结算方式或已填的比例/单价再筛一遍。
+    final formulaOptions = _unifiedSettleFormulas(
+      syncSource: syncSource,
+      productSource: productSource,
+      bundle: bundle,
+    );
 
     Widget dateField(
       String label,
@@ -18827,6 +19005,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       'expire',
       (value) => terms.copyWith(expireTime: value),
     );
+    final hasRatio = terms.displayRatio.trim().isNotEmpty;
+    final hasPrice = terms.displayUnitPrice.trim().isNotEmpty;
     final ratioField = field(
       '结算比例',
       terms.displayRatio,
@@ -18936,8 +19116,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               label: '计算公式',
               current: terms.formulaRef ?? CatalogRef.fromName(terms.formula),
               options: formulaOptions,
-              hint: useAdminFormulas ? '请选择' : catalogHint,
-              emptyText: useAdminFormulas ? '暂无计算公式' : catalogEmptyText,
+              hint: catalogHint,
+              emptyText: catalogEmptyText,
               metaOf: (item) => item.formulaExpression.isEmpty
                   ? null
                   : item.formulaExpression,
@@ -21345,6 +21525,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? reviewSection,
     String reviewLabel = '复核',
     ValueChanged<String>? onQueryChanged,
+    String? addLabel,
   }) {
     final canEdit =
         _fillEnabled(
@@ -21390,6 +21571,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         onQueryChanged: onQueryChanged,
         remoteOptions: remoteSearch || onQueryChanged != null,
         emptyText: emptyText,
+        addLabel: addLabel,
+        onAdd: addLabel == null || !canEdit
+            ? null
+            : () async {
+                final added = await _promptAddedOption(addLabel);
+                if (added == null || added.isEmpty) return;
+                onSelected(CatalogRef.fromName(added));
+              },
         onSelected: canEdit ? onSelected : null,
       ),
     );

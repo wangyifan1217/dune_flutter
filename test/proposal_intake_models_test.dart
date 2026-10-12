@@ -223,6 +223,7 @@ void main() {
       'product': '现金券',
       'projectName': '项目甲',
       'supplies': ['供给A'],
+      'channelTagL1': '银行',
       'channels': ['渠道A'],
       'supplierPolicy': '供货政策',
       'channelPolicy': '渠道政策',
@@ -4396,6 +4397,7 @@ void main() {
     expect(empty, contains('请选择产品（标签一）'));
     expect(empty, isNot(contains('请选择子分类')));
     expect(empty, contains('请选择供给（标签二）'));
+    expect(empty, contains('请选择标签三一级'));
     expect(empty, isNot(contains('请选择渠道（标签三）')));
     expect(empty, contains('请填写盈利计算说明'));
     expect(empty, contains('请选择采购合同状态'));
@@ -4431,6 +4433,7 @@ void main() {
       'product': '智能投放平台',
       'projectName': '华东区域智能投放项目',
       'supplies': ['头部媒体供给'],
+      'channelTagL1': '银行',
       'channels': ['直客渠道'],
       'supplierPolicy': '供货政策',
       'channelPolicy': '渠道政策',
@@ -5614,6 +5617,9 @@ void main() {
     () {
       Map<String, bool> items({bool settle = true}) => {
         ..._allFinanceItemsReviewed(),
+        for (final sku in ['sku-1', 'child-1'])
+          for (final kind in kProposalProductFormulaReviewKinds)
+            proposalIntakeProductFormulaReviewKey(sku, kind): true,
         if (settle) kProposalSkuSettlementsReviewKey: true,
       };
       ProposalIntakeRow rowOf(Map<String, bool> financeItems) {

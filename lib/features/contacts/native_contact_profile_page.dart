@@ -443,7 +443,8 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     ];
     final sections = <Widget>[];
     for (var index = 0; index < content.length;) {
-      if (!nightApp || content[index] is! GroupInfoRow) {
+      if ((!nightApp && !isDesktopCommOnly) ||
+          content[index] is! GroupInfoRow) {
         sections.add(content[index++]);
         continue;
       }
@@ -455,7 +456,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
         Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(isDesktopCommOnly ? 12 : 16),
             border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Column(children: rows),
@@ -517,7 +518,11 @@ class _ProfileHero extends StatelessWidget {
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        borderRadius: nightApp ? BorderRadius.circular(20) : null,
+        borderRadius: nightApp
+            ? BorderRadius.circular(20)
+            : isDesktopCommOnly
+            ? BorderRadius.circular(12)
+            : null,
         border: nightApp
             ? Border.all(color: Theme.of(context).dividerColor)
             : null,
@@ -559,7 +564,7 @@ class _ProfileHero extends StatelessWidget {
               ),
             ),
           ),
-          if (onAddToGroup != null && !nightApp) ...[
+          if (onAddToGroup != null && !nightApp && !isDesktopCommOnly) ...[
             const SizedBox(width: 12),
             _ProfileAddCell(size: avatarSize, onTap: onAddToGroup!),
           ],
@@ -634,7 +639,7 @@ class _ProfileHero extends StatelessWidget {
               ],
             ),
           ),
-          if (nightApp && onAddToGroup != null) ...[
+          if ((nightApp || isDesktopCommOnly) && onAddToGroup != null) ...[
             const SizedBox(width: 8),
             _ProfileAddCell(size: 32, onTap: onAddToGroup!),
           ],
@@ -725,6 +730,8 @@ class _ProfileMessageAction extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Material(
+        borderRadius: isDesktopCommOnly ? BorderRadius.circular(12) : null,
+        clipBehavior: Clip.antiAlias,
         color: DunesColors.resolve(
           context,
           Colors.white,

@@ -6,6 +6,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../lighthouse/lighthouse_theme.dart' show LhColors, LhTypography;
 import 'proposal_cost_estimate.dart';
 import 'proposal_finance_formula.dart';
+import 'proposal_finance_formula_board.dart';
 import 'proposal_intake_models.dart';
 import 'proposal_intake_ui.dart';
 
@@ -179,14 +180,16 @@ String proposalEstimateWan(double? value) {
   return proposalEstimateGrouped(value.toStringAsFixed(1));
 }
 
-String _pct(double? value) =>
-    value == null || value.isNaN || value.isInfinite
+String _pct(double? value) => value == null || value.isNaN || value.isInfinite
     ? '—'
     : '${value.toStringAsFixed(1)}%';
 
 /// 提案详情顶部，照原型（Main 详情页）：
 /// 左边「年化利润 · 测算」大数字卡，右边「测算合计」小格 + 收入→成本→利润瀑布图，
 /// 下面「规模 / 成本 / 利润」三张卡，每格注明来源，可点的直接切到对应板块。
+///
+/// [kProposalFinanceShowEstimates] 为 false 时，收入、成本、利润这些公式金额先不展示，
+/// 只留产品、渠道、评级，以及市场部规模、月均规模、周转资金和 SKU。
 ///
 /// 只负责展示；数值由页面按财务部现有测算算好传入。
 class ProposalEstimateSummary extends StatelessWidget {
@@ -224,11 +227,7 @@ class ProposalEstimateSummary extends StatelessWidget {
       '财务部 · 产品结算',
     ),
     '项目成本': (ProposalIntakeNavSection.finance, 'costItems', '财务部 · 项目成本'),
-    '业务成本': (
-      ProposalIntakeNavSection.finance,
-      'businessCost',
-      '财务部 · 业务成本',
-    ),
+    '业务成本': (ProposalIntakeNavSection.finance, 'businessCost', '财务部 · 业务成本'),
     '周转资金': (
       ProposalIntakeNavSection.finance,
       'turnoverTimes',
@@ -294,7 +293,13 @@ class ProposalEstimateSummary extends StatelessWidget {
       textScaler: MediaQuery.textScalerOf(context),
       text: TextSpan(
         text: text,
-        style: _style(context, size: size, weight: weight, color: color, mono: mono),
+        style: _style(
+          context,
+          size: size,
+          weight: weight,
+          color: color,
+          mono: mono,
+        ),
         children: tail,
       ),
     );
@@ -328,7 +333,12 @@ class ProposalEstimateSummary extends StatelessWidget {
 
   // ---------- 填写中：原型填写页的实时测算 ----------
 
-  Widget _fillingLayout(BuildContext context, double width, {required bool phone}) {
+  Widget _fillingLayout(
+    BuildContext context,
+    double width, {
+    required bool phone,
+  }) {
+    final showAmounts = kProposalFinanceShowEstimates;
     final spread = data.spread;
     final sideBySide = width >= 230 + _gap + 520;
     final hero = Container(
@@ -387,16 +397,44 @@ class ProposalEstimateSummary extends StatelessWidget {
       ),
     );
     final cells = <_Cell>[
-      _Cell('年化规模', proposalEstimateWan(data.scale), '万',
-          data.rating == '—' ? '来自 市场部' : '评级 ${data.rating} · 来自 市场部', ''),
-      _Cell('收入（利差）', proposalEstimateWan(spread), '万',
-          data.pctOfScale(spread) == null ? '来自 产品结算' : '利差 ${_pct(data.pctOfScale(spread))} · 来自 产品结算', ''),
-      _Cell('项目成本', proposalEstimateWan(data.projectCost), '万', '来自 财务部', ''),
-      _Cell('毛利率', data.margin == null ? '—' : data.margin!.toStringAsFixed(2), '%', '利润 ÷ 规模', '',
-          null, data.margin != null && data.margin! < 0 ? _C.red : _C.ink),
-      _Cell('月均利润', proposalEstimateWan(data.monthlyProfit), '万', '÷12', ''),
-      _Cell('周转资金', proposalEstimateWan(data.turnoverCash), '万',
-          data.turnoverTimes == null ? '规模 ÷ 12 ÷ 周转次数' : '规模 ÷ 12 ÷ ${proposalFormatWan(data.turnoverTimes!)} 次', ''),
+      _Cell(
+        '年化规模',
+        proposalEstimateWan(data.scale),
+        '万',
+        data.rating == '—' ? '来自 市场部' : '评级 ${data.rating} · 来自 市场部',
+        '',
+      ),
+      if (showAmounts) ...[
+        _Cell(
+          '收入（利差）',
+          proposalEstimateWan(spread),
+          '万',
+          data.pctOfScale(spread) == null
+              ? '来自 产品结算'
+              : '利差 ${_pct(data.pctOfScale(spread))} · 来自 产品结算',
+          '',
+        ),
+        _Cell('项目成本', proposalEstimateWan(data.projectCost), '万', '来自 财务部', ''),
+        _Cell(
+          '毛利率',
+          data.margin == null ? '—' : data.margin!.toStringAsFixed(2),
+          '%',
+          '利润 ÷ 规模',
+          '',
+          null,
+          data.margin != null && data.margin! < 0 ? _C.red : _C.ink,
+        ),
+        _Cell('月均利润', proposalEstimateWan(data.monthlyProfit), '万', '÷12', ''),
+      ],
+      _Cell(
+        '周转资金',
+        proposalEstimateWan(data.turnoverCash),
+        '万',
+        data.turnoverTimes == null
+            ? '规模 ÷ 12 ÷ 周转次数'
+            : '规模 ÷ 12 ÷ ${proposalFormatWan(data.turnoverTimes!)} 次',
+        '',
+      ),
     ];
     final gridWidth = sideBySide ? width - 240 - _gap : width;
     // 原型：auto-fill minmax(150px, 1fr)。
@@ -466,10 +504,13 @@ class ProposalEstimateSummary extends StatelessWidget {
         ],
       ),
     );
-    if (!sideBySide) {
+    if (!showAmounts || !sideBySide) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [hero, const SizedBox(height: _gap), grid],
+        children: [
+          if (showAmounts) ...[hero, const SizedBox(height: _gap)],
+          grid,
+        ],
       );
     }
     return IntrinsicHeight(
@@ -483,7 +524,6 @@ class ProposalEstimateSummary extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class _Cell {
@@ -578,11 +618,7 @@ class ProposalStatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (bg, fg, dotColor) = switch (status) {
-      'done' => (
-        const Color(0xFFE6F3EB),
-        const Color(0xFF2D6E47),
-        _C.green,
-      ),
+      'done' => (const Color(0xFFE6F3EB), const Color(0xFF2D6E47), _C.green),
       'pending_president' => (
         const Color(0xFFEDE8FB),
         const Color(0xFF3F2A9A),
@@ -593,15 +629,14 @@ class ProposalStatusPill extends StatelessWidget {
         const Color(0xFF9A4A0C),
         const Color(0xFFE8A866),
       ),
-      _ => (
-        const Color(0xFFF3F1F6),
-        _C.text2,
-        const Color(0xFFA9A2BC),
-      ),
+      _ => (const Color(0xFFF3F1F6), _C.text2, const Color(0xFFA9A2BC)),
     };
     return Container(
       key: ValueKey('proposal-status-pill-$status'),
-      padding: EdgeInsets.symmetric(horizontal: dot ? 9 : 8, vertical: dot ? 3 : 2),
+      padding: EdgeInsets.symmetric(
+        horizontal: dot ? 9 : 8,
+        vertical: dot ? 3 : 2,
+      ),
       decoration: BoxDecoration(
         color: DunesColors.resolve(context, bg, role: DunesColorRole.surface),
         borderRadius: BorderRadius.circular(999),
@@ -662,7 +697,12 @@ class ProposalFlowCard extends StatelessWidget {
     (
       'review',
       '四方复核',
-      ['review_market', 'review_tech', 'review_contract', 'review_finance_module'],
+      [
+        'review_market',
+        'review_tech',
+        'review_contract',
+        'review_finance_module',
+      ],
     ),
     ('notify', '通知最终人', ['notify_president']),
     ('president', '最终确认', ['president']),
@@ -730,14 +770,17 @@ class ProposalFlowCard extends StatelessWidget {
     }
 
     // ---- 顶部一句话：卡在谁、多久、要做什么 ----
-    final blocked = [
-      for (final step in steps)
-        if (step.state == ProposalIntakeProgressState.current ||
-            step.state == ProposalIntakeProgressState.rejected)
-          if (step.id != 'end') step,
-    ]..sort((a, b) => (b.waited(now) ?? Duration.zero).compareTo(
-        a.waited(now) ?? Duration.zero,
-      ));
+    final blocked =
+        [
+          for (final step in steps)
+            if (step.state == ProposalIntakeProgressState.current ||
+                step.state == ProposalIntakeProgressState.rejected)
+              if (step.id != 'end') step,
+        ]..sort(
+          (a, b) => (b.waited(now) ?? Duration.zero).compareTo(
+            a.waited(now) ?? Duration.zero,
+          ),
+        );
     final finished = byId['end']?.state == ProposalIntakeProgressState.done;
     final worst = blocked.isEmpty ? null : blocked.first.waited(now);
     final headColor = blocked.isEmpty
@@ -790,7 +833,11 @@ class ProposalFlowCard extends StatelessWidget {
             role: DunesColorRole.surface,
           ),
           border: Border.all(
-            color: DunesColors.resolve(context, fill, role: DunesColorRole.border),
+            color: DunesColors.resolve(
+              context,
+              fill,
+              role: DunesColorRole.border,
+            ),
             width: state == ProposalIntakeProgressState.current ? 3 : 1.5,
           ),
           boxShadow: state == ProposalIntakeProgressState.current
@@ -825,15 +872,20 @@ class ProposalFlowCard extends StatelessWidget {
       ]..sort();
       final names = {
         for (final step in members)
-          if (step.name.trim().isNotEmpty && step.name != '未指定') step.name.trim(),
+          if (step.name.trim().isNotEmpty && step.name != '未指定')
+            step.name.trim(),
       };
       final sub = switch (state) {
-        ProposalIntakeProgressState.done => doneTimes.isEmpty
-            ? (members.first.time.isEmpty ? '已过' : members.first.time)
-            : formatProposalIntakeProgressTime(doneTimes.last.toIso8601String()),
-        ProposalIntakeProgressState.current => waiting.isEmpty
-            ? '进行中'
-            : '卡 ${proposalIntakeWaitedText(waiting.first)}',
+        ProposalIntakeProgressState.done =>
+          doneTimes.isEmpty
+              ? (members.first.time.isEmpty ? '已过' : members.first.time)
+              : formatProposalIntakeProgressTime(
+                  doneTimes.last.toIso8601String(),
+                ),
+        ProposalIntakeProgressState.current =>
+          waiting.isEmpty
+              ? '进行中'
+              : '卡 ${proposalIntakeWaitedText(waiting.first)}',
         ProposalIntakeProgressState.rejected => '驳回',
         ProposalIntakeProgressState.pending => '—',
       };
@@ -908,9 +960,12 @@ class ProposalFlowCard extends StatelessWidget {
         ProposalIntakeProgressState.pending => ('○', _C.grey),
       };
       final tail = switch (step.state) {
-        ProposalIntakeProgressState.done => step.doneAt == null
-            ? (step.time.isEmpty ? '已过' : step.time)
-            : formatProposalIntakeProgressTime(step.doneAt!.toIso8601String()),
+        ProposalIntakeProgressState.done =>
+          step.doneAt == null
+              ? (step.time.isEmpty ? '已过' : step.time)
+              : formatProposalIntakeProgressTime(
+                  step.doneAt!.toIso8601String(),
+                ),
         ProposalIntakeProgressState.current =>
           waited == null ? '进行中' : '卡 ${proposalIntakeWaitedText(waited)}',
         ProposalIntakeProgressState.rejected => '驳回待改',
@@ -966,9 +1021,17 @@ class ProposalFlowCard extends StatelessWidget {
       key: const ValueKey('proposal-flow-card'),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(context, Colors.white, role: DunesColorRole.surface),
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         border: Border.all(
-          color: DunesColors.resolve(context, _C.border, role: DunesColorRole.border),
+          color: DunesColors.resolve(
+            context,
+            _C.border,
+            role: DunesColorRole.border,
+          ),
         ),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -982,7 +1045,10 @@ class ProposalFlowCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: DunesColors.resolve(
                       context,
@@ -1078,7 +1144,13 @@ class _CompactEstimate extends StatefulWidget {
 
 /// 柱状图里的一根柱子。[lift] > 0 时悬空（瀑布图里的「减项」）。
 class _Bar {
-  const _Bar(this.label, this.value, this.color, {this.minus = false, this.lift = 0});
+  const _Bar(
+    this.label,
+    this.value,
+    this.color, {
+    this.minus = false,
+    this.lift = 0,
+  });
 
   final String label;
   final double? value;
@@ -1088,7 +1160,7 @@ class _Bar {
 }
 
 class _CompactEstimateState extends State<_CompactEstimate> {
-  String _selected = '收入（利差）';
+  String _selected = kProposalFinanceShowEstimates ? '收入（利差）' : '年化规模';
 
   /// 下面规模 / 成本 / 利润里被点中的那一格（同灯塔：点格子，上面的图跟着换）。
   String? _activeCell;
@@ -1140,7 +1212,8 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     FontWeight weight = FontWeight.w400,
     Color color = _C.ink,
     bool mono = false,
-  }) => _s._style(context, size: size, weight: weight, color: color, mono: mono);
+  }) =>
+      _s._style(context, size: size, weight: weight, color: color, mono: mono);
 
   Color _bg(Color c) => _s._bg(context, c);
   Color _ln(Color c) => _s._line(context, c);
@@ -1151,8 +1224,9 @@ class _CompactEstimateState extends State<_CompactEstimate> {
   /// 太窄（< 340）才上下排。
   bool get _stacked => widget.width < 340;
 
-  double get _heroWidth =>
-      _stacked ? widget.width : (widget.width * .3).clamp(112.0, 200.0).toDouble();
+  double get _heroWidth => _stacked
+      ? widget.width
+      : (widget.width * .3).clamp(112.0, 200.0).toDouble();
 
   // ---------- 上左：年化利润（小） ----------
 
@@ -1276,8 +1350,8 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 上：产品（标签一）、渠道（标签三）白底小卡，点一行跳到出处；
-          // 中：「年化利润」+ 利润、毛利率、算式，靠左；底：评级。
+          // 上：产品（标签一）、渠道（标签三）；
+          // 中：年化规模（利润金额先不展示时）或年化利润；底：评级。
           if (d.product.isNotEmpty || d.channel.isNotEmpty)
             _tagCard([
               _tagRow(
@@ -1294,83 +1368,169 @@ class _CompactEstimateState extends State<_CompactEstimate> {
                 accent: const Color(0xFF4A83C4),
                 label: '渠道 · 标签三',
                 value: d.channel,
-                // 标签三（渠道分类）填在科技部各产品里。
-                onTap: _jump(ProposalIntakeNavSection.tech, d.channelKey),
+                // 市场部标签三优先；没有时才落到科技部各产品的渠道分类。
+                onTap: d.channelKey == 'channelTagL1'
+                    ? _jump(ProposalIntakeNavSection.market, 'channelTagL1')
+                    : _jump(ProposalIntakeNavSection.tech, d.channelKey),
               ),
             ]),
-          if (stretch) const Spacer() else const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              height: _compact ? 22 : 26,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: _bg(_C.heroPill),
-                borderRadius: BorderRadius.circular(7),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.show_chart,
-                    size: _compact ? 12 : 13,
-                    color: DunesColors.resolve(context, _C.heroInk),
-                  ),
-                  const SizedBox(width: 5),
-                  _t(
-                    _compact ? '年化利润' : '年化利润 · 测算',
-                    size: _compact ? 11 : 12,
-                    weight: FontWeight.w700,
-                    color: _C.heroInk,
-                  ),
-                ],
+          if (!kProposalFinanceShowEstimates) ...[
+            if (d.product.isNotEmpty || d.channel.isNotEmpty)
+              const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                height: _compact ? 22 : 26,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: _bg(_C.heroPill),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.trending_up_rounded,
+                      size: _compact ? 12 : 13,
+                      color: DunesColors.resolve(context, _C.heroInk),
+                    ),
+                    const SizedBox(width: 5),
+                    _t(
+                      '年化规模',
+                      size: _compact ? 11 : 12,
+                      weight: FontWeight.w700,
+                      color: _C.heroInk,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 6),
-          _t(
-            proposalEstimateWan(d.profit),
-            // 手机上大数长了（如 12,345.0）收一档，免得被省略。
-            size: _compact
-                ? (proposalEstimateWan(d.profit).length > 6 ? 18 : 22)
-                : 28,
-            weight: FontWeight.w700,
-            color: d.profit == null ? _C.grey : _C.red,
-            mono: true,
-            tail: [
-              TextSpan(
-                text: ' 万',
-                style: _st(size: _compact ? 10 : 12, weight: FontWeight.w500),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          _t(
-            _pct(d.margin),
-            size: _compact ? 10 : 11,
-            weight: FontWeight.w700,
-            mono: true,
-            maxLines: 2,
-            tail: [
-              TextSpan(
-                text: _compact ? ' 毛利率' : ' 毛利率 · 利润÷规模',
-                style: _st(size: _compact ? 10 : 11, color: _C.text2, mono: true),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          // 算式可点：跳到下方财务部「利润」块。
-          InkWell(
-            key: const ValueKey('proposal-estimate-hero-formula'),
-            onTap: _s._openerFor('利润', null),
-            borderRadius: BorderRadius.circular(4),
-            child: _t(
-              '= 收入 ${proposalEstimateWan(d.spread)} − 成本合计 ${proposalEstimateWan(d.costTotal)}  明细 ›',
-              size: _compact ? 9 : 10,
+            const SizedBox(height: 6),
+            _t(
+              proposalEstimateWan(d.scale),
+              size: _compact
+                  ? (proposalEstimateWan(d.scale).length > 6 ? 18 : 22)
+                  : 28,
+              weight: FontWeight.w700,
+              color: d.scale == null ? _C.grey : _C.ink,
+              mono: true,
+              tail: [
+                TextSpan(
+                  text: ' 万',
+                  style: _st(size: _compact ? 10 : 12, weight: FontWeight.w500),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            _t(
+              '月均 ${proposalEstimateWan(d.monthlyScale)} 万 · ÷12',
+              size: _compact ? 10 : 11,
+              weight: FontWeight.w700,
               color: _C.text2,
-              maxLines: 3,
+              mono: true,
+              maxLines: 2,
             ),
-          ),
+            if (d.turnoverCash != null) ...[
+              const SizedBox(height: 4),
+              InkWell(
+                key: const ValueKey('proposal-estimate-hero-turnover'),
+                onTap: _s._openerFor('周转资金', null),
+                borderRadius: BorderRadius.circular(4),
+                child: _t(
+                  '周转 ${proposalEstimateWan(d.turnoverCash)} 万',
+                  size: _compact ? 10 : 11,
+                  color: _C.text2,
+                  maxLines: 2,
+                  tail: [
+                    TextSpan(
+                      text: d.turnoverTimes == null
+                          ? ''
+                          : '  ·  ${proposalFormatWan(d.turnoverTimes!)}次/月',
+                      style: _st(size: _compact ? 10 : 11, color: _C.text2),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ] else ...[
+            if (stretch) const Spacer() else const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                height: _compact ? 22 : 26,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: _bg(_C.heroPill),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.show_chart,
+                      size: _compact ? 12 : 13,
+                      color: DunesColors.resolve(context, _C.heroInk),
+                    ),
+                    const SizedBox(width: 5),
+                    _t(
+                      _compact ? '年化利润' : '年化利润 · 测算',
+                      size: _compact ? 11 : 12,
+                      weight: FontWeight.w700,
+                      color: _C.heroInk,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            _t(
+              proposalEstimateWan(d.profit),
+              // 手机上大数长了（如 12,345.0）收一档，免得被省略。
+              size: _compact
+                  ? (proposalEstimateWan(d.profit).length > 6 ? 18 : 22)
+                  : 28,
+              weight: FontWeight.w700,
+              color: d.profit == null ? _C.grey : _C.red,
+              mono: true,
+              tail: [
+                TextSpan(
+                  text: ' 万',
+                  style: _st(size: _compact ? 10 : 12, weight: FontWeight.w500),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            _t(
+              _pct(d.margin),
+              size: _compact ? 10 : 11,
+              weight: FontWeight.w700,
+              mono: true,
+              maxLines: 2,
+              tail: [
+                TextSpan(
+                  text: _compact ? ' 毛利率' : ' 毛利率 · 利润÷规模',
+                  style: _st(
+                    size: _compact ? 10 : 11,
+                    color: _C.text2,
+                    mono: true,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // 算式可点：跳到下方财务部「利润」块。
+            InkWell(
+              key: const ValueKey('proposal-estimate-hero-formula'),
+              onTap: _s._openerFor('利润', null),
+              borderRadius: BorderRadius.circular(4),
+              child: _t(
+                '= 收入 ${proposalEstimateWan(d.spread)} − 成本合计 ${proposalEstimateWan(d.costTotal)}  明细 ›',
+                size: _compact ? 9 : 10,
+                color: _C.text2,
+                maxLines: 3,
+              ),
+            ),
+          ],
           if (stretch) const Spacer() else const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.only(top: 7),
@@ -1404,15 +1564,34 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     final d = _d;
     final spread = d.spread;
     return [
-      ('年化规模', proposalEstimateWan(d.scale), d.rating == '—' ? '' : '${d.rating} 级', _C.purple),
-      ('收入（利差）', proposalEstimateWan(spread), _pct(d.pctOfScale(spread)), _C.purple),
-      ('项目成本', proposalEstimateWan(d.projectCost), _pct(d.pctOfScale(d.projectCost)), _C.purpleLight),
-      ('利润', proposalEstimateWan(d.profit), _pct(d.margin), _C.red),
+      (
+        '年化规模',
+        proposalEstimateWan(d.scale),
+        d.rating == '—' ? '' : '${d.rating} 级',
+        _C.purple,
+      ),
+      if (kProposalFinanceShowEstimates) ...[
+        (
+          '收入（利差）',
+          proposalEstimateWan(spread),
+          _pct(d.pctOfScale(spread)),
+          _C.purple,
+        ),
+        (
+          '项目成本',
+          proposalEstimateWan(d.projectCost),
+          _pct(d.pctOfScale(d.projectCost)),
+          _C.purpleLight,
+        ),
+        ('利润', proposalEstimateWan(d.profit), _pct(d.margin), _C.red),
+      ],
       ('月均规模', proposalEstimateWan(d.monthlyScale), '÷12', _C.markIdle),
       (
         '周转资金',
         proposalEstimateWan(d.turnoverCash),
-        d.turnoverTimes == null ? '' : '${proposalFormatWan(d.turnoverTimes!)}次/月',
+        d.turnoverTimes == null
+            ? ''
+            : '${proposalFormatWan(d.turnoverTimes!)}次/月',
         _C.markIdle,
       ),
     ];
@@ -1427,6 +1606,15 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     final profit = d.profit;
     switch (metric) {
       case '年化规模':
+        if (!kProposalFinanceShowEstimates) {
+          return (
+            [
+              _Bar('年化规模', d.scale, _C.purple),
+              _Bar('月均规模', d.monthlyScale, _C.purpleLight),
+            ],
+            '年化规模 · 月均 = 年化 ÷ 12',
+          );
+        }
         return (
           [
             _Bar('年化规模', d.scale, _C.purple),
@@ -1436,6 +1624,12 @@ class _CompactEstimateState extends State<_CompactEstimate> {
           '规模 → 收入 → 利润 · 年化',
         );
       case '月均规模':
+        if (!kProposalFinanceShowEstimates) {
+          return (
+            [_Bar('月均规模', d.monthlyScale, _C.purple)],
+            '月均规模 = 年化规模 ÷ 12',
+          );
+        }
         return (
           [
             _Bar('月均规模', d.monthlyScale, _C.purple),
@@ -1455,6 +1649,9 @@ class _CompactEstimateState extends State<_CompactEstimate> {
               : '月均规模 ÷ 每月周转 ${proposalFormatWan(d.turnoverTimes!)} 次',
         );
       default:
+        if (!kProposalFinanceShowEstimates) {
+          return ([_Bar('年化规模', d.scale, _C.purple)], '年化规模 · 来自市场部');
+        }
         final profitLift = profit != null && profit > 0 ? profit : 0.0;
         return (
           [
@@ -1528,12 +1725,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
                   ? FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerRight,
-                      child: _t(
-                        m.$3,
-                        size: 8.5,
-                        color: _C.grey,
-                        mono: true,
-                      ),
+                      child: _t(m.$3, size: 8.5, color: _C.grey, mono: true),
                     )
                   : _t(
                       m.$3,
@@ -1558,9 +1750,14 @@ class _CompactEstimateState extends State<_CompactEstimate> {
         ? 0
         : (v / top * full).clamp(0.0, full).toDouble();
     Widget column(_Bar b) {
-      final active = b.label == _selected ||
+      final active =
+          b.label == _selected ||
           (_selected == '收入（利差）' && b.label == '收入（利差）');
-      final color = active || _selected == '年化规模' || _selected == '月均规模' || _selected == '周转资金'
+      final color =
+          active ||
+              _selected == '年化规模' ||
+              _selected == '月均规模' ||
+              _selected == '周转资金'
           ? b.color
           : b.color.withValues(alpha: .55);
       final labelColor = b.minus
@@ -1572,14 +1769,24 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       return Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          _t(valueText, size: 11, weight: FontWeight.w700, color: labelColor, mono: true),
+          _t(
+            valueText,
+            size: 11,
+            weight: FontWeight.w700,
+            color: labelColor,
+            mono: true,
+          ),
           const SizedBox(height: 4),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 56),
             child: Container(
               height: math.max(2.0, h(b.value)),
               decoration: BoxDecoration(
-                color: DunesColors.resolve(context, color, role: DunesColorRole.surface),
+                color: DunesColors.resolve(
+                  context,
+                  color,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: b.minus
                     ? BorderRadius.circular(3)
                     : const BorderRadius.vertical(top: Radius.circular(3)),
@@ -1701,7 +1908,10 @@ class _CompactEstimateState extends State<_CompactEstimate> {
                 ),
               ),
               const SizedBox(width: 8),
-              _t('测算合计', weight: FontWeight.w700),
+              _t(
+                kProposalFinanceShowEstimates ? '测算合计' : '规模',
+                weight: FontWeight.w700,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: _t(
@@ -1962,9 +2172,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     return Container(
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        color: result
-            ? blue.withAlpha(24)
-            : _bg(const Color(0xFFF7F6FA)),
+        color: result ? blue.withAlpha(24) : _bg(const Color(0xFFF7F6FA)),
         border: Border.all(
           color: result ? blue.withAlpha(58) : _ln(const Color(0xFFE7E3EF)),
           width: .8,
@@ -2031,39 +2239,90 @@ class _CompactEstimateState extends State<_CompactEstimate> {
 
   Widget _bottom() {
     final d = _d;
+    final showAmounts = kProposalFinanceShowEstimates;
     final spread = d.spread;
     final price = d.pctOfScale(d.revenue);
     final scale = _section('规模', Icons.trending_up_rounded, [
-      _cell('年化规模', proposalEstimateWan(d.scale), '万', d.rating == '—' ? '' : '${d.rating} 级'),
-      _cell('月均规模', proposalEstimateWan(d.monthlyScale), '万', '÷12'),
-      _cell('售价', price == null ? '—' : price.toStringAsFixed(1), '%', '收入 ÷ 规模'),
-      _cell('SKU', d.skuCount == 0 ? '—' : '${d.skuCount}', '个', d.faceRange, divider: false),
-    ]);
-    final cost = _section('成本', Icons.receipt_long_outlined, onTap: _s._openerFor('成本', null), [
-      _cell('成本合计', proposalEstimateWan(d.costTotal), '万', '项目 + 业务 + 经营 + 税务'),
       _cell(
-        '项目成本',
-        proposalEstimateWan(d.projectCost),
+        '年化规模',
+        proposalEstimateWan(d.scale),
         '万',
-        d.pctOfScale(d.projectCost) == null ? '' : '${_pct(d.pctOfScale(d.projectCost))} 规模',
+        d.rating == '—' ? '' : '${d.rating} 级',
       ),
-      _cell('业务成本', proposalEstimateWan(d.businessCost), '万', ''),
+      _cell('月均规模', proposalEstimateWan(d.monthlyScale), '万', '÷12'),
+      if (showAmounts)
+        _cell(
+          '售价',
+          price == null ? '—' : price.toStringAsFixed(1),
+          '%',
+          '收入 ÷ 规模',
+        ),
       _cell(
-        '周转资金',
-        proposalEstimateWan(d.turnoverCash),
-        '万',
-        d.turnoverTimes == null ? '' : '每月周转 ${proposalFormatWan(d.turnoverTimes!)} 次',
+        'SKU',
+        d.skuCount == 0 ? '—' : '${d.skuCount}',
+        '个',
+        d.faceRange,
         divider: false,
       ),
-    ]);
+      if (!showAmounts)
+        _cell(
+          '周转资金',
+          proposalEstimateWan(d.turnoverCash),
+          '万',
+          d.turnoverTimes == null
+              ? ''
+              : '每月周转 ${proposalFormatWan(d.turnoverTimes!)} 次',
+          divider: false,
+        ),
+    ], columns: showAmounts ? 1 : (_stacked ? 2 : 4));
+    if (!showAmounts) return scale;
+    final cost = _section(
+      '成本',
+      Icons.receipt_long_outlined,
+      onTap: _s._openerFor('成本', null),
+      [
+        _cell(
+          '成本合计',
+          proposalEstimateWan(d.costTotal),
+          '万',
+          '项目 + 业务 + 经营 + 税务',
+        ),
+        _cell(
+          '项目成本',
+          proposalEstimateWan(d.projectCost),
+          '万',
+          d.pctOfScale(d.projectCost) == null
+              ? ''
+              : '${_pct(d.pctOfScale(d.projectCost))} 规模',
+        ),
+        _cell('业务成本', proposalEstimateWan(d.businessCost), '万', ''),
+        _cell(
+          '周转资金',
+          proposalEstimateWan(d.turnoverCash),
+          '万',
+          d.turnoverTimes == null
+              ? ''
+              : '每月周转 ${proposalFormatWan(d.turnoverTimes!)} 次',
+          divider: false,
+        ),
+      ],
+    );
     final profitCells = [
-      _cell('利润', proposalEstimateWan(d.profit), '万', '收入 − 四类成本', color: _C.red),
+      _cell(
+        '利润',
+        proposalEstimateWan(d.profit),
+        '万',
+        '收入 − 四类成本',
+        color: _C.red,
+      ),
       _cell('月均利润', proposalEstimateWan(d.monthlyProfit), '万', '÷12'),
       _cell(
         '收入',
         proposalEstimateWan(spread),
         '万',
-        d.pctOfScale(spread) == null ? '' : '规模 × ${_pct(d.pctOfScale(spread))}',
+        d.pctOfScale(spread) == null
+            ? ''
+            : '规模 × ${_pct(d.pctOfScale(spread))}',
       ),
       _cell('税务成本', proposalEstimateWan(d.taxCost), '万', ''),
       _cell(
@@ -2076,7 +2335,9 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       ),
       _cell(
         '成本率',
-        d.pctOfScale(d.costTotal) == null ? '—' : d.pctOfScale(d.costTotal)!.toStringAsFixed(2),
+        d.pctOfScale(d.costTotal) == null
+            ? '—'
+            : d.pctOfScale(d.costTotal)!.toStringAsFixed(2),
         '%',
         '成本合计 ÷ 规模',
         divider: false,

@@ -151,7 +151,7 @@ bool proposalIntakeFormKeyLocked(
     return _anyReviewedPrefix(review, 'technologyItems', 'children:');
   }
   key = _kFinanceAliasKeys[key] ?? key;
-  if (key == 'productFinance') {
+  if (key == 'productFinance' || key == _kProductFormulasKey) {
     return _reviewFlag(review, 'financeCompleted');
   }
   // 采购提案默认财务、销售合同已复核。备注跟市场走，不能整板块锁死。
@@ -445,6 +445,67 @@ Object? _mergeProductFinance({
   return out;
 }
 
+const _kProductFormulasKey = 'productFormulas';
+
+/// 按产品公式选择里每个字段对应的复核类（`financeItem:sku:<skuId>:<类>`）。
+/// 业务成本不在这里：它只随财务整板块复核锁定。
+const _kProductFormulaReviewKindOf = {
+  'revenueFormula': 'revenue',
+  'revenueFormulaGroup': 'revenue',
+  'costItems': 'costItems',
+  'costItemFormulas': 'costItems',
+  'promotionPlans': 'costItems',
+  'taxCostItems': 'taxCost',
+  'taxCostItemFormulas': 'taxCost',
+};
+
+bool _productFormulaFieldLocked(
+  Map<String, dynamic> review,
+  String skuId,
+  String field,
+) {
+  if (_reviewFlag(review, 'financeCompleted')) return true;
+  final kind = _kProductFormulaReviewKindOf[field];
+  if (kind == null) return false;
+  return _itemReviewed(review, 'financeItems', 'sku:$skuId:$kind');
+}
+
+/// 按产品、按类合并：哪个产品的哪一类复核过，那部分保持服务端值。
+Object? proposalIntakeMergeProductFormulas({
+  required Object? existing,
+  required Object? incoming,
+  required Map<String, dynamic> review,
+}) {
+  final base = existing is Map
+      ? Map<String, dynamic>.from(existing)
+      : <String, dynamic>{};
+  final next = incoming is Map
+      ? Map<String, dynamic>.from(incoming)
+      : <String, dynamic>{};
+  if (base.isEmpty && next.isEmpty) return incoming;
+  final out = <String, dynamic>{};
+  for (final id in {...base.keys, ...next.keys}) {
+    final before = base[id] is Map
+        ? Map<String, dynamic>.from(base[id] as Map)
+        : <String, dynamic>{};
+    final after = next[id] is Map
+        ? Map<String, dynamic>.from(next[id] as Map)
+        : null;
+    final entry = <String, dynamic>{};
+    for (final field in {...before.keys, ...?after?.keys}) {
+      if (_productFormulaFieldLocked(review, id, field)) {
+        if (before.containsKey(field)) entry[field] = before[field];
+        continue;
+      }
+      if (after != null && after.containsKey(field)) {
+        entry[field] = after[field];
+      }
+    }
+    if (entry.isNotEmpty) out[id] = entry;
+  }
+  return out;
+}
+
 /// 已复核字段沿用上次服务端值，避免整单保存时被关联重算带偏。
 Map<String, dynamic> proposalIntakeKeepUnreviewedForm({
   required Map<String, dynamic> baseline,
@@ -460,6 +521,17 @@ Map<String, dynamic> proposalIntakeKeepUnreviewedForm({
       final incoming = current[key];
       if (existing == null && incoming == null) continue;
       out[key] = _mergeSharedSettlements(
+        existing: existing,
+        incoming: incoming ?? existing,
+        review: review,
+      );
+      continue;
+    }
+    if (key == _kProductFormulasKey) {
+      final existing = baseline[key];
+      final incoming = current[key];
+      if (existing == null && incoming == null) continue;
+      out[key] = proposalIntakeMergeProductFormulas(
         existing: existing,
         incoming: incoming ?? existing,
         review: review,

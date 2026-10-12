@@ -2099,29 +2099,7 @@ String proposalIntakeActionLabel(
 }
 
 bool proposalIntakeFinanceLineItemsReviewed(ProposalIntakeRow row) {
-  final keys = <String>[
-    'revenue',
-    'profit',
-    'margin',
-    'turnoverCash',
-    'turnoverTimes',
-    'supplySettleMode',
-    'supplySettleCycle',
-    'supplyPayer',
-    'supplyPayAccount',
-    'channelSettleMode',
-    'channelSettleCycle',
-    'channelPayee',
-    'channelReceiveAccount',
-    'generalBusinessAccount',
-    'prepaidAccount',
-    'financeRemark',
-    'costItems',
-    'operatingCost',
-    'taxCost',
-    'proposalSubtitle',
-    ...proposalIntakeSkuSettleReviewKeys(row.form),
-  ];
+  final keys = proposalIntakeFinanceReviewKeys(row.form);
   if (keys.isEmpty) return false;
   final raw = row.review['financeItems'];
   final items = raw is Map ? raw : const {};
@@ -2401,29 +2379,7 @@ int proposalIntakeTaskRemainingCount(
     final raw = review['financeItems'];
     final items = raw is Map ? raw : const {};
     var left = 0;
-    for (final key in [
-      'revenue',
-      'profit',
-      'margin',
-      'turnoverCash',
-      'turnoverTimes',
-      'supplySettleMode',
-      'supplySettleCycle',
-      'supplyPayer',
-      'supplyPayAccount',
-      'channelSettleMode',
-      'channelSettleCycle',
-      'channelPayee',
-      'channelReceiveAccount',
-      'generalBusinessAccount',
-      'prepaidAccount',
-      'financeRemark',
-      'costItems',
-      'operatingCost',
-      'taxCost',
-      'proposalSubtitle',
-      ...proposalIntakeSkuSettleReviewKeys(form),
-    ]) {
+    for (final key in proposalIntakeFinanceReviewKeys(form)) {
       if (key == kProposalSkuSettlementsReviewKey) {
         if (!proposalIntakeSkuSettlementsReviewed(review, form)) left++;
         continue;
@@ -3742,6 +3698,7 @@ void _tallySalesFill(_ProposalFillTally tally, Map<String, dynamic> form) {
   tally.ref(form, 'productRef', 'product');
   tally.ref(form, 'projectRef', 'projectName');
   tally.list(form, 'supplies');
+  tally.ref(form, 'channelTagL1Ref', 'channelTagL1');
   tally.text(form, 'supplierPolicy');
   tally.text(form, 'channelPolicy');
   tally.text(form, 'executionPlan');
@@ -4818,7 +4775,6 @@ const _kProposalProductFinanceFields = <String>[
   'operatingCostItems',
   'operatingCostItemCodes',
   'operatingCostItemAmounts',
-  'operatingCostItemFormulas',
   'operatingCost',
   'taxCostItems',
   'taxCostItemCodes',
@@ -4866,11 +4822,59 @@ const kProposalUserOwnedFinanceKeys = <String>{
   'promotionTiers',
   'costItemFormulas',
   'businessCostItemFormulas',
-  'operatingCostItemFormulas',
   'taxCostItemFormulas',
+  kProposalProductFormulasFormKey,
   'rollback',
   'financeModules',
 };
+
+/// 按产品存的公式选择，只在顶层，不进主 / 子产品财务组。
+const kProposalProductFormulasFormKey = 'productFormulas';
+
+/// 财务部逐条复核的固定项（不含按产品的公式复核和结算复核）。
+const kProposalFinanceLineReviewKeys = <String>[
+  'turnoverCash',
+  'turnoverTimes',
+  'supplySettleMode',
+  'supplySettleCycle',
+  'supplyPayer',
+  'supplyPayAccount',
+  'channelSettleMode',
+  'channelSettleCycle',
+  'channelPayee',
+  'channelReceiveAccount',
+  'generalBusinessAccount',
+  'prepaidAccount',
+  'financeRemark',
+  'operatingCost',
+  'proposalSubtitle',
+];
+
+/// 按产品复核的公式类：收入、项目成本、税务成本。业务成本由市场部负责人一选，不走逐条复核。
+const kProposalProductFormulaReviewKinds = <String>[
+  'revenue',
+  'costItems',
+  'taxCost',
+];
+
+String proposalIntakeProductFormulaReviewKey(String skuId, String kind) =>
+    'sku:$skuId:$kind';
+
+List<String> proposalIntakeProductFormulaReviewKeys(Map<String, dynamic> form) {
+  return [
+    for (final sku in proposalIntakeAllSellableSkus(form))
+      if (sku.id.isNotEmpty)
+        for (final kind in kProposalProductFormulaReviewKinds)
+          proposalIntakeProductFormulaReviewKey(sku.id, kind),
+  ];
+}
+
+/// 财务部负责人二要逐条复核完的全部项。
+List<String> proposalIntakeFinanceReviewKeys(Map<String, dynamic> form) => [
+  ...kProposalFinanceLineReviewKeys,
+  ...proposalIntakeProductFormulaReviewKeys(form),
+  ...proposalIntakeSkuSettleReviewKeys(form),
+];
 
 /// 采购提案市场手填项。复核锁和估算都不能用旧值/空值盖掉。
 const kProposalUserOwnedMarketKeys = <String>{
@@ -4916,7 +4920,9 @@ Map<String, dynamic> proposalIntakePreserveUserFinanceEdits({
         ? <String, dynamic>{
             ...nested,
             for (final key in kProposalUserOwnedFinanceKeys)
-              if (original.containsKey(key)) key: original[key],
+              if (original.containsKey(key) &&
+                  key != kProposalProductFormulasFormKey)
+                key: original[key],
           }
         : nested;
     if (source.isEmpty && outGroups[owner] == null) continue;
@@ -4935,6 +4941,14 @@ Map<String, dynamic> proposalIntakePreserveUserFinanceEdits({
   }
   apply(out, original);
   apply(out, original, keys: kProposalUserOwnedMarketKeys);
+  final formulas = out[kProposalProductFormulasFormKey];
+  if (formulas is Map) {
+    final ids = {for (final sku in proposalIntakeAllSellableSkus(out)) sku.id};
+    out[kProposalProductFormulasFormKey] = <String, dynamic>{
+      for (final entry in formulas.entries)
+        if (ids.contains('${entry.key}')) '${entry.key}': entry.value,
+    };
+  }
   return out;
 }
 
@@ -7123,6 +7137,7 @@ List<String> proposalIntakeSalesMarketIssues(Map<String, dynamic> form) {
   needRef('productRef', 'product', '产品（标签一）');
   needRef('projectRef', 'projectName', '项目名称（标签一二级）');
   needList('supplies', '供给（标签二）');
+  needRef('channelTagL1Ref', 'channelTagL1', '标签三一级');
   need('supplierPolicy', '供货商政策');
   need('channelPolicy', '渠道政策');
   need('executionPlan', '提案执行计划');

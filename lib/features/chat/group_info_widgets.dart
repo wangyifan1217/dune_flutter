@@ -200,7 +200,15 @@ class GroupInfoRow extends StatelessWidget {
           ),
           if (trailing != null) ...[
             const SizedBox(width: 12),
-            Flexible(child: trailing!),
+            Flexible(
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: DefaultTextStyle.merge(
+                  textAlign: TextAlign.end,
+                  child: trailing!,
+                ),
+              ),
+            ),
           ],
         ],
       ),

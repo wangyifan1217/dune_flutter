@@ -25,7 +25,7 @@ const kProposalRevenueFormulaTitle = '收入';
 const kProposalRevenueFormula = '按所选渠道侧结算公式代入：业务量取年化规模，结算比例取产品销售结算';
 const kProposalSalesScaleFormula = '市场部基础信息填写的年化规模';
 const kProposalProcurementFormula = '各供给规则：关联产品年化规模 × 该条比例，加总';
-const kProposalProfitFormula = '收入 − 项目成本 − 业务成本 − 经营成本 − 税务成本';
+const kProposalProfitFormula = '收入 − 项目成本 − 业务成本 − 税务成本';
 const kProposalMarginFormula = '利润 ÷ 规模';
 const kProposalTurnoverCashFormula = '年化规模 ÷ 12 ÷ 月周转次数';
 
@@ -41,14 +41,12 @@ const _kEstimatedFinanceOutputKeys = {
   'projectCost',
   'costItemFormulas',
   'businessCostItemFormulas',
-  'operatingCostItemFormulas',
   'taxCostItemFormulas',
   kProposalFinanceFormulaTouchedKey,
   kProposalPromotionTiersKey,
   'costItems',
   'costItemAmounts',
   'operatingCost',
-  'operatingCostItems',
   'operatingCostItemAmounts',
   'taxCost',
   'taxCostItems',
@@ -1420,8 +1418,9 @@ Map<String, dynamic> _applyEstimatedFinanceCostsOnForm(
   List<ProposalCostItemOption> costCatalog = const [],
   List<String> costNames = const [],
   ProposalFinanceFormulaCatalog? formulaCatalog,
+  String owner = kProposalProductFinanceMain,
 }) {
-  // 财务部不再手填：规模、周转资金照旧，收入 / 四类成本 / 利润全部按所选公式算。
+  // 财务部不再手填：规模、周转资金照旧，收入 / 成本 / 利润按各产品所选公式算再加总。
   final next = proposalApplyTurnoverCash(proposalApplyProductScaleRollup(form));
   return proposalApplyFinanceFormulas(
     next,
@@ -1429,6 +1428,7 @@ Map<String, dynamic> _applyEstimatedFinanceCostsOnForm(
     costCatalog: costCatalog,
     businessCatalog: businessCatalog,
     costNames: costNames,
+    owner: owner,
   );
 }
 
@@ -1497,6 +1497,8 @@ Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
   List<String> costNames = const [],
   ProposalFinanceFormulaCatalog? formulaCatalog,
 }) {
+  // 先把每个产品的公式选择补全进 productFormulas，组上的合计写回后不会再反过来影响产品。
+  form = proposalMaterializeProductFormulas(form);
   final estimated = _applyEstimatedFinanceCostsOnForm(
     proposalIntakeProductFinanceScope(
       form,
@@ -1544,6 +1546,7 @@ Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
     costCatalog: costCatalog,
     costNames: costNames,
     formulaCatalog: formulaCatalog,
+    owner: kProposalProductFinanceChildren,
   );
   final childFinance = <String, dynamic>{
     ...proposalIntakeProductFinance(

@@ -13482,6 +13482,24 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return products;
   }
 
+  Map<String, dynamic>? _productEvaluationForm;
+  Object? _productEvaluationOptions;
+  Map<String, ProposalProductFinanceEvaluation> _productEvaluationById =
+      const {};
+
+  /// 产品结算清单每行都要查自己的收入公式；同一份表单只测算一次。
+  ProposalProductFinanceEvaluation? _productEvaluationOf(String skuId) {
+    if (!identical(_productEvaluationForm, _form) ||
+        !identical(_productEvaluationOptions, widget.options)) {
+      _productEvaluationForm = _form;
+      _productEvaluationOptions = widget.options;
+      _productEvaluationById = {
+        for (final p in _financeProductEvaluations) p.skuId: p,
+      };
+    }
+    return _productEvaluationById[skuId];
+  }
+
   /// 「成本」「利润」两块共用的配置：测算结果、各角色能改什么、复核、锚点。
   ProposalFinanceBoardConfig _financeBoardConfig(String owner) {
     final scope = proposalIntakeIsolatedFinanceScope(_form, owner: owner);
@@ -16636,6 +16654,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       if (ratio.isNotEmpty) ratio,
       if (costs > 0) '应付 $costs 条',
     ];
+    final revenue = product == null
+        ? null
+        : _productEvaluationOf(product.id)?.evaluation.revenue;
+    final formula = revenue?.formula;
+    final formulaText = formula == null || formula.isEmpty
+        ? ''
+        : formula.detail.isEmpty
+        ? formula.name
+        : '${formula.name}：${formula.detail}';
+    final substitution = kProposalFinanceShowEstimates
+        ? (revenue?.substitution ?? '')
+        : '';
     final menu = <(String, String, VoidCallback?)>[
       if (onReplace != null) ...[
         (
@@ -16717,6 +16747,43 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 11.5, height: 1.35),
                 ),
+                if (revenue != null) ...[
+                  const SizedBox(height: 2),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '收入公式  ',
+                          style: TextStyle(color: c(0xFF8A8499)),
+                        ),
+                        TextSpan(
+                          text: formulaText.isEmpty ? '未选择' : formulaText,
+                          style: TextStyle(
+                            color: c(
+                              formulaText.isEmpty ? 0xFFB4570F : 0xFF3F2A9A,
+                            ),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11.5, height: 1.35),
+                  ),
+                  if (substitution.isNotEmpty)
+                    Text(
+                      substitution,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.35,
+                        color: c(0xFF5B556A),
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                ],
                 if (extra.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(

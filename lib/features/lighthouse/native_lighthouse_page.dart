@@ -21044,6 +21044,68 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 大图里选的指标（下拉切）；null = 默认利润。每次打开重置。
   String? _heroFullscreenMetric;
 
+  static const String _kFullscreenTab = 'product';
+  static const String _kFullscreenGroup = '能源';
+
+  /// 大图打开时把页面切到「产品 › 能源」。已经是就什么都不做。
+  void _enterFullscreenEnergy() {
+    if (_tab == _kFullscreenTab) {
+      if (_groupFilter != _kFullscreenGroup) {
+        _switchGroupForFullscreen(_kFullscreenGroup);
+      }
+      return;
+    }
+    // 从供给 / 渠道 / 人效点开：整页切到产品 › 能源（跟点「产品」tab 同一套收拾）。
+    final leavingPeople = _tab == 'people';
+    setState(() {
+      _tab = _kFullscreenTab;
+      _heroPointIndex = null;
+      _tabBarShowsGroups = true;
+      if (_sortField == 'netTa' || _sortField == lighthouseTotalAssetsSortKey) {
+        _sortField = 'profit';
+      }
+      _groupFilter = _kFullscreenGroup;
+      _hunFilter = '全部';
+      _tradeTypeFilter = '全部';
+      _listLimit = _listPageSize;
+      _rowsCacheKey = '';
+      _rowsCache = null;
+      _closeMetricPage();
+      _invalidateAiSummary();
+      _clearNetTAHeroTransientState();
+      if (leavingPeople) {
+        _expandedTrendKey = null;
+        _heroTraceKey = null;
+      }
+    });
+    final reload = _reloadHeroSummary();
+    _heroGroupReload = reload;
+    _heroFullscreenAwaiting = true;
+    reload.whenComplete(() {
+      if (!mounted) return;
+      setState(() => _heroFullscreenAwaiting = false);
+    });
+    // 产品的分类表还没拉回来时，_loadTab 可能把「能源」规整回「全部」：
+    // 拉完再确认一次，大图还开着就扳回能源。
+    _loadTab(_kFullscreenTab).whenComplete(() {
+      if (!mounted || !_heroFullscreenOpen) return;
+      if (_tab == _kFullscreenTab && _groupFilter != _kFullscreenGroup) {
+        _switchGroupForFullscreen(_kFullscreenGroup);
+      }
+    });
+  }
+
+  /// 大图里数据没对上 / 拉失败了：再拉一次当前分组。
+  void _retryFullscreenReload() {
+    final reload = _reloadHeroSummary();
+    _heroGroupReload = reload;
+    setState(() => _heroFullscreenAwaiting = true);
+    reload.whenComplete(() {
+      if (!mounted) return;
+      setState(() => _heroFullscreenAwaiting = false);
+    });
+  }
+
   void _switchGroupForFullscreen(String group) {
     _setGroupFilter(group);
     final reload = _heroGroupReload;
@@ -21059,13 +21121,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (_heroFullscreenOpen || _heroTrendArgs == null) return;
     _heroFullscreenOpen = true;
     _heroFullscreenMetric = null;
-    // 大图默认看「能源」的利润：产品页还停在「全部」时先切到能源，
-    // 并且等能源的数据回来再画 —— 不先闪一眼「产品汇总」的旧图。
-    if (_tab == 'product' &&
-        (_groupFilter.isEmpty || _groupFilter == '全部') &&
-        _categoryOptions(_tab).contains('能源')) {
-      _switchGroupForFullscreen('能源');
-    }
+    // 不管从哪儿点开（哪个 tab、之前选的什么分类），大图一律先看
+    // 「产品 › 能源」的利润；数据确认是能源之前只转圈，绝不先画「全部」。
+    _enterFullscreenEnergy();
     _pumpHeroFullscreenHistory();
     final theme = Theme.of(context);
     final fromRect = _heroCardRect();
@@ -21474,12 +21532,37 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               const SizedBox(height: 8),
                               Expanded(
                                 // 新分组 / 新周期的数据没回来前只转圈，不画旧图。
-                                child:
-                                    args == null ||
+                                // 只在「Hero 数据确实是当前分组的」时才画：summary 的
+                                // filterGroup 对不上（还在路上 / 拉失败）就不画旧数据。
+                                child: (args == null ||
                                         _heroFullscreenAwaiting ||
-                                        _loading
+                                        _loading)
                                     ? const Center(
                                         child: _LhBrandLoader(size: 44),
+                                      )
+                                    : !_heroSummaryMatchesGroup
+                                    ? Center(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              '$_groupFilter 的数据没拉到',
+                                              style: LhTypography.sans(
+                                                size: 12,
+                                                color: DunesColors.resolve(
+                                                  ctx,
+                                                  LhColors.ink2,
+                                                ),
+                                                context: ctx,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            TextButton(
+                                              onPressed: _retryFullscreenReload,
+                                              child: const Text('重新加载'),
+                                            ),
+                                          ],
+                                        ),
                                       )
                                     : _buildHeroUnifiedTrendChart(
                                         totals: args.totals,

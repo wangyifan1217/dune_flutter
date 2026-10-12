@@ -1480,10 +1480,15 @@ List<double> _trendEma(List<double> v, int n) {
 ///     NX慢 带和 DEA 同色，上下两张图读的是同一对「快慢」。
 /// 带子的面用预先跟白色混好的浅色，不用透明度。
 abstract final class LhKColors {
-  static const up = LhColors.neg;
-  static const down = LhColors.pos;
-  static const fast = Color(0xFF6F6CC6);
-  static const slow = Color(0xFFC0892E);
+  // 跟看盘软件一样的「清楚的红绿」：饱和度、明度跟蓝 / 琥珀带子同一档，
+  // 不再一边哑光土色、一边荧光色。
+  static const up = Color(0xFFE0362C);
+  static const down = Color(0xFF0E9A57);
+  static const fast = Color(0xFF3F78E0);
+  static const slow = Color(0xFFE39A1F);
+
+  /// 主线（7 日均线 = 走势线）：灯塔品牌紫，压在蜡烛上。
+  static const trend = Color(0xFF7565C7);
   static const nxFast = fast;
   static const nxSlow = slow;
   static const dif = fast;
@@ -2466,6 +2471,7 @@ class _LhPopStage extends StatelessWidget {
         .clamp(8.0, math.max(8.0, screen.width - width - 8))
         .toDouble();
     final usableH = screen.height - pad.vertical - 24;
+    // 弹层高度：半屏（340–580），手机和桌面同一个比例。
     final height = math.min(
       (screen.height * 0.5).clamp(340.0, 580.0).toDouble(),
       math.max(240.0, usableH),
@@ -2502,6 +2508,9 @@ class _LhPopStage extends StatelessWidget {
           final fade = Curves.easeOut.transform((t / 0.3).clamp(0.0, 1.0));
           final lift = Curves.easeOut.transform(t.clamp(0.0, 1.0));
           final glare = back ? -1.0 : (t - 0.55) / 0.45;
+          // 落定之后矩阵回到纯单位阵（不带透视项）：Flutter 对纯平移不建
+          // 变换图层，web 上就不会把整张卡栅格化 —— 字和线不再发虚。
+          final settled = !back && t >= 1.0;
           return Stack(
             children: [
               Positioned.fromRect(
@@ -2510,10 +2519,12 @@ class _LhPopStage extends StatelessWidget {
                   opacity: fade,
                   child: Transform(
                     alignment: Alignment.center,
-                    transform: Matrix4.identity()
-                      ..setEntry(3, 2, 0.0012)
-                      ..rotateX(angleX)
-                      ..rotateY(angleY),
+                    transform: settled
+                        ? Matrix4.identity()
+                        : (Matrix4.identity()
+                            ..setEntry(3, 2, 0.0012)
+                            ..rotateX(angleX)
+                            ..rotateY(angleY)),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         borderRadius: radius,
@@ -2835,7 +2846,8 @@ class _TrendLinesPainter extends CustomPainter {
           _addSmoothPath(fill, top);
           appendSmoothPath(fill, bot.reversed.toList(growable: false));
           fill.close();
-          canvas.drawPath(fill, Paint()..color = LhKColors.tint(c, 0.86));
+          // 面只铺一层很浅的实色（93% 白），雾感来自面太大太灰，不是线。
+          canvas.drawPath(fill, Paint()..color = LhKColors.tint(c, 0.93));
           for (final edge in [top, bot]) {
             final path = Path();
             _addSmoothPath(path, edge);
@@ -2843,7 +2855,7 @@ class _TrendLinesPainter extends CustomPainter {
               path,
               Paint()
                 ..color = c
-                ..strokeWidth = 1.0
+                ..strokeWidth = 1.1
                 ..style = PaintingStyle.stroke
                 ..strokeJoin = StrokeJoin.round,
             );
@@ -2913,6 +2925,42 @@ class _TrendLinesPainter extends CustomPainter {
           );
         } else {
           canvas.drawRRect(rect, Paint()..color = col);
+        }
+      }
+
+      // 走势线（快均线，日线 = 7 日均）：白衬底切开、品牌紫实线，压在蜡烛上。
+      final trend = maFast;
+      if (trend != null) {
+        final pts = <Offset>[
+          for (var i = 0; i < math.min(trend.length, m); i++)
+            if (trend[i].isFinite) Offset(xOf(i), yOf(trend[i], heroBounds)),
+        ];
+        if (pts.length >= 2) {
+          final path = Path();
+          _addSmoothPath(path, pts);
+          canvas.save();
+          canvas.clipRect(
+            Rect.fromLTRB(0, plotTop - 2, size.width, plotBottom + 2),
+          );
+          canvas.drawPath(
+            path,
+            Paint()
+              ..color = Colors.white
+              ..strokeWidth = 2.6
+              ..style = PaintingStyle.stroke
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round,
+          );
+          canvas.drawPath(
+            path,
+            Paint()
+              ..color = LhKColors.trend
+              ..strokeWidth = 1.7
+              ..style = PaintingStyle.stroke
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round,
+          );
+          canvas.restore();
         }
       }
 
@@ -8453,6 +8501,9 @@ class _TrendChartState extends State<_TrendChart>
       i < _labelMD.length &&
       _labelMD[i]?.day == 1;
 
+  /// K 线左侧纵轴栏宽：刻度数、现价牌、光标读数都坐在这一栏里，不压蜡烛。
+  static const double _kCandleAxisGutter = 36;
+
   /// NX 牛熊带开关（图例里那颗「牛熊线」）。
   bool _showNx = true;
 
@@ -9472,7 +9523,7 @@ class _TrendChartState extends State<_TrendChart>
             '较${u.prevAny}',
             chg(),
             color: prev.isFinite
-                ? DunesColors.resolve(context, up ? LhColors.neg : LhColors.pos)
+                ? DunesColors.resolve(context, up ? LhKColors.up : LhKColors.down)
                 : null,
           ),
           row('NX快', _money(f), color: DunesColors.resolve(context, LhKColors.nxFast)),
@@ -9552,7 +9603,7 @@ class _TrendChartState extends State<_TrendChart>
     final d = pts[i] - pts[i - 1];
     final base = pts[i - 1].abs();
     final up = d >= 0;
-    final c = DunesColors.resolve(context, up ? LhColors.neg : LhColors.pos);
+    final c = DunesColors.resolve(context, up ? LhKColors.up : LhKColors.down);
     final pct = base > 1e-9
         ? ' ${up ? '+' : '−'}${(d.abs() / base * 100).toStringAsFixed(d.abs() / base >= 1 ? 0 : 1)}%'
         : '';
@@ -9646,33 +9697,46 @@ class _TrendChartState extends State<_TrendChart>
         ],
       ),
     );
-    return Container(
-      height: 22,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
+    final cells = <Widget>[
+      cell('最高', _money(hi), color: DunesColors.resolve(context, LhKColors.up)),
+      cell(_unit.avg, _money(sum / cnt)),
+      cell(
+        '涨/跌',
+        '$up/$down',
         color: DunesColors.resolve(
           context,
-          const Color(0xFFF8F7FA),
-          role: DunesColorRole.surface,
+          up >= down ? LhKColors.up : LhKColors.down,
         ),
-        borderRadius: BorderRadius.circular(6),
       ),
-      child: Row(
-        children: [
-          cell('最高', _money(hi)),
-          cell('最低', _money(lo)),
-          cell(_unit.avg, _money(sum / cnt)),
-          cell('合计', _money(sum)),
-          cell(
-            '涨/跌',
-            '$up/$down',
+      cell('最低', _money(lo), color: DunesColors.resolve(context, LhKColors.down)),
+      cell('合计', _money(sum)),
+      cell('天数', '$cnt'),
+    ];
+    // 手机上一行塞五格会挤成省略号：窄屏改成 2 × 3，跟看盘软件的
+    // 最高 / 今开 / 成交量 那块一样排。
+    return LayoutBuilder(
+      builder: (ctx, box) {
+        final narrow = box.maxWidth < 440;
+        Widget row(List<Widget> xs) =>
+            SizedBox(height: 18, child: Row(children: xs));
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
             color: DunesColors.resolve(
               context,
-              up >= down ? LhColors.neg : LhColors.pos,
+              const Color(0xFFF7F7F9),
+              role: DunesColorRole.surface,
             ),
+            borderRadius: BorderRadius.circular(6),
           ),
-        ],
-      ),
+          child: narrow
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [row(cells.sublist(0, 3)), row(cells.sublist(3))],
+                )
+              : row(cells),
+        );
+      },
     );
   }
 
@@ -9708,10 +9772,22 @@ class _TrendChartState extends State<_TrendChart>
     final dim = style.copyWith(
       color: DunesColors.resolve(context, LhColors.mute2).withAlpha(120),
     );
+    final narrow = MediaQuery.sizeOf(context).width < 430;
     return SizedBox(
       height: 16,
       child: Row(
         children: [
+          Container(
+            width: 12,
+            height: 2.5,
+            decoration: BoxDecoration(
+              color: LhKColors.trend,
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(_unit.fastLabel, style: style),
+          const SizedBox(width: 8),
           // 牛熊线开关：点这一段整体开 / 关蓝黄两条带。
           Semantics(
             button: true,
@@ -9779,6 +9855,7 @@ class _TrendChartState extends State<_TrendChart>
             ),
           ),
           const Spacer(),
+          if (!narrow)
           Flexible(
             child: Text(
               '拖动平移 · 双指缩放',
@@ -9941,9 +10018,15 @@ class _TrendChartState extends State<_TrendChart>
               size: 17,
               // 利润：赚红亏绿；其它指标正数用墨色。
               color: neg
-                  ? DunesColors.resolve(context, LhColors.pos)
+                  ? DunesColors.resolve(
+                      context,
+                      widget.candles ? LhKColors.down : LhColors.pos,
+                    )
                   : (key == 'profit' && v > 0
-                        ? DunesColors.resolve(context, LhColors.neg)
+                        ? DunesColors.resolve(
+                            context,
+                            widget.candles ? LhKColors.up : LhColors.neg,
+                          )
                         : DunesColors.resolve(context, LhColors.ink)),
               context: context,
             ).copyWith(height: 1.0),
@@ -10522,7 +10605,7 @@ class _TrendChartState extends State<_TrendChart>
               decoration: BoxDecoration(
                 color: DunesColors.resolve(
                   ctx,
-                  up ? LhColors.neg : LhColors.pos,
+                  up ? LhKColors.up : LhKColors.down,
                   role: DunesColorRole.surface,
                 ),
                 borderRadius: BorderRadius.circular(3),
@@ -10717,8 +10800,8 @@ class _TrendChartState extends State<_TrendChart>
                         (crossY == null ||
                             (padTop + usableH * f - crossY).abs() > 14))
                       Positioned(
-                        left: 0,
-                        top: math.max(0.0, padTop + usableH * f - 12),
+                        right: w + 4,
+                        top: math.max(0.0, padTop + usableH * f - 6),
                         child: IgnorePointer(
                           child: Text(
                             _fmtHeroShort(
@@ -10775,7 +10858,7 @@ class _TrendChartState extends State<_TrendChart>
                   ),
                   if (crossValue != null)
                     Positioned(
-                      left: 0,
+                      right: w + 1,
                       top: (crossY - 7)
                           .clamp(0.0, math.max(0.0, chartH - 14))
                           .toDouble(),
@@ -10796,7 +10879,7 @@ class _TrendChartState extends State<_TrendChart>
                 // 最新一天的现价牌：贴左边、跟着那根虚线走，涨红跌绿。
                 if (latestPillY != null && latestPill != null)
                   Positioned(
-                    left: 0,
+                    right: w + 1,
                     top: (latestPillY - 7)
                         .clamp(0.0, math.max(0.0, chartH - 14))
                         .toDouble(),
@@ -11672,12 +11755,22 @@ class _TrendChartState extends State<_TrendChart>
         ],
         const SizedBox(height: 10),
         if (widget.fitHeight)
-          Expanded(child: _trendCanvas())
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: widget.candles ? _kCandleAxisGutter : 0,
+              ),
+              child: _trendCanvas(),
+            ),
+          )
         else
           _trendCanvas(),
         const SizedBox(height: 4),
-        SizedBox(
+        Container(
           height: 14,
+          padding: EdgeInsets.only(
+            left: widget.candles ? _kCandleAxisGutter : 0,
+          ),
           child: LayoutBuilder(
             builder: (ctx, c) {
               final w = c.maxWidth;
@@ -11781,8 +11874,9 @@ class _TrendChartState extends State<_TrendChart>
           ),
         ),
         if (widget.candles) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: 10),
           _candleLegend(),
+          const SizedBox(height: 4),
         ],
         if (widget.showScrubHint) ...[
           const SizedBox(height: 4),
@@ -21372,7 +21466,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     child: Stack(
                       children: [
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+                          padding: const EdgeInsets.fromLTRB(12, 9, 8, 14),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [

@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import 'proposal_intake_models.dart';
+import 'proposal_list_card.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
 
 /// 提案页原型样式的字体：中文 Noto Sans SC（带真粗体），数字 JetBrains Mono。
@@ -2714,6 +2715,12 @@ class _ProposalIntakeProgressTimelineState
                           ),
                         ),
                       ],
+                      // 和列表卡片底部同一条五段进度条：提交 → 市场部 → 科技部 → 财务部 → 最终确认。
+                      const SizedBox(height: 8),
+                      ProposalReviewSegments(
+                        steps: proposalReviewSegments(steps),
+                        height: 6,
+                      ),
                     ],
                   ),
                 ),

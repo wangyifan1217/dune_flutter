@@ -24,6 +24,7 @@ import 'lighthouse_data.dart';
 import 'lighthouse_card_share.dart';
 import 'lighthouse_shared_card_data.dart';
 import 'lighthouse_feedback.dart';
+import 'lighthouse_pk.dart';
 import 'lighthouse_product_rules.dart';
 import 'lighthouse_gross_margin_label.dart';
 import 'lighthouse_discount_metric.dart';
@@ -3505,7 +3506,10 @@ class _TrendLinesPainter extends CustomPainter {
           appendSmoothPath(fill, bot.reversed.toList(growable: false));
           fill.close();
           // 面只铺一层很浅的实色（93% 白），雾感来自面太大太灰，不是线。
-          canvas.drawPath(fill, Paint()..color = LhKColors.tint(c, 0.93));
+          canvas.drawPath(
+            fill,
+            Paint()..color = LhKColors.tint(c, step < 4.5 ? 0.95 : 0.93),
+          );
           for (final edge in [top, bot]) {
             final path = Path();
             _addSmoothPath(path, edge);
@@ -3513,7 +3517,7 @@ class _TrendLinesPainter extends CustomPainter {
               path,
               Paint()
                 ..color = c
-                ..strokeWidth = 1.1
+                ..strokeWidth = step < 4.5 ? 0.8 : 1.1
                 ..style = PaintingStyle.stroke
                 ..strokeJoin = StrokeJoin.round,
             );
@@ -3525,8 +3529,61 @@ class _TrendLinesPainter extends CustomPainter {
         canvas.restore();
       }
 
+      // 点很密（手机上一屏几个月，一天不到 4.5px）时：白衬底会把下面的蜡烛、
+      // 牛熊带一层层「刷白」，整张图发雾。密的时候去掉白衬底、线细一号，
+      // 实际值线垫到蜡烛下面，让红绿蜡烛自己露出来。
+      final dense = step < 4.5;
+      // 实际值线：每天的真实值直连（不做平滑，是几就是几），墨色细线 + 白衬底。
+      void drawActual() {
+        if (!showActual) return;
+        final pts = <Offset>[
+          for (var i = 0; i < m; i++)
+            if (heroPts[i].isFinite)
+              Offset(
+                xOf(i),
+                yOf(heroPts[i], heroBounds)
+                    .clamp(plotTop, plotBottom)
+                    .toDouble(),
+              ),
+        ];
+        if (pts.length >= 2) {
+          final path = Path()..moveTo(pts.first.dx, pts.first.dy);
+          for (final p in pts.skip(1)) {
+            path.lineTo(p.dx, p.dy);
+          }
+          if (!dense) canvas.drawPath(
+            path,
+            Paint()
+              ..color = Colors.white
+              ..strokeWidth = 2.4
+              ..style = PaintingStyle.stroke
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round,
+          );
+          canvas.drawPath(
+            path,
+            Paint()
+              ..color = LhKColors.actual
+              ..strokeWidth = dense ? 0.9 : 1.1
+              ..style = PaintingStyle.stroke
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round,
+          );
+          if (step >= 7) {
+            final dot = Paint()..color = LhKColors.actual;
+            final ring = Paint()..color = Colors.white;
+            for (final p in pts) {
+              canvas.drawCircle(p, 2.0, ring);
+              canvas.drawCircle(p, 1.3, dot);
+            }
+          }
+        }
+      }
+
+      if (dense) drawActual();
+
       // 蜡烛：开 = 前一天，收 = 当天。涨红跌绿（A 股习惯，也和利润赚红亏绿同向）。
-      final bodyW = n <= 1 ? 6.0 : (step * 0.62).clamp(1.2, 10.0).toDouble();
+      final bodyW = n <= 1 ? 6.0 : (step * 0.62).clamp(1.4, 10.0).toDouble();
       final unfinishedLast = (profitPartial || partial) && showEndpoint;
       for (var i = 0; i < m; i++) {
         final c = heroPts[i];
@@ -3586,51 +3643,7 @@ class _TrendLinesPainter extends CustomPainter {
         }
       }
 
-      // 实际值线：每天的真实值直连（不做平滑，是几就是几），墨色细线 + 白衬底。
-      if (showActual) {
-        final pts = <Offset>[
-          for (var i = 0; i < m; i++)
-            if (heroPts[i].isFinite)
-              Offset(
-                xOf(i),
-                yOf(heroPts[i], heroBounds)
-                    .clamp(plotTop, plotBottom)
-                    .toDouble(),
-              ),
-        ];
-        if (pts.length >= 2) {
-          final path = Path()..moveTo(pts.first.dx, pts.first.dy);
-          for (final p in pts.skip(1)) {
-            path.lineTo(p.dx, p.dy);
-          }
-          canvas.drawPath(
-            path,
-            Paint()
-              ..color = Colors.white
-              ..strokeWidth = 2.4
-              ..style = PaintingStyle.stroke
-              ..strokeCap = StrokeCap.round
-              ..strokeJoin = StrokeJoin.round,
-          );
-          canvas.drawPath(
-            path,
-            Paint()
-              ..color = LhKColors.actual
-              ..strokeWidth = 1.1
-              ..style = PaintingStyle.stroke
-              ..strokeCap = StrokeCap.round
-              ..strokeJoin = StrokeJoin.round,
-          );
-          if (step >= 7) {
-            final dot = Paint()..color = LhKColors.actual;
-            final ring = Paint()..color = Colors.white;
-            for (final p in pts) {
-              canvas.drawCircle(p, 2.0, ring);
-              canvas.drawCircle(p, 1.3, dot);
-            }
-          }
-        }
-      }
+      if (!dense) drawActual();
 
       // 走势线（快均线，日线 = 7 日均）：白衬底切开、品牌紫实线，压在蜡烛上。
       final trend = maFast;
@@ -3646,7 +3659,7 @@ class _TrendLinesPainter extends CustomPainter {
           canvas.clipRect(
             Rect.fromLTRB(0, plotTop - 2, size.width, plotBottom + 2),
           );
-          canvas.drawPath(
+          if (!dense) canvas.drawPath(
             path,
             Paint()
               ..color = Colors.white
@@ -3659,7 +3672,7 @@ class _TrendLinesPainter extends CustomPainter {
             path,
             Paint()
               ..color = LhKColors.trend
-              ..strokeWidth = 1.7
+              ..strokeWidth = dense ? 1.4 : 1.7
               ..style = PaintingStyle.stroke
               ..strokeCap = StrokeCap.round
               ..strokeJoin = StrokeJoin.round,
@@ -14997,6 +15010,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
     final touched = prefs.getStringList(_kPrefsColOrderTouched) ?? const [];
     final savedZoom = prefs.getDouble(_kPrefsUiZoom);
+    unawaited(LighthousePkBasket.instance.load());
     if (!mounted) return;
     setState(() {
       // 对账放到 _syncMetricsFromUI 之后做 —— 此刻 _bundle 可能还没到，
@@ -19063,6 +19077,76 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Widget _buildMainView() {
     if (_metricPageKey != null)
       return _buildMetricAnalysisPage(_metricPageKey!);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildPinnedPeriodBar(),
+        Expanded(
+          child: Stack(
+            children: [
+              Positioned.fill(child: _buildMainList()),
+              // 列表一滚动，钉住的时间条底下浮出一道淡紫阴影（画在列表上面，
+              // 不然会被列表盖住），表示内容从它下面经过。
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                height: 10,
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _mainListScrollCtrl,
+                    builder: (ctx, _) {
+                      final c = _mainListScrollCtrl;
+                      final scrolled =
+                          c.hasClients &&
+                          c.positions.length == 1 &&
+                          c.offset > 2;
+                      return AnimatedOpacity(
+                        opacity: scrolled ? 1 : 0,
+                        duration: const Duration(milliseconds: 160),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                _LhPlum.deep.withAlpha(22),
+                                _LhPlum.deep.withAlpha(0),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 日 / 周 / 月 / 季 / 年 钉在列表上方：往下滑看账本时它不走，随时能切时间段。
+  Widget _buildPinnedPeriodBar() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        lighthouseHeroShellMarginH,
+        lighthousePeriodGapAbove,
+        lighthouseHeroShellMarginH,
+        8,
+      ),
+      color: DunesColors.resolve(
+        context,
+        DunesColors.bgApp,
+        role: DunesColorRole.surface,
+      ),
+      child: _buildPeriodBar(),
+    );
+  }
+
+  Widget _buildMainList() {
     return RefreshIndicator.noSpinner(
       key: const ValueKey('lighthouse-pull-refresh'),
       onRefresh: _refresh,
@@ -20409,15 +20493,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-            lighthouseHeroShellMarginH,
-            lighthousePeriodGapAbove,
-            lighthouseHeroShellMarginH,
-            lighthouseSoftReloadKeepsContent ? 0 : 10,
-          ),
-          child: _buildPeriodBar(),
-        ),
+        // 日 / 周 / 月 / 季 / 年 已钉在列表上方（_buildPinnedPeriodBar），
+        // 这里只留原来的间距。
+        SizedBox(height: lighthouseSoftReloadKeepsContent ? 0 : 10),
         // 原来 10pt 的留白里放进度条：不占新高度，刷新前后页面不跳。
         if (lighthouseSoftReloadKeepsContent) _buildSoftReloadLine(),
         // Hero：始终展示；L1 分类只筛列表，不在 Hero 上贴「能源」等标签
@@ -30669,12 +30747,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   ///
   /// 返回 null = 该行没有这个口径的数据源，列表上显示「—」而不是 0.00万。
   double? _rowMetricValueOrNull(Map<String, dynamic> r, String key) {
-    // 资管独有省级行（中油BP 等）：只有资产，没有经营指标，
-    // 显示「—」而不是 0。
-    if (r[lighthouseAssetOnlyKey] == true &&
-        key != lighthouseTotalAssetsSortKey) {
-      return null;
-    }
     switch (key) {
       case lighthouseTotalAssetsSortKey:
         return (r[lighthouseTotalAssetsSortKey] as num?)?.toDouble();
@@ -32272,7 +32344,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             filterRow(
               kicker: '分类',
               divider: true,
-              trailing: supplyFoldable ? moreFiltersToggle() : null,
+              // 最右：PK 篮（账本卡片上点「PK」加进来的都在这）。
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (supplyFoldable) moreFiltersToggle(),
+                  // PK 暂不上线（kLighthousePkEnabled）。
+                  if (kLighthousePkEnabled) LhPkBasketButton(onTap: _openPk),
+                ],
+              ),
               cells: groups
                   .map(
                     (g) => _filterPill(
@@ -40677,6 +40757,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   /// 资管独有省级行的紧凑卡：名称 + 总资产 / 票税，外加一句口径说明。
+  // 中油BP 已改用普通省卡片；这张只讲资产的卡暂留，不再调用。
+  // ignore: unused_element
   Widget _buildAssetOnlyLedgerCard(
     Map<String, dynamic> r, {
     required String name,
@@ -42652,6 +42734,101 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   /// 一行 = 账本行 (+ 展开态)。展开体全宽渲染。
+  // ── PK 对比 ─────────────────────────────────────────────────────────
+  String _pkKeyFor(String tab, String name, String group) =>
+      '$tab::$name::$group';
+
+  /// 给账本这一行拍一张 PK 快照：只收卡片上真的展示的指标（核销额卡不收 GMV），
+  /// 再加利润和毛利率。
+  LhPkEntry _pkEntryFor(
+    Map<String, dynamic> r,
+    String tab,
+    String name,
+    String group,
+  ) {
+    final shown = <String>{
+      for (final row in lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: tab,
+        product: name,
+        basis: _rowMarginBasis(r),
+      ))
+        ...row,
+      'profit',
+      'grossMargin',
+    };
+    return LhPkEntry(
+      key: _pkKeyFor(tab, name, group),
+      name: name,
+      tab: tab,
+      group: group,
+      rangeLabel: _selectedRangeLabel,
+      metrics: <String, double?>{
+        for (final m in lhPkMetrics)
+          m.key: shown.contains(m.key) ? _pkFinite(_rowMetricValueOrNull(r, m.key)) : null,
+      },
+      marginFormula: _grossMarginFormula(r),
+    );
+  }
+
+  double? _pkFinite(double? v) => v != null && v.isFinite ? v : null;
+
+  /// 分享图标左边挂一颗「＋PK」。
+  Widget _withPkButton(
+    Map<String, dynamic> r,
+    String tab,
+    String name,
+    String group,
+    Widget? shareIcon,
+  ) {
+    // PK 暂不上线：只留分享图标。
+    if (!kLighthousePkEnabled) return shareIcon ?? const SizedBox.shrink();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LhPkAddButton(
+          entryKey: _pkKeyFor(tab, name, group),
+          onTap: (btnCtx) =>
+              _togglePk(_pkEntryFor(r, tab, name, group), btnCtx),
+        ),
+        if (shareIcon != null) shareIcon,
+      ],
+    );
+  }
+
+  void _togglePk(LhPkEntry entry, BuildContext buttonContext) {
+    final basket = LighthousePkBasket.instance;
+    final from = lhPkGlobalRect(buttonContext);
+    final res = basket.toggle(entry);
+    if (res == null) {
+      LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
+      lhPkToast(
+        context,
+        text: 'PK 篮满了，最多放 $lhPkMaxEntries 个',
+        action: '去对比 ›',
+        onAction: _openPk,
+      );
+      return;
+    }
+    if (!res) {
+      LighthouseFeedback.instance.play(LighthouseFeedbackKind.collapse);
+      return;
+    }
+    LighthouseFeedback.instance.play(LighthouseFeedbackKind.success);
+    final to = lhPkGlobalRect(basket.anchor);
+    if (from != null && to != null) {
+      lhPkFly(context, from: from, to: to, slot: basket.indexOf(entry.key));
+    }
+    final n = basket.length;
+    lhPkToast(
+      context,
+      text: n < 2 ? '已加入 PK · 再加一个就能比' : '已加入 PK · $n 个',
+      action: n >= 2 ? '去对比 ›' : null,
+      onAction: _openPk,
+    );
+  }
+
+  void _openPk() => unawaited(openLighthousePk(context, uiZoom: _uiZoom));
+
   List<Widget> _buildLedgerRowGroup(
     Map<String, dynamic> r,
     int idx,
@@ -42688,6 +42865,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         : lhGroupColor(group);
     final prefix = trendKeyPrefix ?? tab;
     final trendKey = '$prefix::$name::$group';
+    // PK：这一行在 PK 篮里就顺手刷新快照（换了时间段也跟上）。
+    final pkEnabled = tab != 'netTa' && rawName.isNotEmpty;
+    if (pkEnabled &&
+        LighthousePkBasket.instance.contains(_pkKeyFor(tab, name, group))) {
+      LighthousePkBasket.instance.refresh(_pkEntryFor(r, tab, name, group));
+    }
     final soloMetricKey = _expandedLedgerSolo[trendKey];
     final isSoloExpanded = soloMetricKey != null;
     final isExpanded = _expandedTrends.contains(trendKey) || isSoloExpanded;
@@ -42696,11 +42879,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final fundPoolTrace = _fundPoolTraces[fundPoolKey];
     final isFundPoolExpanded = fundPoolPanel != null;
     final isAnyExpanded = isExpanded || isFundPoolExpanded;
-    // 资管独有省级行（例如中油BP）账本里没有，进不了二级页。
-    final isAssetOnlyRow = r[lighthouseAssetOnlyKey] == true;
+    // 中油BP 等资管省级行跟其他省一样能点进二级页（后端按「中油BP」行名筛）。
     final canDefaultOpen =
         allowDefaultDetailOpen &&
-        !isAssetOnlyRow &&
         (tab == 'product' ||
             tab == 'supply' ||
             tab == 'channel' ||
@@ -42782,21 +42963,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         (l3SearchHit
             ? !_expandedProductL3.contains(l3Key)
             : _expandedProductL3.contains(l3Key));
-    // 资管独有省级行（中油BP 等）：账本里没有这一行，销售额 / 利润等
-    // 本来就不存在。不再套账本卡片画一排「—」（读起来像「拆下去是 0」），
-    // 改成只讲资产的紧凑卡。
-    if (isAssetOnlyRow && lighthouseLedgerShowsFundPoolPreview(tab)) {
-      return [
-        _buildAssetOnlyLedgerCard(
-          r,
-          name: name,
-          summaryCellH: summaryCellH,
-          fundPoolKey: fundPoolKey,
-          fundPoolPanel: fundPoolPanel,
-          fundPoolTrace: fundPoolTrace,
-        ),
-      ];
-    }
     return [
       LhProductL3HoverRegion(
         cursor: canOpen ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -42927,7 +43093,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       pinned: _buildLedgerPinned(
                         r,
                         idx,
-                        shareIcon: shareIcon,
+                        shareIcon: pkEnabled
+                            ? _withPkButton(r, tab, name, group, shareIcon)
+                            : shareIcon,
                         canDetail: showChevron,
                         isExpanded: isExpanded,
                         onOpenDetail: rowTap == null

@@ -247,7 +247,9 @@ const Set<String> _kNonAdditiveKeys = <String>{
 /// 供给「全部」视图：账本行（省 × 供给分类 × 交易标识）按省合并成一行。
 ///
 /// [attachAssets] 为 true 时（没开 HUN / 交易类型筛选）挂上总资产、
-/// 并补上账本里没有、资管里有的真实省级行（例如中油BP）。
+/// 并补上本期账本里没有交易、资管里有的真实省级行（例如今天没卖的中油BP），
+/// 补出来的行跟其他省同一个格式，经营指标记 0。
+/// 中油BP 平时有自己的账本行：后端 Tag2CaseSQL 把带「中油BP」的券单列成「中油BP」。
 /// 供给页只展示省级资产，不再把资管主体拆成供给侧子行。
 /// 「中石化」是资管接口用于全国中石化汇总的伪省份，只进入顶部资产总览，
 /// 不能再作为省份卡片补到列表末尾。
@@ -283,6 +285,13 @@ List<Map<String, dynamic>> lighthouseSupplyProvinceRows(
   // 只看得到部分省份的人，不补账本里看不到的省（资管快照是全量的）。
   if (attachAssets && !snapshot.restricted) {
     final seen = order.toSet();
+    // 本期账本里没有交易的（例如今天中油BP 没卖）：照样按省卡片的格式出，
+    // 销售额 / 核销额 / 利润… 全记 0，而不是一排「—」或一张只讲资产的卡。
+    final zeroKeys = <String>{
+      for (final r in rows)
+        for (final e in r.entries)
+          if (e.value is num && !_kNonAdditiveKeys.contains(e.key)) e.key,
+    };
     for (final key in snapshot.provinceAmounts.keys) {
       if (seen.contains(key)) continue;
       if (key == '中石化') continue;
@@ -291,6 +300,7 @@ List<Map<String, dynamic>> lighthouseSupplyProvinceRows(
         continue;
       }
       final row = <String, dynamic>{
+        for (final k in zeroKeys) k: 0.0,
         'name': snapshot.provinceNames[key] ?? key,
         'group': '',
         lighthouseAssetOnlyKey: true,

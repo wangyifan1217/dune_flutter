@@ -103,7 +103,7 @@ class ProposalEstimateSummaryData {
   /// 渠道取自各产品的渠道分类 / 渠道名（科技部 SKU），点它跳科技部 SKU 清单。
   final bool channelFromSku;
 
-  /// 点「渠道 · 标签三」跳到科技部的哪一行：所有产品渠道分类相同 → SKU 共同项；否则 → SKU 清单（自动展开）。
+  /// 点「渠道 · 标签三」跳到科技部的哪一行：市场部渠道标签 → channelTagL1；否则 → 产品清单（自动展开）。
   final String channelKey;
 
   /// 市场部「产品（标签一）」。

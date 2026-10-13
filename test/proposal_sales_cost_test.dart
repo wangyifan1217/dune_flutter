@@ -314,7 +314,7 @@ void main() {
         final cost = find
             .descendant(
               of: find.byType(ProposalFinanceSplit),
-              matching: find.text('成本'),
+              matching: find.text('收入与成本'),
             )
             .first;
         await tester.ensureVisible(cost);
@@ -339,27 +339,8 @@ void main() {
         );
         await tester.tap(find.byKey(const ValueKey('proposal-nav-market')));
         await tester.pumpAndSettle();
-        final marketCost = find.text('成本测算').first;
-        await tester.ensureVisible(marketCost);
-        await tester.tap(marketCost);
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(const ValueKey('market-cost-result')),
-          findsOneWidget,
-        );
-        expect(find.text('采购成本'), findsNothing);
-        expect(
-          find.descendant(
-            of: find.byKey(const ValueKey('market-cost-result')),
-            matching: find.text('业务成本'),
-          ),
-          findsOneWidget,
-        );
-        expect(
-          find.textContaining('财务复核时由财务部负责人一选择公式'),
-          findsWidgets,
-        );
-        expect(find.text('待选择'), findsOneWidget);
+        // 市场部「成本测算」页签已删，成本只在财务部「成本」看。
+        expect(find.text('成本测算'), findsNothing);
         expect(find.text('经营与周转'), findsNothing);
         expect(find.text('经营成本'), findsNothing);
         expect(tester.takeException(), isNull);

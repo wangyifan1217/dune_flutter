@@ -39,14 +39,16 @@ void main() {
           findsOneWidget,
         );
         expect(find.byType(DropdownButton<String>), findsNothing);
-        expect(find.widgetWithText(ChoiceChip, '全部'), findsOneWidget);
-        expect(find.widgetWithText(ChoiceChip, '草稿'), findsOneWidget);
-        expect(find.widgetWithText(ChoiceChip, '填写中'), findsOneWidget);
-        expect(find.widgetWithText(ChoiceChip, '全部板块'), findsNothing);
-        expect(find.text('库内提案'), findsOneWidget);
-        expect(find.text('本日提案'), findsOneWidget);
-        expect(find.text('本周提案'), findsOneWidget);
-        expect(find.text('本月提案'), findsOneWidget);
+        // 状态改成灯塔式文字页签（不再是 ChoiceChip）。
+        final strip = find.byKey(const ValueKey('proposal-status-strip'));
+        expect(find.descendant(of: strip, matching: find.text('全部')), findsOneWidget);
+        expect(find.descendant(of: strip, matching: find.text('草稿')), findsOneWidget);
+        expect(find.descendant(of: strip, matching: find.text('填写中')), findsOneWidget);
+        expect(find.text('全部板块'), findsNothing);
+        // 时间段是「库内提案 20」这样的一段富文本。
+        for (final label in ['库内提案', '本日提案', '本周提案', '本月提案']) {
+          expect(find.textContaining(label, findRichText: true), findsOneWidget);
+        }
         await tester.tap(find.byKey(const ValueKey('proposal-period-day')));
         await tester.pump();
         expect(

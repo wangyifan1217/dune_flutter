@@ -35,10 +35,12 @@ import 'proposal_finance_formula_board.dart';
 import 'proposal_view_style.dart';
 import 'proposal_intake_models.dart';
 import 'proposal_intake_review_mock.dart';
+import 'proposal_product_card.dart';
 import 'proposal_intake_unreviewed.dart';
 import 'proposal_intake_select.dart';
 import 'proposal_intake_service.dart';
 import 'proposal_intake_ui.dart';
+import 'proposal_list_card.dart';
 import 'settlement_catalog.dart';
 
 enum _ProposalPage { list, form }
@@ -1457,245 +1459,319 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   /// 销售、采购共用一套灯塔式列表骨架，仅由 kind 区分数据和文案。
   bool get _protoList => kProposalPrototypeStyleEnabled;
 
-  Widget _protoListBody({
+  static const _listAccent = Color(0xFF4A3A9A);
+  static const _listPage = Color(0xFFF7F6FB);
+
+  /// 列表页顶部（照原型）：标题「销售提案 PROPOSALS」+ 搜索 + 刷新 + 新建。
+  Widget _protoHeader({
     required bool compact,
+    required String kindLabel,
     required Widget search,
-    required Widget refresh,
-    required Widget? create,
-    required Widget statusFilter,
   }) {
-    Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
-        DunesColors.resolve(context, Color(v), role: role);
-    final kindLabel = proposalIntakeIsPurchase(widget.kind) ? '采购提案' : '销售提案';
-    final toolbar = compact
-        ? Column(
-            children: [
-              search,
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(child: refresh),
-                  if (create != null) ...[
-                    const SizedBox(width: 6),
-                    Expanded(child: create),
-                  ],
-                ],
+    Color c(Color v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, v, role: role);
+    final title = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: c(_listAccent, DunesColorRole.surface),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(
+            Icons.description_outlined,
+            size: 16,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          widget.assistantMode ? '待我处理的$kindLabel' : kindLabel,
+          style: TextStyle(
+            fontSize: compact ? 17 : 19,
+            fontWeight: FontWeight.w800,
+            color: c(_listAccent),
+          ),
+        ),
+        if (!widget.assistantMode) ...[
+          const SizedBox(width: 6),
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text(
+              'PROPOSALS',
+              style: TextStyle(
+                fontSize: 9.5,
+                letterSpacing: 2,
+                color: c(const Color(0xFF8A85A0)),
               ),
-            ],
+            ),
+          ),
+        ],
+      ],
+    );
+    final refresh = IconButton(
+      key: const ValueKey('proposal-list-refresh'),
+      tooltip: '刷新',
+      onPressed: _loading ? null : _load,
+      visualDensity: VisualDensity.compact,
+      style: IconButton.styleFrom(
+        backgroundColor: c(Colors.white, DunesColorRole.surface),
+        side: BorderSide(color: c(const Color(0xFFE4E1EE), DunesColorRole.border)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        fixedSize: const Size(36, 36),
+      ),
+      icon: Icon(Icons.refresh_rounded, size: 18, color: c(_listAccent)),
+    );
+    final create = widget.showCreate
+        ? FilledButton.icon(
+            key: const ValueKey('proposal-list-create'),
+            onPressed: _saving || _options == null ? null : _create,
+            style: FilledButton.styleFrom(
+              backgroundColor: c(_listAccent, DunesColorRole.surface),
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            icon: const Icon(Icons.add, size: 16),
+            label: Text(
+              compact
+                  ? '新建'
+                  : (proposalIntakeIsPurchase(widget.kind) ? '新建采购提案' : '新建提案'),
+            ),
           )
-        : Row(
-            children: [
-              Expanded(child: search),
-              const SizedBox(width: 10),
-              refresh,
-              if (create != null) ...[const SizedBox(width: 10), create],
-            ],
-          );
+        : null;
     if (compact) {
-      return _protoListPhone(
-        kindLabel: kindLabel,
-        toolbar: toolbar,
-        statusFilter: statusFilter,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Flexible(child: title),
+              const Spacer(),
+              refresh,
+              if (create != null) ...[const SizedBox(width: 6), create],
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(height: 38, child: search),
+        ],
       );
     }
-    return GestureDetector(
-      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-      behavior: HitTestBehavior.translucent,
-      child: ColoredBox(
-        key: const ValueKey('proposal-lighthouse-list'),
-        color: c(0xFFF4F1EA, DunesColorRole.surface),
-        child: DefaultTextStyle.merge(
-          style: const TextStyle(
-            fontFamily: kProposalProtoSans,
-            fontFamilyFallback: kProposalProtoSansFallback,
-          ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              compact ? 10 : 16,
-              compact ? 8 : 14,
-              compact ? 10 : 16,
-              compact ? 10 : 14,
-            ),
-            // PC 列表默认铺满整个内容区（和灯塔一样），不再限宽 1180 居中。
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: double.infinity),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (widget.assistantMode)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
-                        child: Text(
-                          '待我处理的$kindLabel',
-                          style: TextStyle(
-                            color: c(0xFF1F2421),
-                            fontSize: compact ? 15 : 17,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      )
-                    else
-                      Container(
-                        key: const ValueKey('proposal-status-strip'),
-                        padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
-                        child: statusFilter,
-                      ),
-                    Expanded(
-                      child: Container(
-                        key: const ValueKey('proposal-proto-list-box'),
-                        padding: EdgeInsets.fromLTRB(
-                          compact ? 10 : 14,
-                          compact ? 10 : 14,
-                          compact ? 10 : 14,
-                          compact ? 8 : 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: DunesColors.resolveNullable(
-                            context,
-                            const Color(0xFFFFFFFF).withValues(alpha: .88),
-                            role: DunesColorRole.surface,
-                          ),
-                          border: Border.all(
-                            color: c(0xFFE5E1D3, DunesColorRole.border),
-                          ),
-                          borderRadius: BorderRadius.circular(
-                            compact ? 12 : 16,
-                          ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x10000000),
-                              blurRadius: 12,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            toolbar,
-                            SizedBox(height: compact ? 9 : 12),
-                            if (!widget.assistantMode)
-                              _libraryStatsRow(compact: compact),
-                            _protoListTiles(),
-                            SizedBox(height: compact ? 9 : 12),
-                            Row(
-                              children: [
-                                Container(
-                                  width: 3,
-                                  height: 14,
-                                  decoration: BoxDecoration(
-                                    color: c(0xFF7B5CD8),
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                                const SizedBox(width: 7),
-                                Text(
-                                  '提案明细',
-                                  style: TextStyle(
-                                    color: c(0xFF1F2421),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                const SizedBox(width: 7),
-                                Text(
-                                  '${_rows.length} 份',
-                                  style: TextStyle(
-                                    color: c(0xFF5A5C56),
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 10.5,
-                                    fontFamily: kProposalProtoMono,
-                                    fontFamilyFallback:
-                                        kProposalProtoMonoFallback,
-                                  ),
-                                ),
-                                const Spacer(),
-                                if (_sectorFilter.isNotEmpty ||
-                                    _periodFilter.isNotEmpty)
-                                  TextButton.icon(
-                                    onPressed: _loading
-                                        ? null
-                                        : () {
-                                            setState(() {
-                                              _sectorFilter = '';
-                                              _periodFilter = '';
-                                            });
-                                            unawaited(_load(resetScroll: true));
-                                          },
-                                    style: TextButton.styleFrom(
-                                      visualDensity: VisualDensity.compact,
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                    ),
-                                    icon: const Icon(
-                                      Icons.filter_alt_off,
-                                      size: 13,
-                                    ),
-                                    label: const Text(
-                                      '清除筛选',
-                                      style: TextStyle(fontSize: 10),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 7),
-                            Expanded(
-                              child: _buildListContent(compact: compact),
-                            ),
-                          ],
-                        ),
-                      ),
+    return Row(
+      children: [
+        title,
+        const Spacer(),
+        SizedBox(width: 300, height: 38, child: search),
+        const SizedBox(width: 8),
+        refresh,
+        if (create != null) ...[const SizedBox(width: 8), create],
+      ],
+    );
+  }
+
+  /// 状态页签：灯塔那样的一排文字页签，选中的下面一条紫线。
+  Widget _protoStatusTabs({required bool compact}) {
+    Color c(Color v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, v, role: role);
+    final items = _presidentDesk ? _presidentDeskFilters : _proposalStatusFilters;
+    return SingleChildScrollView(
+      key: const ValueKey('proposal-status-strip'),
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final item in items)
+            InkWell(
+              key: ValueKey('proposal-status-${item.$1.isEmpty ? 'all' : item.$1}'),
+              onTap: () => unawaited(_setStatusFilter(item.$1)),
+              child: Container(
+                padding: EdgeInsets.fromLTRB(compact ? 11 : 16, 10, compact ? 11 : 16, 8),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      width: 2,
+                      color: _statusFilter == item.$1
+                          ? c(_listAccent)
+                          : Colors.transparent,
                     ),
-                  ],
+                  ),
+                ),
+                child: Text(
+                  item.$2,
+                  style: TextStyle(
+                    fontSize: compact ? 13 : 13.5,
+                    fontWeight: _statusFilter == item.$1
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                    color: _statusFilter == item.$1
+                        ? c(_listAccent)
+                        : c(const Color(0xFF4D4860)),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
+        ],
       ),
     );
   }
 
-  /// 手机列表：整页一起滑（状态、搜索、统计、提案明细连在一起往上走），
-  /// 不再只有下面的明细小框能滑。
-  Widget _protoListPhone({
-    required String kindLabel,
-    required Widget toolbar,
-    required Widget statusFilter,
-  }) {
-    Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
-        DunesColors.resolve(context, Color(v), role: role);
-    final title = Row(
-      children: [
-        Container(
-          width: 3,
-          height: 13,
+  /// 时间段 + 分类一行：左边「库内 / 本日 / 本周 / 本月」小分段，右边「分类」胶囊。
+  Widget _protoFilters({required bool compact}) {
+    Color c(Color v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, v, role: role);
+    Widget period((String, String) item) {
+      final selected = _periodFilter == item.$1;
+      final id = item.$1.isEmpty ? 'all' : item.$1;
+      final count = switch (item.$1) {
+        'day' => _libraryStats.day,
+        'week' => _libraryStats.week,
+        'month' => _libraryStats.month,
+        _ => _libraryStats.total,
+      };
+      return InkWell(
+        key: ValueKey(
+          selected ? 'proposal-period-$id-selected' : 'proposal-period-$id',
+        ),
+        onTap: () => unawaited(_setPeriodFilter(item.$1)),
+        borderRadius: BorderRadius.circular(7),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
           decoration: BoxDecoration(
-            color: c(0xFF7B5CD8),
-            borderRadius: BorderRadius.circular(2),
+            color: selected ? c(Colors.white, DunesColorRole.surface) : null,
+            borderRadius: BorderRadius.circular(7),
+            boxShadow: selected
+                ? const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 3,
+                      offset: Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: item.$2,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? c(_listAccent) : c(const Color(0xFF4D4860)),
+                  ),
+                ),
+                TextSpan(
+                  text: ' $count',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? c(_listAccent) : c(const Color(0xFF1F1B2E)),
+                    fontFamily: kProposalProtoMono,
+                    fontFamilyFallback: kProposalProtoMonoFallback,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(width: 6),
+      );
+    }
+
+    final sectorRows = proposalIntakeSectorCountRows(
+      catalog: _options?.sectors ?? const [],
+      counts: _libraryStats.sectors,
+    );
+    Widget sector(String name, int count) {
+      final filter = name == '未填写' ? kProposalIntakeSectorBlankFilter : name;
+      final selected = _sectorFilter == filter;
+      return InkWell(
+        onTap: _loading
+            ? null
+            : () => unawaited(
+                _setSectorFilter(_sectorFilter == filter ? '' : filter),
+              ),
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          decoration: BoxDecoration(
+            color: c(
+              selected ? _listAccent : const Color(0xFFF1EFF8),
+              DunesColorRole.surface,
+            ),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            '$name $count',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? Colors.white : c(const Color(0xFF4D4860)),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Container(
+          key: const ValueKey('proposal-period-strip'),
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: c(const Color(0xFFF0ECF6), DunesColorRole.surface),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final item in kProposalIntakePeriodFilters) period(item),
+            ],
+          ),
+        ),
+        if (sectorRows.isNotEmpty)
+          Wrap(
+            spacing: 5,
+            runSpacing: 5,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                '分类',
+                style: TextStyle(fontSize: 11, color: c(const Color(0xFF6B6680))),
+              ),
+              for (final item in sectorRows) sector(item.$1, item.$2),
+            ],
+          ),
+      ],
+    );
+  }
+
+  /// 「提案明细 N 份 · 清除筛选」一行。
+  Widget _protoListTitle() {
+    Color c(Color v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, v, role: role);
+    return Row(
+      children: [
         Text(
           '提案明细',
           style: TextStyle(
-            color: c(0xFF1F2421),
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
+            color: c(const Color(0xFF1F1B2E)),
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
           ),
         ),
         const SizedBox(width: 6),
         Text(
           '${_rows.length} 份',
           style: TextStyle(
-            color: c(0xFF5A5C56),
-            fontWeight: FontWeight.w600,
-            fontSize: 10.5,
+            color: c(const Color(0xFF6B6680)),
+            fontSize: 11,
             fontFamily: kProposalProtoMono,
             fontFamilyFallback: kProposalProtoMonoFallback,
           ),
@@ -1717,32 +1793,129 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               padding: const EdgeInsets.symmetric(horizontal: 6),
             ),
-            child: const Text('清除筛选', style: TextStyle(fontSize: 10)),
+            child: const Text('清除筛选', style: TextStyle(fontSize: 11)),
           ),
       ],
     );
-    final Widget rowsBlock = _rows.isEmpty
-        ? SizedBox(height: 260, child: _buildListContent(compact: true))
-        : Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: c(0xFFFFFFFF, DunesColorRole.surface),
-              border: Border.all(color: c(0xFFE7E3F2, DunesColorRole.border)),
-              borderRadius: BorderRadius.circular(12),
+  }
+
+  /// 白色列表面板：状态页签 + 时间段 / 分类 + 明细标题（[body] 是电脑上的列表）。
+  Widget _protoPanel({required bool compact, Widget? body}) {
+    Color c(Color v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, v, role: role);
+    return Container(
+      key: const ValueKey('proposal-proto-list-box'),
+      decoration: BoxDecoration(
+        color: c(Colors.white, DunesColorRole.surface),
+        border: Border.all(color: c(const Color(0xFFE8E5F1), DunesColorRole.border)),
+        borderRadius: BorderRadius.circular(compact ? 12 : 14),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: body == null ? MainAxisSize.min : MainAxisSize.max,
+        children: [
+          if (!widget.assistantMode) ...[
+            Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: c(const Color(0xFFEFEDF5), DunesColorRole.border),
+                  ),
+                ),
+              ),
+              child: _protoStatusTabs(compact: compact),
             ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(compact ? 10 : 14, 10, compact ? 10 : 14, 0),
+              child: _protoFilters(compact: compact),
+            ),
+          ],
+          Padding(
+            padding: EdgeInsets.fromLTRB(compact ? 10 : 14, 8, compact ? 10 : 14, 6),
+            child: _protoListTitle(),
+          ),
+          if (body != null)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: body,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _protoListBody({
+    required bool compact,
+    required Widget search,
+    required Widget refresh,
+    required Widget? create,
+    required Widget statusFilter,
+  }) {
+    Color c(Color v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, v, role: role);
+    final kindLabel = proposalIntakeIsPurchase(widget.kind) ? '采购提案' : '销售提案';
+    if (compact) {
+      return _protoListPhone(kindLabel: kindLabel, search: search);
+    }
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: ColoredBox(
+        key: const ValueKey('proposal-lighthouse-list'),
+        color: c(_listPage, DunesColorRole.surface),
+        child: DefaultTextStyle.merge(
+          style: const TextStyle(
+            fontFamily: kProposalProtoSans,
+            fontFamilyFallback: kProposalProtoSansFallback,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final row in _rows) _protoListRow(row, compact: true),
+                _protoHeader(compact: false, kindLabel: kindLabel, search: search),
+                const SizedBox(height: 12),
+                _protoListTiles(compact: false),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: _protoPanel(
+                    compact: false,
+                    body: _buildListContent(compact: false),
+                  ),
+                ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 手机列表：整页一起滑（标题、汇总、页签筛选、提案卡片连在一起往上走）。
+  Widget _protoListPhone({
+    required String kindLabel,
+    required Widget search,
+  }) {
+    Color c(Color v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, v, role: role);
+    final Widget rowsBlock = _rows.isEmpty
+        ? SizedBox(height: 260, child: _buildListContent(compact: true))
+        // 每个提案一张灯塔样式的卡，卡自己有边框，外面不再套框。
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final row in _rows) _protoListRow(row, compact: true),
+            ],
           );
     return GestureDetector(
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       behavior: HitTestBehavior.translucent,
       child: ColoredBox(
         key: const ValueKey('proposal-lighthouse-list'),
-        color: c(0xFFF4F1EA, DunesColorRole.surface),
+        color: c(_listPage, DunesColorRole.surface),
         child: DefaultTextStyle.merge(
           style: const TextStyle(
             fontFamily: kProposalProtoSans,
@@ -1758,56 +1931,14 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.fromLTRB(10, 6, 10, 16),
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 16),
                   children: [
-                    if (widget.assistantMode)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(2, 0, 2, 6),
-                        child: Text(
-                          '待我处理的$kindLabel',
-                          style: TextStyle(
-                            color: c(0xFF1F2421),
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      )
-                    else
-                      Padding(
-                        key: const ValueKey('proposal-status-strip'),
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: statusFilter,
-                      ),
-                    Container(
-                      key: const ValueKey('proposal-proto-list-box'),
-                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                      decoration: BoxDecoration(
-                        color: DunesColors.resolveNullable(
-                          context,
-                          const Color(0xFFFFFFFF).withValues(alpha: .88),
-                          role: DunesColorRole.surface,
-                        ),
-                        border: Border.all(
-                          color: c(0xFFE5E1D3, DunesColorRole.border),
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          toolbar,
-                          const SizedBox(height: 8),
-                          if (!widget.assistantMode)
-                            _libraryStatsRow(compact: true),
-                          _protoListTiles(),
-                        ],
-                      ),
-                    ),
+                    _protoHeader(compact: true, kindLabel: kindLabel, search: search),
                     const SizedBox(height: 10),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(2, 0, 2, 6),
-                      child: title,
-                    ),
+                    _protoListTiles(compact: true),
+                    const SizedBox(height: 10),
+                    _protoPanel(compact: true),
+                    const SizedBox(height: 8),
                     rowsBlock,
                   ],
                 ),
@@ -1826,11 +1957,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     );
   }
 
-  /// 灯塔式经营概览：一条内同时读完进行中、年化规模和超时风险。
-  Widget _protoListTiles() {
+  /// 汇总三格（照原型）：进行中、进行中年化、卡住超过 3 天，各一张白卡。
+  Widget _protoListTiles({bool compact = false}) {
     if (_rows.isEmpty) return const SizedBox.shrink();
-    Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
-        DunesColors.resolve(context, Color(v), role: role);
+    Color c(Color v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, v, role: role);
     final active = [
       for (final row in _rows)
         if (row.status != 'done' && row.status != 'draft') row,
@@ -1842,303 +1973,120 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       );
       if (scale != null) scaleSum += scale;
     }
+    // 卡住天数和卡片底部一样：从当前这一步开始等算起（详情「审批进度」同一份数据）。
+    int stuckDays(ProposalIntakeRow row) =>
+        proposalReviewWaited(
+          proposalIntakeProgressSteps(row: row, people: _people, options: _options),
+        )?.inDays ??
+        0;
     final stuck = [
       for (final row in active)
-        if (proposalIntakeDaysOpen(row) > 3) row,
+        if (stuckDays(row) > 3) row,
     ];
     final longest = stuck.isEmpty
-        ? null
-        : stuck.reduce(
-            (a, b) =>
-                proposalIntakeDaysOpen(a) >= proposalIntakeDaysOpen(b) ? a : b,
-          );
-    Widget metric({
-      required IconData icon,
-      required String label,
-      required String value,
-      required String sub,
-      bool warn = false,
-    }) {
-      final tone = c(warn ? 0xFFB07A2B : 0xFF7B5CD8);
-      return Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, size: 12, color: tone),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        color: c(0xFF3A3D37),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+        ? 0
+        : stuck.map(stuckDays).reduce((a, b) => a > b ? a : b);
+    Widget tile(String label, String value, String unit, {bool warn = false}) =>
+        Expanded(
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 9 : 14,
+              vertical: compact ? 7 : 10,
+            ),
+            decoration: BoxDecoration(
+              color: c(Colors.white, DunesColorRole.surface),
+              border: Border.all(
+                color: c(const Color(0xFFE8E5F1), DunesColorRole.border),
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: compact ? 11 : 12,
+                    color: c(const Color(0xFF6B6680)),
                   ),
-                ],
-              ),
-              const SizedBox(height: 3),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 17,
-                  height: 1.05,
-                  fontWeight: FontWeight.w800,
-                  color: c(warn ? 0xFFB4570F : 0xFF1F2421),
-                  fontFamily: kProposalProtoMono,
-                  fontFamilyFallback: kProposalProtoMonoFallback,
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                sub,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 9.5,
-                  color: c(0xFF5A5C56),
-                  fontWeight: FontWeight.w500,
+                const SizedBox(height: 2),
+                Text.rich(
+                  TextSpan(
+                    text: value,
+                    style: TextStyle(
+                      fontSize: compact ? 15 : 20,
+                      height: 1.15,
+                      fontWeight: FontWeight.w700,
+                      color: c(warn ? const Color(0xFFB4441F) : const Color(0xFF1F1B2E)),
+                      fontFamily: kProposalProtoMono,
+                      fontFamilyFallback: kProposalProtoMonoFallback,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: unit,
+                        style: TextStyle(
+                          fontSize: compact ? 10.5 : 12,
+                          fontWeight: FontWeight.w400,
+                          color: c(const Color(0xFF6B6680)),
+                          fontFamily: kProposalProtoSans,
+                          fontFamilyFallback: kProposalProtoSansFallback,
+                        ),
+                      ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      );
-    }
-
-    Widget divider() => Container(
-      width: 1,
-      height: 42,
-      color: c(0xFFE5E1D3, DunesColorRole.border),
-    );
-
-    return Container(
+        );
+    return Row(
       key: const ValueKey('proposal-overview-strip'),
-      margin: const EdgeInsets.only(top: 2),
-      decoration: BoxDecoration(
-        color: c(0xFFFBFAF6, DunesColorRole.surface),
-        border: Border.all(color: c(0xFFE5E1D3, DunesColorRole.border)),
-        borderRadius: BorderRadius.circular(11),
-      ),
-      child: Row(
-        children: [
-          metric(
-            icon: Icons.pending_actions_outlined,
-            label: '进行中',
-            value: '${active.length}',
-            sub: '待推进提案',
-          ),
-          divider(),
-          metric(
-            icon: Icons.stacked_line_chart,
-            label: '进行中年化',
-            value: proposalEstimateGrouped(proposalFormatWan(scaleSum)),
-            sub: '万元',
-          ),
-          divider(),
-          metric(
-            icon: Icons.schedule_outlined,
-            label: '超过 3 天',
-            value: '${stuck.length}',
-            sub: longest == null
-                ? '暂无滞留'
-                : '${proposalIntakeDaysOpen(longest)} 天 · ${longest.title.isEmpty ? proposalIntakeUntitledTitle(longest.kind) : longest.title}',
-            warn: stuck.isNotEmpty,
-          ),
-        ],
-      ),
+      children: [
+        tile('进行中', '${active.length}', ' 份'),
+        SizedBox(width: compact ? 6 : 10),
+        tile(
+          '进行中年化',
+          proposalEstimateGrouped(proposalFormatWan(scaleSum)),
+          ' 万',
+        ),
+        SizedBox(width: compact ? 6 : 10),
+        tile(
+          '卡住超过 3 天',
+          '${stuck.length}',
+          longest > 0 && !compact ? ' 份 · 最长 $longest 天' : ' 份',
+          warn: stuck.isNotEmpty,
+        ),
+      ],
     );
   }
 
   /// 原型表格：提案 | 项目 | 评级 | 年化规模 | 计划毛利率 | 状态 | 现在卡在谁 | 操作。
+  /// 提案列表：一张张灯塔样式的卡（[ProposalListCard]），电脑、手机同一套，不再是表格。
   Widget _protoListTable({required bool compact}) {
-    Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
-        DunesColors.resolve(context, Color(v), role: role);
-    const flex = [20, 20, 5, 9, 8, 12, 14, 9];
-    Widget headerCell(String text, int f, {bool right = false}) => Expanded(
-      flex: f,
-      child: Text(
-        text,
-        textAlign: right ? TextAlign.right : TextAlign.left,
-        style: TextStyle(
-          fontSize: 11,
-          color: c(0xFF5A5C56),
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
     final rows = _rows;
-    final list = ListView.builder(
+    return ListView.builder(
       key: const PageStorageKey('proposal-intake-list'),
       controller: _listScroll,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(top: 2, bottom: 12),
       itemCount: rows.length,
       itemBuilder: (_, index) => _protoListRow(rows[index], compact: compact),
     );
-    final table = Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        border: Border.all(color: c(0xFFE7E3F2, DunesColorRole.border)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (!compact)
-            Container(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-              decoration: BoxDecoration(
-                color: c(0xFFFAF9FD, DunesColorRole.surface),
-                border: Border(
-                  bottom: BorderSide(
-                    color: c(0xFFEFECF6, DunesColorRole.border),
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  headerCell('提案', flex[0]),
-                  const SizedBox(width: 10),
-                  headerCell('项目', flex[1]),
-                  const SizedBox(width: 10),
-                  headerCell('评级', flex[2]),
-                  const SizedBox(width: 10),
-                  headerCell('年化规模', flex[3], right: true),
-                  if (kProposalFinanceShowEstimates &&
-                      kProposalFinanceShowProfit) ...[
-                    const SizedBox(width: 10),
-                    headerCell('计划毛利率', flex[4], right: true),
-                  ],
-                  const SizedBox(width: 10),
-                  headerCell('状态', flex[5]),
-                  const SizedBox(width: 10),
-                  headerCell('当前节点', flex[6]),
-                  const SizedBox(width: 10),
-                  headerCell('操作', flex[7], right: true),
-                ],
-              ),
-            ),
-          Expanded(child: list),
-        ],
-      ),
-    );
-    if (compact) return table;
-    // 原型：表格最小宽 1080，窗口更窄时横向滚动。
-    return LayoutBuilder(
-      builder: (_, box) {
-        if (box.maxWidth >= 1080) return table;
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(width: 1080, height: box.maxHeight, child: table),
-        );
-      },
-    );
   }
 
+  /// 列表一行 = 一张灯塔样式的卡：左边编号 + 标签一 + 年化规模，中间产品（科技部），
+  /// 右边收入与成本（财务部），底下复核进度条（卡在谁、开了几天）。电脑、手机同一张卡。
   Widget _protoListRow(ProposalIntakeRow row, {required bool compact}) {
     Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
         DunesColors.resolve(context, Color(v), role: role);
-    TextStyle mono(double size, {FontWeight? weight, int color = 0xFF1F2421}) =>
-        TextStyle(
-          fontSize: size,
-          fontWeight: weight,
-          color: c(color),
-          fontFamily: kProposalProtoMono,
-          fontFamilyFallback: kProposalProtoMonoFallback,
-        );
-    final name = row.title.isEmpty
-        ? proposalIntakeUntitledTitle(row.kind)
-        : row.title;
-    final sub = [
-      proposalIntakeSectorName(row),
-      '${row.form['product'] ?? ''}'.trim(),
-    ].where((item) => item.isNotEmpty).join(' · ');
-    final project = '${row.form['projectName'] ?? ''}'.trim();
-    final mainScale = proposalIntakeMainProductScale(row.form);
-    final rating = mainScale == null ? null : _options?.ratingFor(mainScale);
-    final figures = proposalEstimateListFigures(row.form);
-    final scale = figures.scale.isEmpty
-        ? '—'
-        : proposalEstimateGrouped(
-            (double.tryParse(figures.scale) ?? 0).toStringAsFixed(0),
-          );
-    final margin = figures.margin.isEmpty
-        ? '—'
-        : '${double.tryParse(figures.margin)?.toStringAsFixed(1) ?? figures.margin}%';
-    final statusLabel = switch (row.status) {
-      'done' => '已完成',
-      'pending_president' => '待最终确认',
-      'reviewing' => proposalIntakeStatusChipLabel(row),
-      'filling' => '填写中',
-      _ => '草稿',
-    };
-    final who = proposalIntakeListActionText(row, people: _people);
-    final days = proposalIntakeDaysOpen(row);
-    final wait = row.status == 'done'
-        ? formatProposalIntakeDateTime(row.updatedAt)
-        : proposalIntakeDaysOpenLabel(row);
     final canDelete = row.canDeleteBy(widget.session.userId);
-    Widget iconBtn(
-      String tip,
-      IconData icon,
-      VoidCallback onTap, {
-      int color = 0xFF4F3488,
-    }) => IconButton(
-      tooltip: tip,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-      onPressed: onTap,
-      icon: Icon(icon, size: 18, color: c(color)),
-    );
-    final actions = Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        if (widget.showCreate)
-          iconBtn(
-            '复制新建',
-            Icons.file_copy_outlined,
-            () => unawaited(_duplicateRow(row)),
-          ),
-        if (kDebugMode &&
-            widget.showCreate &&
-            !proposalIntakeIsPurchase(row.kind))
-          iconBtn(
-            '生成复核 mock',
-            Icons.science_outlined,
-            () => unawaited(_makeReviewMock(row)),
-          ),
-        iconBtn(
-          '相关人员',
-          Icons.people_alt_outlined,
-          () => unawaited(_showStakeholders(row)),
-        ),
-        iconBtn(
-          '转发',
-          Icons.forward_outlined,
-          () => unawaited(_forwardRow(row)),
-        ),
-        if (canDelete)
-          iconBtn(
-            '删除',
-            Icons.delete_outline,
-            () => unawaited(_confirmDelete(row)),
-            color: 0xFFC0563F,
-          ),
-      ],
-    );
     // 手机：四个操作收进「⋯」，卡片少一行。
     final moreMenu = PopupMenuButton<String>(
       key: ValueKey('proposal-proto-row-more-${row.id}'),
@@ -2198,267 +2146,175 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         ];
       },
     );
-    final nameBlock = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: compact ? 14 : 13.5,
-            height: 1.3,
-            fontWeight: FontWeight.w800,
-            color: c(0xFF1F2421),
-          ),
-        ),
-        if (sub.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              sub,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w500,
-                color: c(0xFF5A5C56),
-              ),
-            ),
-          ),
-      ],
-    );
-    final projectText = Text(
-      project.isEmpty ? '—' : project,
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        color: c(project.isEmpty ? 0xFF5A5C56 : 0xFF3F2A9A),
-      ),
-    );
-    final badge = (rating ?? '').isEmpty
-        ? Text('—', style: TextStyle(fontSize: 12, color: c(0xFF5A5C56)))
-        : ProposalRatingBadge(rating: rating!, size: 24);
-    final pill = ProposalStatusPill(status: row.status, label: statusLabel);
-    final done = row.status == 'done';
-    final whoBlock = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          // 已完成的不再写「卡在谁」，直接写完成日期。
-          done ? wait : (who.isEmpty ? '—' : who),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 12,
-            height: 1.3,
-            fontWeight: FontWeight.w800,
-            color: c(0xFF1F2421),
-          ),
-        ),
-        if (wait.isNotEmpty && !done)
-          Text(
-            wait,
-            style: mono(
-              10,
-              weight: FontWeight.w600,
-              // 超过 3 天标橙（与上面「超过 3 天」一致）。
-              color: days > 3 && row.status != 'done' ? 0xFFB4570F : 0xFF5A5C56,
-            ),
-          ),
-      ],
-    );
-    final border = BoxDecoration(
-      border: Border(
-        bottom: BorderSide(color: c(0xFFF3F0F8, DunesColorRole.border)),
-      ),
-    );
-    if (compact) {
-      Widget metricCell(String label, Widget value) => Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 7),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w600,
-                  color: c(0xFF5A5C56),
-                ),
-              ),
-              const SizedBox(height: 3),
-              value,
-            ],
-          ),
-        ),
-      );
-      Widget divider() => Container(
-        width: 1,
-        height: 28,
-        color: c(0xFFE5E1D3, DunesColorRole.border),
-      );
-      return InkWell(
-        key: ValueKey('proposal-proto-row-${row.id}'),
-        onTap: () => unawaited(_openExisting(row)),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(10, 10, 4, 10),
-          decoration: border,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  badge,
-                  const SizedBox(width: 8),
-                  Expanded(child: nameBlock),
-                  const SizedBox(width: 8),
-                  pill,
-                  SizedBox(width: 32, height: 32, child: moreMenu),
-                ],
-              ),
-              if (project.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.account_tree_outlined,
-                      size: 12,
-                      color: c(0xFF5B3FD0),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        project,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: c(0xFF4F3488),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 7),
-                decoration: BoxDecoration(
-                  color: c(0xFFFBFAF6, DunesColorRole.surface),
-                  border: Border.all(
-                    color: c(0xFFE5E1D3, DunesColorRole.border),
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    metricCell(
-                      '年化规模',
-                      Text.rich(
-                        TextSpan(
-                          text: scale,
-                          style: mono(13.5, weight: FontWeight.w800),
-                          children: [
-                            if (scale != '—')
-                              TextSpan(
-                                text: ' 万',
-                                style: TextStyle(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: c(0xFF5A5C56),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    divider(),
-                    if (kProposalFinanceShowEstimates &&
-                        kProposalFinanceShowProfit) ...[
-                      metricCell(
-                        '计划毛利率',
-                        Text(
-                          margin,
-                          style: mono(13.5, weight: FontWeight.w800),
-                        ),
-                      ),
-                      divider(),
-                    ],
-                    metricCell(done ? '完成日期' : '当前节点', whoBlock),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    const flex = [20, 20, 5, 9, 8, 12, 14, 9];
-    return InkWell(
+    final index = _rows.indexOf(row);
+    return ProposalListCard(
       key: ValueKey('proposal-proto-row-${row.id}'),
+      data: _listCardData(row, index < 0 ? 0 : index),
       onTap: () => unawaited(_openExisting(row)),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
-        decoration: border,
-        child: Row(
-          children: [
-            Expanded(flex: flex[0], child: nameBlock),
-            const SizedBox(width: 10),
-            Expanded(flex: flex[1], child: projectText),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: flex[2],
-              child: Align(alignment: Alignment.centerLeft, child: badge),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: flex[3],
-              child: Text(
-                scale,
-                textAlign: TextAlign.right,
-                style: mono(13.5, weight: FontWeight.w800),
-              ),
-            ),
-            const SizedBox(width: 10),
-            if (kProposalFinanceShowEstimates &&
-                kProposalFinanceShowProfit) ...[
-              Expanded(
-                flex: flex[4],
-                child: Text(
-                  margin,
-                  textAlign: TextAlign.right,
-                  style: mono(13.5, weight: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(width: 10),
-            ],
-            Expanded(
-              flex: flex[5],
-              child: Align(alignment: Alignment.centerLeft, child: pill),
-            ),
-            const SizedBox(width: 10),
-            Expanded(flex: flex[6], child: whoBlock),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: flex[7],
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: FittedBox(fit: BoxFit.scaleDown, child: actions),
-              ),
-            ),
-          ],
-        ),
-      ),
+      more: SizedBox(width: 30, height: 30, child: moreMenu),
     );
   }
+
+  /// 列表卡的数据：都从提案表单里取，没填的写「—」。
+  ProposalListCardData _listCardData(ProposalIntakeRow row, int index) {
+    final form = row.form;
+    final title = row.title.isEmpty
+        ? proposalIntakeUntitledTitle(row.kind)
+        : row.title;
+    // 标签一 = 市场部「产品」；标签三 = 市场部渠道标签（一级 / 二级）。
+    String refText(String refKey, String key) =>
+        (proposalIntakeFormRef(form, refKey) ??
+                CatalogRef.fromName('${form[key] ?? ''}'.trim()))
+            .label
+            .trim();
+    final tag1 = refText('productRef', 'product');
+    final tag3 = [
+      refText('channelTagL1Ref', 'channelTagL1'),
+      refText('channelTagL2Ref', 'channelTagL2'),
+    ].where((item) => item.isNotEmpty).join(' / ');
+    final sector = proposalIntakeSectorName(row);
+    final type = '${form['proposalType'] ?? ''}'.trim();
+    final project = '${form['projectName'] ?? ''}'.trim();
+    final mainScale = proposalIntakeMainProductScale(form);
+    final rating = mainScale == null
+        ? ''
+        : (_options?.ratingFor(mainScale) ?? '');
+    final figures = proposalEstimateListFigures(form);
+    final scale = figures.scale.isEmpty
+        ? '—'
+        : proposalEstimateGrouped(
+            (double.tryParse(figures.scale) ?? 0).toStringAsFixed(0),
+          );
+
+    // 中：产品（科技部）。
+    final skus = proposalIntakeSkuDetails(form);
+    final faces = [
+      for (final sku in skus)
+        if (proposalIntakeSkuSettleFace(sku) > 0) proposalIntakeSkuSettleFace(sku),
+    ]..sort();
+    final faceText = faces.isEmpty
+        ? '—'
+        : (faces.first == faces.last
+              ? proposalFormatWan(faces.first)
+              : '${proposalFormatWan(faces.first)}–${proposalFormatWan(faces.last)}');
+
+    // 右：收入与成本（财务部）。一种比例就写比例，多种写「N 种」，右上角写口径或条数。
+    ({String value, String tag}) settle(bool cost) {
+      final values = <String>{};
+      var basis = '';
+      var count = 0;
+      for (final sku in skus) {
+        for (final item in proposalIntakeSkuSettlements(sku)) {
+          if (item.isCost != cost) continue;
+          count++;
+          final t = item.terms;
+          final v = t.displayRatio.trim().isNotEmpty
+              ? t.displayRatio.trim()
+              : (t.displayUnitPrice.trim().isNotEmpty
+                    ? '${t.displayUnitPrice.trim()}元'
+                    : '');
+          if (v.isNotEmpty) values.add(v);
+          if (basis.isEmpty) basis = proposalSettleBasisShort(t.displayFormula);
+        }
+      }
+      if (count == 0) return (value: '—', tag: '');
+      return (
+        value: values.isEmpty
+            ? '—'
+            : (values.length == 1 ? values.first : '${values.length} 种'),
+        tag: values.length > 1 ? '$count 条' : basis,
+      );
+    }
+
+    final income = settle(false);
+    final scope = proposalIntakeProductFinanceScope(
+      form,
+      owner: kProposalProductFinanceMain,
+    );
+    final turnover = proposalTurnoverCashAmount(scope);
+    final times = proposalFinanceAmount(scope, kProposalTurnoverTimesKey);
+
+    // 底：复核进度条。和提案详情里的「审批进度」用同一份步骤（proposalIntakeProgressSteps），
+    // 详情里走到哪、卡在谁、驳回在哪，列表就显示到哪。
+    final progress = proposalIntakeProgressSteps(
+      row: row,
+      people: _people,
+      options: _options,
+    );
+    final steps = proposalReviewSegments(progress);
+    final nowDepts = [
+      for (final step in steps)
+        if (step.state == ProposalListStepState.now ||
+            step.state == ProposalListStepState.rejected)
+          step.label,
+    ];
+    final done = row.status == 'done';
+    final who = proposalReviewNowText(progress);
+    final waited = proposalReviewWaited(progress);
+    return ProposalListCardData(
+      index: index,
+      // 主标题是标签一（没填用提案名称）；提案名称放在左下角原来年化规模的位置。
+      tag1: tag1.isNotEmpty ? tag1 : title,
+      name: title,
+      chips: [
+        if (sector.isNotEmpty) sector,
+        if (type.isNotEmpty) type,
+      ],
+      rating: rating,
+      scale: scale,
+      mid: [
+        ProposalListCardMetric(
+          label: '产品',
+          value: skus.isEmpty ? '—' : '${skus.length}',
+          unit: '个',
+        ),
+        // 年化规模挪到原来「标签一」那格；面值写在右上角小字。
+        ProposalListCardMetric(
+          label: '年化规模',
+          value: scale,
+          unit: '万',
+          tag: faceText == '—' ? '' : '面值 $faceText',
+          mono: true,
+        ),
+        ProposalListCardMetric(
+          label: '项目',
+          value: project.isEmpty ? '—' : project,
+          wrap: true,
+        ),
+      ],
+      right: [
+        ProposalListCardMetric(
+          label: '收入',
+          value: income.value,
+          tag: income.tag,
+          mono: true,
+        ),
+        ProposalListCardMetric(
+          label: '标签三',
+          value: tag3.isEmpty ? '—' : tag3,
+          wrap: true,
+        ),
+        ProposalListCardMetric(
+          label: '周转资金',
+          value: turnover == null ? '—' : proposalFormatWan(turnover),
+          unit: '万',
+          tag: times > 0 ? '${proposalFormatWan(times)}次' : '',
+          mono: true,
+        ),
+      ],
+      steps: steps,
+      nowText: done
+          ? '已完成 · ${formatProposalIntakeDateTime(row.updatedAt)}'
+          : [
+              if (nowDepts.isNotEmpty) nowDepts.join('、'),
+              if (who.isNotEmpty) who,
+            ].join(' · '),
+      // 停了多久：从这一步开始等的时间算（和详情「审批进度」一致），不是提案开了几天。
+      days: done ? '' : proposalReviewWaitedLabel(waited),
+      daysWarn: !done && waited != null && waited.inDays > 3,
+    );
+  }
+
 
   Widget _buildListContent({required bool compact}) {
     if (_error != null && _rows.isEmpty) {
@@ -5297,9 +5153,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           _marketChannelTagText().isEmpty && _setOf('channels').isEmpty,
       channelKey: _marketChannelTagText().isNotEmpty
           ? 'channelTagL1'
-          : (_skuCommonFields(skus).containsKey('channelCategory')
-                ? 'skuCommon'
-                : 'skuDetails'),
+          : 'skuDetails',
       platform: _platformShortName,
     );
   }
@@ -6734,20 +6588,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     ];
   }
 
-  /// 所有产品都一样的字段（至少两个产品时才算「共同项」）。
-  Map<String, String> _skuCommonFields(List<ProposalSkuDetailRow> rows) {
-    if (rows.length < 2) return const {};
-    final first = {
-      for (final (key, text) in _skuFieldTexts(rows.first))
-        if (text.isNotEmpty) key: text,
-    };
-    for (final row in rows.skip(1)) {
-      final mine = {for (final (key, text) in _skuFieldTexts(row)) key: text};
-      first.removeWhere((key, text) => mine[key] != text);
-    }
-    return first;
-  }
-
   /// 账单类型的末级名（「应收 / 销售回款 / 渠道结算」→「渠道结算」）。
   String _settleBillName(ProposalFinanceSettleTerms terms) {
     final raw = (terms.billTypeRef?.name ?? '').trim().isNotEmpty
@@ -6812,6 +6652,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   /// 原型「产品 30 个」清单：默认一行一个产品（序号 · 名称 · 结算条数和收入一比例 · 业务平台状态），
   /// 比例和多数不同的标紫；点某个产品才展开它的全部字段和每条结算。
+  // 产品清单已换成共用的产品卡（_productCard），旧列表先留着备用。
+  // ignore: unused_element
   Widget _simpleSkuList(
     List<ProposalSkuDetailRow> rows, {
     required String scope,
@@ -7286,35 +7128,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     // 这里不再把结算条款另写一遍文字。
     final productDetail = rows.isEmpty
         ? Text('请先在科技部添加业务产品', style: small(ProposalPalette.text3))
-        : editing
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _skuSettlementsBlock(wide, header: false),
-              if (proposalIntakeHasChildProducts(_form)) ...[
-                const SizedBox(height: 12),
-                _childSettlementsBlock(wide),
-              ],
-            ],
-          )
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final sku in rows)
-                _skuSettleCompactRow(
-                  title: [
-                    sku.displayName.isEmpty ? '未填写产品名称' : sku.displayName,
-                    if (sku.faceValue.trim().isNotEmpty &&
-                        !sku.displayName.contains(sku.faceValue.trim()))
-                      '面值 ${sku.faceValue.trim()}',
-                  ].join(' · '),
-                  settlements: proposalIntakeSkuSettlements(sku),
-                  product: sku,
-                  enabled: false,
-                  extra: _relatedProductsText(sku),
-                  onOpenEditor: () =>
-                      unawaited(_openSkuSettleDialog(sku: sku, child: false)),
-                ),
+              // 和科技部同一张产品卡：结算段正常显示，产品信息段浅灰、可跳回科技部。
+              for (var i = 0; i < rows.length; i++)
+                _productCard(rows[i], i, side: ProposalProductCardSide.finance),
+              // 关联产品的结算在每张卡的「三、关联产品结算」里填，不再另起一块「子产品结算」。
             ],
           );
     final productSummary = [
@@ -7479,7 +7299,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         _anchor(
           'productSalesSettle',
           ProposalFinanceRow(
-            title: '产品清单',
+            title: '产品',
             summary: productSummary,
             value: '${rows.length} 个',
             review: settleReview,
@@ -7567,7 +7387,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  /// 原型「填报内容 · 科技部」的产品部分：SKU 共同项一行，SKU 清单一行（可展开）。
+  /// 原型「填报内容 · 科技部」的产品部分：复核行 + 产品卡（不再单独汇总「SKU 共同项」，产品卡里已有）。
   /// 科技部产品清单默认展开（只展开清单一层，每个产品的明细仍收起），只在第一次显示时打开一次。
   bool _techSkuAutoOpened = false;
 
@@ -7577,17 +7397,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _techSkuAutoOpened = true;
       _simpleSkuListShown.add('tech');
     }
-    // 所有产品都一样的字段收进「SKU 共同项」，其余写在清单每个产品下面。
-    final common = _skuCommonFields(rows).values.join(' · ');
-    final faces = [
-      for (final row in rows)
-        if (double.tryParse(row.faceValue.trim()) case final v? when v > 0) v,
-    ]..sort();
-    final faceText = faces.isEmpty
-        ? ''
-        : (faces.first == faces.last
-              ? '面值 ${proposalFormatWan(faces.first)} 元'
-              : '面值 ${proposalFormatWan(faces.first)}–${proposalFormatWan(faces.last)} 元');
     final review = _rowReviewToggle(
       'technologyItem:$kProposalSkuProductsReviewKey',
       _techReviewLabel,
@@ -7595,37 +7404,42 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _fieldGrid(wide, [
-          if (common.isNotEmpty)
-            _simpleLine(
-              'SKU 共同项',
-              common,
-              anchorKey: 'skuCommon',
-              fullWidth: true,
-            ),
-          _simpleLine(
-            'SKU 清单',
-            rows.isEmpty
-                ? ''
-                : [
-                    '${rows.length} 个',
-                    faceText,
-                    if (!_isPurchase) '结算和业务平台状态在财务部「产品结算」',
-                  ].where((item) => item.isNotEmpty).join(' · '),
-            anchorKey: 'skuDetails',
-            required: true,
-            fullWidth: true,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
+        // 块顶已经写了「N 个产品 · 面值」，这里不再重复，只留复核；下面直接是产品卡。
+        _anchor(
+          'skuDetails',
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 6),
+            child: Row(
               children: [
-                if (rows.isNotEmpty) _simpleSkuListButton('tech', rows.length),
-                if (review != null) ...[const SizedBox(width: 8), review],
+                Text(
+                  '产品',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolve(context, ProposalPalette.text),
+                  ),
+                ),
+                if (rows.isEmpty) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '还没有产品',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.amber,
+                      ),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                ?review,
               ],
             ),
           ),
-        ]),
-        if (rows.isNotEmpty && !_simpleSkuListHidden('tech'))
-          _simpleSkuList(rows, scope: 'tech'),
+        ),
+        for (var i = 0; i < rows.length; i++)
+          _productCard(rows[i], i, side: ProposalProductCardSide.tech),
       ],
     );
   }
@@ -7921,7 +7735,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
           decoration: proposalInputDecoration(
             forceUnderline: kProposalPrototypeFormEnabled,
-            context: context),
+            context: context,
+          ),
         ),
         actions: [
           TextButton(
@@ -7956,7 +7771,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
           decoration: proposalInputDecoration(
             forceUnderline: kProposalPrototypeFormEnabled,
-            context: context),
+            context: context,
+          ),
         ),
         actions: [
           TextButton(
@@ -8179,12 +7995,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ifAbsent: () => 0,
     );
     final slot = n == 0 ? key : '$key#$n';
-    final gk = _fieldAnchorKeys.putIfAbsent(slot, () => GlobalKey(debugLabel: slot));
+    final gk = _fieldAnchorKeys.putIfAbsent(
+      slot,
+      () => GlobalKey(debugLabel: slot),
+    );
     return KeyedSubtree(
       key: gk,
       child: _FlowFieldFlash(
         flashKey: key.replaceFirst(RegExp(r'^financeCost:'), ''),
-        active: _flashFieldKeys.contains(key.replaceFirst(RegExp(r'^financeCost:'), '')),
+        active: _flashFieldKeys.contains(
+          key.replaceFirst(RegExp(r'^financeCost:'), ''),
+        ),
         child: child,
       ),
     );
@@ -8196,8 +8017,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final resolved = raw.fieldKeys.isEmpty
         ? (raw.section, '')
         : _resolveJump(raw.section, raw.fieldKeys.first);
-    final jump = resolved.$2 == 'marketCost'
-        ? FlowFieldJump(ProposalIntakeNavSection.market, const ['marketCost'])
+    // 落点被改到别的板块（如成本 → 财务部「成本」）时按改后的跳。
+    final jump =
+        raw.fieldKeys.isNotEmpty &&
+            (resolved.$1 != raw.section || resolved.$2 != raw.fieldKeys.first)
+        ? FlowFieldJump(resolved.$1, [resolved.$2])
         : raw;
     final before = _tabOf(jump.section);
     if (jump.fieldKeys.isNotEmpty)
@@ -11453,7 +11277,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   /// 市场部 / 科技部左右分栏当前选中的格子。
   String _marketTab = 'identity';
-  String _techTab = 'platform';
+  String _techTab = 'sku';
 
   /// 某个锚点在本板块分栏的哪一格；跳转前先切过去，锚点才在树上。
   void _selectTabFor(ProposalIntakeNavSection section, String fieldKey) {
@@ -11470,9 +11294,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               'executionPlan',
               'riskPoints',
             }.contains(fieldKey);
-        _marketTab = fieldKey == 'marketCost'
-            ? 'cost'
-            : (execution ? 'execution' : 'identity');
+        _marketTab = execution ? 'execution' : 'identity';
       case ProposalIntakeNavSection.tech:
         _techTab = fieldKey.startsWith('sku') ? 'sku' : 'platform';
       case ProposalIntakeNavSection.finance:
@@ -11622,7 +11444,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           colors: const [Color(0xFFD9822B), Color(0xFFF4B860)],
           icon: Icons.receipt_long_rounded,
           onTap: () =>
-              _openEstimateField(ProposalIntakeNavSection.market, 'marketCost'),
+              _openEstimateField(
+                ProposalIntakeNavSection.finance,
+                kProposalFinanceCostAnchor,
+              ),
         ),
         if (kProposalFinanceShowProfit)
           _kpiTile(
@@ -12010,23 +11835,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         color: const Color(0xFF3B8B5A),
       ),
     ];
-    final costEval = _allFinanceEvaluation;
-    final costKnown = costEval.salesScale > 0 || costEval.costTotal != 0;
-    tabs.add(
-      ProposalFinanceSplitTab(
-        id: 'cost',
-        icon: Icons.receipt_long_outlined,
-        label: '成本测算',
-        value: costKnown ? proposalFormatWan(costEval.costTotal) : '—',
-        unit: costKnown ? '万' : '',
-        sub: '提案成本合计',
-      ),
-    );
-    final selected = switch (_marketTab) {
-      'execution' => 'execution',
-      'cost' => 'cost',
-      _ => 'identity',
-    };
+    // 市场部不再有「成本测算」页签：成本统一看财务部「成本」。
+    final selected = _marketTab == 'execution' ? 'execution' : 'identity';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -12037,24 +11847,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           onSelect: (id) {
             if (id != _marketTab) setState(() => _marketTab = id);
           },
-          detail: switch (selected) {
-            'execution' => execution,
-            // 成本按结算规则自动算：结算写好就出结果，不用填，只读展示。利润不算。
-            'cost' => _anchor(
-              'marketCost',
-              ProposalFinanceCostPanel(
-                key: const ValueKey('market-cost-result'),
-                config: _financeBoardConfig(
-                  kProposalProductFinanceMain,
-                  readOnly: true,
-                  showEstimates: true,
-                  businessSealed: false,
-                ),
-                mode: ProposalFinanceCostPanelMode.result,
-              ),
-            ),
-            _ => identity,
-          },
+          detail: selected == 'execution' ? execution : identity,
           footer: _splitPeople([
             ('市场', _ownerName('marketOwner2'), null),
             (
@@ -12807,7 +12600,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  /// 科技部左右分栏：左「平台与研发 / 业务平台产品」两格，右边是选中那块。
+  /// 科技部左右分栏：左「产品 / 平台与研发」两格，右边是选中那块。
   Widget _techSplit({required List<Widget> platform, required Widget sku}) {
     final skus = proposalIntakeSkuDetails(_form);
     final checks = [
@@ -12822,6 +12615,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     ]..sort();
     final tabs = [
       ProposalFinanceSplitTab(
+        id: 'sku',
+        icon: Icons.inventory_2_outlined,
+        label: '产品',
+        value: '${skus.length}',
+        unit: '个产品',
+        sub: faces.isEmpty
+            ? (skus.isEmpty ? '待添加' : 'SKU 清单')
+            : (faces.first == faces.last
+                  ? '面值 ${proposalFormatWan(faces.first)} 元'
+                  : '面值 ${proposalFormatWan(faces.first)}–${proposalFormatWan(faces.last)}'),
+        color: const Color(0xFF6B4FD8),
+      ),
+      ProposalFinanceSplitTab(
         id: 'platform',
         icon: Icons.memory_outlined,
         label: '平台与研发',
@@ -12831,19 +12637,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ? '标签一 · 接口 · 研发'
             : _text('technologyPlatform').trim(),
         color: const Color(0xFF4A83C4),
-      ),
-      ProposalFinanceSplitTab(
-        id: 'sku',
-        icon: Icons.inventory_2_outlined,
-        label: '业务平台产品',
-        value: '${skus.length}',
-        unit: '个 SKU',
-        sub: faces.isEmpty
-            ? (skus.isEmpty ? '待添加' : 'SKU 清单')
-            : (faces.first == faces.last
-                  ? '面值 ${proposalFormatWan(faces.first)} 元'
-                  : '面值 ${proposalFormatWan(faces.first)}–${proposalFormatWan(faces.last)}'),
-        color: const Color(0xFF6B4FD8),
       ),
     ];
     final selected = _techTab == 'sku' ? 'sku' : 'platform';
@@ -12978,12 +12771,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               : '面值 ${proposalFormatWan(faces.first)}–${proposalFormatWan(faces.last)} 元');
     return _simpleBlock(
       icon: Icons.inventory_2_outlined,
-      title: '业务平台产品',
+      title: '产品',
       wide: wide,
       band: _blockBand(
         headline: _blockHeadline(
           '${skus.length}',
-          unit: '个 SKU',
+          unit: '个产品',
           sub: faceText,
           numeric: true,
         ),
@@ -13396,22 +13189,25 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   /// 某个锚点在财务部分栏的哪一格。
   static String _financeTabOf(String fieldKey) =>
       const {
-        'operatingCost',
-        'turnoverTimes',
-        'turnoverCash',
-      }.contains(fieldKey) ||
+            'operatingCost',
+            'turnoverTimes',
+            'turnoverCash',
+          }.contains(fieldKey) ||
           _costResultKeys.contains(fieldKey)
       ? 'cost'
       : 'settle';
 
-  /// 市场部成本跳转落到只读测算；财务部保留当前板块。
+  /// 成本类跳转一律落到财务部「成本」（市场部「成本测算」已删）。
   (ProposalIntakeNavSection, String) _resolveJump(
     ProposalIntakeNavSection section,
     String fieldKey,
   ) {
+    if (fieldKey == 'marketCost') {
+      return (ProposalIntakeNavSection.finance, kProposalFinanceCostAnchor);
+    }
     if (_costResultKeys.contains(fieldKey) &&
         section == ProposalIntakeNavSection.market) {
-      return (ProposalIntakeNavSection.market, 'marketCost');
+      return (ProposalIntakeNavSection.finance, fieldKey);
     }
     return (section, fieldKey);
   }
@@ -13429,8 +13225,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ProposalFinanceSplitTab(
         id: 'cost',
         icon: Icons.receipt_long_outlined,
-        label: '成本',
-        value: '项目 / 业务 / 税务',
+        label: '收入与成本',
+        value: '收入 / 项目 / 税务',
         sub: '公式 · 周转',
       ),
     ];
@@ -13501,9 +13297,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (_isLocked || _showSelectedAsText) return '';
     final notes = <String>[];
     if (_canEditAsSubmitter) {
-      notes.add(
-        '填写人：按产品选好收入公式和项目 / 税务成本，并填周转。业务成本不用填，财务复核时由财务部负责人一选择。',
-      );
+      notes.add('填写人：按产品选好收入公式和项目 / 税务成本，并填周转。业务成本不用填，财务复核时由财务部负责人一选择。');
     } else if (_isOwner('financeOwner2')) {
       notes.add(
         _canEditUnreviewedFinance
@@ -13645,7 +13439,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               'operatingCost',
             ),
         kProposalCostCategoryTax:
-            editable && _isSubmitter && !_isLocked && !_row.techRevisionOpen &&
+            editable &&
+            _isSubmitter &&
+            !_isLocked &&
+            !_row.techRevisionOpen &&
             _financeFormulaEditable(owner, true, 'taxCost'),
       },
       productEditable: _productFormulaEditable,
@@ -13661,29 +13458,30 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       reviewStatus: readOnly
           ? null
           : (key) {
-        final parts = key.split(':');
-        if (parts.first == 'kind' && parts.length == 2) {
-          return _reviewStatusTag([
-            for (final p in _financeProductEvaluations)
-              _productFormulaReviewSection(p.skuId, parts[1]),
-          ]);
-        }
-        if (parts.first == 'sku' && parts.length == 2) {
-          return _reviewStatusTag([
-            for (final kind in kProposalProductFormulaReviewKinds)
-              _productFormulaReviewSection(parts[1], kind),
-          ]);
-        }
-        if (parts.first == 'sku') return _reviewStatusTag(['financeItem:$key']);
-        return switch (key) {
-          'profit' => _reviewStatusTag([
-            _financeReviewSection(owner, 'profit'),
-            _financeReviewSection(owner, 'margin'),
-          ]),
-          'businessCost' => null,
-          _ => _reviewStatusTag([_financeReviewSection(owner, key)]),
-        };
-      },
+              final parts = key.split(':');
+              if (parts.first == 'kind' && parts.length == 2) {
+                return _reviewStatusTag([
+                  for (final p in _financeProductEvaluations)
+                    _productFormulaReviewSection(p.skuId, parts[1]),
+                ]);
+              }
+              if (parts.first == 'sku' && parts.length == 2) {
+                return _reviewStatusTag([
+                  for (final kind in kProposalProductFormulaReviewKinds)
+                    _productFormulaReviewSection(parts[1], kind),
+                ]);
+              }
+              if (parts.first == 'sku')
+                return _reviewStatusTag(['financeItem:$key']);
+              return switch (key) {
+                'profit' => _reviewStatusTag([
+                  _financeReviewSection(owner, 'profit'),
+                  _financeReviewSection(owner, 'margin'),
+                ]),
+                'businessCost' => null,
+                _ => _reviewStatusTag([_financeReviewSection(owner, key)]),
+              };
+            },
       reviewToggle: readOnly
           ? null
           : (key) {
@@ -13716,22 +13514,44 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
       onCostItemsChanged: (skuId, category, names) {
         if (category.key == kProposalCostCategoryTax) {
-          _writeFinanceFormula(kProposalProductFinanceMain, (form) => proposalFinanceWriteSelection(proposalTaxForm(form), category, names));
+          _writeFinanceFormula(
+            kProposalProductFinanceMain,
+            (form) => proposalFinanceWriteSelection(
+              proposalTaxForm(form),
+              category,
+              names,
+            ),
+          );
         } else {
-          _writeProductFormula(skuId, (entry) => proposalFinanceWriteSelection(entry, category, names));
+          _writeProductFormula(
+            skuId,
+            (entry) => proposalFinanceWriteSelection(entry, category, names),
+          );
         }
       },
       onCostFormula: (skuId, category, name, code) {
         if (category.key == kProposalCostCategoryTax) {
-          _writeFinanceFormula(kProposalProductFinanceMain, (form) => proposalFinanceWriteItemFormula(proposalTaxForm(form), category, name, code));
+          _writeFinanceFormula(
+            kProposalProductFinanceMain,
+            (form) => proposalFinanceWriteItemFormula(
+              proposalTaxForm(form),
+              category,
+              name,
+              code,
+            ),
+          );
         } else {
-          _writeProductFormula(skuId, (entry) => proposalFinanceWriteItemFormula(entry, category, name, code));
+          _writeProductFormula(
+            skuId,
+            (entry) =>
+                proposalFinanceWriteItemFormula(entry, category, name, code),
+          );
         }
       },
       onBusinessFormulas: (codes) => _writeFinanceFormula(
         kProposalProductFinanceMain,
-        (form) => Map<String, dynamic>.from(form)
-          ..['businessFormulaCodes'] = codes,
+        (form) =>
+            Map<String, dynamic>.from(form)..['businessFormulaCodes'] = codes,
       ),
       operatingItems: proposalCostSelectedNames(
         _form,
@@ -13747,8 +13567,50 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       anchor: !readOnly && owner == kProposalProductFinanceMain
           ? (key, child) => _anchor(costPanel ? 'financeCost:$key' : key, child)
           : null,
-      // hero 跳下来只定位、闪一下，不自动展开，保持简单。
-      focusKeys: const <String>{},
+      // hero 跳下来只定位、闪一下；从产品卡点收入 / 项目成本跳过来时把那一行展开。
+      focusKeys: {
+        for (final key in const ['revenue', 'costItems'])
+          if (_flashFieldKeys.contains(key)) key,
+      },
+      // 收入、项目成本跟着产品结算同步：每个产品下面先列它的结算各条（和产品卡同一个样子）。
+      settleLines: (skuId, cost) {
+        final sku = _sellableSkuById(skuId);
+        if (sku == null) return null;
+        return ProposalSettleLineList(
+          lines: _productSettleLines(
+            sku,
+            cost: cost,
+            base: proposalIntakeSkuScaleTotal(sku),
+          ),
+          cost: cost,
+          emptyText: cost ? '产品结算里没有项目成本' : '产品结算里还没填收入',
+          framed: false,
+        );
+      },
+      settleSummary: (cost) {
+        final skus = proposalIntakeAllSellableSkus(_form);
+        final count = skus.fold<int>(
+          0,
+          (sum, sku) =>
+              sum +
+              proposalIntakeSkuSettlements(
+                sku,
+              ).where((row) => row.isCost == cost).length,
+        );
+        return '${skus.length} 个产品 · ${count == 0 ? '还没有' : '$count 条'}${cost ? '项目成本' : '收入'}';
+      },
+      productInfo: (skuId) {
+        final sku = _sellableSkuById(skuId);
+        if (sku == null) return '';
+        final face = sku.faceValue.trim();
+        final scale = proposalIntakeSkuScaleTotal(sku);
+        return [
+          if (face.isNotEmpty) '面值 $face',
+          if (scale > 0) '规模 ${proposalFormatWan(scale)} 万',
+          if (proposalIntakeChildProducts(_form).any((c) => c.id == skuId))
+            '数量 ${proposalIntakeChildProductQuantity(_form, skuId)}',
+        ].join('   ');
+      },
       turnoverTimes: times > 0 ? times : null,
       turnoverCash: proposalTurnoverCashAmount(scope),
       turnoverField: _scopedFinanceField(
@@ -13861,7 +13723,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ? _writeRevenue(owner, value)
             : _writeProductFinanceValue(owner, key, value, rebuild: false),
         decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+          forceUnderline: kProposalPrototypeFormEnabled,
           context: context,
           hint: revenueEditable ? '默认按结算测算，可改' : null,
         ),
@@ -14366,28 +14228,69 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Widget _purchasePromotersField() {
     final selected = _setOf('purchasePromoters');
-    final enabled = _fillEnabled(null, resetReview: 'purchaseContractCompleted');
-    return _FullWidthField(child: ProposalField(
-      label: '推广商',
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        if (selected.isNotEmpty) Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Wrap(spacing: 6, runSpacing: 6, children: [
-            for (final name in selected) InputChip(
-              label: Text(name),
-              onDeleted: enabled ? () => _toggleList('purchasePromoters', name, resetReview: 'purchaseContractCompleted') : null,
+    final enabled = _fillEnabled(
+      null,
+      resetReview: 'purchaseContractCompleted',
+    );
+    return _FullWidthField(
+      child: ProposalField(
+        label: '推广商',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (selected.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final name in selected)
+                      InputChip(
+                        label: Text(name),
+                        onDeleted: enabled
+                            ? () => _toggleList(
+                                'purchasePromoters',
+                                name,
+                                resetReview: 'purchaseContractCompleted',
+                              )
+                            : null,
+                      ),
+                  ],
+                ),
+              ),
+            ProposalSelectField<String>(
+              value: null,
+              hint: '选择推广商，可多选或新增',
+              searchable: true,
+              options: [
+                for (final name in _promoterNames)
+                  if (!selected.contains(name))
+                    ProposalSelectOption(value: name, label: name),
+              ],
+              onSelected: enabled
+                  ? (name) {
+                      if (name != null)
+                        _toggleList(
+                          'purchasePromoters',
+                          name,
+                          resetReview: 'purchaseContractCompleted',
+                        );
+                    }
+                  : null,
+              onAdd: enabled
+                  ? () => _addOption(
+                      'purchasePromoters',
+                      '新增推广商',
+                      resetReview: 'purchaseContractCompleted',
+                    )
+                  : null,
+              addLabel: '新增推广商',
             ),
-          ]),
+          ],
         ),
-        ProposalSelectField<String>(
-          value: null, hint: '选择推广商，可多选或新增', searchable: true,
-          options: [for (final name in _promoterNames) if (!selected.contains(name)) ProposalSelectOption(value: name, label: name)],
-          onSelected: enabled ? (name) { if (name != null) _toggleList('purchasePromoters', name, resetReview: 'purchaseContractCompleted'); } : null,
-          onAdd: enabled ? () => _addOption('purchasePromoters', '新增推广商', resetReview: 'purchaseContractCompleted') : null,
-          addLabel: '新增推广商',
-        ),
-      ]),
-    ));
+      ),
+    );
   }
 
   Widget _contractCard(String step, String title, String prefix, bool wide) {
@@ -14434,8 +14337,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   : (value) => _setContractMode(prefix, value),
             ),
             if (signed && !usePurchaseProposal) _contractSelector(prefix),
-            if (!_isPurchase && prefix == 'purchase')
-              _purchasePromotersField(),
+            if (!_isPurchase && prefix == 'purchase') _purchasePromotersField(),
             _textField(
               '合同编号',
               '${prefix}No',
@@ -15806,6 +15708,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // 线上原版结算弹窗：销售（收入）+ 项目成本（采购成本），每条一张表格。
                       _skuSettleProductCard(
                         skuId: current.id,
                         childProduct: child,
@@ -16120,7 +16023,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               onTapOutside: (_) =>
                   FocusManager.instance.primaryFocus?.unfocus(),
               decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+                forceUnderline: kProposalPrototypeFormEnabled,
                 context: context,
                 hint: '新增数量',
               ),
@@ -16619,7 +16522,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
-                      '业务平台产品',
+                      '产品',
                       style: TextStyle(
                         color: c(0xFF3F2A9A),
                         fontSize: 12,
@@ -16627,15 +16530,33 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       ),
                     ),
                     Text(
-                      '共 ${rows.length} 个 · 填写人填写，科技部负责人对本板块整块复核',
-                      style: TextStyle(color: c(0xFF8A8499), fontSize: 11),
+                      '共 ${rows.length} 个',
+                      style: TextStyle(color: c(0xFF5B556A), fontSize: 12),
                     ),
                     if (_canEditProducts) ...[
-                      TextButton(
+                      FilledButton.icon(
+                        key: const ValueKey('proposal-new-product'),
                         onPressed: _addSkuDetail,
-                        style: _protoLinkStyle,
-                        child: const Text('+ 新增'),
+                        icon: const Icon(Icons.add_rounded, size: 16),
+                        label: const Text('新建产品'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          backgroundColor: c(
+                            0xFF6B4FD8,
+                            DunesColorRole.surface,
+                          ),
+                          foregroundColor: c(0xFFFFFFFF),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
+                      if (rows.isNotEmpty) _copyProductButton(rows),
                       TextButton(
                         style: dim,
                         onPressed: () => setState(() {
@@ -16691,11 +16612,26 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               locked: _showSelectedAsText || !_canEditProducts,
             ),
           ],
-          for (var i = 0; i < visibleCount; i++)
-            _anchor(
-              'skuDetail:${rows[i].id}',
-              _skuProductSummaryRow(rows[i], i + 1, child: false),
+          const SizedBox(height: 8),
+          // 一个产品一张产品卡（和财务部同一张）：产品信息全部列出，编辑 / 复制 / 删除在标题旁；
+          // 关联产品在卡下面单独管理（可编辑、删除）。
+          for (var i = 0; i < visibleCount; i++) ...[
+            _productCard(
+              rows[i],
+              i,
+              side: ProposalProductCardSide.tech,
+              showRelated: false,
+              techAction: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ?_productSelectBox(rows[i].id),
+                  _skuRowActions(rows[i], child: false),
+                ],
+              ),
+              // 关联产品放进卡里：收起产品时一起收起。
+              techExtra: _relatedProductsBox(rows[i]),
             ),
+          ],
           _foldedListActions(
             total: rows.length,
             visible: _businessProductVisible,
@@ -16703,6 +16639,59 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
         ],
       ],
+    );
+  }
+
+  /// 「复制一个同样的产品」：只有一个产品时直接复制它；多个时先选复制哪一个。
+  Widget _copyProductButton(List<ProposalSkuDetailRow> rows) {
+    final style = OutlinedButton.styleFrom(
+      minimumSize: const Size(0, 32),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      foregroundColor: DunesColors.resolve(context, const Color(0xFF4F3488)),
+      side: BorderSide(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFCFC2F5),
+          role: DunesColorRole.border,
+        ),
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+    );
+    const label = Text('复制一个同样的产品');
+    const icon = Icon(Icons.copy_rounded, size: 15);
+    if (rows.length == 1) {
+      return OutlinedButton.icon(
+        key: const ValueKey('proposal-copy-product'),
+        onPressed: () => unawaited(_duplicateBusinessProduct(rows.first)),
+        icon: icon,
+        label: label,
+        style: style,
+      );
+    }
+    return PopupMenuButton<int>(
+      key: const ValueKey('proposal-copy-product'),
+      tooltip: '选择要复制的产品',
+      position: PopupMenuPosition.under,
+      onSelected: (i) => unawaited(_duplicateBusinessProduct(rows[i])),
+      itemBuilder: (_) => [
+        for (var i = 0; i < rows.length; i++)
+          PopupMenuItem<int>(
+            value: i,
+            child: Text(
+              '${i + 1}. ${rows[i].displayName.isEmpty ? '未填写产品名称' : rows[i].displayName}',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+      ],
+      child: IgnorePointer(
+        child: OutlinedButton.icon(
+          onPressed: () {},
+          icon: icon,
+          label: const Text('复制一个同样的产品 ▾'),
+          style: style,
+        ),
+      ),
     );
   }
 
@@ -16731,7 +16720,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '业务平台产品',
+                    '产品',
                     style: TextStyle(
                       color: DunesColors.resolve(context, ProposalPalette.text),
                       fontWeight: FontWeight.w700,
@@ -16965,6 +16954,331 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       key: ValueKey('proposal-sku-platform-status-${row.id}-$slot'),
       label: proposalSkuPlatformStatusChipLabel(row),
       kind: proposalSkuPlatformStatusChipKind(row.platformStatus),
+    );
+  }
+
+
+  /// 一个产品的「产品卡」：科技部、财务部共用。
+  /// 产品信息取科技部 SKU；结算取财务部产品结算，金额 = 产品年化规模 × 该条比例（单价折成 单价 ÷ 面值）。
+  /// 产品颜色序号：主产品按科技部产品顺序；关联产品跟它所在的主产品同色。
+  int _productTintIndex(String skuId) {
+    final mains = proposalIntakeSkuDetails(_form);
+    final own = mains.indexWhere((row) => row.id == skuId);
+    if (own >= 0) return own;
+    final child = proposalIntakeChildProducts(
+      _form,
+    ).where((row) => row.id == skuId).firstOrNull;
+    if (child == null) return 0;
+    final parent = mains.indexWhere((row) => row.id == child.parentSkuId);
+    return parent < 0 ? 0 : parent;
+  }
+
+  /// 现金券说「面值」，满减券说「满额」（满 200 减 20 按 200 算）。
+  String _skuFaceWord(ProposalSkuDetailRow sku) =>
+      sku.resolvedCouponKind == kProposalCouponKindDiscount ||
+          proposalIntakeIsDiscountFace(sku.faceValue.trim())
+      ? '满额'
+      : '面值';
+
+  /// 产品卡每条结算的悬停说明：怎么乘出来的。乘的是年化规模，不是面值。
+  String _settleLineNote(
+    ProposalFinanceSettleTerms t, {
+    required double base,
+    required double share,
+    required double face,
+    String faceWord = '面值',
+  }) {
+    if (share <= 0) return '';
+    final byUnit =
+        t.displayRatio.trim().isEmpty && t.displayUnitPrice.trim().isNotEmpty;
+    final lines = <String>[
+      if (face > 0)
+        byUnit
+            ? '每张$faceWord ${proposalFormatWan(face)} 元的券结 ${t.displayUnitPrice.trim()} 元'
+            : '每张$faceWord ${proposalFormatWan(face)} 元的券结 ${proposalFormatWan(face * share)} 元',
+      base > 0
+          ? '年测算：年化规模 ${proposalFormatWan(base)} 万 × ${proposalFormatSharePct(share)} = ${proposalFormatWan(base * share)} 万'
+          : '年化规模未填，算不出年测算',
+    ];
+    return lines.join('\n');
+  }
+
+  /// 统计口径简称：资管公式名里带「核销 / 销售 / 下发」就取它。
+  String _settleBasisShort(String formula) => proposalSettleBasisShort(formula);
+
+  /// 一个产品的收入（cost=false）或项目成本（cost=true）各条：产品卡和财务部「收入与成本」共用。
+  List<ProposalProductCardLine> _productSettleLines(
+    ProposalSkuDetailRow product, {
+    required bool cost,
+    required double base,
+    String prefix = '',
+  }) {
+    final items = proposalIntakeSkuSettlements(product);
+    final ordered = [
+      for (final item in items)
+        if (!item.isCost) item,
+      for (final item in items)
+        if (item.isCost) item,
+    ];
+    final labels = _settleRowLabels(ordered);
+    final faceValue = proposalIntakeSkuSettleFace(product);
+    return [
+      for (var i = 0; i < ordered.length; i++)
+        if (ordered[i].isCost == cost)
+          () {
+            final t = ordered[i].terms;
+            final side = cost ? '应付' : '应收';
+            final label = labels[i];
+            var name = label.startsWith('$side · ')
+                ? label.substring(side.length + 3)
+                : label;
+            if (!cost && name.startsWith('应收')) name = '渠道结算款';
+            // 产品卡里统一叫「收入 / 项目成本」：没选类型的「应付一」写成「项目成本一」。
+            if (cost && name.startsWith('应付')) {
+              name = '项目成本${name.substring(2)}';
+            }
+            if (!cost && name.startsWith('应收')) {
+              name = '收入${name.substring(2)}';
+            }
+            // 按单价结的：比例列空着，单价写在「每张」列。
+            final ratio = t.displayRatio.trim();
+            final unitPrice = t.displayUnitPrice.trim();
+            final share = proposalIntakeSettleShare(t, face: faceValue);
+            final amount = base > 0 && share > 0 ? base * share : 0.0;
+            final perUnit = ratio.isEmpty && unitPrice.isNotEmpty
+                ? (unitPrice.endsWith('元') ? unitPrice : '$unitPrice 元')
+                : (faceValue > 0 && share > 0
+                      ? '${proposalFormatWan(faceValue * share)} 元'
+                      : '');
+            final formula = t.displayFormula.trim();
+            return ProposalProductCardLine(
+              name: prefix.isEmpty
+                  ? name
+                  : '$prefix · ${cost ? '项目成本' : '收入'} $name',
+              ratio: ratio,
+              amount: amount > 0 ? '${proposalFormatWan(amount)} 万' : '',
+              basis: _settleBasisShort(formula),
+              perUnit: perUnit,
+              // 第二行灰字：计算公式 · 发票类型 · 税率。
+              detail: [
+                if (formula.isNotEmpty) formula,
+                if (t.invoiceType.trim().isNotEmpty) t.invoiceType.trim(),
+                if (t.taxRate.trim().isNotEmpty) t.taxRate.trim(),
+              ].join(' · '),
+              // 悬停提示：资管公式原文 + 怎么乘出来的。
+              note: [
+                if (formula.isNotEmpty) '资管公式：$formula',
+                _settleLineNote(
+                  t,
+                  base: base,
+                  share: share,
+                  face: faceValue,
+                  faceWord: _skuFaceWord(product),
+                ),
+              ].where((item) => item.isNotEmpty).join('\n'),
+            );
+          }(),
+    ];
+  }
+
+  Widget _productCard(
+    ProposalSkuDetailRow sku,
+    int index, {
+    required ProposalProductCardSide side,
+    Widget? techAction,
+    Widget? techExtra,
+    bool showRelated = true,
+  }) {
+    String wan(double v) => '${proposalFormatWan(v)} 万';
+    final scale = proposalIntakeSkuScaleTotal(sku);
+    final children = proposalIntakeChildProducts(
+      _form,
+    ).where((child) => child.parentSkuId == sku.id).toList(growable: false);
+
+    List<ProposalProductCardLine> linesOf(
+      ProposalSkuDetailRow product, {
+      required bool cost,
+      required double base,
+    }) => _productSettleLines(product, cost: cost, base: base);
+
+    final reviewing = _isReviewing;
+    final techDone = _review['technologyCompleted'] == true;
+    final financeDone = proposalIntakeSkuSettlementsReviewed(_review, _form);
+    return _anchor(
+      side == ProposalProductCardSide.finance
+          ? 'skuSettle:${sku.id}'
+          : 'skuDetail:${sku.id}',
+      ProposalProductCard(
+        key: ValueKey('product-card-${side.name}-${sku.id}'),
+        index: index,
+        tintIndex: _productTintIndex(sku.id),
+        name: sku.displayName,
+        side: side,
+        info: _productInfoRows(sku),
+        related: [
+          if (showRelated)
+            for (final child in children)
+              '${child.displayName.isEmpty ? '未命名关联产品' : child.displayName} × ${proposalIntakeChildProductQuantity(_form, child.id)}',
+        ],
+        techAction: techAction,
+        techExtra: techExtra,
+        techStatus: reviewing || techDone
+            ? ProposalProductCardStatus(
+                techDone ? '已复核' : '待复核',
+                done: techDone,
+              )
+            : null,
+        financeStatus: reviewing || financeDone
+            ? ProposalProductCardStatus(
+                financeDone ? '已复核' : '待复核',
+                done: financeDone,
+              )
+            : null,
+        receivables: linesOf(sku, cost: false, base: scale),
+        payables: linesOf(sku, cost: true, base: scale),
+        // 关联产品：科技部、财务部都显示，每个一张小卡，自己的结算和「看明细 ›」。
+        // 科技部编辑时下面另有可编辑的关联产品框（showRelated: false），这里不重复。
+        relatedProducts: [
+          if (showRelated)
+          for (final child in children)
+            () {
+              final childScale = proposalIntakeSkuScaleTotal(child) > 0
+                  ? proposalIntakeSkuScaleTotal(child)
+                  : scale;
+              final childFace = child.faceValue.trim();
+              return ProposalRelatedProductEntry(
+                title: child.displayName.isEmpty
+                    ? '未命名关联产品'
+                    : child.displayName,
+                subtitle: [
+                  if (childFace.isNotEmpty) '面值 $childFace',
+                  '数量 ${proposalIntakeChildProductQuantity(_form, child.id)}',
+                  '${proposalIntakeSkuSettlements(child).length} 条结算',
+                ].join(' · '),
+                receivables: linesOf(child, cost: false, base: childScale),
+                payables: linesOf(child, cost: true, base: childScale),
+                action: side == ProposalProductCardSide.finance
+                    ? _productCardSettleButton(child, child: true)
+                    : null,
+              );
+            }(),
+        ],
+        otherSideLabel: side == ProposalProductCardSide.finance
+            ? '去科技部看'
+            : '去财务部看',
+        onOtherSide: side == ProposalProductCardSide.finance
+            ? () => _jumpToSkuProduct(sku, child: false)
+            : () => _openEstimateField(
+                ProposalIntakeNavSection.finance,
+                'skuSettle:${sku.id}',
+              ),
+        financeAction: side == ProposalProductCardSide.finance
+            ? _productCardSettleButton(sku)
+            : null,
+        // 点一条收入 / 项目成本：跳到财务部「收入与成本」对应那一行并展开。
+        onSettleTap: (cost) => _openEstimateField(
+          ProposalIntakeNavSection.finance,
+          cost ? 'costItems' : 'revenue',
+        ),
+      ),
+    );
+  }
+
+  /// 产品卡「一、产品信息」：科技部填的字段全部列出，一行一项；没填的可选字段不出现。
+  List<(String, String)> _productInfoRows(ProposalSkuDetailRow sku) {
+    const labels = {
+      'face': '面值',
+      'coupon': '券种',
+      'productCategory': '产品分类',
+      'channelCategory': '渠道分类',
+      'channel': '渠道',
+      'institution': '机构',
+      'platform': '业务平台',
+      'valid': '有效期',
+      'stock': '库存',
+      'sync': '中油好客',
+      'supplier': '供应商编码',
+      'rollback': '回滚',
+      'existing': '已有产品',
+      'remark': '备注',
+    };
+    final texts = {for (final (key, text) in _skuFieldTexts(sku)) key: text};
+    String value(String key) {
+      final text = (texts[key] ?? '').trim();
+      final label = labels[key] ?? '';
+      return text.startsWith('$label ')
+          ? text.substring(label.length + 1)
+          : text;
+    }
+
+    final scale = proposalIntakeSkuScaleTotal(sku);
+    return [
+      ('面值', value('face')),
+      ('业务平台', value('platform')),
+      ('年化规模', scale > 0 ? '${proposalFormatWan(scale)} 万' : ''),
+      for (final key in const [
+        'coupon',
+        'productCategory',
+        'channelCategory',
+        'channel',
+        'institution',
+        'valid',
+        'stock',
+        'sync',
+        'supplier',
+        'rollback',
+        'existing',
+        'remark',
+      ])
+        if ((texts[key] ?? '').trim().isNotEmpty) (labels[key]!, value(key)),
+      ('建品状态', _skuBuildText(sku)),
+    ];
+  }
+
+  /// 「待配置」说清楚：这个产品要由业务平台（如中石油权益平台）按提案建出来，回传平台编码。
+  String _skuBuildText(ProposalSkuDetailRow sku) {
+    final code = sku.partnerProductCode.trim();
+    final msg = sku.platformMessage.trim();
+    return switch (normalizeProposalSkuPlatformStatus(sku.platformStatus)) {
+      kProposalSkuPlatformStatusCreated =>
+        code.isEmpty ? '已建品' : '已建品，平台编码 $code',
+      kProposalSkuPlatformStatusCreating => '业务平台建品中',
+      kProposalSkuPlatformStatusFailed => msg.isEmpty ? '建品失败' : '建品失败：$msg',
+      _ => '待建品',
+    };
+  }
+
+  /// 结算段标题右边：能改时「填写结算 ›」，否则「看明细 ›」（发票、税率、周期等都在弹窗里）。
+  Widget _productCardSettleButton(
+    ProposalSkuDetailRow sku, {
+    bool child = false,
+  }) {
+    final enabled = _canEditSkuSettlements && !_simpleView;
+    final empty = proposalIntakeSkuSettlements(sku).isEmpty;
+    return InkWell(
+      onTap: () => unawaited(_openSkuSettleDialog(sku: sku, child: child)),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFCFC2F5),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
+        child: Text(
+          enabled ? (empty ? '填写结算 ›' : '修改结算 ›') : '看明细 ›',
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.resolve(context, const Color(0xFF3F2A9A)),
+          ),
+        ),
+      ),
     );
   }
 
@@ -17211,6 +17525,48 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  /// 业务平台状态：小圆点 + 「待配置 / 创建中 / 已创建 / 失败」，不再用大色块。
+  Widget _skuPlatformStatusDot(ProposalSkuDetailRow row) {
+    final color = switch (normalizeProposalSkuPlatformStatus(
+      row.platformStatus,
+    )) {
+      kProposalSkuPlatformStatusCreated => const Color(0xFF3B8B5A),
+      kProposalSkuPlatformStatusCreating => const Color(0xFF6B4FD8),
+      kProposalSkuPlatformStatusFailed => const Color(0xFFB42318),
+      _ => const Color(0xFFB07A2B),
+    };
+    return Row(
+      key: ValueKey('proposal-sku-platform-status-${row.id}-dot'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(context, color),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 5),
+        Tooltip(
+          message: _skuBuildText(row),
+          child: Text(
+            switch (normalizeProposalSkuPlatformStatus(row.platformStatus)) {
+              kProposalSkuPlatformStatusCreated => '已建品',
+              kProposalSkuPlatformStatusCreating => '建品中',
+              kProposalSkuPlatformStatusFailed => '建品失败',
+              _ => '待建品',
+            },
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, color),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   /// 原型填写页的业务平台产品行：名称、要点、状态、文字按钮，一行一条，细线分隔。
   Widget _protoSkuProductRow(
     ProposalSkuDetailRow row,
@@ -17293,7 +17649,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               spacing: 8,
               runSpacing: 4,
               crossAxisAlignment: WrapCrossAlignment.center,
-              children: [_skuPlatformStatusChip(row), actions],
+              children: [_skuPlatformStatusDot(row), actions],
             ),
           ] else
             Row(
@@ -17304,7 +17660,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ],
                 Expanded(child: info),
                 const SizedBox(width: 10),
-                _skuPlatformStatusChip(row),
+                _skuPlatformStatusDot(row),
                 const SizedBox(width: 8),
                 actions,
               ],
@@ -17478,12 +17834,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               unawaited(_openSkuProductDialog(child: child, existing: row)),
           child: Text(_canEditProducts ? '编辑' : '查看'),
         ),
-        if (_canEditProducts && !child)
-          TextButton(
-            style: dim,
-            onPressed: () => unawaited(_duplicateBusinessProduct(row)),
-            child: const Text('复制新增'),
-          ),
         if (_canEditProducts)
           TextButton(
             style: dim,
@@ -17492,12 +17842,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
             child: const Text('删除'),
           ),
-        TextButton(
-          style: dim,
-          onPressed: () =>
-              unawaited(_openSkuSettleDialog(sku: row, child: child)),
-          child: Text(_canEditSkuSettlements ? '填写结算' : '查看结算'),
-        ),
+        // 结算是财务操作，只在财务部「产品结算」里填；科技部只配产品。采购提案保持原样。
+        if (_isPurchase)
+          TextButton(
+            style: dim,
+            onPressed: () =>
+                unawaited(_openSkuSettleDialog(sku: row, child: child)),
+            child: Text(_canEditSkuSettlements ? '填写结算' : '查看结算'),
+          ),
       ],
     );
   }
@@ -17954,11 +18306,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   ),
                   child: const Text('删除'),
                 ),
-              TextButton.icon(
-                onPressed: () => _jumpToSkuSettlement(row, child: child),
-                icon: const Icon(Icons.keyboard_return_rounded, size: 15),
-                label: const Text('填写结算'),
-              ),
+              if (_isPurchase)
+                TextButton.icon(
+                  onPressed: () => _jumpToSkuSettlement(row, child: child),
+                  icon: const Icon(Icons.keyboard_return_rounded, size: 15),
+                  label: const Text('填写结算'),
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -18541,7 +18894,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   FocusManager.instance.primaryFocus?.unfocus(),
               onChanged: onChanged,
               decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+                forceUnderline: kProposalPrototypeFormEnabled,
                 context: context,
                 hint: hint,
                 tone: tone,
@@ -18688,6 +19041,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  // 关联产品的结算已并进产品卡「三、关联产品结算」，这块先留着备用。
+  // ignore: unused_element
   Widget _childSettlementsBlock(bool wide) {
     final rows = proposalIntakeChildProducts(_form);
     final enabled = _canEditSkuSettlements;
@@ -18754,6 +19109,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  // 财务部产品结算已换成共用的产品卡（_productCard），旧列表先留着备用。
+  // ignore: unused_element
   Widget _skuSettlementsBlock(bool wide, {bool header = true}) {
     final channelRows = proposalIntakeSkuDetails(_form);
     final enabled = _canEditSkuSettlements;
@@ -19262,6 +19619,1021 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  // ───────────── 产品结算弹窗（新版） ─────────────
+  // 只换呈现方式，数据还是原来的 settlements：收钱 = income，付钱 = cost；
+  // 「按比例 / 按单价 / 按阶梯」由已经填过的字段推出来，旧单不用迁移就能对上。
+
+  static const _settleWayRatio = 'ratio';
+  static const _settleWayUnit = 'unit';
+  static const _settleWayTier = 'tier';
+
+  /// 旧单：推广费阶梯挂在产品公式上，结算行一条 priceMode 都没有。
+  bool _settleLegacyPromotion(
+    String skuId,
+    List<ProposalSkuSettleRow> settlements,
+  ) {
+    if (settlements.any((row) => row.terms.priceMode.isNotEmpty)) return false;
+    final product = _financeProductEvaluations
+        .where((p) => p.skuId == skuId)
+        .firstOrNull;
+    return product != null &&
+        product.hasPromotion &&
+        product.promotionPlans.any((plan) => !plan.isEmpty);
+  }
+
+  /// 这一条现在是「怎么算」的：
+  /// - priceMode = tier，或旧数据结算方式是阶梯 / 已有档位 → 按阶梯；
+  /// - priceMode = unit，或只填了单价 → 按单价；
+  /// - 其余（填了比例、什么都没填） → 按比例。
+  String _settleWayOf(
+    ProposalFinanceSettleTerms terms, {
+    bool legacyPromotion = false,
+  }) {
+    if (terms.settleByTier) return _settleWayTier;
+    if (terms.priceMode.isEmpty &&
+        (proposalIntakeSettleIsTier(terms) || terms.settleTiers.isNotEmpty)) {
+      return _settleWayTier;
+    }
+    if (legacyPromotion &&
+        terms.priceMode.isEmpty &&
+        _settleBillName(terms) == '推广费') {
+      return _settleWayTier;
+    }
+    if (terms.settleByUnit) return _settleWayUnit;
+    if (terms.displayRatio.trim().isEmpty &&
+        terms.displayUnitPrice.trim().isNotEmpty) {
+      return _settleWayUnit;
+    }
+    return _settleWayRatio;
+  }
+
+  /// 公式属于哪种算法：资管字典带了结算方式就用，没带就看名字。
+  String _settleFormulaWay(CatalogRef formula) {
+    final code = formula.settleMethod.trim().isNotEmpty
+        ? formula.settleMethod.trim()
+        : _settleMethodCodeOf('${formula.name}${formula.formulaExpression}');
+    if (code == '2' || code == '5') return _settleWayUnit;
+    if (code == '3') return _settleWayTier;
+    return _settleWayRatio;
+  }
+
+  bool _settleFormulaFits(CatalogRef formula, String way) {
+    final own = _settleFormulaWay(formula);
+    if (own == way) return true;
+    // 阶梯每档还是比例，比例类公式也能用。
+    return way == _settleWayTier && own == _settleWayRatio;
+  }
+
+  /// 只列跟「怎么算」对得上的公式；一个都对不上就全列，免得选不了。
+  List<CatalogRef> _settleFormulasFor(List<CatalogRef> all, String way) {
+    final hit = [
+      for (final item in all)
+        if (_settleFormulaFits(item, way)) item,
+    ];
+    return hit.isEmpty ? all : hit;
+  }
+
+  /// 公式一句话说明：按核销 / 销售 / 下发统计，再带上公式原文。
+  String _settleFormulaHint(CatalogRef? formula) {
+    if (formula == null || formula.isEmpty) return '';
+    final text = '${formula.name}${formula.formulaExpression}';
+    final basis = text.contains('核销')
+        ? '按用户实际用掉（核销）的券统计'
+        : text.contains('下发')
+        ? '按发到用户手里（下发）的券统计'
+        : text.contains('销售')
+        ? '按卖出去（销售）的券统计'
+        : '';
+    final expr = formula.formulaExpression.trim();
+    return [
+      if (basis.isNotEmpty) basis,
+      if (expr.isNotEmpty && expr != formula.name.trim()) '公式：$expr',
+    ].join('；');
+  }
+
+  /// 新版结算弹窗正文（已停用，弹窗恢复线上原版）。
+  // ignore: unused_element
+  Widget _settleDialogBody({
+    required ProposalSkuDetailRow product,
+    required bool enabled,
+    required VoidCallback refresh,
+  }) {
+    final settlements = proposalIntakeSkuSettlements(product);
+    final scale = proposalIntakeSkuScaleTotal(product);
+    final face = proposalIntakeSkuSettleFace(product);
+    final legacyPromotion = _settleLegacyPromotion(product.id, settlements);
+    final syncSource = _skuSyncSource(product);
+    const productSource = 'CHANNEL';
+    if (syncSource.trim().isNotEmpty) {
+      _prefetchSettle(syncSource, productSource);
+    }
+    final cacheKey = _settleCacheKey(syncSource, productSource);
+    final bundle = _settleBundles[cacheKey] ?? const _SettleCatalogBundle();
+    final formulas = _unifiedSettleFormulas(
+      syncSource: syncSource,
+      productSource: productSource,
+      bundle: bundle,
+    );
+    final formulaEmptyText = syncSource.trim().isEmpty
+        ? '产品还没选业务平台，先去科技部补'
+        : (_settleLoading.contains(cacheKey) ? '公式加载中…' : '该业务平台暂无公式');
+
+    Widget group(bool cost) {
+      final rows = [
+        for (final item in settlements)
+          if (item.isCost == cost) item,
+      ];
+      final tone = DunesColors.resolve(
+        context,
+        cost ? ProposalPalette.coral : ProposalPalette.green,
+      );
+      final soft = DunesColors.resolve(
+        context,
+        cost ? ProposalPalette.coralSoft : ProposalPalette.greenSoft,
+        role: DunesColorRole.surface,
+      );
+      var total = 0.0;
+      for (final row in rows) {
+        final way = _settleWayOf(
+          row.terms,
+          legacyPromotion: legacyPromotion && cost,
+        );
+        if (way == _settleWayTier) continue;
+        final share = proposalIntakeSettleShare(row.terms, face: face);
+        if (scale > 0 && share > 0) total += scale * share;
+      }
+      final verb = cost ? '付钱' : '收钱';
+      return Container(
+        key: ValueKey('settle-dialog-group-${product.id}-$cost'),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        decoration: BoxDecoration(
+          color: soft.withValues(alpha: 0.35),
+          border: Border.all(color: tone.withValues(alpha: 0.35)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: tone,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  cost ? '项目成本' : '收入',
+                  style: TextStyle(
+                    color: tone,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    cost ? '我们付出去的钱：采购款、推广费、服务费、手续费…' : '别人付给我们的钱：渠道 / 客户按结算打款',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.text3,
+                      ),
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                if (total > 0)
+                  Text(
+                    '合计 ${proposalFormatWan(total)} 万/年',
+                    style: TextStyle(
+                      color: tone,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (rows.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  enabled ? '还没有$verb的条目，点下面「添加一条$verb」。' : '还没有$verb的条目。',
+                  style: TextStyle(
+                    color: DunesColors.resolve(context, ProposalPalette.text3),
+                    fontSize: 12,
+                  ),
+                ),
+              )
+            else
+              for (var i = 0; i < rows.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                _settleStepCard(
+                  product: product,
+                  settle: rows[i],
+                  number: i + 1,
+                  cost: cost,
+                  enabled:
+                      enabled &&
+                      !_skuSettleRowLocked(
+                        'financeItem',
+                        'skuSettle',
+                        product.id,
+                        rows[i].id,
+                      ),
+                  scale: scale,
+                  face: face,
+                  legacyPromotion: legacyPromotion && cost,
+                  formulas: formulas,
+                  formulaEmptyText: formulaEmptyText,
+                  refresh: refresh,
+                ),
+              ],
+            if (enabled) ...[
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  key: ValueKey('settle-dialog-add-${product.id}-$cost'),
+                  onPressed: () {
+                    _addSkuSettle(
+                      product.id,
+                      kind: cost
+                          ? kProposalSkuSettleKindCost
+                          : kProposalSkuSettleKindIncome,
+                    );
+                    refresh();
+                  },
+                  icon: const Icon(Icons.add, size: 16),
+                  label: Text(rows.isEmpty ? '添加一条$verb' : '再加一条$verb'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: tone,
+                    side: BorderSide(color: tone.withValues(alpha: 0.6)),
+                    visualDensity: VisualDensity.compact,
+                    textStyle: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _settleDialogIntro(product, scale: scale),
+        if (enabled)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Wrap(
+              spacing: 4,
+              children: [
+                TextButton.icon(
+                  onPressed: settlements.isEmpty
+                      ? null
+                      : () {
+                          setState(
+                            () => _skuSettlementsClipboard = [
+                              for (final item in settlements)
+                                ProposalSkuSettleRow(
+                                  id: item.id,
+                                  kind: item.kind,
+                                  terms: item.terms,
+                                ),
+                            ],
+                          );
+                          refresh();
+                        },
+                  icon: const Icon(Icons.copy_rounded, size: 14),
+                  label: const Text('复制这套结算'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    textStyle: const TextStyle(fontSize: 11.5),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _skuSettlementsClipboard == null
+                      ? null
+                      : () {
+                          _writeSkuSettlements(
+                            product.id,
+                            _pasteSkuSettlements(settlements),
+                          );
+                          refresh();
+                        },
+                  icon: const Icon(Icons.content_paste_rounded, size: 14),
+                  label: const Text('粘贴别的产品的结算'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    textStyle: const TextStyle(fontSize: 11.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 14),
+        group(false),
+        const SizedBox(height: 16),
+        group(true),
+      ],
+    );
+  }
+
+  /// 弹窗顶部：这个产品的面值、年化规模，和一句怎么填。
+  Widget _settleDialogIntro(
+    ProposalSkuDetailRow product, {
+    required double scale,
+  }) {
+    final faceText = product.faceValue.trim();
+    Widget kv(String key, String value, {bool missing = false}) => Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '$key  ',
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text3),
+              fontSize: 12,
+            ),
+          ),
+          TextSpan(
+            text: value,
+            style: TextStyle(
+              color: missing
+                  ? DunesColors.resolve(context, ProposalPalette.amber)
+                  : DunesColors.resolve(context, ProposalPalette.text),
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+    // 和产品卡同一个产品色，弹窗里一眼知道在填哪个产品。
+    final tint = ProposalProductTint.of(_productTintIndex(product.id));
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          tint.soft,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            tint.line,
+            role: DunesColorRole.border,
+          ),
+        ),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Wrap(
+            spacing: 20,
+            runSpacing: 6,
+            children: [
+              kv(
+                '面值',
+                faceText.isEmpty ? '未填' : faceText,
+                missing: faceText.isEmpty,
+              ),
+              kv(
+                '年化规模',
+                scale > 0 ? '${proposalFormatWan(scale)} 万' : '未填',
+                missing: scale <= 0,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '每一条按 ① 什么钱 → ② 怎么算 → ③ 填数字 → ④ 发票和税率 填，填完马上算出一年多少钱。'
+            '${scale > 0 ? '' : '年化规模在科技部「产品」里填，填好才能算出金额。'}',
+            style: TextStyle(
+              color: DunesColors.resolve(context, ProposalPalette.text2),
+              fontSize: 11.5,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 一条收钱 / 付钱：标题「付钱 1：推广费」，下面 ①②③④ 四步。
+  Widget _settleStepCard({
+    required ProposalSkuDetailRow product,
+    required ProposalSkuSettleRow settle,
+    required int number,
+    required bool cost,
+    required bool enabled,
+    required double scale,
+    required double face,
+    required bool legacyPromotion,
+    required List<CatalogRef> formulas,
+    required String formulaEmptyText,
+    required VoidCallback refresh,
+  }) {
+    final skuId = product.id;
+    final keyPrefix = 'settleStep-$skuId-${settle.id}';
+    final raw = settle.terms;
+    final typeName = _settleBillName(raw);
+    final isPromotion = cost && typeName == '推广费';
+    // 推广费选了阶梯但这一条还没存档位：先带出产品上的方案（和原来一样）。
+    final terms =
+        isPromotion &&
+            raw.settleByTier &&
+            raw.tierPlans.isEmpty &&
+            raw.settleTiers.isEmpty
+        ? raw.copyWith(
+            tierPlans: proposalPromotionPlansOf(
+              proposalProductFormulaEntry(_form, skuId),
+            ),
+          )
+        : raw;
+    final way = _settleWayOf(terms, legacyPromotion: legacyPromotion);
+    final tone = DunesColors.resolve(
+      context,
+      cost ? ProposalPalette.coral : ProposalPalette.green,
+    );
+    final verb = cost ? '付钱' : '收钱';
+    final pay = cost ? '付' : '收';
+    final textColor = DunesColors.resolve(context, ProposalPalette.text);
+    final text2 = DunesColors.resolve(context, ProposalPalette.text2);
+    final text3 = DunesColors.resolve(context, ProposalPalette.text3);
+
+    void write(ProposalFinanceSettleTerms next) {
+      _patchSkuSettle(skuId, settle.id, next);
+      refresh();
+    }
+
+    // ---- 公式 ----
+    final currentFormula =
+        terms.formulaRef != null && terms.formulaRef!.isNotEmpty
+        ? terms.formulaRef
+        : (terms.displayFormula.isEmpty
+              ? null
+              : CatalogRef.fromName(terms.displayFormula));
+    final selectedFormula = currentFormula == null
+        ? null
+        : (_selectedCatalog(currentFormula, formulas) ?? currentFormula);
+
+    void pickWay(String next) {
+      if (!enabled || next == way) return;
+      ProposalFinanceSettleTerms updated;
+      if (next == _settleWayUnit) {
+        updated = terms.copyWith(
+          priceMode: kProposalSettlePriceModeUnit,
+          settleRatio: '',
+          settlePrice: '',
+        );
+      } else if (next == _settleWayTier) {
+        updated = terms.copyWith(priceMode: kProposalSettlePriceModeTier);
+        if (proposalSettleTierPlans(updated).isEmpty) {
+          updated = updated.copyWith(
+            tierPlans: [
+              ProposalPromotionTierPlan(
+                id: proposalPromotionPlanNextId(const []),
+                segments: ProposalPromotionTierPlan.monthSeqSegments,
+              ),
+            ],
+          );
+        }
+      } else {
+        updated = terms.copyWith(
+          priceMode: kProposalSettlePriceModeDirect,
+          settleUnitPrice: '',
+          settlePrice: '',
+        );
+      }
+      // 公式跟着「怎么算」走：对不上就清掉，让人重选。
+      if (selectedFormula != null &&
+          selectedFormula.isNotEmpty &&
+          !_settleFormulaFits(selectedFormula, next)) {
+        updated = updated.copyWith(formula: '', formulaRef: null);
+      }
+      write(updated);
+    }
+
+    // ---- 还差什么 ----
+    final missing = <String>[
+      if (cost && typeName.isEmpty) '类型',
+      if (way == _settleWayRatio && terms.displayRatio.trim().isEmpty) '比例',
+      if (way == _settleWayUnit && terms.displayUnitPrice.trim().isEmpty) '单价',
+      if (terms.displayFormula.isEmpty) '计算公式',
+      if (terms.taxRate.trim().isEmpty) '税率',
+    ];
+
+    Widget step(
+      int n,
+      String label, {
+      String hint = '',
+      required Widget child,
+    }) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: tone.withValues(alpha: 0.12),
+              ),
+              child: Text(
+                '$n',
+                style: TextStyle(
+                  color: tone,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (hint.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        hint,
+                        style: TextStyle(
+                          color: text3,
+                          fontSize: 11,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  child,
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ① 什么钱
+    final Widget typeInput;
+    if (!cost) {
+      typeInput = Text(
+        typeName.isEmpty ? '渠道结算款' : typeName,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+    } else {
+      final value = terms.billType.trim();
+      final options = [
+        if (value.isNotEmpty && !_projectCostItemNames.contains(value)) value,
+        ..._projectCostItemNames,
+      ];
+      typeInput = !enabled
+          ? _readonlySelectedText(typeName)
+          : ProposalSelectField<String>(
+              key: ValueKey('$keyPrefix-type'),
+              value: value.isEmpty ? null : value,
+              title: '这是什么钱',
+              hint: '选一个：推广费、平台服务费、采购款…',
+              searchable: true,
+              options: [
+                for (final item in options)
+                  ProposalSelectOption(value: item, label: item),
+              ],
+              onSelected: (picked) {
+                final name = (picked ?? '').trim();
+                var next = terms.copyWith(
+                  billType: name,
+                  billTypeRef: name.isEmpty ? null : CatalogRef.fromName(name),
+                );
+                if (name != '推广费' && terms.settleByTier) {
+                  next = next.copyWith(
+                    priceMode: kProposalSettlePriceModeDirect,
+                  );
+                }
+                write(next);
+              },
+            );
+    }
+
+    // ② 怎么算
+    final showTier = isPromotion || way == _settleWayTier;
+    final wayGuide = way == _settleWayUnit
+        ? '按张算：每张券$pay多少元。例：面值 50 的券每张$pay 46 元，就填 46。'
+        : way == _settleWayTier
+        ? '按推广量分档，每档一个比例，在下面 ③ 里加档位。'
+        : '按规模的百分比$pay。填小数：0.08 = 规模的 8%，不要带 %。';
+    final allowedFormulas = _settleFormulasFor(formulas, way);
+    final formulaValues = _withCurrent(allowedFormulas, selectedFormula);
+    final formulaHint = _settleFormulaHint(selectedFormula);
+    final wayInput = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ProposalChoiceChip(
+              label: '按比例',
+              selected: way == _settleWayRatio,
+              enabled: enabled,
+              onSelected: enabled ? (_) => pickWay(_settleWayRatio) : null,
+            ),
+            ProposalChoiceChip(
+              label: '按单价',
+              selected: way == _settleWayUnit,
+              enabled: enabled,
+              onSelected: enabled ? (_) => pickWay(_settleWayUnit) : null,
+            ),
+            if (showTier)
+              ProposalChoiceChip(
+                label: '按阶梯',
+                selected: way == _settleWayTier,
+                enabled: enabled,
+                onSelected: enabled ? (_) => pickWay(_settleWayTier) : null,
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          wayGuide,
+          style: TextStyle(color: text2, fontSize: 11.5, height: 1.4),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          '按什么统计（计算公式）',
+          style: TextStyle(
+            color: text2,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        if (!enabled)
+          _readonlySelectedText(selectedFormula?.label ?? '')
+        else
+          ProposalSelectField<CatalogRef>(
+            key: ValueKey('$keyPrefix-formula-$way'),
+            value: selectedFormula == null || selectedFormula.isEmpty
+                ? null
+                : selectedFormula,
+            title: '按什么统计',
+            hint: '选一个计算公式',
+            searchable: true,
+            emptyText: formulaEmptyText,
+            options: [
+              for (final item in formulaValues)
+                ProposalSelectOption(
+                  value: item,
+                  label: item.label,
+                  meta: _settleFormulaHint(item).isEmpty
+                      ? null
+                      : _settleFormulaHint(item),
+                ),
+            ],
+            onSelected: (value) => write(
+              terms.copyWith(
+                formula: value?.name ?? value?.formulaExpression ?? '',
+                formulaRef: value,
+              ),
+            ),
+          ),
+        if (formulaHint.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              formulaHint,
+              style: TextStyle(color: text3, fontSize: 11, height: 1.35),
+            ),
+          ),
+      ],
+    );
+
+    // ③ 填数字
+    Widget numberInput({
+      required String fieldKey,
+      required String value,
+      required String hint,
+      required String unit,
+      List<TextInputFormatter>? formatters,
+      required ProposalFinanceSettleTerms Function(String) toTerms,
+    }) {
+      final input = !enabled
+          ? _readonlySelectedText(value)
+          : TextFormField(
+              key: ValueKey('$keyPrefix-$fieldKey-$_fieldEpoch'),
+              initialValue: value,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: formatters,
+              onTapOutside: (_) =>
+                  FocusManager.instance.primaryFocus?.unfocus(),
+              onChanged: (next) => write(toTerms(next.trim())),
+              decoration: proposalInputDecoration(
+                forceUnderline: kProposalPrototypeFormEnabled,
+                context: context,
+                hint: hint,
+              ),
+            );
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          SizedBox(width: 200, child: input),
+          const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(unit, style: TextStyle(color: text2, fontSize: 12)),
+          ),
+        ],
+      );
+    }
+
+    final Widget numberBlock;
+    if (way == _settleWayUnit) {
+      numberBlock = numberInput(
+        fieldKey: 'unit',
+        value: terms.displayUnitPrice,
+        hint: '如 46',
+        unit: '元 / 张',
+        toTerms: (v) => proposalIntakeApplySettleXor(terms, settleUnitPrice: v),
+      );
+    } else if (way == _settleWayTier) {
+      if (legacyPromotion && terms.priceMode.isEmpty && isPromotion) {
+        numberBlock = _promotionPlanCard(skuId, enabled, onChanged: refresh);
+      } else if (terms.settleByTier) {
+        numberBlock = ProposalPromotionPlanField(
+          costName: typeName.isEmpty ? '成本' : typeName,
+          promoterOptions: _setOf('purchasePromoters').toList(),
+          plans: proposalSettleTierPlans(terms),
+          onChanged: enabled
+              ? (plans) => write(terms.copyWith(tierPlans: plans))
+              : null,
+        );
+      } else {
+        numberBlock = _settleTierRules(
+          keyPrefix: keyPrefix,
+          terms: terms,
+          enabled: enabled,
+          onChanged: write,
+        );
+      }
+    } else {
+      numberBlock = numberInput(
+        fieldKey: 'ratio',
+        value: terms.displayRatio,
+        hint: '如 0.08',
+        unit: '小数，0.08 = 8%',
+        formatters: const [ProposalSettleRatioFormatter()],
+        toTerms: (v) => proposalIntakeApplySettleXor(terms, settleRatio: v),
+      );
+    }
+
+    // 测算一行
+    final share = proposalIntakeSettleShare(terms, face: face);
+    var estimate = '';
+    var estimateReady = false;
+    if (way == _settleWayTier) {
+      estimate = '按阶梯分档算，金额见市场部「成本测算」。';
+    } else if (way == _settleWayUnit &&
+        terms.displayUnitPrice.trim().isNotEmpty &&
+        face <= 0) {
+      estimate = '产品没填面值，单价换算不出比例，先去科技部补面值。';
+    } else if (share <= 0) {
+      estimate = '填好数字后，这里自动算出一年$pay多少钱。';
+    } else if (scale <= 0) {
+      estimate = '相当于规模的 ${proposalFormatSharePct(share)}；产品年化规模填好后自动算出金额。';
+    } else {
+      estimateReady = true;
+      final amount = proposalFormatWan(scale * share);
+      final base = proposalFormatWan(scale);
+      estimate = way == _settleWayUnit
+          ? '测算：$base 万 × (单价 ${terms.displayUnitPrice.trim()} ÷ 面值 ${proposalFormatWan(face)}) = $amount 万/年'
+          : '测算：$base 万 × ${terms.displayRatio.trim()} = $amount 万/年';
+    }
+    final estimateLine = Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: estimateReady
+            ? tone.withValues(alpha: 0.08)
+            : DunesColors.resolve(
+                context,
+                ProposalPalette.soft,
+                role: DunesColorRole.surface,
+              ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.calculate_outlined,
+            size: 14,
+            color: estimateReady ? tone : text3,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              estimate,
+              style: TextStyle(
+                color: estimateReady ? tone : text2,
+                fontSize: estimateReady ? 12.5 : 11.5,
+                fontWeight: estimateReady ? FontWeight.w700 : FontWeight.w400,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // ④ 发票和税率
+    final invoiceField = _settleStringSelectField(
+      label: '发票类型',
+      value: terms.invoiceType,
+      options: kProposalInvoiceTypes,
+      enabled: enabled,
+      fieldKey: '$keyPrefix-invoice',
+      onSelected: (value) => write(terms.copyWith(invoiceType: value ?? '')),
+    );
+    final taxField = _settleStringSelectField(
+      label: '税率',
+      value: terms.taxRate,
+      options: kProposalTaxRates,
+      enabled: enabled,
+      fieldKey: '$keyPrefix-tax',
+      onSelected: (value) => write(terms.copyWith(taxRate: value ?? '')),
+    );
+    final invoiceTax = LayoutBuilder(
+      builder: (_, constraints) => constraints.maxWidth < 420
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [invoiceField, const SizedBox(height: 8), taxField],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: invoiceField),
+                const SizedBox(width: 12),
+                Expanded(child: taxField),
+              ],
+            ),
+    );
+
+    // 标题行
+    final header = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '$verb $number：',
+                  style: TextStyle(color: tone, fontWeight: FontWeight.w700),
+                ),
+                TextSpan(
+                  text: cost
+                      ? (typeName.isEmpty ? '还没选类型' : typeName)
+                      : (typeName.isEmpty ? '渠道结算款' : typeName),
+                  style: TextStyle(
+                    color: cost && typeName.isEmpty ? text3 : textColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            style: const TextStyle(fontSize: 13.5),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: missing.isEmpty
+                ? DunesColors.resolve(
+                    context,
+                    ProposalPalette.green,
+                  ).withValues(alpha: 0.12)
+                : DunesColors.resolve(
+                    context,
+                    ProposalPalette.amber,
+                  ).withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            missing.isEmpty ? '✓ 填好了' : '还差：${missing.join('、')}',
+            style: TextStyle(
+              color: missing.isEmpty
+                  ? DunesColors.resolve(context, ProposalPalette.green)
+                  : DunesColors.resolve(context, ProposalPalette.amber),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        if (enabled)
+          TextButton(
+            onPressed: () {
+              _removeSkuSettle(skuId, settle.id);
+              refresh();
+            },
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(36, 28),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              foregroundColor: text3,
+              textStyle: const TextStyle(fontSize: 11.5),
+            ),
+            child: const Text('删除这条'),
+          ),
+      ],
+    );
+
+    return Container(
+      key: ValueKey(keyPrefix),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            ProposalPalette.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          header,
+          step(
+            1,
+            '这是什么钱',
+            hint: cost ? '选这笔钱的类型，决定它记到哪类成本' : '渠道 / 客户按结算打给我们的钱，不用选',
+            child: typeInput,
+          ),
+          step(2, '这笔钱怎么算', child: wayInput),
+          step(
+            3,
+            way == _settleWayUnit
+                ? '每张$pay多少元'
+                : way == _settleWayTier
+                ? '分档填比例'
+                : '$pay规模的多少',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [numberBlock, estimateLine],
+            ),
+          ),
+          step(4, '发票和税率', hint: '按合同约定填，税率会算进税务成本', child: invoiceTax),
+        ],
+      ),
+    );
+  }
+
   Widget _settleSplitPair(Widget left, Widget right, {required bool stack}) {
     final line = DunesColors.resolve(context, ProposalPalette.borderSoft);
     if (stack) {
@@ -19602,8 +20974,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           final grid = _settleTermsGrid(
             wide: wide,
             keyPrefix: '$reviewPrefix-$skuId-${settle.id}',
-            terms: settle.isCost && settle.terms.billType.trim() == '推广费' && settle.terms.settleByTier && settle.terms.tierPlans.isEmpty && settle.terms.settleTiers.isEmpty
-                ? settle.terms.copyWith(tierPlans: proposalPromotionPlansOf(proposalProductFormulaEntry(_form, skuId)))
+            terms:
+                settle.isCost &&
+                    settle.terms.billType.trim() == '推广费' &&
+                    settle.terms.settleByTier &&
+                    settle.terms.tierPlans.isEmpty &&
+                    settle.terms.settleTiers.isEmpty
+                ? settle.terms.copyWith(
+                    tierPlans: proposalPromotionPlansOf(
+                      proposalProductFormulaEntry(_form, skuId),
+                    ),
+                  )
                 : settle.terms,
             enabled: enabled,
             includeParties: false,
@@ -19703,7 +21084,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                           ? (value) => write(i, from: value.trim())
                           : null,
                       decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+                        forceUnderline: kProposalPrototypeFormEnabled,
                         context: context,
                         hint: '0',
                       ),
@@ -19726,7 +21107,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                           ? (value) => write(i, rate: value.trim())
                           : null,
                       decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+                        forceUnderline: kProposalPrototypeFormEnabled,
                         context: context,
                         hint: '0.08',
                       ),
@@ -19818,7 +21199,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     initialValue: value,
                     enabled: false,
                     decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+                      forceUnderline: kProposalPrototypeFormEnabled,
                       context: context,
                       hint: hint ?? '已选另一项，此项不可填',
                       readOnly: true,
@@ -19833,8 +21214,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   FocusManager.instance.primaryFocus?.unfocus(),
               onChanged: (next) => onChanged(write(next.trim())),
               decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
-            context: context, hint: hint),
+                forceUnderline: kProposalPrototypeFormEnabled,
+                context: context,
+                hint: hint,
+              ),
             );
       if (bare) return input;
       return ProposalField(label: label, child: input);
@@ -20077,10 +21460,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               if (terms.settleByTier) ...[
                 const SizedBox(height: 8),
                 ProposalPromotionPlanField(
-                  costName: terms.billType.trim().isEmpty ? '成本' : terms.billType.trim(),
+                  costName: terms.billType.trim().isEmpty
+                      ? '成本'
+                      : terms.billType.trim(),
                   promoterOptions: _setOf('purchasePromoters').toList(),
                   plans: proposalSettleTierPlans(terms),
-                  onChanged: enabled ? (plans) => onChanged(terms.copyWith(tierPlans: plans)) : null,
+                  onChanged: enabled
+                      ? (plans) => onChanged(terms.copyWith(tierPlans: plans))
+                      : null,
                 ),
               ] else ...[
                 const SizedBox(height: 8),
@@ -20153,9 +21540,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                               }
                               return next;
                             },
-                            hint: hasRatio && !hasPrice
-                                ? '填写后将清空结算比例'
-                                : null,
+                            hint: hasRatio && !hasPrice ? '填写后将清空结算比例' : null,
                             bare: true,
                           ),
                         ],
@@ -20487,7 +21872,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         child: InputDecorator(
                           decoration:
                               proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+                                forceUnderline: kProposalPrototypeFormEnabled,
                                 context: context,
                                 hint: _uploadingProductFile
                                     ? '上传中…'
@@ -21062,7 +22447,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         child: InputDecorator(
           decoration: proposalInputDecoration(
             forceUnderline: kProposalPrototypeFormEnabled,
-            context: context, readOnly: true),
+            context: context,
+            readOnly: true,
+          ),
           child: Row(
             children: [
               Icon(
@@ -21135,7 +22522,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             child: InputDecorator(
               decoration:
                   proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+                    forceUnderline: kProposalPrototypeFormEnabled,
                     context: context,
                     hint: uploading ? '上传中…' : '选择 PDF / Word 文件',
                     readOnly: !enabled,
@@ -21167,7 +22554,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         : files.isEmpty
         ? InputDecorator(
             decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+              forceUnderline: kProposalPrototypeFormEnabled,
               context: context,
               readOnly: true,
             ),
@@ -22432,7 +23819,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         child: InputDecorator(
           decoration:
               proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+                forceUnderline: kProposalPrototypeFormEnabled,
                 context: context,
                 hint: hint,
                 readOnly: !enabled,
@@ -22560,7 +23947,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   )
                 : null,
             decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+              forceUnderline: kProposalPrototypeFormEnabled,
               context: context,
               hint: hint,
               readOnly: !enabled,
@@ -23983,8 +25370,9 @@ class _ProposalAddOptionDialogState extends State<_ProposalAddOptionDialog> {
         onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
         onSubmitted: (_) => _submit(),
         decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
-            context: context),
+          forceUnderline: kProposalPrototypeFormEnabled,
+          context: context,
+        ),
       ),
       actions: [
         TextButton(
@@ -24546,7 +25934,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                     onTapOutside: (_) =>
                         FocusManager.instance.primaryFocus?.unfocus(),
                     decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+                      forceUnderline: kProposalPrototypeFormEnabled,
                       context: context,
                       hint: '门槛',
                     ),
@@ -24575,7 +25963,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                     onTapOutside: (_) =>
                         FocusManager.instance.primaryFocus?.unfocus(),
                     decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
+                      forceUnderline: kProposalPrototypeFormEnabled,
                       context: context,
                       hint: '优惠',
                     ),
@@ -24613,8 +26001,10 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
               onTapOutside: (_) =>
                   FocusManager.instance.primaryFocus?.unfocus(),
               decoration: proposalInputDecoration(
-            forceUnderline: kProposalPrototypeFormEnabled,
-            context: context, hint: hint),
+                forceUnderline: kProposalPrototypeFormEnabled,
+                context: context,
+                hint: hint,
+              ),
             ),
     );
   }
@@ -24830,4 +26220,13 @@ class _SettleCatalogBundle {
 
 extension _FirstOrNullExtension<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
+}
+
+/// 统计口径简称：资管公式名里带「核销 / 销售 / 下发」就取它。
+/// 放在文件顶层：提案列表和提案详情两个 State 都要用。
+String proposalSettleBasisShort(String formula) {
+  for (final word in const ['核销', '销售', '下发']) {
+    if (formula.contains(word)) return word;
+  }
+  return '';
 }

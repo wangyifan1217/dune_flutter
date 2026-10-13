@@ -29,11 +29,35 @@ class XrxsService {
   final AuthSession session;
   final http.Client _client;
 
-  Future<XrxsLoginUrl> fetchH5LoginUrl({String? sid, String? role}) =>
-      _fetch('/xrxs/h5/login-url', sid: sid, role: role);
+  Future<XrxsLoginUrl> fetchH5LoginUrl({
+    String? sid,
+    String? role,
+    String? page,
+    String? url,
+    String? pcUrl,
+  }) => _fetch(
+    '/xrxs/h5/login-url',
+    sid: sid,
+    role: role,
+    page: page,
+    url: url,
+    pcUrl: pcUrl,
+  );
 
-  Future<XrxsLoginUrl> fetchPcLoginUrl({String? sid, String? role}) =>
-      _fetch('/xrxs/pc/login-url', sid: sid, role: role);
+  Future<XrxsLoginUrl> fetchPcLoginUrl({
+    String? sid,
+    String? role,
+    String? page,
+    String? url,
+    String? pcUrl,
+  }) => _fetch(
+    '/xrxs/pc/login-url',
+    sid: sid,
+    role: role,
+    page: page,
+    url: url,
+    pcUrl: pcUrl,
+  );
 
   Future<bool> openInSystemBrowser(XrxsLoginUrl login) {
     return launchUrl(login.uri, mode: LaunchMode.externalApplication);
@@ -43,12 +67,21 @@ class XrxsService {
     String path, {
     String? sid,
     String? role,
+    String? page,
+    String? url,
+    String? pcUrl,
   }) async {
     final query = <String, String>{};
     final sidTrim = sid?.trim() ?? '';
     final roleTrim = role?.trim() ?? '';
+    final pageTrim = page?.trim() ?? '';
+    final urlTrim = url?.trim() ?? '';
+    final pcUrlTrim = pcUrl?.trim() ?? '';
     if (sidTrim.isNotEmpty) query['sid'] = sidTrim;
     if (roleTrim.isNotEmpty) query['role'] = roleTrim;
+    if (pageTrim.isNotEmpty) query['page'] = pageTrim;
+    if (urlTrim.isNotEmpty) query['url'] = urlTrim;
+    if (pcUrlTrim.isNotEmpty) query['pcUrl'] = pcUrlTrim;
     var requestPath = path;
     if (query.isNotEmpty) {
       requestPath =

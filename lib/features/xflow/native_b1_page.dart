@@ -9,6 +9,7 @@ import '../proposal_intake/proposal_intake_select.dart';
 import '../shell/dunes_toast.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'approval_list_cache.dart';
+import 'approval_list_ui.dart';
 import 'approval_todo_flow_guide.dart';
 import 'task_todo_actions.dart';
 import 'xflow_models.dart';
@@ -555,7 +556,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
                         children: [
-                          XflowHeroStatCard(
+                          ApprovalListSummary(
                             kicker: isB1
                                 ? '我的审批 · ${_all.length} 项'
                                 : isB13
@@ -578,10 +579,6 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                 : (pending > 0 ||
                                       (widget.type == _ListType.b14 &&
                                           (counts['REJECTED'] ?? 0) > 0)),
-                            bigValue: isB1 || isB13
-                                ? '$mine'
-                                : '${_all.length}',
-                            bigUnit: isB1 || isB13 ? '项' : '份',
                             footItems: isB13
                                 ? <(String, String, String?)>[
                                     ('待办理', '$mine', mine > 0 ? 'urge' : null),
@@ -590,9 +587,9 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                 : isB1
                                 ? <(String, String, String?)>[
                                     ('待审批', '$mine', mine > 0 ? 'urge' : null),
-                                    ('抄送', '0', null),
-                                    ('任务', '0', null),
-                                    ('执行', '0', null),
+                                    ('审批中', '$pending', null),
+                                    ('已通过', '${counts['APPROVED']}', 'pos'),
+                                    ('已驳回', '${counts['REJECTED']}', 'neg'),
                                   ]
                                 : widget.type == _ListType.b14
                                 ? <(String, String, String?)>[
@@ -625,7 +622,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                             scrollDirection: Axis.horizontal,
                             child: Row(
                               children: [
-                                XflowStatusChip(
+                                ApprovalListFilterChip(
                                   label: '全部 ${counts['ALL'] ?? 0}',
                                   active: _statusFilter == 'ALL',
                                   showDot: true,
@@ -633,7 +630,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                 ),
                                 const SizedBox(width: 6),
                                 for (final key in _chipKeys) ...[
-                                  XflowStatusChip(
+                                  ApprovalListFilterChip(
                                     label:
                                         '${_statusLabel(key)} ${counts[key] ?? 0}',
                                     active: _statusFilter == key,
@@ -645,53 +642,72 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Text(
-                                '审批模板',
-                                style: DunesTypography.sans(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: DunesColors.resolve(
-                                    context,
-                                    DunesColors.text2,
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final selector = Row(
+                                children: [
+                                  Text(
+                                    '审批模板',
+                                    style: DunesTypography.sans(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text2,
+                                      ),
+                                      context: context,
+                                    ),
                                   ),
-                                  context: context,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: ProposalSelectField<String>(
-                                  value: _templateFilter == 'ALL'
-                                      ? null
-                                      : _templateFilter,
-                                  hint: '全部模板',
-                                  searchable: true,
-                                  options: _templateOptions
-                                      .where((key) => key != 'ALL')
-                                      .map(
-                                        (key) => ProposalSelectOption(
-                                          value: key,
-                                          label: _templateLabel(key),
-                                          meta: key,
-                                        ),
-                                      )
-                                      .toList(growable: false),
-                                  onSelected: (key) =>
-                                      _selectTemplateFilter(key ?? 'ALL'),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          XflowWfListSearch(
-                            controller: _search,
-                            hint: _searchHint,
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: ProposalSelectField<String>(
+                                      value: _templateFilter == 'ALL'
+                                          ? null
+                                          : _templateFilter,
+                                      hint: '全部模板',
+                                      searchable: true,
+                                      options: _templateOptions
+                                          .where((key) => key != 'ALL')
+                                          .map(
+                                            (key) => ProposalSelectOption(
+                                              value: key,
+                                              label: _templateLabel(key),
+                                              meta: key,
+                                            ),
+                                          )
+                                          .toList(growable: false),
+                                      onSelected: (key) =>
+                                          _selectTemplateFilter(key ?? 'ALL'),
+                                    ),
+                                  ),
+                                ],
+                              );
+                              final search = XflowWfListSearch(
+                                controller: _search,
+                                hint: _searchHint,
+                              );
+                              if (constraints.maxWidth >= 680) {
+                                return Row(
+                                  children: [
+                                    SizedBox(width: 300, child: selector),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: search),
+                                  ],
+                                );
+                              }
+                              return Column(
+                                children: [
+                                  search,
+                                  const SizedBox(height: 8),
+                                  selector,
+                                ],
+                              );
+                            },
                           ),
                           const SizedBox(height: 10),
                           XflowSectionLabel(
                             accent: widget.type == _ListType.p1 ? '抄送' : '审批',
-                            title: '按发起时间倒序',
+                            title: '${visible.length} 项 · 最新发起优先',
                           ),
                           if (_refreshing) ...[
                             const SizedBox(height: 10),
@@ -707,25 +723,16 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                           ],
                           const SizedBox(height: 8),
                           if (visible.isEmpty)
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              alignment: Alignment.center,
-                              child: Text(
-                                _search.text.trim().isEmpty ? '暂无数据' : '无匹配结果',
-                                style: DunesTypography.sans(
-                                  fontSize: 12,
-                                  color: DunesColors.resolve(
-                                    context,
-                                    DunesColors.text3,
-                                  ),
-                                  context: context,
-                                ),
-                              ),
+                            ApprovalListEmpty(
+                              filtered:
+                                  _search.text.trim().isNotEmpty ||
+                                  _statusFilter != 'ALL' ||
+                                  _templateFilter != 'ALL',
                             )
                           else
                             ...visible.map(
                               (item) => Padding(
-                                padding: const EdgeInsets.only(bottom: 9),
+                                padding: const EdgeInsets.only(bottom: 7),
                                 child: XflowProposalListCard(
                                   item: item,
                                   mode: _cardMode,

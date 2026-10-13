@@ -19,6 +19,9 @@ class NativeXrxsPCPage extends StatefulWidget {
     this.onChromeChanged,
     this.loginSid,
     this.loginRole,
+    this.loginPage,
+    this.loginUrl,
+    this.loginPcUrl,
   });
 
   final AuthSession session;
@@ -27,6 +30,9 @@ class NativeXrxsPCPage extends StatefulWidget {
   final ValueChanged<TaskShellChrome>? onChromeChanged;
   final String? loginSid;
   final String? loginRole;
+  final String? loginPage;
+  final String? loginUrl;
+  final String? loginPcUrl;
 
   @override
   State<NativeXrxsPCPage> createState() => _NativeXrxsPCPageState();
@@ -98,6 +104,9 @@ class _NativeXrxsPCPageState extends State<NativeXrxsPCPage> {
       final login = await _service.fetchPcLoginUrl(
         sid: widget.loginSid,
         role: widget.loginRole,
+        page: widget.loginPage,
+        url: widget.loginUrl,
+        pcUrl: widget.loginPcUrl,
       );
       if (!mounted) return;
       final opened = await _service.openInSystemBrowser(login);

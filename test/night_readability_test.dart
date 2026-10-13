@@ -95,11 +95,11 @@ void main() {
       await tester.pumpAndSettle();
       final markdown = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
       final color = markdown.styleSheet!.p!.color!;
-      final nova = tester.widget<SelectableText>(
+      final nova = tester.widget<Text>(
         find
             .descendant(
               of: find.byType(NovaMarkdownBody),
-              matching: find.byType(SelectableText),
+              matching: find.byType(Text),
             )
             .first,
       );

@@ -27,6 +27,7 @@ import '../meeting/native_meeting_models.dart';
 import '../meeting/native_meeting_service.dart';
 import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
+import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_service.dart';
 import '../qianji/digital_auto/digital_employee_service.dart';
 import '../shell/dunes_toast.dart';
@@ -48,6 +49,7 @@ import 'nova_source_scope.dart';
 import 'nova_stream_parser.dart';
 import 'nova_web_storage.dart';
 import 'nova_welcome_view.dart';
+import 'nova_deliverable.dart';
 import 'nova_widgets.dart';
 import 'voice_call/tau_voice_call_page.dart';
 
@@ -4174,6 +4176,52 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     return true;
   }
 
+  Future<void> _copyAssistantReply(NativeNovaMessage m) async {
+    final value = novaAssistantCopyText(m.text);
+    if (value.isEmpty) {
+      showDunesToast(context, '暂无可复制内容');
+      return;
+    }
+    try {
+      await Clipboard.setData(ClipboardData(text: value));
+      if (mounted) showDunesToast(context, '已复制');
+    } catch (_) {
+      if (mounted) {
+        showDunesToast(context, '复制失败，请重试', kind: DunesToastKind.error);
+      }
+    }
+  }
+
+  Future<void> _forwardAssistantReply(NativeNovaMessage m) async {
+    final value = novaAssistantCopyText(m.text);
+    if (value.isEmpty) {
+      showDunesToast(context, '暂无可转发内容');
+      return;
+    }
+    final conversationId = await showConversationPickerSheet(
+      context: context,
+      service: _avatarService,
+      title: '转发到 IM',
+    );
+    if (conversationId == null || conversationId <= 0 || !mounted) return;
+    try {
+      await _avatarService.sendText(
+        conversationId,
+        value,
+        payload: const <String, dynamic>{'forwardedFromNova': true},
+      );
+      if (mounted) showDunesToast(context, '已转发到会话');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          '转发失败：${friendlyErrorText(e, fallback: '请稍后重试')}',
+          kind: DunesToastKind.error,
+        );
+      }
+    }
+  }
+
   Widget _buildMessageRow(NativeNovaMessage m) {
     final mine = m.role == 'user';
     final time = m.isWelcome ? '' : novaMsgTimeLabel(m.createdAt);
@@ -4215,6 +4263,12 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           ragUsed: m.ragUsed,
           onResend: _canResendUserMessage(m)
               ? () => unawaited(_resendUserMessage(m))
+              : null,
+          onCopyReply: !mine && !thinking && !m.streaming
+              ? () => unawaited(_copyAssistantReply(m))
+              : null,
+          onForwardReply: !mine && !thinking && !m.streaming
+              ? () => unawaited(_forwardAssistantReply(m))
               : null,
         ),
       ),

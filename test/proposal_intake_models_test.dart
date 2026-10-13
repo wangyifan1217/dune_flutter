@@ -5786,6 +5786,20 @@ void main() {
 
       expect(proposalIntakeFinanceLineItemsReviewed(rowOf(items())), isTrue);
       expect(
+        proposalIntakeFinanceLineItemsReviewed(
+          rowOf({...items()}..remove('operatingCost')),
+        ),
+        isTrue,
+      );
+      expect(
+        proposalIntakeTaskRemainingCount(
+          'review_finance',
+          {'financeItems': {...items()}..remove('operatingCost')},
+          form: rowOf(items()).form,
+        ),
+        0,
+      );
+      expect(
         proposalIntakeFinanceLineItemsReviewed(rowOf(items(settle: false))),
         isFalse,
       );

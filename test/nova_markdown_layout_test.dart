@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dunes_app/features/nova/nova_deliverable.dart';
+import 'package:dunes_app/features/nova/nova_markdown.dart';
 
 void main() {
   group('normalizeNovaMarkdownLayout', () {
@@ -57,5 +59,23 @@ void main() {
         '明天适合出门\n- **天气：**多云\n- **气温：**23℃~29℃\n- **降水：**约6%',
       );
     });
+  });
+
+  testWidgets('inline code stays real text so a partial selection can copy it', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: NovaMarkdownBody(text: '请看 `订单号` 再继续')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SelectableText), findsNothing);
+    final rich = tester.widget<Text>(find.byType(Text).first);
+    final plain = rich.textSpan!.toPlainText();
+    expect(plain, contains('订单号'));
+    expect(plain, isNot(contains('`')));
+    expect(plain, isNot(contains('\uFFFC')));
   });
 }

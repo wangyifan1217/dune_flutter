@@ -11,6 +11,8 @@ class XrxsChatCard {
     this.statusLabel = '待审批',
     this.eventType = '',
     this.roleHint = 'approver',
+    this.url = '',
+    this.pcUrl = '',
   });
 
   final String sid;
@@ -19,8 +21,12 @@ class XrxsChatCard {
   final String statusLabel;
   final String eventType;
   final String roleHint;
+  final String url;
+  final String pcUrl;
 
-  bool get canOpenDetail => sid.trim().isNotEmpty;
+  bool get opensAttendanceConfirm => eventType == 'attendance_confirm';
+
+  bool get canOpenDetail => sid.trim().isNotEmpty || opensAttendanceConfirm;
 
   static XrxsChatCard? fromPayload(Map<String, dynamic>? payload) {
     if (payload == null) return null;
@@ -40,6 +46,8 @@ class XrxsChatCard {
       statusLabel: '${map['statusLabel'] ?? ''}'.trim(),
       eventType: '${map['eventType'] ?? ''}'.trim(),
       roleHint: role.isEmpty ? 'approver' : role,
+      url: '${map['url'] ?? ''}'.trim(),
+      pcUrl: '${map['pcUrl'] ?? ''}'.trim(),
     );
   }
 }

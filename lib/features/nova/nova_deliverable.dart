@@ -123,6 +123,14 @@ String stripNovaToolCallLeak(String text) {
   return s.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
 }
 
+/// 复制/转发用的正文：去掉工具调用泄漏，与气泡里实际显示的文字一致。
+String novaAssistantCopyText(String body) {
+  final prep = prepareNovaAssistantBody(body);
+  final shown = prep.raw.trim();
+  if (shown.isNotEmpty) return shown;
+  return stripNovaToolCallLeak(prep.toolRaw).trim();
+}
+
 ({String raw, String toolRaw}) prepareNovaAssistantBody(String body) {
   final split = splitNovaReasoningReply(body, finalPass: true);
   final reply = stripHermesProgressLines(

@@ -56,6 +56,9 @@ class NativeXrxsH5Page extends StatefulWidget {
     this.onChromeChanged,
     this.loginSid,
     this.loginRole,
+    this.loginPage,
+    this.loginUrl,
+    this.loginPcUrl,
   });
 
   final AuthSession session;
@@ -63,9 +66,12 @@ class NativeXrxsH5Page extends StatefulWidget {
   final VoidCallback? onBack;
   final ValueChanged<TaskShellChrome>? onChromeChanged;
 
-  /// 可选：免登直达审批详情（见 geturl redirectUrlType）。
+  /// 可选：免登直达审批详情或考勤确认（见 geturl redirectUrlType）。
   final String? loginSid;
   final String? loginRole;
+  final String? loginPage;
+  final String? loginUrl;
+  final String? loginPcUrl;
 
   @override
   State<NativeXrxsH5Page> createState() => _NativeXrxsH5PageState();
@@ -223,6 +229,9 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
       final login = await _service.fetchH5LoginUrl(
         sid: widget.loginSid,
         role: widget.loginRole,
+        page: widget.loginPage,
+        url: widget.loginUrl,
+        pcUrl: widget.loginPcUrl,
       );
       if (!mounted) return;
       if (kIsWeb) {

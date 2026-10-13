@@ -216,6 +216,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   int? _driveTargetItemId;
   String? _xrxsLoginSid;
   String? _xrxsLoginRole;
+  String? _xrxsLoginPage;
+  String? _xrxsLoginUrl;
+  String? _xrxsLoginPcUrl;
   String? _ssoAppKey;
   String _ssoAppTitle = '';
   ApprovalAssistantPickMode _approvalAssistantPickMode =
@@ -3102,16 +3105,32 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onBack: () => _leaveChatToInbox(clearSelection: true),
       onConversationRead: _handleConversationRead,
       onOpenHome: () => _openXrxsPortal(),
-      onOpenDetail: (sid, role) => _openXrxsPortal(sid: sid, role: role),
+      onOpenDetail: (sid, role, {page = '', url = '', pcUrl = ''}) =>
+          _openXrxsPortal(
+            sid: sid,
+            role: role,
+            page: page,
+            url: url,
+            pcUrl: pcUrl,
+          ),
     );
   }
 
   /// APP：内嵌 XR1 WebView；PC 桌面：XR1 取免登后系统浏览器打开。
-  void _openXrxsPortal({String? sid, String? role}) {
+  void _openXrxsPortal({
+    String? sid,
+    String? role,
+    String? page,
+    String? url,
+    String? pcUrl,
+  }) {
     _markUserLeftChat();
     setState(() {
       _xrxsLoginSid = sid?.trim().isEmpty == true ? null : sid?.trim();
       _xrxsLoginRole = role?.trim().isEmpty == true ? null : role?.trim();
+      _xrxsLoginPage = page?.trim().isEmpty == true ? null : page?.trim();
+      _xrxsLoginUrl = url?.trim().isEmpty == true ? null : url?.trim();
+      _xrxsLoginPcUrl = pcUrl?.trim().isEmpty == true ? null : pcUrl?.trim();
     });
     widget.navigation.go('XR1');
   }
@@ -3460,7 +3479,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onConversationRead: _handleConversationRead,
             onOpenHome: () => _openXrxsPortal(),
-            onOpenDetail: (sid, role) => _openXrxsPortal(sid: sid, role: role),
+            onOpenDetail: (sid, role, {page = '', url = '', pcUrl = ''}) =>
+                _openXrxsPortal(
+                  sid: sid,
+                  role: role,
+                  page: page,
+                  url: url,
+                  pcUrl: pcUrl,
+                ),
           ),
         );
       case _DualChatKind.weeklySummary:
@@ -4438,7 +4464,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         final xrxsKey = ValueKey<String>(
           'xrxs-${widget.navigation.history.length}-'
           '${widget.navigation.history.where((e) => e == 'XR1').length}-'
-          '${_xrxsLoginSid ?? ''}-${_xrxsLoginRole ?? ''}',
+          '${_xrxsLoginSid ?? ''}-${_xrxsLoginRole ?? ''}-'
+          '${_xrxsLoginPage ?? ''}-${_xrxsLoginUrl ?? ''}-${_xrxsLoginPcUrl ?? ''}',
         );
         void xrxsBack() {
           if (widget.navigation.history.contains('XA1')) {
@@ -4459,6 +4486,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             onBack: xrxsBack,
             loginSid: _xrxsLoginSid,
             loginRole: _xrxsLoginRole,
+            loginPage: _xrxsLoginPage,
+            loginUrl: _xrxsLoginUrl,
+            loginPcUrl: _xrxsLoginPcUrl,
           );
         }
         return NativeXrxsH5Page(
@@ -4468,6 +4498,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onBack: xrxsBack,
           loginSid: _xrxsLoginSid,
           loginRole: _xrxsLoginRole,
+          loginPage: _xrxsLoginPage,
+          loginUrl: _xrxsLoginUrl,
+          loginPcUrl: _xrxsLoginPcUrl,
         );
       case 'AM1':
         final amKey = ValueKey<String>(

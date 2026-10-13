@@ -16,6 +16,7 @@ class NovaMarkdownBody extends StatelessWidget {
     this.streaming = false,
     this.mediaResolver,
     this.documentPreview = false,
+    this.manageSelection = true,
   });
 
   final String text;
@@ -24,6 +25,9 @@ class NovaMarkdownBody extends StatelessWidget {
 
   /// 全文档预览（知识库 / Nova 附件 MD）：弱化链接样式，避免满屏下划线。
   final bool documentPreview;
+
+  /// 会话气泡外层已经包了 SelectionArea 时关掉，避免两层选区抢节选复制。
+  final bool manageSelection;
 
   static TextStyle _documentPreviewStyle(BuildContext context) => TextStyle(
     fontFamily: 'Noto Sans SC',
@@ -104,10 +108,12 @@ class NovaMarkdownBody extends StatelessWidget {
           : const SizedBox.shrink();
     }
 
-    return Column(
+    final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: widgets,
     );
+    if (!manageSelection) return body;
+    return SelectionArea(child: body);
   }
 
   List<Widget> _renderInlineSegment(
@@ -559,7 +565,7 @@ class NovaCodeBlock extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-            child: SelectableText(
+            child: Text(
               code + (partial ? '▍' : ''),
               style: DunesTypography.mono(
                 fontSize: 12,
@@ -765,7 +771,9 @@ class _NovaMarkdownInline extends StatelessWidget {
     final spans = <InlineSpan>[];
     _parseInline(text, spans, context);
     final span = TextSpan(style: _baseStyle(context), children: spans);
-    return SelectableText.rich(span);
+    // 会话气泡外层已有 SelectionArea。这里再用 SelectableText 会抢选区，
+    // 节选后复制得到整段或错位文本。
+    return Text.rich(span);
   }
 
   Widget _buildWithImageWidgets(BuildContext context) {
@@ -859,35 +867,19 @@ class _NovaMarkdownInline extends StatelessWidget {
           ),
         );
       } else if (token.startsWith('`') && token.endsWith('`')) {
+        // 行内代码必须是真实文字。WidgetSpan 在选区里会变成占位符，节选复制会错位。
         out.add(
-          WidgetSpan(
-            alignment: PlaceholderAlignment.baseline,
-            baseline: TextBaseline.alphabetic,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              margin: const EdgeInsets.symmetric(horizontal: 1),
-              decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  const Color(0x142F5D62),
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: DunesColors.resolve(
-                    context,
-                    const Color(0x1F2F5D62),
-                    role: DunesColorRole.border,
-                  ),
-                ),
-              ),
-              child: Text(
-                token.substring(1, token.length - 1),
-                style: DunesTypography.mono(
-                  fontSize: 11.5,
-                  color: DunesColors.resolve(context, DunesColors.accentDeep),
-                  context: context,
-                ),
+          TextSpan(
+            text: token.substring(1, token.length - 1),
+            style: DunesTypography.mono(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.accentDeep),
+              context: context,
+            ).copyWith(
+              backgroundColor: DunesColors.resolve(
+                context,
+                const Color(0x142F5D62),
+                role: DunesColorRole.surface,
               ),
             ),
           ),

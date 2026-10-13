@@ -14564,12 +14564,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   ///
   /// 整页遮罩的问题是把用户刚点的那个期间条也盖住了 —— 手指刚离开，
   /// 眼前就是一整块白和一个大 logo，既看不到「点中了哪个」，也点不了下一个。
-  /// 首次进入（没有旧数据）和二级页仍走原来的整页遮罩。
+  /// 一级和已经打开的二三级都留在当前滚动位置。首次进入（没有旧数据）
+  /// 仍走整页遮罩。
   bool get _softReloading =>
       lighthouseSoftReloadKeepsContent &&
       _loading &&
       _bundle != null &&
-      _detailKey == null &&
       _metricPageKey == null &&
       !_biViewOpen;
 
@@ -16084,6 +16084,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
+  /// 人停在二级 / 三级时换日期，摘要会换成一份空详情的新包。
+  /// 把当前实体的详情留住，列表才不会被卸掉再从顶部长出来。
+  LighthouseDataBundle _retainOpenDetail(LighthouseDataBundle next) {
+    if (_detailKey == null) return next;
+    final prev = _bundle;
+    if (prev == null) return next;
+    return next.copyWith(
+      productDetail: prev.productDetail,
+      supplyDetail: prev.supplyDetail,
+      channelDetail: prev.channelDetail,
+      peopleDetail: prev.peopleDetail,
+    );
+  }
+
   Future<void> _load() async {
     final requestedPeriod = _period;
     final requestedOffset = _periodOffset;
@@ -16136,7 +16150,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       if (mounted && stillCurrent()) {
         setState(() {
           _splitCacheKey = cacheKey;
-          _bundle = LighthouseDataBundle.empty().withSummary(summary);
+          _bundle = _retainOpenDetail(
+            LighthouseDataBundle.empty().withSummary(summary),
+          );
           _loadError = null;
           _loading = false;
           _loadedTabs.clear();
@@ -16194,7 +16210,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         if (mounted && stillCurrent()) {
           setState(() {
             _splitCacheKey = cacheKey;
-            _bundle = bundle;
+            _bundle = _retainOpenDetail(bundle);
             _loadedTabs
               ..clear()
               ..addAll(const ['product', 'supply', 'channel']);
@@ -25198,7 +25214,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         _detailType = null;
       }
       _resetDetailSkuSearch();
-      _resetDetailDrill();
+      // 人还在二级 / 三级里：别拆掉当前这一层。拆了路由键会变，
+      // 整页重建，滚动位置回到顶部。新周期的数到了再原地换。
+      if (!wasInDetail) _resetDetailDrill();
       _closeMetricPage();
       _rowsCacheKey = '';
       _rowsCache = null;
@@ -25836,7 +25854,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         _detailType = null;
       }
       _resetDetailSkuSearch();
-      _resetDetailDrill();
+      if (!wasInDetail) _resetDetailDrill();
       _closeMetricPage();
       _rowsCacheKey = '';
       _rowsCache = null;
@@ -46902,19 +46920,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ],
           ),
         ),
+        // 日 / 周 / 月 / 季 / 年 与一级一样钉在滚动区外面。
+        // 二级、三级、产品三级共用这一页，往下看账本时日期不跟着走。
+        _buildPinnedPeriodBar(),
 
         Expanded(
-          child: ListView(
-            padding: EdgeInsets.only(bottom: _bottomNavScrollPadding(context)),
-            children: [
-              const SizedBox(height: 10),
-              // ── Detail 期间条 —— 与一级同款下划线 tab（含实例选择）
-              Padding(
-                padding: const EdgeInsets.fromLTRB(22, 0, 22, 10),
-                child: _buildPeriodBar(),
-              ),
-              const SizedBox(height: 4),
-              // ── Hero：与一级同壳同版式；数值取详情 payload ──────────────
+          child: _softReloadDim(
+            _LhPinnedScrollShade(
+              child: ListView(
+                padding: EdgeInsets.only(
+                  bottom: _bottomNavScrollPadding(context),
+                ),
+                children: [
+                  // ── Hero：与一级同壳同版式；数值取详情 payload ──────────────
               _buildHeroShell(
                 child: _buildHero(
                   totalsOverride: _heroTotalsFromRow(summaryEntity),
@@ -47091,6 +47109,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ],
           ),
         ),
+        ),
+        ),
       ],
     );
   }
@@ -47154,14 +47174,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ],
           ),
         ),
+        _buildPinnedPeriodBar(),
 
         Expanded(
-          child: ListView(
-            padding: EdgeInsets.only(bottom: _bottomNavScrollPadding(context)),
-            children: [
-              const SizedBox(height: 14),
-
-              // ── SKU 汇总卡 ────────────────────────────────────────────────
+          child: _softReloadDim(
+            _LhPinnedScrollShade(
+              child: ListView(
+                padding: EdgeInsets.only(
+                  bottom: _bottomNavScrollPadding(context),
+                ),
+                children: [
+                  // ── SKU 汇总卡 ────────────────────────────────────────────────
               Container(
                 margin: const EdgeInsets.fromLTRB(22, 0, 22, 0),
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 11),
@@ -47321,6 +47344,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               _buildFooter(),
             ],
           ),
+        ),
+        ),
         ),
       ],
     );
@@ -50841,6 +50866,62 @@ double _ledgerColW(double w) => (72 * _lhLedgerScale(w)).roundToDouble();
 /// 四个重点指标改为 2×2 后，左栏可放宽到 35%，让常见产品名优先单行。
 double _ledgerPinnedW(double w, {required String tab}) =>
     lighthouseLedgerPinnedWidthFor(w, tab: tab);
+
+/// 钉住的日期条底下：列表滚过时浮出一道淡紫阴影，和一级页同一套。
+class _LhPinnedScrollShade extends StatefulWidget {
+  const _LhPinnedScrollShade({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_LhPinnedScrollShade> createState() => _LhPinnedScrollShadeState();
+}
+
+class _LhPinnedScrollShadeState extends State<_LhPinnedScrollShade> {
+  bool _scrolled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        if (n.metrics.axis != Axis.vertical || n.depth != 0) return false;
+        final next = n.metrics.pixels > 2;
+        if (next != _scrolled) setState(() => _scrolled = next);
+        return false;
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(child: widget.child),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 10,
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: _scrolled ? 1 : 0,
+                duration: const Duration(milliseconds: 160),
+                child: const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0x165A458F),
+                        Color(0x005A458F),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// 一条物理行 = 冻结首列 + 指标网格。
 /// v17 起不再横滚：网格自适应铺满剩余宽度，行高由调用方按网格行数算好传入。

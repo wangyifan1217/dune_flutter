@@ -5138,7 +5138,6 @@ const kProposalFinanceLineReviewKeys = <String>[
   'generalBusinessAccount',
   'prepaidAccount',
   'financeRemark',
-  'operatingCost',
   'proposalSubtitle',
 ];
 

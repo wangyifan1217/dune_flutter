@@ -9,6 +9,7 @@ import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'native_nova_service.dart';
 import 'nova_icon.dart';
+import 'nova_deliverable.dart';
 import 'nova_markdown.dart';
 import 'nova_markdown_preview.dart';
 import 'nova_media.dart';
@@ -1646,6 +1647,8 @@ class NovaC4MessageRow extends StatelessWidget {
     this.highlighted = false,
     this.ragUsed = false,
     this.onResend,
+    this.onCopyReply,
+    this.onForwardReply,
   });
 
   final bool mine;
@@ -1671,6 +1674,8 @@ class NovaC4MessageRow extends StatelessWidget {
   final bool highlighted;
   final bool ragUsed;
   final VoidCallback? onResend;
+  final VoidCallback? onCopyReply;
+  final VoidCallback? onForwardReply;
 
   bool _isImageAttachment(NovaMessageAttachment a) {
     final k = a.kind.toUpperCase();
@@ -1847,6 +1852,7 @@ class NovaC4MessageRow extends StatelessWidget {
             text: text,
             streaming: streaming,
             mediaResolver: resolver,
+            manageSelection: false,
           ),
           if (attachments.isNotEmpty && resolver != null)
             ...attachments.map(
@@ -1919,14 +1925,14 @@ class NovaC4MessageRow extends StatelessWidget {
     );
   }
 
-  /// 交给系统原生选择菜单处理长按复制/选取：iOS 显示 Cupertino 文本菜单，
-  /// Android 和 Web 则使用各自平台的默认选择控件。额外提供“复制全部”，
-  /// 不必拖拽选完整条 NOVA 回复。
+  /// 选区由这一层 SelectionArea 独占。菜单里的「复制」只复制当前节选，
+  /// 「复制全部」放在后面，避免节选后一点就复制整段。
   Widget _wrapCopyable(BuildContext context, Widget bubble, String copyText) {
     if (copyText.trim().isEmpty) return bubble;
     return SelectionArea(
       contextMenuBuilder: (menuContext, selectableRegionState) {
         final items = <ContextMenuButtonItem>[
+          ...selectableRegionState.contextMenuButtonItems,
           ContextMenuButtonItem(
             label: '复制全部',
             onPressed: () async {
@@ -1942,7 +1948,6 @@ class NovaC4MessageRow extends StatelessWidget {
               }
             },
           ),
-          ...selectableRegionState.contextMenuButtonItems,
         ];
         return AdaptiveTextSelectionToolbar.buttonItems(
           anchors: selectableRegionState.contextMenuAnchors,
@@ -1958,8 +1963,20 @@ class NovaC4MessageRow extends StatelessWidget {
       ? text
       : '';
 
-  String get _aiCopyText =>
-      !thinking && kind.toUpperCase() == 'TEXT' ? text : '';
+  String get _aiCopyText {
+    if (thinking) return '';
+    // 小饕回复的 kind 是 AI_ASSISTANT，不是 TEXT。只排除纯媒体消息。
+    final upper = kind.toUpperCase();
+    if (upper == 'IMAGE' || upper == 'AUDIO' || upper == 'FILE') return '';
+    return novaAssistantCopyText(text);
+  }
+
+  bool get _showReplyActions =>
+      !mine &&
+      !thinking &&
+      !streaming &&
+      _aiCopyText.trim().isNotEmpty &&
+      (onCopyReply != null || onForwardReply != null);
 
   Widget _buildUserAvatar(BuildContext context) {
     final initial = userInitial.isNotEmpty
@@ -2125,36 +2142,105 @@ class NovaC4MessageRow extends StatelessWidget {
         children: [
           _buildAiAvatar(context),
           Flexible(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              decoration: highlighted
-                  ? BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: DunesColors.resolve(
-                          context,
-                          const Color(0xFF6B3FE2),
-                          role: DunesColorRole.border,
-                        ),
-                        width: 1.8,
-                      ),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x1F6B3FE2),
-                          blurRadius: 0,
-                          spreadRadius: 3,
-                        ),
-                      ],
-                    )
-                  : null,
-              child: _wrapCopyable(
-                context,
-                NovaC4AiBubble(child: _buildAiBubbleContent(context)),
-                _aiCopyText,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  decoration: highlighted
+                      ? BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFF6B3FE2),
+                              role: DunesColorRole.border,
+                            ),
+                            width: 1.8,
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x1F6B3FE2),
+                              blurRadius: 0,
+                              spreadRadius: 3,
+                            ),
+                          ],
+                        )
+                      : null,
+                  child: _wrapCopyable(
+                    context,
+                    NovaC4AiBubble(child: _buildAiBubbleContent(context)),
+                    _aiCopyText,
+                  ),
+                ),
+                if (_showReplyActions)
+                  _NovaReplyIconActions(
+                    onCopy: onCopyReply,
+                    onForward: onForwardReply,
+                  ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NovaReplyIconActions extends StatelessWidget {
+  const _NovaReplyIconActions({this.onCopy, this.onForward});
+
+  final VoidCallback? onCopy;
+  final VoidCallback? onForward;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (onCopy != null)
+            _NovaReplyIconButton(
+              icon: Icons.copy_outlined,
+              tooltip: '复制',
+              onTap: onCopy!,
+            ),
+          if (onForward != null)
+            _NovaReplyIconButton(
+              icon: Icons.shortcut_outlined,
+              tooltip: '转发到 IM',
+              onTap: onForward!,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NovaReplyIconButton extends StatelessWidget {
+  const _NovaReplyIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = DunesColors.resolve(context, const Color(0xFF86909C));
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(5),
+          child: Icon(icon, size: 16, color: color),
+        ),
       ),
     );
   }

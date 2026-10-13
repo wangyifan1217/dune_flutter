@@ -182,6 +182,7 @@ void main() {
     }
     expect(keys, isNot(contains('profit')));
     expect(keys, isNot(contains('margin')));
+    expect(keys, isNot(contains('operatingCost')));
   });
 
   testWidgets('finance board hides estimate amounts and lists products', (

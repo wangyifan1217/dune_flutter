@@ -130,8 +130,14 @@ class NativeXrxsAssistantPage extends StatefulWidget {
   /// 打开薪人薪事首页（XR1：APP 内嵌 H5 / PC 系统浏览器）。
   final VoidCallback onOpenHome;
 
-  /// 打开审批详情；APP 走内嵌 XR1，PC 可外跳系统浏览器。
-  final void Function(String sid, String role)? onOpenDetail;
+  /// 打开审批详情或考勤确认；APP 走内嵌 XR1，PC 可外跳系统浏览器。
+  final void Function(
+    String sid,
+    String role, {
+    String page,
+    String url,
+    String pcUrl,
+  })? onOpenDetail;
   final bool showBackButton;
   final VoidCallback? onBack;
   final ValueChanged<int>? onConversationRead;
@@ -303,7 +309,13 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
     }
     final onOpenDetail = widget.onOpenDetail;
     if (onOpenDetail != null) {
-      onOpenDetail(card.sid, card.roleHint);
+      onOpenDetail(
+        card.sid,
+        card.roleHint,
+        page: card.opensAttendanceConfirm ? 'attendance_confirm' : '',
+        url: card.url,
+        pcUrl: card.pcUrl,
+      );
       return;
     }
     // 兜底：无宿主回调时 PC 外跳；APP 仍应尽量走 XR1 内嵌。
@@ -321,6 +333,9 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
       final login = await _xrxs.fetchPcLoginUrl(
         sid: card.sid,
         role: card.roleHint,
+        page: card.opensAttendanceConfirm ? 'attendance_confirm' : null,
+        url: card.url,
+        pcUrl: card.pcUrl,
       );
       if (!mounted) return;
       final opened = await _xrxs.openInSystemBrowser(login);
@@ -357,7 +372,7 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
               title: '薪人薪事',
               subtitle: _loading
                   ? '加载中…'
-                  : (kXrxsAssistantStaticPreview ? '静态预览' : '审批通知'),
+                  : (kXrxsAssistantStaticPreview ? '静态预览' : '审批与考勤'),
               onBack: widget.onBack ?? () => Navigator.maybePop(context),
               showBackButton: widget.showBackButton,
               leadingAvatar: const XrxsAssistantAvatar(size: 45),
@@ -411,7 +426,7 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
     if (_messages.isEmpty) {
       return Center(
         child: Text(
-          '薪人薪事审批待办与通知会显示在这里',
+          '薪人薪事的审批和考勤确认会显示在这里',
           style: TextStyle(
             color: DunesColors.resolve(context, DunesColors.text3),
           ),

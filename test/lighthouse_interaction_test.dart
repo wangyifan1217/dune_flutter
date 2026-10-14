@@ -415,6 +415,32 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets('supply asset bag stays compact and tappable at phone width', (
+    tester,
+  ) async {
+    await mountPage(tester);
+    await tester.tap(find.text('供给方').first);
+    await tester.pump(const Duration(milliseconds: 800));
+
+    final bag = find.byTooltip('总资产').first;
+    expect(bag, findsOneWidget);
+    expect(tester.getSize(bag).width, lessThan(26));
+    final rowCard = find
+        .ancestor(of: bag, matching: find.byType(LighthouseShareableCard))
+        .first;
+    final rowTitle = tester.widget<LighthouseShareableCard>(rowCard).title;
+    final name = find
+        .descendant(of: rowCard, matching: find.text(rowTitle))
+        .first;
+    expect(
+      (tester.getTopLeft(bag).dy - tester.getTopLeft(name).dy).abs(),
+      lessThan(22),
+    );
+    await tester.tap(bag);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.bySemanticsLabel('收起总资产'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('pull refresh reuses the period-switch soft loading animation', (
     tester,
   ) async {

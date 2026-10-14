@@ -2832,6 +2832,11 @@ const lighthouseFundPoolInvoiceSection = LighthouseFundPoolSectionSpec(
   ],
 );
 
+/// 卡上用业务名称（已入账 / 待入账 / 期末应收返利 / 在手券 / 同步在途 / 已预支 /
+/// 可动用额度 / 券资产 / 期末预付 / 对账差额 / 账面资产），对应原来的
+/// 现金·监管户 / 现金·在途 / 应收资金 / 库存券 / 同步券 / 预支券 /
+/// 资金池可用 / 库存/同步券 / 期末预付款余额 / 系统差异 / 资产合计。
+///
 /// 资产卡 = 存量 + 增量。
 ///
 /// 原来只有资产合计一个数，和左边四格的对账卡并排，整张卡三分之二是空的。
@@ -2842,15 +2847,15 @@ const lighthouseFundPoolAssetsSection = LighthouseFundPoolSectionSpec(
   kind: LighthouseFundPoolSectionKind.assets,
   title: '资产',
   metrics: [
-    LighthouseFundPoolMetricSpec('totalAssets', '资产合计'),
-    LighthouseFundPoolMetricSpec('profitMonth', '本月新增利润'),
-    LighthouseFundPoolMetricSpec('profitDay', '本日新增利润'),
+    LighthouseFundPoolMetricSpec('totalAssets', '账面资产'),
+    LighthouseFundPoolMetricSpec('profitMonth', '本月利润'),
+    LighthouseFundPoolMetricSpec('profitDay', '今日利润'),
   ],
   flowStartIndex: 1,
 );
 
 /// 分隔线上的小字。用「期间新增」不用「流量」—— 会计名词对着数字读没人懂。
-const String lighthouseFundPoolFlowDividerLabel = '期间新增';
+const String lighthouseFundPoolFlowDividerLabel = '期间利润';
 
 /// 按「增长」显示的格子：数字前挂 ↑ / ↓，正负吃涨跌色。
 ///
@@ -2862,9 +2867,9 @@ const lighthouseFundPoolFundsSection = LighthouseFundPoolSectionSpec(
   kind: LighthouseFundPoolSectionKind.funds,
   title: '资金',
   metrics: [
-    LighthouseFundPoolMetricSpec('regulatoryAccountBalance', '现金 · 监管户'),
-    LighthouseFundPoolMetricSpec('inTransitFunds', '现金 · 在途'),
-    LighthouseFundPoolMetricSpec('endingReceivableRebate', '应收资金'),
+    LighthouseFundPoolMetricSpec('regulatoryAccountBalance', '已入账'),
+    LighthouseFundPoolMetricSpec('inTransitFunds', '待入账'),
+    LighthouseFundPoolMetricSpec('endingReceivableRebate', '期末应收返利'),
     // 占位：口径和数据源都还没定，先把格子留出来，取不到值显示「—」。
     LighthouseFundPoolMetricSpec('turnoverDays', '周转周期'),
   ],
@@ -2899,9 +2904,9 @@ const lighthouseFundPoolVouchersSection = LighthouseFundPoolSectionSpec(
   kind: LighthouseFundPoolSectionKind.vouchers,
   title: '券',
   metrics: [
-    LighthouseFundPoolMetricSpec('inventoryVoucherBalance', '库存券'),
-    LighthouseFundPoolMetricSpec('contractVoucherBalance', '同步券'),
-    LighthouseFundPoolMetricSpec('advanceVoucherBalance', '预支券'),
+    LighthouseFundPoolMetricSpec('inventoryVoucherBalance', '在手券'),
+    LighthouseFundPoolMetricSpec('contractVoucherBalance', '同步在途'),
+    LighthouseFundPoolMetricSpec('advanceVoucherBalance', '已预支'),
   ],
 );
 
@@ -2909,10 +2914,10 @@ const lighthouseFundPoolReconSection = LighthouseFundPoolSectionSpec(
   kind: LighthouseFundPoolSectionKind.recon,
   title: '期末预付款对账',
   metrics: [
-    LighthouseFundPoolMetricSpec('fundPoolBalance', '资金池可用'),
-    LighthouseFundPoolMetricSpec('stockAndSyncVouchers', '库存/同步券'),
-    LighthouseFundPoolMetricSpec('systemDifference', '系统差异'),
-    LighthouseFundPoolMetricSpec('endingPrepaymentBalance', '期末预付款余额'),
+    LighthouseFundPoolMetricSpec('fundPoolBalance', '可动用额度'),
+    LighthouseFundPoolMetricSpec('stockAndSyncVouchers', '券资产'),
+    LighthouseFundPoolMetricSpec('systemDifference', '对账差额'),
+    LighthouseFundPoolMetricSpec('endingPrepaymentBalance', '期末预付'),
   ],
 );
 
@@ -4379,8 +4384,8 @@ const lighthouseFundPoolFormulas = <LighthouseFundPoolFormula>[
   LighthouseFundPoolFormula(
     kind: LighthouseFundPoolSectionKind.assets,
     resultKey: 'totalAssets',
-    result: '资产合计',
-    expression: '现金·监管户 + 现金·在途 + 期末预付款余额',
+    result: '账面资产',
+    expression: '已入账 + 待入账 + 期末预付',
     sourceKeys: [
       'regulatoryAccountBalance',
       'inTransitFunds',
@@ -4390,8 +4395,8 @@ const lighthouseFundPoolFormulas = <LighthouseFundPoolFormula>[
   LighthouseFundPoolFormula(
     kind: LighthouseFundPoolSectionKind.recon,
     resultKey: 'systemDifference',
-    result: '系统差异',
-    expression: '期末预付款余额 − 资金池可用 − 库存/同步券 − 应收资金',
+    result: '对账差额',
+    expression: '期末预付 − 可动用额度 − 券资产 − 期末应收返利',
     sourceKeys: [
       'endingPrepaymentBalance',
       'fundPoolBalance',

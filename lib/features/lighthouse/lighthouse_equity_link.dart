@@ -113,6 +113,9 @@ List<LhEquityLink> lighthouseEquityLinksOf(Map<String, dynamic> row) {
   return legacy == null ? const <LhEquityLink>[] : <LhEquityLink>[legacy];
 }
 
+/// 省份名下划线 + 点开「关联权益」气泡的总开关。先关掉：名字不画下划线、点了不弹气泡。
+const bool lighthouseEquityPopoverEnabled = false;
+
 /// 标签二一级列表中的省份统一提供权益气泡入口。
 ///
 /// 下划线表示「可查看关联权益」，不再表示后端一定匹配到了项目；没有匹配项时

@@ -2700,8 +2700,9 @@ class _LhMiniKButton extends StatefulWidget {
 }
 
 class _LhMiniKButtonState extends State<_LhMiniKButton> {
-  static const double _w = 40;
-  static const double _h = 19;
+  // 只剩几根小蜡烛：没有卡片、没有边框、没有角标。
+  static const double _w = 26;
+  static const double _h = 15;
   bool _down = false;
 
   void _setDown(bool v) {
@@ -2714,24 +2715,13 @@ class _LhMiniKButtonState extends State<_LhMiniKButton> {
     final ro = context.findRenderObject();
     Rect? r;
     if (ro is RenderBox && ro.hasSize && ro.attached) {
-      r = ro.localToGlobal(const Offset(0, 3)) & const Size(_w, _h);
+      r = ro.localToGlobal(Offset.zero) & ro.size;
     }
     widget.onTap(r);
   }
 
   @override
   Widget build(BuildContext context) {
-    final surface = DunesColors.resolve(
-      context,
-      Colors.white,
-      role: DunesColorRole.surface,
-    );
-    final edge = DunesColors.resolve(
-      context,
-      const Color(0xFFE2D8F0),
-      role: DunesColorRole.border,
-    );
-    const dur = Duration(milliseconds: 140);
     return Semantics(
       button: true,
       label: '打开 K 线大图',
@@ -2741,97 +2731,104 @@ class _LhMiniKButtonState extends State<_LhMiniKButton> {
         onTapUp: (_) => _setDown(false),
         onTapCancel: () => _setDown(false),
         onTap: _fire,
-        child: SizedBox(
-          width: _w + 4,
-          height: _h + 3,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // 后面那张：淡紫，往右上斜一点。
-              Positioned(
-                left: 3,
-                top: 0,
-                child: AnimatedContainer(
-                  duration: dur,
-                  curve: Curves.easeOut,
-                  width: _w,
-                  height: _h,
-                  transformAlignment: Alignment.bottomLeft,
-                  transform: Matrix4.rotationZ(_down ? 0.11 : 0.06),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFFF1ECFB), Color(0xFFE6DEF6)],
-                    ),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: const Color(0xFFDCD0F0),
-                      width: 0.7,
-                    ),
-                  ),
-                ),
+        child: AnimatedScale(
+          scale: _down ? 0.86 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          child: AnimatedOpacity(
+            opacity: _down ? 0.7 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            child: CustomPaint(
+              size: const Size(_w, _h),
+              painter: _LhMiniCandlesPainter(
+                values: widget.values,
+                loading: widget.loading,
               ),
-              // 前面那张：白卡 + 迷你 K 线。
-              Positioned(
-                left: 0,
-                top: 3,
-                child: AnimatedContainer(
-                  duration: dur,
-                  curve: Curves.easeOut,
-                  width: _w,
-                  height: _h,
-                  transformAlignment: Alignment.center,
-                  transform: _down
-                      ? (Matrix4.identity()
-                          ..setEntry(3, 2, 0.006)
-                          ..rotateX(0.22)
-                          ..scale(0.95, 0.95, 1.0))
-                      : Matrix4.identity(),
-                  decoration: BoxDecoration(
-                    color: surface,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: edge, width: 0.7),
-                    boxShadow: _down
-                        ? [
-                            BoxShadow(
-                              color: _LhPlum.deep.withAlpha(30),
-                              blurRadius: 2,
-                              offset: const Offset(0, 0.5),
-                            ),
-                          ]
-                        : [
-                            BoxShadow(
-                              color: _LhPlum.deep.withAlpha(44),
-                              blurRadius: 6,
-                              spreadRadius: -1,
-                              offset: const Offset(0, 2),
-                            ),
-                            BoxShadow(
-                              color: _LhPlum.deep.withAlpha(22),
-                              blurRadius: 1.5,
-                              offset: const Offset(0, 0.5),
-                            ),
-                          ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(5.4),
-                    child: CustomPaint(
-                      size: const Size(_w, _h),
-                      painter: _LhMiniKPainter(
-                        values: widget.values,
-                        loading: widget.loading,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// 入口用的极简小蜡烛：最近 6 根（开 = 前一天，收 = 当天），涨红跌绿，
+/// 没有底、没有网格、没有均线。26×15 的设计坐标。
+class _LhMiniCandlesPainter extends CustomPainter {
+  const _LhMiniCandlesPainter({required this.values, required this.loading});
+
+  final List<double> values;
+  final bool loading;
+
+  static const int _count = 6;
+  static const double _step = 4.4;
+  static const double _bodyW = 2.6;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 26, size.height / 15);
+    final wick = Paint()
+      ..strokeWidth = 0.8
+      ..strokeCap = StrokeCap.round;
+    final body = Paint();
+    double x(int i, int k) => 26 - 1.6 - (k - 1 - i) * _step;
+
+    void candle(double cx, double top, double bot, Color col) {
+      wick.color = col;
+      body.color = col;
+      canvas.drawLine(
+        Offset(cx, math.max(0.6, top - 1.5)),
+        Offset(cx, math.min(14.4, bot + 1.5)),
+        wick,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(cx - _bodyW / 2, top, cx + _bodyW / 2, bot),
+          const Radius.circular(0.6),
+        ),
+        body,
+      );
+    }
+
+    if (loading || values.length < 3) {
+      const ghost = Color(0xFFDCD3EE);
+      for (var i = 0; i < _count; i++) {
+        final top = 9.2 - i * 1.15;
+        candle(x(i, _count), top, top + 3.2, ghost);
+      }
+    } else {
+      final closes = values.length > _count + 1
+          ? values.sublist(values.length - _count - 1)
+          : values;
+      final k = closes.length - 1;
+      var lo = closes.reduce(math.min);
+      var hi = closes.reduce(math.max);
+      if ((hi - lo).abs() < 1e-9) {
+        lo -= 1;
+        hi += 1;
+      }
+      double y(double v) => 12.6 - (v - lo) / (hi - lo) * 10.2;
+      for (var i = 0; i < k; i++) {
+        final o = closes[i];
+        final c = closes[i + 1];
+        final col = c >= o ? LhKColors.up : LhKColors.down;
+        var top = math.min(y(o), y(c));
+        var bot = math.max(y(o), y(c));
+        if (bot - top < 1.2) {
+          final m = (top + bot) / 2;
+          top = m - 0.6;
+          bot = m + 0.6;
+        }
+        candle(x(i, k), top, bot, col);
+      }
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _LhMiniCandlesPainter old) =>
+      old.loading != loading || !listEquals(old.values, values);
 }
 
 /// 迷你 K 线：在 64×30 的设计坐标里画，再整体缩到实际尺寸。
@@ -2850,9 +2847,15 @@ class _LhMiniKPainter extends CustomPainter {
 
   // 加载中的灰色占位（x, 影线上, 影线下, 实体上, 实体高）。
   static const List<List<double>> _ghost = [
-    [5, 19, 26, 21, 4], [10, 17, 25, 18.5, 5], [15, 18, 24, 19, 3],
-    [20, 14, 22, 15.5, 5], [25, 12, 19, 13, 4], [30, 13, 19, 14, 3.5],
-    [35, 9, 17, 10.5, 5], [40, 7, 14, 8, 4], [45, 5, 11, 6, 3.5],
+    [5, 19, 26, 21, 4],
+    [10, 17, 25, 18.5, 5],
+    [15, 18, 24, 19, 3],
+    [20, 14, 22, 15.5, 5],
+    [25, 12, 19, 13, 4],
+    [30, 13, 19, 14, 3.5],
+    [35, 9, 17, 10.5, 5],
+    [40, 7, 14, 8, 4],
+    [45, 5, 11, 6, 3.5],
   ];
 
   @override
@@ -3195,7 +3198,10 @@ class _LhPopStage extends StatelessWidget {
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
-                                        begin: Alignment(-2.6 + 4.2 * glare, -1),
+                                        begin: Alignment(
+                                          -2.6 + 4.2 * glare,
+                                          -1,
+                                        ),
                                         end: Alignment(-1.6 + 4.2 * glare, 1),
                                         colors: [
                                           Colors.white.withAlpha(0),
@@ -3495,7 +3501,11 @@ class _TrendLinesPainter extends CustomPainter {
         void band(List<double> upper, List<double> lower, Color c) {
           final top = <Offset>[];
           final bot = <Offset>[];
-          for (var i = 0; i < math.min(math.min(upper.length, lower.length), m); i++) {
+          for (
+            var i = 0;
+            i < math.min(math.min(upper.length, lower.length), m);
+            i++
+          ) {
             if (!upper[i].isFinite || !lower[i].isFinite) continue;
             top.add(Offset(xOf(i), yOf(upper[i], heroBounds)));
             bot.add(Offset(xOf(i), yOf(lower[i], heroBounds)));
@@ -3541,9 +3551,10 @@ class _TrendLinesPainter extends CustomPainter {
             if (heroPts[i].isFinite)
               Offset(
                 xOf(i),
-                yOf(heroPts[i], heroBounds)
-                    .clamp(plotTop, plotBottom)
-                    .toDouble(),
+                yOf(
+                  heroPts[i],
+                  heroBounds,
+                ).clamp(plotTop, plotBottom).toDouble(),
               ),
         ];
         if (pts.length >= 2) {
@@ -3551,15 +3562,16 @@ class _TrendLinesPainter extends CustomPainter {
           for (final p in pts.skip(1)) {
             path.lineTo(p.dx, p.dy);
           }
-          if (!dense) canvas.drawPath(
-            path,
-            Paint()
-              ..color = Colors.white
-              ..strokeWidth = 2.4
-              ..style = PaintingStyle.stroke
-              ..strokeCap = StrokeCap.round
-              ..strokeJoin = StrokeJoin.round,
-          );
+          if (!dense)
+            canvas.drawPath(
+              path,
+              Paint()
+                ..color = Colors.white
+                ..strokeWidth = 2.4
+                ..style = PaintingStyle.stroke
+                ..strokeCap = StrokeCap.round
+                ..strokeJoin = StrokeJoin.round,
+            );
           canvas.drawPath(
             path,
             Paint()
@@ -3659,15 +3671,16 @@ class _TrendLinesPainter extends CustomPainter {
           canvas.clipRect(
             Rect.fromLTRB(0, plotTop - 2, size.width, plotBottom + 2),
           );
-          if (!dense) canvas.drawPath(
-            path,
-            Paint()
-              ..color = Colors.white
-              ..strokeWidth = 2.6
-              ..style = PaintingStyle.stroke
-              ..strokeCap = StrokeCap.round
-              ..strokeJoin = StrokeJoin.round,
-          );
+          if (!dense)
+            canvas.drawPath(
+              path,
+              Paint()
+                ..color = Colors.white
+                ..strokeWidth = 2.6
+                ..style = PaintingStyle.stroke
+                ..strokeCap = StrokeCap.round
+                ..strokeJoin = StrokeJoin.round,
+            );
           canvas.drawPath(
             path,
             Paint()
@@ -3705,371 +3718,394 @@ class _TrendLinesPainter extends CustomPainter {
     }
 
     if (!candles) {
-    // ── 2. 主图体积：差额带（核销↔销售）或主线渐变填充 ────────────────────
-    if (altDrawable) {
-      // 「销售 − 核销」带：上缘销售、下缘核销，带宽 = 未核销部分。
-      final alt = series.scaleAlt;
-      final bandN = math.min(solidN, alt.length);
-      if (bandN >= 2) {
-        final top = <Offset>[
-          for (int i = 0; i < bandN; i++)
-            Offset(xOf(i), yOf(alt[i], heroBounds)),
-        ];
-        final bottom = <Offset>[
-          for (int i = 0; i < bandN; i++)
-            Offset(xOf(i), yOf(heroPts[i], heroBounds)),
-        ];
-        final band = Path();
-        _addSmoothPath(band, top);
-        appendSmoothPath(band, bottom.reversed.toList(growable: false));
-        band.close();
-        canvas.drawPath(
-          band,
-          Paint()
-            ..color = heroColor.withAlpha(24)
-            ..style = PaintingStyle.fill,
-        );
-        final altSpec = _trendPaintSpec(
-          series: series,
-          bounds: bounds,
-          colors: colors,
-          index: 4,
-        );
-        drawLine(
-          alt.sublist(0, bandN),
-          altSpec.color,
-          altSpec.range,
-          strokeWidth: 1.0,
-          alpha: 130,
-        );
-      }
-    } else if (heroDrawable && heroSolid.length >= 2) {
-      final offsets = <Offset>[
-        for (int i = 0; i < heroSolid.length; i++)
-          Offset(xOf(i), yOf(heroSolid[i], heroBounds)),
-      ];
-      // 分色时面收在零轴上：赚的部分从线垂到 0，亏的部分从 0 垂到线，
-      // 红绿各自贴着那条分界，而不是都拖到画布底。
-      final baseY = signSplit ? zeroAxisY : plotBottom;
-      final path = Path();
-      _addSmoothPath(path, offsets);
-      path.lineTo(offsets.last.dx, baseY);
-      path.lineTo(offsets.first.dx, baseY);
-      path.close();
-      // v17 · 渐变从「线的最高点」起算而不是画布顶：峰下最浓、
-      // 很快衰到透明，面只是托住线的一层雾，不再是一整块紫。
-      var lineTop = baseY;
-      var lineBottom = baseY;
-      for (final o in offsets) {
-        if (o.dy < lineTop) lineTop = o.dy;
-        if (o.dy > lineBottom) lineBottom = o.dy;
-      }
-      void fillArea(
-        Color c,
-        Rect span, {
-        Rect? clip,
-        bool fadeDownward = true,
-      }) {
-        if (clip != null) {
-          canvas.save();
-          canvas.clipRect(clip);
+      // ── 2. 主图体积：差额带（核销↔销售）或主线渐变填充 ────────────────────
+      if (altDrawable) {
+        // 「销售 − 核销」带：上缘销售、下缘核销，带宽 = 未核销部分。
+        final alt = series.scaleAlt;
+        final bandN = math.min(solidN, alt.length);
+        if (bandN >= 2) {
+          final top = <Offset>[
+            for (int i = 0; i < bandN; i++)
+              Offset(xOf(i), yOf(alt[i], heroBounds)),
+          ];
+          final bottom = <Offset>[
+            for (int i = 0; i < bandN; i++)
+              Offset(xOf(i), yOf(heroPts[i], heroBounds)),
+          ];
+          final band = Path();
+          _addSmoothPath(band, top);
+          appendSmoothPath(band, bottom.reversed.toList(growable: false));
+          band.close();
+          canvas.drawPath(
+            band,
+            Paint()
+              ..color = heroColor.withAlpha(24)
+              ..style = PaintingStyle.fill,
+          );
+          final altSpec = _trendPaintSpec(
+            series: series,
+            bounds: bounds,
+            colors: colors,
+            index: 4,
+          );
+          drawLine(
+            alt.sublist(0, bandN),
+            altSpec.color,
+            altSpec.range,
+            strokeWidth: 1.0,
+            alpha: 130,
+          );
         }
-        final ramp = [c.withAlpha(30), c.withAlpha(8), c.withAlpha(0)];
-        canvas.drawPath(
-          path,
-          Paint()
-            ..shader = LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: fadeDownward ? ramp : ramp.reversed.toList(),
-              stops: const [0.0, 0.55, 1.0],
-            ).createShader(span)
-            ..style = PaintingStyle.fill,
-        );
-        if (clip != null) canvas.restore();
-      }
-
-      if (!signSplit) {
-        fillArea(heroColor, Rect.fromLTRB(0, lineTop, size.width, plotBottom));
-      } else {
-        // 浓在峰 / 谷，淡到零轴。
-        fillArea(
-          earnColor,
-          Rect.fromLTRB(0, lineTop, size.width, zeroAxisY),
-          clip: aboveZero,
-        );
-        fillArea(
-          loseColor,
-          Rect.fromLTRB(0, zeroAxisY, size.width, lineBottom),
-          clip: belowZero,
-          fadeDownward: false,
-        );
-      }
-    }
-
-    // ── 3. 主线 ─────────────────────────────────────────────────────────
-    //   v17 · 质感：旧版是 2.2px 纯色线 + 贴线的浓填充，边缘发虚、像马克笔。
-    //   现在三层：① 往下错 2px 的柔影把线「抬」离纸面；② 白色衬底把线和
-    //   填充切开，边缘利落；③ 主线本身左浅右深的横向渐变 —— 越靠近本期越实，
-    //   视线自然落到末端读数上。
-    if (heroDrawable && heroSolid.length >= 2) {
-      final offsets = <Offset>[
-        for (int i = 0; i < heroSolid.length; i++)
-          Offset(xOf(i), yOf(heroSolid[i], heroBounds)),
-      ];
-      final linePath = Path();
-      _addSmoothPath(linePath, offsets);
-      final x0 = offsets.first.dx;
-      final x1 = math.max(offsets.last.dx, x0 + 1);
-      // 三层照旧：柔影抬起、白衬底切开填充、主线左浅右深。
-      // 分色时整套用同一条路径画两遍，各自裁在零轴的一侧 ——
-      // 影子和白边也跟着裁，接缝落在那条虚线上，不会互相糊。
-      void strokeHero(Color c, {Rect? clip}) {
-        if (clip != null) {
-          canvas.save();
-          canvas.clipRect(clip);
+      } else if (heroDrawable && heroSolid.length >= 2) {
+        final offsets = <Offset>[
+          for (int i = 0; i < heroSolid.length; i++)
+            Offset(xOf(i), yOf(heroSolid[i], heroBounds)),
+        ];
+        // 分色时面收在零轴上：赚的部分从线垂到 0，亏的部分从 0 垂到线，
+        // 红绿各自贴着那条分界，而不是都拖到画布底。
+        final baseY = signSplit ? zeroAxisY : plotBottom;
+        final path = Path();
+        _addSmoothPath(path, offsets);
+        path.lineTo(offsets.last.dx, baseY);
+        path.lineTo(offsets.first.dx, baseY);
+        path.close();
+        // v17 · 渐变从「线的最高点」起算而不是画布顶：峰下最浓、
+        // 很快衰到透明，面只是托住线的一层雾，不再是一整块紫。
+        var lineTop = baseY;
+        var lineBottom = baseY;
+        for (final o in offsets) {
+          if (o.dy < lineTop) lineTop = o.dy;
+          if (o.dy > lineBottom) lineBottom = o.dy;
         }
-        canvas.drawPath(
-          linePath.shift(const Offset(0, 1.6)),
-          Paint()
-            ..color = c.withAlpha(28)
-            ..strokeWidth = 2.8
-            ..style = PaintingStyle.stroke
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0),
-        );
-        canvas.drawPath(
-          linePath,
-          Paint()
-            ..color = Colors.white.withAlpha(188)
-            ..strokeWidth = 3.0
-            ..style = PaintingStyle.stroke
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round,
-        );
-        canvas.drawPath(
-          linePath,
-          Paint()
-            ..shader = LinearGradient(
-              colors: [Color.lerp(c, Colors.white, 0.38)!, c, deepen(c)],
-              stops: const [0.0, 0.6, 1.0],
-            ).createShader(Rect.fromLTRB(x0, 0, x1, size.height))
-            ..strokeWidth = 1.7
-            ..style = PaintingStyle.stroke
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round,
-        );
-        if (clip != null) canvas.restore();
+        void fillArea(
+          Color c,
+          Rect span, {
+          Rect? clip,
+          bool fadeDownward = true,
+        }) {
+          if (clip != null) {
+            canvas.save();
+            canvas.clipRect(clip);
+          }
+          final ramp = [c.withAlpha(30), c.withAlpha(8), c.withAlpha(0)];
+          canvas.drawPath(
+            path,
+            Paint()
+              ..shader = LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: fadeDownward ? ramp : ramp.reversed.toList(),
+                stops: const [0.0, 0.55, 1.0],
+              ).createShader(span)
+              ..style = PaintingStyle.fill,
+          );
+          if (clip != null) canvas.restore();
+        }
+
+        if (!signSplit) {
+          fillArea(
+            heroColor,
+            Rect.fromLTRB(0, lineTop, size.width, plotBottom),
+          );
+        } else {
+          // 浓在峰 / 谷，淡到零轴。
+          fillArea(
+            earnColor,
+            Rect.fromLTRB(0, lineTop, size.width, zeroAxisY),
+            clip: aboveZero,
+          );
+          fillArea(
+            loseColor,
+            Rect.fromLTRB(0, zeroAxisY, size.width, lineBottom),
+            clip: belowZero,
+            fadeDownward: false,
+          );
+        }
       }
 
-      if (!signSplit) {
-        strokeHero(heroColor);
-      } else {
-        strokeHero(earnColor, clip: aboveZero);
-        strokeHero(loseColor, clip: belowZero);
-      }
-    }
+      // ── 3. 主线 ─────────────────────────────────────────────────────────
+      //   v17 · 质感：旧版是 2.2px 纯色线 + 贴线的浓填充，边缘发虚、像马克笔。
+      //   现在三层：① 往下错 2px 的柔影把线「抬」离纸面；② 白色衬底把线和
+      //   填充切开，边缘利落；③ 主线本身左浅右深的横向渐变 —— 越靠近本期越实，
+      //   视线自然落到末端读数上。
+      if (heroDrawable && heroSolid.length >= 2) {
+        final offsets = <Offset>[
+          for (int i = 0; i < heroSolid.length; i++)
+            Offset(xOf(i), yOf(heroSolid[i], heroBounds)),
+        ];
+        final linePath = Path();
+        _addSmoothPath(linePath, offsets);
+        final x0 = offsets.first.dx;
+        final x1 = math.max(offsets.last.dx, x0 + 1);
+        // 三层照旧：柔影抬起、白衬底切开填充、主线左浅右深。
+        // 分色时整套用同一条路径画两遍，各自裁在零轴的一侧 ——
+        // 影子和白边也跟着裁，接缝落在那条虚线上，不会互相糊。
+        void strokeHero(Color c, {Rect? clip}) {
+          if (clip != null) {
+            canvas.save();
+            canvas.clipRect(clip);
+          }
+          canvas.drawPath(
+            linePath.shift(const Offset(0, 1.6)),
+            Paint()
+              ..color = c.withAlpha(28)
+              ..strokeWidth = 2.8
+              ..style = PaintingStyle.stroke
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0),
+          );
+          canvas.drawPath(
+            linePath,
+            Paint()
+              ..color = Colors.white.withAlpha(188)
+              ..strokeWidth = 3.0
+              ..style = PaintingStyle.stroke
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round,
+          );
+          canvas.drawPath(
+            linePath,
+            Paint()
+              ..shader = LinearGradient(
+                colors: [Color.lerp(c, Colors.white, 0.38)!, c, deepen(c)],
+                stops: const [0.0, 0.6, 1.0],
+              ).createShader(Rect.fromLTRB(x0, 0, x1, size.height))
+              ..strokeWidth = 1.7
+              ..style = PaintingStyle.stroke
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round,
+          );
+          if (clip != null) canvas.restore();
+        }
 
-    // ── 4. 每个日期一个点。末端另有实心点，这里不重复画。
-    final eFrom = math.max(0, extremeLo ?? 0);
-    final eTo = math.min(
-      heroSolid.length - 1,
-      extremeHi ?? heroSolid.length - 1,
-    );
-    // 点距太密（全屏大图缩到几百天）时不画逐点小圈，否则糊成一条粗珠链。
-    if (heroDrawable &&
-        eTo >= eFrom &&
-        (n <= 1 || step >= (dotScale < 1 ? 11.0 : 6.0))) {
-      for (var i = eFrom; i <= eTo; i++) {
-        if (showEndpoint && i == heroSolid.length - 1) continue;
+        if (!signSplit) {
+          strokeHero(heroColor);
+        } else {
+          strokeHero(earnColor, clip: aboveZero);
+          strokeHero(loseColor, clip: belowZero);
+        }
+      }
+
+      // ── 4. 每个日期一个点。末端另有实心点，这里不重复画。
+      final eFrom = math.max(0, extremeLo ?? 0);
+      final eTo = math.min(
+        heroSolid.length - 1,
+        extremeHi ?? heroSolid.length - 1,
+      );
+      // 点距太密（全屏大图缩到几百天）时不画逐点小圈，否则糊成一条粗珠链。
+      if (heroDrawable &&
+          eTo >= eFrom &&
+          (n <= 1 || step >= (dotScale < 1 ? 11.0 : 6.0))) {
+        for (var i = eFrom; i <= eTo; i++) {
+          if (showEndpoint && i == heroSolid.length - 1) continue;
+          final o = Offset(xOf(i), yOf(heroSolid[i], heroBounds));
+          canvas.drawCircle(o, 3.0 * dotScale, Paint()..color = Colors.white);
+          canvas.drawCircle(
+            o,
+            3.0 * dotScale,
+            Paint()
+              ..color = heroColorAt(heroSolid[i])
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.4 * math.max(0.8, dotScale),
+          );
+        }
+      }
+
+      // ── 5. 末端点：走完的期给 halo；没走完时 halo 让给进度胶囊 ────────────
+      if (heroDrawable && showEndpoint) {
+        final i = heroSolid.length - 1;
         final o = Offset(xOf(i), yOf(heroSolid[i], heroBounds));
-        canvas.drawCircle(o, 3.0 * dotScale, Paint()..color = Colors.white);
-        canvas.drawCircle(
-          o,
-          3.0 * dotScale,
-          Paint()
-            ..color = heroColorAt(heroSolid[i])
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.4 * math.max(0.8, dotScale),
-        );
+        //   v17 · 两圈半透明光晕叠在一起边缘发糊，换成「白珠 + 投影」：
+        //   白环压实、下方一点柔影，点像是嵌在线上，而不是晕开的墨。
+        final endColor = heroColorAt(heroSolid[i]);
+        if (!partial) {
+          canvas.drawCircle(
+            o,
+            6.8 * dotScale,
+            Paint()..color = endColor.withAlpha(14),
+          );
+          canvas.drawCircle(
+            o.translate(0, 1.0),
+            4.2 * dotScale,
+            Paint()
+              ..color = (profitHero ? endColor : _LhPlum.deep).withAlpha(42)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.8),
+          );
+        }
+        canvas.drawCircle(o, 4.0 * dotScale, Paint()..color = Colors.white);
+        canvas.drawCircle(o, 2.5 * dotScale, Paint()..color = deepen(endColor));
       }
-    }
 
-    // ── 5. 末端点：走完的期给 halo；没走完时 halo 让给进度胶囊 ────────────
-    if (heroDrawable && showEndpoint) {
-      final i = heroSolid.length - 1;
-      final o = Offset(xOf(i), yOf(heroSolid[i], heroBounds));
-      //   v17 · 两圈半透明光晕叠在一起边缘发糊，换成「白珠 + 投影」：
-      //   白环压实、下方一点柔影，点像是嵌在线上，而不是晕开的墨。
-      final endColor = heroColorAt(heroSolid[i]);
-      if (!partial) {
-        canvas.drawCircle(
-          o,
-          6.8 * dotScale,
-          Paint()..color = endColor.withAlpha(14),
+      // ── 6. 当月：已发生实柱 + 月末预测虚框（v18）────────────────────────
+      //   v16 的胶囊是「从画布底到预测点，按 已发生/预测 填充」—— 可是
+      //   已发生/预测 = 已过天数/当月天数，永远只是日历进度（22/30 就是 73%），
+      //   跟生意好坏无关；实心顶也不落在纵轴的真实刻度上，所以看不懂。
+      //   现在两段都贴真轴：实柱顶 = 已发生的真实位置，虚框顶 = 月末预测的
+      //   真实位置，中间那截 = 按日均补到月底还要做的量。虚线从上个完整月
+      //   连到预测点：往上 = 预计超上月，往下 = 预计不如上月。
+      if (partial) {
+        final lastI = heroPts.length - 1;
+        final lastX = xOf(lastI);
+        final rawFcY = yOf(fc!, heroBounds);
+        final fcClipped = rawFcY < plotTop;
+        final fcY = rawFcY.clamp(plotTop, plotBottom).toDouble();
+        final actY = math.max(
+          fcY,
+          yOf(heroPts[lastI], heroBounds).clamp(plotTop, plotBottom).toDouble(),
         );
-        canvas.drawCircle(
-          o.translate(0, 1.0),
-          4.2 * dotScale,
-          Paint()
-            ..color = (profitHero ? endColor : _LhPlum.deep).withAlpha(42)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.8),
-        );
-      }
-      canvas.drawCircle(o, 4.0 * dotScale, Paint()..color = Colors.white);
-      canvas.drawCircle(o, 2.5 * dotScale, Paint()..color = deepen(endColor));
-    }
-
-    // ── 6. 当月：已发生实柱 + 月末预测虚框（v18）────────────────────────
-    //   v16 的胶囊是「从画布底到预测点，按 已发生/预测 填充」—— 可是
-    //   已发生/预测 = 已过天数/当月天数，永远只是日历进度（22/30 就是 73%），
-    //   跟生意好坏无关；实心顶也不落在纵轴的真实刻度上，所以看不懂。
-    //   现在两段都贴真轴：实柱顶 = 已发生的真实位置，虚框顶 = 月末预测的
-    //   真实位置，中间那截 = 按日均补到月底还要做的量。虚线从上个完整月
-    //   连到预测点：往上 = 预计超上月，往下 = 预计不如上月。
-    if (partial) {
-      final lastI = heroPts.length - 1;
-      final lastX = xOf(lastI);
-      final rawFcY = yOf(fc!, heroBounds);
-      final fcClipped = rawFcY < plotTop;
-      final fcY = rawFcY.clamp(plotTop, plotBottom).toDouble();
-      final actY = math.max(
-        fcY,
-        yOf(heroPts[lastI], heroBounds).clamp(plotTop, plotBottom).toDouble(),
-      );
-      const colW = 8.0;
-      const r = Radius.circular(2.0);
-      // ① 虚框：预测整根
-      canvas.drawRRect(
-        RRect.fromLTRBR(lastX - colW / 2, fcY, lastX + colW / 2, plotBottom, r),
-        Paint()..color = heroColor.withAlpha(18),
-      );
-      final dash = Paint()
-        ..color = heroColor.withAlpha(150)
-        ..strokeWidth = 0.8;
-      _trendDashedLine(
-        canvas,
-        Offset(lastX - colW / 2, fcY),
-        Offset(lastX + colW / 2, fcY),
-        dash,
-        dash: 2,
-        gap: 1.6,
-      );
-      _trendDashedLine(
-        canvas,
-        Offset(lastX - colW / 2, fcY),
-        Offset(lastX - colW / 2, actY),
-        dash,
-        dash: 2,
-        gap: 2,
-      );
-      _trendDashedLine(
-        canvas,
-        Offset(lastX + colW / 2, fcY),
-        Offset(lastX + colW / 2, actY),
-        dash,
-        dash: 2,
-        gap: 2,
-      );
-      // ② 实柱：已发生
-      if (plotBottom - actY > 0.5) {
+        const colW = 8.0;
+        const r = Radius.circular(2.0);
+        // ① 虚框：预测整根
         canvas.drawRRect(
-          RRect.fromLTRBAndCorners(
+          RRect.fromLTRBR(
             lastX - colW / 2,
-            actY,
+            fcY,
             lastX + colW / 2,
             plotBottom,
-            topLeft: r,
-            topRight: r,
+            r,
           ),
-          Paint()
-            ..shader =
-                LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [heroColor.withAlpha(215), heroColor.withAlpha(120)],
-                ).createShader(
-                  Rect.fromLTRB(
-                    lastX - colW / 2,
-                    actY,
-                    lastX + colW / 2,
-                    plotBottom,
-                  ),
-                ),
+          Paint()..color = heroColor.withAlpha(18),
         );
-      }
-      // ③ 上个完整月 → 月末预测
-      if (solidN >= 1) {
-        final prev = Offset(
-          xOf(solidN - 1),
-          yOf(heroPts[solidN - 1], heroBounds),
+        final dash = Paint()
+          ..color = heroColor.withAlpha(150)
+          ..strokeWidth = 0.8;
+        _trendDashedLine(
+          canvas,
+          Offset(lastX - colW / 2, fcY),
+          Offset(lastX + colW / 2, fcY),
+          dash,
+          dash: 2,
+          gap: 1.6,
         );
         _trendDashedLine(
           canvas,
-          prev,
-          Offset(lastX, fcY),
-          Paint()
+          Offset(lastX - colW / 2, fcY),
+          Offset(lastX - colW / 2, actY),
+          dash,
+          dash: 2,
+          gap: 2,
+        );
+        _trendDashedLine(
+          canvas,
+          Offset(lastX + colW / 2, fcY),
+          Offset(lastX + colW / 2, actY),
+          dash,
+          dash: 2,
+          gap: 2,
+        );
+        // ② 实柱：已发生
+        if (plotBottom - actY > 0.5) {
+          canvas.drawRRect(
+            RRect.fromLTRBAndCorners(
+              lastX - colW / 2,
+              actY,
+              lastX + colW / 2,
+              plotBottom,
+              topLeft: r,
+              topRight: r,
+            ),
+            Paint()
+              ..shader =
+                  LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      heroColor.withAlpha(215),
+                      heroColor.withAlpha(120),
+                    ],
+                  ).createShader(
+                    Rect.fromLTRB(
+                      lastX - colW / 2,
+                      actY,
+                      lastX + colW / 2,
+                      plotBottom,
+                    ),
+                  ),
+          );
+        }
+        // ③ 上个完整月 → 月末预测
+        if (solidN >= 1) {
+          final prev = Offset(
+            xOf(solidN - 1),
+            yOf(heroPts[solidN - 1], heroBounds),
+          );
+          _trendDashedLine(
+            canvas,
+            prev,
+            Offset(lastX, fcY),
+            Paint()
+              ..color = heroColor.withAlpha(150)
+              ..strokeWidth = 1.4
+              ..strokeCap = StrokeCap.round,
+          );
+        }
+        // ③′ 80% 区间须线：模型回测误差给出的上下沿。
+        final bLo = forecastLo;
+        final bHi = forecastHi;
+        if (bLo != null && bHi != null && bHi > bLo) {
+          final yHi = yOf(
+            bHi,
+            heroBounds,
+          ).clamp(plotTop, plotBottom).toDouble();
+          final yLo = yOf(
+            bLo,
+            heroBounds,
+          ).clamp(plotTop, plotBottom).toDouble();
+          final wx = lastX + colW / 2 + 4;
+          final wp = Paint()
             ..color = heroColor.withAlpha(150)
-            ..strokeWidth = 1.4
-            ..strokeCap = StrokeCap.round,
+            ..strokeWidth = 1.0
+            ..strokeCap = StrokeCap.round;
+          canvas.drawLine(Offset(wx, yHi), Offset(wx, yLo), wp);
+          canvas.drawLine(Offset(wx - 2.5, yHi), Offset(wx + 2.5, yHi), wp);
+          canvas.drawLine(Offset(wx - 2.5, yLo), Offset(wx + 2.5, yLo), wp);
+        }
+        // ④ 预测点：空心圈；超出图顶时顶端加一个小三角，表示「还在上面」。
+        canvas.drawCircle(
+          Offset(lastX, fcY),
+          3.2,
+          Paint()..color = Colors.white,
+        );
+        canvas.drawCircle(
+          Offset(lastX, fcY),
+          3.2,
+          Paint()
+            ..color = heroColor
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.3,
+        );
+        if (fcClipped) {
+          final tri = Path()
+            ..moveTo(lastX, fcY - 8.5)
+            ..lineTo(lastX - 3, fcY - 4.8)
+            ..lineTo(lastX + 3, fcY - 4.8)
+            ..close();
+          canvas.drawPath(tri, Paint()..color = heroColor);
+        }
+        // ⑤ 就地标注「预测」，不用回头去图例找这个圈是什么。
+        final tp = TextPainter(
+          text: TextSpan(
+            text: '预测',
+            style: LhTypography.mono(
+              size: 7.5,
+              color: heroColor,
+              weight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(
+          canvas,
+          Offset(
+            lastX - colW / 2 - 3 - tp.width,
+            (fcY - tp.height / 2)
+                .clamp(0.0, size.height - tp.height)
+                .toDouble(),
+          ),
         );
       }
-      // ③′ 80% 区间须线：模型回测误差给出的上下沿。
-      final bLo = forecastLo;
-      final bHi = forecastHi;
-      if (bLo != null && bHi != null && bHi > bLo) {
-        final yHi = yOf(bHi, heroBounds).clamp(plotTop, plotBottom).toDouble();
-        final yLo = yOf(bLo, heroBounds).clamp(plotTop, plotBottom).toDouble();
-        final wx = lastX + colW / 2 + 4;
-        final wp = Paint()
-          ..color = heroColor.withAlpha(150)
-          ..strokeWidth = 1.0
-          ..strokeCap = StrokeCap.round;
-        canvas.drawLine(Offset(wx, yHi), Offset(wx, yLo), wp);
-        canvas.drawLine(Offset(wx - 2.5, yHi), Offset(wx + 2.5, yHi), wp);
-        canvas.drawLine(Offset(wx - 2.5, yLo), Offset(wx + 2.5, yLo), wp);
-      }
-      // ④ 预测点：空心圈；超出图顶时顶端加一个小三角，表示「还在上面」。
-      canvas.drawCircle(Offset(lastX, fcY), 3.2, Paint()..color = Colors.white);
-      canvas.drawCircle(
-        Offset(lastX, fcY),
-        3.2,
-        Paint()
-          ..color = heroColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.3,
-      );
-      if (fcClipped) {
-        final tri = Path()
-          ..moveTo(lastX, fcY - 8.5)
-          ..lineTo(lastX - 3, fcY - 4.8)
-          ..lineTo(lastX + 3, fcY - 4.8)
-          ..close();
-        canvas.drawPath(tri, Paint()..color = heroColor);
-      }
-      // ⑤ 就地标注「预测」，不用回头去图例找这个圈是什么。
-      final tp = TextPainter(
-        text: TextSpan(
-          text: '预测',
-          style: LhTypography.mono(
-            size: 7.5,
-            color: heroColor,
-            weight: FontWeight.w700,
-            letterSpacing: 0.3,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(
-        canvas,
-        Offset(
-          lastX - colW / 2 - 3 - tp.width,
-          (fcY - tp.height / 2).clamp(0.0, size.height - tp.height).toDouble(),
-        ),
-      );
-    }
-
     }
 
     // ── 7. 底部小柱层（各自归一的上下文序列）──────────────────────────────
@@ -4137,8 +4173,7 @@ class _TrendLinesPainter extends CustomPainter {
                 x + barW / 2,
                 math.max(y, mid),
               ),
-              Paint()
-                ..color = h >= 0 ? LhKColors.barUp : LhKColors.barDown,
+              Paint()..color = h >= 0 ? LhKColors.barUp : LhKColors.barDown,
             );
             difPts.add(Offset(x, ly(dif[i])));
             deaPts.add(Offset(x, ly(dea[i])));
@@ -9367,6 +9402,7 @@ class _TrendChartState extends State<_TrendChart>
     _zoomVisible = (n - start).clamp(2, n);
     _viewEnd = (n - 1).toDouble();
   }
+
   late List<String> _pointLabels;
   late List<String> _xLabels;
   late List<int> _xAnchors;
@@ -10048,10 +10084,7 @@ class _TrendChartState extends State<_TrendChart>
     final d = (pts[0] - pts[1]).distance;
     if (d <= 1) return;
     final mid = (pts[0].dx + pts[1].dx) / 2;
-    _zoomTo(
-      (_pinchStartVisible * d0 / d).round(),
-      focalFrac: _fracAt(mid, w),
-    );
+    _zoomTo((_pinchStartVisible * d0 / d).round(), focalFrac: _fracAt(mid, w));
   }
 
   void _onZoomPointerUp(int pointer) {
@@ -10484,7 +10517,9 @@ class _TrendChartState extends State<_TrendChart>
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: color == null ? valueStyle : valueStyle.copyWith(color: color),
+              style: color == null
+                  ? valueStyle
+                  : valueStyle.copyWith(color: color),
             ),
           ),
         ],
@@ -10501,7 +10536,11 @@ class _TrendChartState extends State<_TrendChart>
           up >= down ? LhKColors.up : LhKColors.down,
         ),
       ),
-      cell('最低', _money(lo), color: DunesColors.resolve(context, LhKColors.down)),
+      cell(
+        '最低',
+        _money(lo),
+        color: DunesColors.resolve(context, LhKColors.down),
+      ),
       cell('合计', _money(sum)),
       cell('天数', '$cnt'),
     ];
@@ -10566,10 +10605,7 @@ class _TrendChartState extends State<_TrendChart>
       decoration: BoxDecoration(
         color: LhKColors.tint(c, on ? 0.82 : 0.95),
         borderRadius: BorderRadius.circular(2),
-        border: Border.all(
-          color: on ? c : LhKColors.tint(c, 0.62),
-          width: 0.9,
-        ),
+        border: Border.all(color: on ? c : LhKColors.tint(c, 0.62), width: 0.9),
       ),
     );
     Widget box(Color c) => Container(
@@ -10761,7 +10797,14 @@ class _TrendChartState extends State<_TrendChart>
     };
     final base = _baseFlags;
     final pickable = <String>[
-      for (final k in const ['profit', 'scale', 'scaleAlt', 'revenue', 'cost', 'costAlt'])
+      for (final k in const [
+        'profit',
+        'scale',
+        'scaleAlt',
+        'revenue',
+        'cost',
+        'costAlt',
+      ])
         if (lighthouseTrendSeriesKeys.indexOf(k) case final i
             when i >= 0 && i < base.length && base[i] && labelOf(k).isNotEmpty)
           k,
@@ -10829,20 +10872,20 @@ class _TrendChartState extends State<_TrendChart>
             child: _LhKStack(
               radius: 6,
               child: Container(
-              padding: const EdgeInsets.fromLTRB(7, 2, 3, 2),
-              decoration: _lhKCardDeco(context, radius: 6),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  labelText,
-                  Icon(
-                    Icons.expand_more_rounded,
-                    size: 14,
-                    color: DunesColors.resolve(context, LhColors.ink2),
-                  ),
-                ],
+                padding: const EdgeInsets.fromLTRB(7, 2, 3, 2),
+                decoration: _lhKCardDeco(context, radius: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    labelText,
+                    Icon(
+                      Icons.expand_more_rounded,
+                      size: 14,
+                      color: DunesColors.resolve(context, LhColors.ink2),
+                    ),
+                  ],
+                ),
               ),
-            ),
             ),
           );
     return Row(
@@ -10886,7 +10929,7 @@ class _TrendChartState extends State<_TrendChart>
       if (v.isFinite) tail.insert(0, v);
     }
     return SizedBox(
-      width: 48,
+      width: 30,
       height: 13,
       child: OverflowBox(
         maxHeight: 26,
@@ -11138,9 +11181,7 @@ class _TrendChartState extends State<_TrendChart>
             colors: _paintColors,
             index: heroIndex,
           ).pts;
-          final a0 = windowed
-              ? math.max(0, (viewStart - 1e-6).ceil() - lo)
-              : 0;
+          final a0 = windowed ? math.max(0, (viewStart - 1e-6).ceil() - lo) : 0;
           final b0 = windowed
               ? math.min(hp.length - 1, (_viewEnd + 1e-6).floor() - lo)
               : hp.length - 1;
@@ -11293,11 +11334,13 @@ class _TrendChartState extends State<_TrendChart>
         double? crossX;
         String? crossValue;
         String? crossLabel;
-        if (widget.candles && sliceSelected != null &&
-            sliceSelected < pts.length && pts[sliceSelected].isFinite) {
-          crossY = yOf(pts[sliceSelected])
-              .clamp(padTop, geo.plotBottom)
-              .toDouble();
+        if (widget.candles &&
+            sliceSelected != null &&
+            sliceSelected < pts.length &&
+            pts[sliceSelected].isFinite) {
+          crossY = yOf(
+            pts[sliceSelected],
+          ).clamp(padTop, geo.plotBottom).toDouble();
           crossX = paintLeft + _kChartPadH + sliceSelected * step;
           final real = _trendPaintSpec(
             series: _series,
@@ -11314,7 +11357,8 @@ class _TrendChartState extends State<_TrendChart>
         // 没点中任何一天时，默认挂着最新一天的明细牌（构图更完整）；
         // 点一下它就收起，点别的天换成那天的。
         double? cardAnchorX = crossX;
-        final defaultCard = widget.candles &&
+        final defaultCard =
+            widget.candles &&
             sel == null &&
             includesLatest &&
             !_hideDefaultCard &&
@@ -11331,7 +11375,11 @@ class _TrendChartState extends State<_TrendChart>
           final real = _heroRealPts;
           var iMax = -1;
           var iMin = -1;
-          for (var k = math.max(0, eLo); k <= math.min(eHi, pts.length - 1); k++) {
+          for (
+            var k = math.max(0, eLo);
+            k <= math.min(eHi, pts.length - 1);
+            k++
+          ) {
             if (!pts[k].isFinite) continue;
             if (iMax < 0 || pts[k] > pts[iMax]) iMax = k;
             if (iMin < 0 || pts[k] < pts[iMin]) iMin = k;
@@ -11527,7 +11575,9 @@ class _TrendChartState extends State<_TrendChart>
                                 left: paintLeft + _kChartPadH + (i - lo) * step,
                                 top: padTop - 6,
                                 height:
-                                    (geo.lane ? geo.laneBottom : geo.plotBottom) -
+                                    (geo.lane
+                                        ? geo.laneBottom
+                                        : geo.plotBottom) -
                                     padTop +
                                     6,
                                 width: 0.7,
@@ -12197,21 +12247,21 @@ class _TrendChartState extends State<_TrendChart>
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (!widget.legendCompact) ...[
-              Container(
-                width: 2.5,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? DunesColors.resolve(
-                          context,
-                          _LhPlum.deep,
-                          role: DunesColorRole.surface,
-                        )
-                      : lighthouseTrendEmphasisInk(_emphasisColor),
-                  borderRadius: BorderRadius.circular(1.5),
+                Container(
+                  width: 2.5,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? DunesColors.resolve(
+                            context,
+                            _LhPlum.deep,
+                            role: DunesColorRole.surface,
+                          )
+                        : lighthouseTrendEmphasisInk(_emphasisColor),
+                    borderRadius: BorderRadius.circular(1.5),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
+                const SizedBox(width: 6),
               ],
               Text(
                 statusText,
@@ -12545,25 +12595,22 @@ class _TrendChartState extends State<_TrendChart>
             ),
           ),
         ],
-        if (widget.candles) ...[
-          const SizedBox(height: 6),
-          _windowStats(),
-        ],
+        if (widget.candles) ...[const SizedBox(height: 6), _windowStats()],
         if (widget.formulaExpression != null &&
             widget.formulaExpression!.trim().isNotEmpty) ...[
           const SizedBox(height: 6),
           _trendFormulaInline(widget.formulaExpression!),
         ],
         if (!widget.legendCompact)
-        if (_stripForecast case final sf?) ...[
-          const SizedBox(height: 7),
-          _forecastStrip(
-            sf.f,
-            prev: sf.prev,
-            prevLabel: sf.prevLabel,
-            profit: sf.profit,
-          ),
-        ],
+          if (_stripForecast case final sf?) ...[
+            const SizedBox(height: 7),
+            _forecastStrip(
+              sf.f,
+              prev: sf.prev,
+              prevLabel: sf.prevLabel,
+              profit: sf.profit,
+            ),
+          ],
         const SizedBox(height: 10),
         if (widget.fitHeight)
           Expanded(
@@ -12616,8 +12663,18 @@ class _TrendChartState extends State<_TrendChart>
                                   size: labelSize,
                                   color: widget.partialPeriod && i == n - 1
                                       ? DunesColors.resolve(ctx, _LhPlum.deep)
-                                      : (widget.zoomable && _isMonthStart(i) ? DunesColors.resolve(ctx, LhColors.ink2) : DunesColors.resolve(ctx, LhColors.mute2)),
-                                  weight: (widget.partialPeriod && i == n - 1) || (widget.zoomable && _isMonthStart(i))
+                                      : (widget.zoomable && _isMonthStart(i)
+                                            ? DunesColors.resolve(
+                                                ctx,
+                                                LhColors.ink2,
+                                              )
+                                            : DunesColors.resolve(
+                                                ctx,
+                                                LhColors.mute2,
+                                              )),
+                                  weight:
+                                      (widget.partialPeriod && i == n - 1) ||
+                                          (widget.zoomable && _isMonthStart(i))
                                       ? FontWeight.w700
                                       : FontWeight.w500,
                                   letterSpacing: 0.1,
@@ -12660,7 +12717,9 @@ class _TrendChartState extends State<_TrendChart>
                         width: slotW,
                         child: Center(
                           child: Text(
-                            widget.zoomable ? _zoomLabel(_xAnchors[i]) : _xLabels[i],
+                            widget.zoomable
+                                ? _zoomLabel(_xAnchors[i])
+                                : _xLabels[i],
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             // v16 · 本期（没走完的那一列）标签用主色加粗，
@@ -14369,6 +14428,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   // 主列表下滑加载（产品 / 供给 / 渠道）—— 不要上一页/下一页
   static const int _listPageSize = 20;
   int _listLimit = _listPageSize;
+
+  /// 切期间时：已经往下滑出来的条数先留着，新数据到了列表不缩回第一页、视角不跳。
+  int? _listLimitKeptForReload;
+
+  /// 切期间时先留着上一期的行（压淡、不可点）等新列表；新列表到了就清掉。
+  String? _staleRowsTab;
   bool _listLoadingMore = false;
   int _detailPage = 1; // 详情子列表暂保留页码（另议）
   static const int _pageSize = 15; // 详情等其它分页条仍用
@@ -14568,7 +14633,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 仍走整页遮罩。
   bool get _softReloading =>
       lighthouseSoftReloadKeepsContent &&
-      _loading &&
+      (_loading || _staleRowsTab != null) &&
       _bundle != null &&
       _metricPageKey == null &&
       !_biViewOpen;
@@ -16150,9 +16215,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       if (mounted && stillCurrent()) {
         setState(() {
           _splitCacheKey = cacheKey;
-          _bundle = _retainOpenDetail(
-            LighthouseDataBundle.empty().withSummary(summary),
-          );
+          final carryTab = requestedTab == 'netTa' ? 'netTa' : tabToLoad;
+          final carryRows =
+              _bundle?.rowsOf(carryTab) ?? const <Map<String, dynamic>>[];
+          var next = LighthouseDataBundle.empty().withSummary(summary);
+          // 新列表还在路上时先留着上一期的行（压淡、不可点），列表不塌成
+          // 240 高的空白 —— 塌了滚动位置就被夹回顶上，看起来像整页跳走。
+          if (carryRows.isNotEmpty) {
+            next = next.withDimension(carryTab, carryRows);
+            _staleRowsTab = carryTab;
+          } else {
+            _staleRowsTab = null;
+          }
+          _bundle = _retainOpenDetail(next);
           _loadError = null;
           _loading = false;
           _loadedTabs.clear();
@@ -16223,6 +16298,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             _failedTrends.clear();
             _productL3VisibleCount.clear();
             _loading = false;
+            _staleRowsTab = null;
             _loadError = null;
             _rowsCacheKey = '';
             _rowsCache = null;
@@ -16248,6 +16324,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         if (mounted && stillCurrent()) {
           setState(() {
             _loading = false;
+            _staleRowsTab = null;
             _loadError = e.toString().replaceFirst('Exception: ', '');
           });
         }
@@ -16568,6 +16645,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         _splitCacheKey = cacheKey;
         _loadedTabs.add(tab);
         _loadingTabs.remove(tab);
+        if (_staleRowsTab == tab) _staleRowsTab = null;
         _rowsCacheKey = '';
         _rowsCache = null;
         _syncMetricsFromUI();
@@ -16595,6 +16673,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       if (_tabLoadKeys[tab] != cacheKey) return;
       setState(() {
         _tabErrors[tab] = e.toString().replaceFirst('Exception: ', '');
+        // 新列表拿不到：别把上一期的行当成这一期的数留在那儿。
+        if (_staleRowsTab == tab) {
+          _staleRowsTab = null;
+          _bundle = _bundle?.withDimension(
+            tab,
+            const <Map<String, dynamic>>[],
+          );
+          _rowsCacheKey = '';
+          _rowsCache = null;
+        }
       });
     } finally {
       if (_tabLoadKeys[tab] == cacheKey) {
@@ -17857,6 +17945,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (cached != null && key == _rowsCacheKey) return cached;
     _listLimit = _listPageSize; // 筛选/排序/周期变化时重置分页
     _discountExpanded = false;
+    // 切期间：已经滑出来的条数保留，列表不缩回第一页，视角不跳。
+    final keptLimit = _listLimitKeptForReload;
+    if (keptLimit != null) {
+      if (keptLimit > _listLimit) _listLimit = keptLimit;
+      if (!_loading && _staleRowsTab == null) _listLimitKeptForReload = null;
+    }
 
     var rows = _rowsBeforeAnomalyFilter();
     if (_anomalyFilter != '全部' && _tab != 'netTa') {
@@ -21871,7 +21965,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   /// 大图默认画日 K；顶栏可切回折线。
   final bool _heroFullscreenCandles = true;
-  ({Map<String, double> totals, List<double> profitSeries, List<String> labels})?
+  ({
+    Map<String, double> totals,
+    List<double> profitSeries,
+    List<String> labels,
+  })?
   _heroTrendArgs;
 
   /// 大图一打开的视窗：从最近一个 7 月 1 号看到今天。
@@ -21919,7 +22017,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final ro = _heroCardKey.currentContext?.findRenderObject();
     if (ro is! RenderBox || !ro.hasSize || !ro.attached) return null;
     final r = ro.localToGlobal(Offset.zero) & ro.size;
-    const inset = lighthouseHeroUsesFlatLayout ? 22.0 : lighthouseHeroShellMarginH;
+    const inset = lighthouseHeroUsesFlatLayout
+        ? 22.0
+        : lighthouseHeroShellMarginH;
     return Rect.fromLTRB(r.left + inset, r.top, r.right - inset, r.bottom);
   }
 
@@ -22021,38 +22121,38 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final fromRect = _heroCardRect();
     unawaited(
       Navigator.of(context, rootNavigator: true)
-        .push<void>(
-          PageRouteBuilder<void>(
-            opaque: false,
-            barrierDismissible: true,
-            barrierLabel: '收起走势大图',
-            barrierColor: const Color(0x261E1830),
-            transitionDuration: const Duration(milliseconds: 820),
-            reverseTransitionDuration: const Duration(milliseconds: 300),
-            pageBuilder: (routeCtx, anim, secondary) => Theme(
-              data: theme,
-              child: _LhPopStage(
-                animation: anim,
-                fromRect: fromRect,
-                originRect: origin,
-                onDismiss: () {
-                  LighthouseFeedback.instance.play(
-                    LighthouseFeedbackKind.collapse,
-                  );
-                  Navigator.of(routeCtx).maybePop();
-                },
-                child: ValueListenableBuilder<int>(
-                  valueListenable: _heroFullscreenTick,
-                  builder: (ctx, tick, child) =>
-                      _buildHeroTrendFullscreen(ctx),
+          .push<void>(
+            PageRouteBuilder<void>(
+              opaque: false,
+              barrierDismissible: true,
+              barrierLabel: '收起走势大图',
+              barrierColor: const Color(0x261E1830),
+              transitionDuration: const Duration(milliseconds: 820),
+              reverseTransitionDuration: const Duration(milliseconds: 300),
+              pageBuilder: (routeCtx, anim, secondary) => Theme(
+                data: theme,
+                child: _LhPopStage(
+                  animation: anim,
+                  fromRect: fromRect,
+                  originRect: origin,
+                  onDismiss: () {
+                    LighthouseFeedback.instance.play(
+                      LighthouseFeedbackKind.collapse,
+                    );
+                    Navigator.of(routeCtx).maybePop();
+                  },
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: _heroFullscreenTick,
+                    builder: (ctx, tick, child) =>
+                        _buildHeroTrendFullscreen(ctx),
+                  ),
                 ),
               ),
+              // 动效全在 _LhPopStage 里（3D 翻起 + 回弹 + 扫光）。
+              transitionsBuilder: (ctx, anim, secondary, child) => child,
             ),
-            // 动效全在 _LhPopStage 里（3D 翻起 + 回弹 + 扫光）。
-            transitionsBuilder: (ctx, anim, secondary, child) => child,
-          ),
-        )
-        .whenComplete(() => _heroFullscreenOpen = false),
+          )
+          .whenComplete(() => _heroFullscreenOpen = false),
     );
   }
 
@@ -22162,10 +22262,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               height: 10,
               child: CircularProgressIndicator(
                 strokeWidth: 1.2,
-                color: DunesColors.resolve(
-                  ctx,
-                  _LhPlum.primary,
-                ).withAlpha(200),
+                color: DunesColors.resolve(ctx, _LhPlum.primary).withAlpha(200),
               ),
             ),
           ],
@@ -22318,29 +22415,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               child: _LhKStack(
                 radius: 7,
                 child: Container(
-                padding: const EdgeInsets.fromLTRB(8, 3, 4, 3),
-                decoration: _lhKCardDeco(ctx, radius: 7),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _groupFilter.isEmpty ? '全部' : _groupFilter,
-                      style: LhTypography.sans(
-                        size: 10.5,
-                        color: DunesColors.resolve(ctx, _LhPlum.deep),
-                        weight: FontWeight.w700,
-                        letterSpacing: 0.2,
-                        context: ctx,
+                  padding: const EdgeInsets.fromLTRB(8, 3, 4, 3),
+                  decoration: _lhKCardDeco(ctx, radius: 7),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _groupFilter.isEmpty ? '全部' : _groupFilter,
+                        style: LhTypography.sans(
+                          size: 10.5,
+                          color: DunesColors.resolve(ctx, _LhPlum.deep),
+                          weight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                          context: ctx,
+                        ),
                       ),
-                    ),
-                    Icon(
-                      Icons.expand_more_rounded,
-                      size: 14,
-                      color: DunesColors.resolve(ctx, _LhPlum.deep),
-                    ),
-                  ],
+                      Icon(
+                        Icons.expand_more_rounded,
+                        size: 14,
+                        color: DunesColors.resolve(ctx, _LhPlum.deep),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
               ),
             ),
             if (parts.isNotEmpty) const SizedBox(width: 6),
@@ -22365,100 +22462,92 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
 
     return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                // 点卡片里空白处：收起明细牌（取消选中那一天）。
-                onTap: () =>
-                    _heroFullscreenChartKey.currentState?._clearSelection(),
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: Container(
-                    padding: EdgeInsets.zero,
-                    decoration: BoxDecoration(
-                      color: DunesColors.resolve(
-                        ctx,
-                        LhColors.paper,
-                        role: DunesColorRole.surface,
-                      ),
-                      borderRadius: BorderRadius.circular(
-                        lighthouseHeroCardRadius + 2,
-                      ),
-                      border: Border.all(
-                        color: DunesColors.resolve(
-                          ctx,
-                          _LhPlum.heroEdge,
-                          role: DunesColorRole.border,
-                        ),
-                        width: 0.7,
-                      ),
-                    ),
-                    child: Stack(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 9, 8, 14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _heroCandlePeriodTabs(ctx),
-                              const SizedBox(height: 8),
-                              Expanded(
-                                // 新分组 / 新周期的数据没回来前只转圈，不画旧图。
-                                // 只在「Hero 数据确实是当前分组的」时才画：summary 的
-                                // filterGroup 对不上（还在路上 / 拉失败）就不画旧数据。
-                                child: (args == null ||
-                                        _heroFullscreenAwaiting ||
-                                        _loading)
-                                    ? const Center(
-                                        child: _LhBrandLoader(size: 44),
-                                      )
-                                    : !_heroSummaryMatchesGroup
-                                    ? Center(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              '$_groupFilter 的数据没拉到',
-                                              style: LhTypography.sans(
-                                                size: 12,
-                                                color: DunesColors.resolve(
-                                                  ctx,
-                                                  LhColors.ink2,
-                                                ),
-                                                context: ctx,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            TextButton(
-                                              onPressed: _retryFullscreenReload,
-                                              child: const Text('重新加载'),
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                    : _buildHeroUnifiedTrendChart(
-                                        totals: args.totals,
-                                        profitSeries: args.profitSeries,
-                                        labels: args.labels,
-                                        chartMaxHeight: 4000,
-                                        fullscreen: true,
-                                        fullscreenTrailing: _heroScopeBadge(
-                                          ctx,
-                                        ),
+      behavior: HitTestBehavior.opaque,
+      // 点卡片里空白处：收起明细牌（取消选中那一天）。
+      onTap: () => _heroFullscreenChartKey.currentState?._clearSelection(),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Container(
+          padding: EdgeInsets.zero,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              ctx,
+              LhColors.paper,
+              role: DunesColorRole.surface,
+            ),
+            borderRadius: BorderRadius.circular(lighthouseHeroCardRadius + 2),
+            border: Border.all(
+              color: DunesColors.resolve(
+                ctx,
+                _LhPlum.heroEdge,
+                role: DunesColorRole.border,
+              ),
+              width: 0.7,
+            ),
+          ),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 9, 8, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _heroCandlePeriodTabs(ctx),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      // 新分组 / 新周期的数据没回来前只转圈，不画旧图。
+                      // 只在「Hero 数据确实是当前分组的」时才画：summary 的
+                      // filterGroup 对不上（还在路上 / 拉失败）就不画旧数据。
+                      child:
+                          (args == null || _heroFullscreenAwaiting || _loading)
+                          ? const Center(child: _LhBrandLoader(size: 44))
+                          : !_heroSummaryMatchesGroup
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '$_groupFilter 的数据没拉到',
+                                    style: LhTypography.sans(
+                                      size: 12,
+                                      color: DunesColors.resolve(
+                                        ctx,
+                                        LhColors.ink2,
                                       ),
+                                      context: ctx,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextButton(
+                                    onPressed: _retryFullscreenReload,
+                                    child: const Text('重新加载'),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                        // 收起钉在卡片最右上角。
-                        Positioned(
-                          top: 9,
-                          right: 6,
-                          child: _LhKCollapseButton(onTap: close),
-                        ),
-                      ],
+                            )
+                          : _buildHeroUnifiedTrendChart(
+                              totals: args.totals,
+                              profitSeries: args.profitSeries,
+                              labels: args.labels,
+                              chartMaxHeight: 4000,
+                              fullscreen: true,
+                              fullscreenTrailing: _heroScopeBadge(ctx),
+                            ),
                     ),
-                  ),
+                  ],
                 ),
-              );
+              ),
+              // 收起钉在卡片最右上角。
+              Positioned(
+                top: 9,
+                right: 6,
+                child: _LhKCollapseButton(onTap: close),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildHeroUnifiedTrendChart({
@@ -22656,9 +22745,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ? _heroFullscreenViewportCount
               : _heroViewportCount,
           initialViewEnd: fullscreen ? null : widget.sharedCard?.viewEnd,
-          onViewEndChanged: fullscreen
-              ? null
-              : (value) => _heroViewEnd = value,
+          onViewEndChanged: fullscreen ? null : (value) => _heroViewEnd = value,
           zoomable: fullscreen,
           legendCompact: fullscreen,
           legendTrailing: fullscreenTrailing,
@@ -22732,7 +22819,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           periodProfit: totals['profit'],
           periodProfitDeltaPct: _deltaForMetric('profit')?.pct,
           // 大图「显示全部」时默认看利润，不看核销规模。
-          soloKey: fullscreen ? (_heroFullscreenMetric ?? 'profit') : overlaySlot,
+          soloKey: fullscreen
+              ? (_heroFullscreenMetric ?? 'profit')
+              : overlaySlot,
           formulaExpression:
               !lighthouseHeroShowsFormulaBar ||
                   overlaySlot == null ||
@@ -22742,27 +22831,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           onSoloChanged: fullscreen
               ? (slot) => setState(() => _heroFullscreenMetric = slot)
               : (slot) {
-            setState(() {
-              if (slot == null) {
-                _expandedTrendKey = null;
-                _heroTraceKey = null;
-                return;
-              }
-              final key = switch (slot) {
-                'profit' => 'profit',
-                'revenue' => 'revenue',
-                'cost' => 'totalCost',
-                'scale' => scaleKey,
-                'scaleAlt' => altKey.isEmpty ? scaleKey : altKey,
-                'costAlt' => showGmv ? 'gmv' : _expandedTrendKey,
-                _ => _expandedTrendKey,
-              };
-              _expandedTrendKey = key;
-              _heroTraceKey = key != null && _heroFormula(key) != null
-                  ? key
-                  : null;
-            });
-          },
+                  setState(() {
+                    if (slot == null) {
+                      _expandedTrendKey = null;
+                      _heroTraceKey = null;
+                      return;
+                    }
+                    final key = switch (slot) {
+                      'profit' => 'profit',
+                      'revenue' => 'revenue',
+                      'cost' => 'totalCost',
+                      'scale' => scaleKey,
+                      'scaleAlt' => altKey.isEmpty ? scaleKey : altKey,
+                      'costAlt' => showGmv ? 'gmv' : _expandedTrendKey,
+                      _ => _expandedTrendKey,
+                    };
+                    _expandedTrendKey = key;
+                    _heroTraceKey = key != null && _heroFormula(key) != null
+                        ? key
+                        : null;
+                  });
+                },
         );
       },
     );
@@ -23367,331 +23456,358 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     child: SizedBox(
                                       width: mastheadBox.maxWidth,
                                       child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    if (lighthouseHeroMastheadLabelAboveNumber) ...[
-                                      Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Container(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            5,
-                                            4,
-                                            7,
-                                            4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: profitPanel
-                                                ? DunesColors.resolve(
-                                                    context,
-                                                    const Color(
-                                                      lighthouseHeroResultSectionChipValue,
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          if (lighthouseHeroMastheadLabelAboveNumber) ...[
+                                            Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.fromLTRB(
+                                                      5,
+                                                      4,
+                                                      7,
+                                                      4,
                                                     ),
-                                                    role:
-                                                        DunesColorRole.surface,
-                                                  )
-                                                : DunesColors.resolve(
-                                                    context,
-                                                    _LhPlum.primary,
-                                                    role:
-                                                        DunesColorRole.surface,
-                                                  ).withAlpha(12),
-                                            borderRadius: BorderRadius.circular(
-                                              lighthouseHeroMastheadLabelRadius,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Container(
-                                                width:
-                                                    lighthouseHeroMastheadLabelIconSize,
-                                                height:
-                                                    lighthouseHeroMastheadLabelIconSize,
                                                 decoration: BoxDecoration(
                                                   color: profitPanel
                                                       ? DunesColors.resolve(
                                                           context,
                                                           const Color(
-                                                            lighthouseLedgerResultBlockAccentValue,
+                                                            lighthouseHeroResultSectionChipValue,
                                                           ),
                                                           role: DunesColorRole
                                                               .surface,
-                                                        ).withAlpha(34)
-                                                      : DunesColors.resolve(
-                                                          context,
-                                                          _LhPlum.primary,
-                                                          role: DunesColorRole
-                                                              .surface,
-                                                        ).withAlpha(24),
-                                                  borderRadius:
-                                                      BorderRadius.circular(5),
-                                                ),
-                                                child: Icon(
-                                                  Icons.trending_up_rounded,
-                                                  size: 11,
-                                                  color: profitPanel
-                                                      ? DunesColors.resolve(
-                                                          context,
-                                                          const Color(
-                                                            lighthouseHeroResultSectionTitleValue,
-                                                          ),
                                                         )
                                                       : DunesColors.resolve(
                                                           context,
                                                           _LhPlum.primary,
+                                                          role: DunesColorRole
+                                                              .surface,
+                                                        ).withAlpha(12),
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                        lighthouseHeroMastheadLabelRadius,
+                                                      ),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Container(
+                                                      width:
+                                                          lighthouseHeroMastheadLabelIconSize,
+                                                      height:
+                                                          lighthouseHeroMastheadLabelIconSize,
+                                                      decoration: BoxDecoration(
+                                                        color: profitPanel
+                                                            ? DunesColors.resolve(
+                                                                context,
+                                                                const Color(
+                                                                  lighthouseLedgerResultBlockAccentValue,
+                                                                ),
+                                                                role:
+                                                                    DunesColorRole
+                                                                        .surface,
+                                                              ).withAlpha(34)
+                                                            : DunesColors.resolve(
+                                                                context,
+                                                                _LhPlum.primary,
+                                                                role:
+                                                                    DunesColorRole
+                                                                        .surface,
+                                                              ).withAlpha(24),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              5,
+                                                            ),
+                                                      ),
+                                                      child: Icon(
+                                                        Icons
+                                                            .trending_up_rounded,
+                                                        size: 11,
+                                                        color: profitPanel
+                                                            ? DunesColors.resolve(
+                                                                context,
+                                                                const Color(
+                                                                  lighthouseHeroResultSectionTitleValue,
+                                                                ),
+                                                              )
+                                                            : DunesColors.resolve(
+                                                                context,
+                                                                _LhPlum.primary,
+                                                              ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 5),
+                                                    // 选中某一天时，日期**替换**掉口径名而不是排在它
+                                                    // 后面 —— 追加的写法会把「本月利润」挤成「本日…」，
+                                                    // 而日期本来就是更具体的那一个，该它站在前面。
+                                                    if (heroPointLabel !=
+                                                        null) ...[
+                                                      Text(
+                                                        heroPointLabel,
+                                                        style: _tabular(
+                                                          LhTypography.mono(
+                                                            size:
+                                                                lighthouseHeroMastheadLabelFontSize,
+                                                            color:
+                                                                DunesColors.resolve(
+                                                                  context,
+                                                                  _LhPlum
+                                                                      .primary,
+                                                                ),
+                                                            weight:
+                                                                FontWeight.w700,
+                                                            letterSpacing: 0.2,
+                                                            height: 1.0,
+                                                            context: context,
+                                                          ),
                                                         ),
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Flexible(
+                                                        child: Text(
+                                                          _metricPageLabel(
+                                                            mastheadKey,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          style: LhTypography.sans(
+                                                            size:
+                                                                lighthouseHeroMastheadLabelFontSize,
+                                                            color:
+                                                                DunesColors.resolve(
+                                                                  context,
+                                                                  LhColors.ink2,
+                                                                ),
+                                                            weight:
+                                                                FontWeight.w600,
+                                                            letterSpacing: 0.1,
+                                                            height: 1.0,
+                                                            context: context,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 3),
+                                                      GestureDetector(
+                                                        behavior:
+                                                            HitTestBehavior
+                                                                .opaque,
+                                                        onTap:
+                                                            _clearHeroPointSelection,
+                                                        child: Padding(
+                                                          padding:
+                                                              EdgeInsets.symmetric(
+                                                                horizontal: 2,
+                                                                vertical: 3,
+                                                              ),
+                                                          child: Icon(
+                                                            Icons
+                                                                .refresh_rounded,
+                                                            size: 11,
+                                                            color:
+                                                                DunesColors.resolve(
+                                                                  context,
+                                                                  _LhPlum
+                                                                      .primary,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ] else ...[
+                                                      Flexible(
+                                                        child: Text(
+                                                          lighthouseHeroMetricPeriodLabel(
+                                                            _period,
+                                                            mastheadKey,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          style: LhTypography.sans(
+                                                            size:
+                                                                lighthouseHeroMastheadLabelFontSize,
+                                                            color:
+                                                                DunesColors.resolve(
+                                                                  context,
+                                                                  LhColors.ink,
+                                                                ),
+                                                            weight:
+                                                                FontWeight.w600,
+                                                            letterSpacing: 0.1,
+                                                            height: 1.0,
+                                                            context: context,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      // 点了下面某个指标后，大数和走势都换成它；
+                                                      // 原来只能再点一次那格才回得去，很多人不知道。
+                                                      // 这里给一个明面上的 ×，一点回到默认口径。
+                                                      if (lighthouseHeroMastheadShowsFocusExit &&
+                                                          _expandedTrendKey !=
+                                                              null) ...[
+                                                        const SizedBox(
+                                                          width: 3,
+                                                        ),
+                                                        GestureDetector(
+                                                          behavior:
+                                                              HitTestBehavior
+                                                                  .opaque,
+                                                          onTap: () {
+                                                            LighthouseFeedback
+                                                                .instance
+                                                                .play(
+                                                                  LighthouseFeedbackKind
+                                                                      .select,
+                                                                );
+                                                            setState(() {
+                                                              _expandedTrendKey =
+                                                                  null;
+                                                              _heroTraceKey =
+                                                                  null;
+                                                            });
+                                                          },
+                                                          child: Padding(
+                                                            padding:
+                                                                EdgeInsets.symmetric(
+                                                                  horizontal: 4,
+                                                                  vertical: 3,
+                                                                ),
+                                                            child: Icon(
+                                                              Icons
+                                                                  .close_rounded,
+                                                              size: 12,
+                                                              color:
+                                                                  DunesColors.resolve(
+                                                                    context,
+                                                                    _LhPlum
+                                                                        .primary,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ],
+                                                  ],
                                                 ),
                                               ),
-                                              const SizedBox(width: 5),
-                                              // 选中某一天时，日期**替换**掉口径名而不是排在它
-                                              // 后面 —— 追加的写法会把「本月利润」挤成「本日…」，
-                                              // 而日期本来就是更具体的那一个，该它站在前面。
-                                              if (heroPointLabel != null) ...[
-                                                Text(
-                                                  heroPointLabel,
-                                                  style: _tabular(
-                                                    LhTypography.mono(
-                                                      size:
-                                                          lighthouseHeroMastheadLabelFontSize,
-                                                      color:
-                                                          DunesColors.resolve(
-                                                            context,
-                                                            _LhPlum.primary,
-                                                          ),
-                                                      weight: FontWeight.w700,
-                                                      letterSpacing: 0.2,
-                                                      height: 1.0,
-                                                      context: context,
-                                                    ),
-                                                  ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                          ],
+                                          if (mastheadKey == 'grossMargin') ...[
+                                            Text(
+                                              _grossMarginFormula(),
+                                              style: LhTypography.sans(
+                                                size: 9,
+                                                color: DunesColors.resolve(
+                                                  context,
+                                                  LhColors.ink2,
                                                 ),
-                                                const SizedBox(width: 4),
-                                                Flexible(
-                                                  child: Text(
-                                                    _metricPageLabel(
-                                                      mastheadKey,
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: LhTypography.sans(
-                                                      size:
-                                                          lighthouseHeroMastheadLabelFontSize,
-                                                      color:
-                                                          DunesColors.resolve(
-                                                            context,
-                                                            LhColors.ink2,
-                                                          ),
-                                                      weight: FontWeight.w600,
-                                                      letterSpacing: 0.1,
-                                                      height: 1.0,
-                                                      context: context,
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 3),
-                                                GestureDetector(
-                                                  behavior:
-                                                      HitTestBehavior.opaque,
-                                                  onTap:
-                                                      _clearHeroPointSelection,
-                                                  child: Padding(
-                                                    padding:
-                                                        EdgeInsets.symmetric(
-                                                          horizontal: 2,
-                                                          vertical: 3,
-                                                        ),
-                                                    child: Icon(
-                                                      Icons.refresh_rounded,
-                                                      size: 11,
-                                                      color:
-                                                          DunesColors.resolve(
-                                                            context,
-                                                            _LhPlum.primary,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ] else ...[
-                                                Flexible(
-                                                  child: Text(
-                                                    lighthouseHeroMetricPeriodLabel(
-                                                      _period,
-                                                      mastheadKey,
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: LhTypography.sans(
-                                                      size:
-                                                          lighthouseHeroMastheadLabelFontSize,
-                                                      color:
-                                                          DunesColors.resolve(
-                                                            context,
-                                                            LhColors.ink,
-                                                          ),
-                                                      weight: FontWeight.w600,
-                                                      letterSpacing: 0.1,
-                                                      height: 1.0,
-                                                      context: context,
-                                                    ),
-                                                  ),
-                                                ),
-                                                // 点了下面某个指标后，大数和走势都换成它；
-                                                // 原来只能再点一次那格才回得去，很多人不知道。
-                                                // 这里给一个明面上的 ×，一点回到默认口径。
-                                                if (lighthouseHeroMastheadShowsFocusExit &&
-                                                    _expandedTrendKey !=
-                                                        null) ...[
-                                                  const SizedBox(width: 3),
-                                                  GestureDetector(
-                                                    behavior:
-                                                        HitTestBehavior.opaque,
-                                                    onTap: () {
-                                                      LighthouseFeedback
-                                                          .instance
-                                                          .play(
-                                                            LighthouseFeedbackKind
-                                                                .select,
-                                                          );
-                                                      setState(() {
-                                                        _expandedTrendKey =
-                                                            null;
-                                                        _heroTraceKey = null;
-                                                      });
-                                                    },
-                                                    child: Padding(
-                                                      padding:
-                                                          EdgeInsets.symmetric(
-                                                            horizontal: 4,
-                                                            vertical: 3,
-                                                          ),
-                                                      child: Icon(
-                                                        Icons.close_rounded,
-                                                        size: 12,
+                                                height: 1.2,
+                                                context: context,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 5),
+                                          ],
+                                          _LhAnimatedNumber(
+                                            value: mastheadIsRate
+                                                ? heroMastheadValue
+                                                : heroMastheadValue.abs(),
+                                            duration: const Duration(
+                                              milliseconds: 800,
+                                            ),
+                                            immediate: heroPointActive,
+                                            builder: (context, v) => LhScrollRichText(
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              text: TextSpan(
+                                                children: [
+                                                  if (mastheadIsNeg)
+                                                    TextSpan(
+                                                      text: '−',
+                                                      style: LhTypography.number(
+                                                        size:
+                                                            lighthouseHeroMastheadFontSize,
                                                         color:
                                                             DunesColors.resolve(
                                                               context,
-                                                              _LhPlum.primary,
+                                                              LhColors.pos,
                                                             ),
+                                                        context: context,
                                                       ),
+                                                    ),
+                                                  TextSpan(
+                                                    text: mastheadIsRate
+                                                        ? v.toStringAsFixed(2)
+                                                        : (lighthouseHeroMetricPlainNumber(
+                                                                mastheadKey,
+                                                                v,
+                                                              ) ??
+                                                              _fmtMoney(v)),
+                                                    style: LhTypography.number(
+                                                      size:
+                                                          lighthouseHeroMastheadFontSize,
+                                                      color: _grossProfitValueColor(
+                                                        mastheadKey,
+                                                        heroMastheadValue,
+                                                        mastheadIsNeg
+                                                            ? DunesColors.resolve(
+                                                                context,
+                                                                LhColors.pos,
+                                                              )
+                                                            : DunesColors.resolve(
+                                                                context,
+                                                                _LhPlum.heroNum,
+                                                              ),
+                                                      ),
+                                                      context: context,
+                                                    ),
+                                                  ),
+                                                  TextSpan(
+                                                    text: mastheadIsRate
+                                                        ? '%'
+                                                        : (lighthouseHeroMetricPlainUnit(
+                                                                    mastheadKey,
+                                                                  ) !=
+                                                                  null
+                                                              ? ' ${lighthouseHeroMetricPlainUnit(mastheadKey)}'
+                                                              : ' ${_unitMoney(v)}'),
+                                                    style: LhTypography.sans(
+                                                      size: 10.5,
+                                                      color:
+                                                          DunesColors.resolve(
+                                                            context,
+                                                            LhColors.mute,
+                                                          ),
+                                                      weight: FontWeight.w500,
+                                                      context: context,
                                                     ),
                                                   ),
                                                 ],
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                    ],
-                                    if (mastheadKey == 'grossMargin') ...[
-                                      Text(
-                                        _grossMarginFormula(),
-                                        style: LhTypography.sans(
-                                          size: 9,
-                                          color: DunesColors.resolve(
-                                            context,
-                                            LhColors.ink2,
-                                          ),
-                                          height: 1.2,
-                                          context: context,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 5),
-                                    ],
-                                    _LhAnimatedNumber(
-                                      value: mastheadIsRate
-                                          ? heroMastheadValue
-                                          : heroMastheadValue.abs(),
-                                      duration: const Duration(
-                                        milliseconds: 800,
-                                      ),
-                                      immediate: heroPointActive,
-                                      builder: (context, v) => LhScrollRichText(
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        text: TextSpan(
-                                          children: [
-                                            if (mastheadIsNeg)
-                                              TextSpan(
-                                                text: '−',
-                                                style: LhTypography.number(
-                                                  size:
-                                                      lighthouseHeroMastheadFontSize,
-                                                  color: DunesColors.resolve(
-                                                    context,
-                                                    LhColors.pos,
-                                                  ),
-                                                  context: context,
-                                                ),
-                                              ),
-                                            TextSpan(
-                                              text: mastheadIsRate
-                                                  ? v.toStringAsFixed(2)
-                                                  : (lighthouseHeroMetricPlainNumber(
-                                                          mastheadKey,
-                                                          v,
-                                                        ) ??
-                                                        _fmtMoney(v)),
-                                              style: LhTypography.number(
-                                                size:
-                                                    lighthouseHeroMastheadFontSize,
-                                                color: _grossProfitValueColor(
-                                                  mastheadKey,
-                                                  heroMastheadValue,
-                                                  mastheadIsNeg
-                                                      ? DunesColors.resolve(
-                                                          context,
-                                                          LhColors.pos,
-                                                        )
-                                                      : DunesColors.resolve(
-                                                          context,
-                                                          _LhPlum.heroNum,
-                                                        ),
-                                                ),
-                                                context: context,
                                               ),
                                             ),
-                                            TextSpan(
-                                              text: mastheadIsRate
-                                                  ? '%'
-                                                  : (lighthouseHeroMetricPlainUnit(
-                                                              mastheadKey,
-                                                            ) !=
-                                                            null
-                                                        ? ' ${lighthouseHeroMetricPlainUnit(mastheadKey)}'
-                                                        : ' ${_unitMoney(v)}'),
-                                              style: LhTypography.sans(
-                                                size: 10.5,
-                                                color: DunesColors.resolve(
-                                                  context,
-                                                  LhColors.mute,
-                                                ),
-                                                weight: FontWeight.w500,
-                                                context: context,
-                                              ),
+                                          ),
+                                          const SizedBox(height: 5),
+                                          _heroDeltaLine(
+                                            profitDelta,
+                                            pointMode: heroPointActive,
+                                            isRate: mastheadIsRate,
+                                            vsLabel: _heroDeltaVsLabel(
+                                              pointMode: heroPointActive,
+                                              series:
+                                                  mastheadKey ==
+                                                      'netTaBankBalance'
+                                                  ? _netTABankBalanceSeries()
+                                                  : _seriesForMetric(
+                                                      mastheadKey,
+                                                    ),
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 5),
-                                    _heroDeltaLine(
-                                      profitDelta,
-                                      pointMode: heroPointActive,
-                                      isRate: mastheadIsRate,
-                                      vsLabel: _heroDeltaVsLabel(
-                                        pointMode: heroPointActive,
-                                        series:
-                                            mastheadKey == 'netTaBankBalance'
-                                            ? _netTABankBalanceSeries()
-                                            : _seriesForMetric(mastheadKey),
-                                      ),
-                                    ),
-                                  ],
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
@@ -24347,55 +24463,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     ).currentLabel;
   }
 
-  /// 自定义/当前实例日期入口 —— 无填充无描边。
+  /// 当前在看的日期窗口（纯文字）+ 清除 / 回到当前。
   /// 挂在列表控制条左侧（与「指标」同行），不进 Hero。
   Widget _buildDateRangeControl() {
     final label = _selectedRangeLabel;
-    final action = _isCustomRange ? '换区间' : '选区间';
 
+    // 选区间已经并进期间条第 6 格「区间」，这里只留一行日期说明在看哪一段。
     return Row(
       children: [
         Flexible(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _pickDateRange,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: LhScrollText(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _tabular(
-                      LhTypography.mono(
-                        size: 11,
-                        color: DunesColors.resolve(context, LhColors.ink2),
-                        weight: FontWeight.w600,
-                        letterSpacing: 0.2,
-                        context: context,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  action,
-                  style: LhTypography.sans(
-                    size: 11,
-                    color: DunesColors.resolve(context, LhColors.mute),
-                    weight: FontWeight.w500,
-                    letterSpacing: 0.1,
-                    context: context,
-                  ),
-                ),
-                const SizedBox(width: 1),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 14,
-                  color: DunesColors.resolve(context, LhColors.mute2),
-                ),
-              ],
+          child: LhScrollText(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _tabular(
+              LhTypography.mono(
+                size: 11,
+                color: DunesColors.resolve(context, LhColors.ink2),
+                weight: FontWeight.w600,
+                letterSpacing: 0.2,
+                context: context,
+              ),
             ),
           ),
         ),
@@ -25201,6 +25289,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final detailTypeSnapshot = _detailType;
     final detailKeySnapshot = _detailKey;
     setState(() {
+      _listLimitKeptForReload = _listLimit;
       _period = newPeriod;
       _periodOffset = newOffset;
       _heroPointIndex = null;
@@ -25843,6 +25932,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final detailTypeSnapshot = _detailType;
     final detailKeySnapshot = _detailKey;
     setState(() {
+      _listLimitKeptForReload = _listLimit;
       _customStart = s;
       _customEnd = e;
       _periodOffset = 0; // 显式清 offset, 让 UI 状态一致
@@ -25872,10 +25962,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
   }
 
+  /// 「区间」胶囊里的短日期：同月 `10.01–14`，跨月 `9.28–10.3`，单日 `10.01`。
+  String _customRangePillLabel() {
+    final s = _customStart;
+    final e = _customEnd;
+    if (s == null || e == null) return '区间';
+    String two(int v) => v.toString().padLeft(2, '0');
+    if (s.year == e.year && s.month == e.month) {
+      if (s.day == e.day) return '${two(s.month)}.${two(s.day)}';
+      return '${two(s.month)}.${two(s.day)}–${two(e.day)}';
+    }
+    return '${s.month}.${s.day}–${e.month}.${e.day}';
+  }
+
   /// 清掉自定义区间, 回到 period+offset 模式.
   void _clearCustomRange() {
     if (!_isCustomRange) return;
     setState(() {
+      _listLimitKeptForReload = _listLimit;
       _customStart = null;
       _customEnd = null;
       _loading = true;
@@ -25895,8 +25999,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       mainAxisSize: MainAxisSize.min,
       children: [
         LhPeriodBar(
-          labels: [for (final k in _kPeriodKeys) _kPeriodShort[k] ?? ''],
-          selectedIndex: _isCustomRange ? -1 : _kPeriodKeys.indexOf(_period),
+          // 第 6 格「区间」：自选起止日期，不再在列表头单独挂一个「选区间」。
+          labels: [for (final k in _kPeriodKeys) _kPeriodShort[k] ?? '', '区间'],
+          selectedIndex: _isCustomRange
+              ? _kPeriodKeys.length
+              : _kPeriodKeys.indexOf(_period),
           pickerOpen: _periodPickerOpen,
           floating: lighthousePeriodUsesFloatingSegment,
           height: lighthousePeriodTrackHeight,
@@ -25985,9 +26092,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           selectedTextColor: lighthousePeriodUsesHeroSurface
               ? DunesColors.resolve(context, _LhPlum.heroNum)
               : null,
-          selectedLabel: (_isCustomRange || !lighthousePeriodPillShowsInstance)
-              ? null
-              : _periodPillLabel(_period, _periodOffset),
+          selectedLabel: _isCustomRange
+              ? _customRangePillLabel()
+              : (!lighthousePeriodPillShowsInstance
+                    ? null
+                    : _periodPillLabel(_period, _periodOffset)),
           ambientMotion: lighthousePeriodAmbientMotion,
           baseTextStyle: LhTypography.sans(
             size: lighthousePeriodLabelFontSize,
@@ -25999,6 +26108,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ),
           onTap: (i) {
             LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
+            // 「区间」格：直接弹日历；已经在看区间时再点 = 换一段。
+            // 取消不改任何东西，胶囊留在原来那格。
+            if (i >= _kPeriodKeys.length) {
+              if (_periodPickerOpen) {
+                setState(() => _periodPickerOpen = false);
+              }
+              _pickDateRange();
+              return;
+            }
             final k = _kPeriodKeys[i];
             // v12.7 · 自定义区间生效时, 点任何 period tab 都先清区间
             //   然后按 tab 意图继续: 同 tab 就切到 offset=0, 不同 tab 切粒度.
@@ -26020,7 +26138,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           },
         ),
         // 实例选择条 — 点当前粒度 tab 展开 —— 横滑选具体哪一天/周/月/季/年
-        // (自定义区间生效时不显示, 走列表控制条 _buildDateRangeControl → _pickDateRange)
+        // (自定义区间生效时不显示；区间在期间条第 6 格「区间」里选)
         if (_periodPickerOpen && !_isCustomRange) ...[
           const SizedBox(height: 4),
           SizedBox(
@@ -32190,8 +32308,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         groups.isNotEmpty &&
         ((showHun && hunOpts.isNotEmpty) || showTradeType);
     final supplyFolded = supplyFoldable && !_supplyMoreFiltersOpen;
-    final supplyHiddenActive =
-        _hunFilter != '全部' || _tradeTypeFilter != '全部';
+    final supplyHiddenActive = _hunFilter != '全部' || _tradeTypeFilter != '全部';
     Widget moreFiltersToggle() {
       final open = _supplyMoreFiltersOpen;
       return Semantics(
@@ -38970,6 +39087,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     String? metricsTab,
     String? trendKey,
     Widget? shareIcon,
+    Widget? belowName,
   }) {
     final tab = metricsTab ?? _tab;
     // 二级/三级列表维看 _detailSubTab（SKU=productName）；一级仍用当前 tab。
@@ -39010,11 +39128,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 标签二一级省份统一给出权益入口。匹配到项目就列项目；没匹配到也能点开
     // 并看到明确空状态，避免用户靠有没有线猜哪些省份可操作。
     final equityLinks = lighthouseEquityLinksOf(r);
-    final showsEquityPopover = lighthouseShowsEquityPopover(
-      tab: tab,
-      isTopLevel: _detailKey == null,
-      hasEquityLinks: equityLinks.isNotEmpty,
-    );
+    // 省份名下划线 → 关联权益气泡：先隐藏（lighthouseEquityPopoverEnabled）。
+    final showsEquityPopover =
+        lighthouseEquityPopoverEnabled &&
+        lighthouseShowsEquityPopover(
+          tab: tab,
+          isTopLevel: _detailKey == null,
+          hasEquityLinks: equityLinks.isNotEmpty,
+        );
 
     final nameStyle = LhTypography.sans(
       size: _fs(nameFontSize),
@@ -39314,9 +39435,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             SizedBox(width: _fs(5)),
           ],
           Expanded(
-            // 这里必须是会换行的 Text：LhScrollText 走单行可横拖的渲染
-            // 路径，maxLines 对它无效 —— 正是它把名字画到列外去的。
-            child: Align(alignment: Alignment.topLeft, child: pinnedNameText),
+            // 省份名和资产入口共用标题行；长省名仍可换行，钱袋不再独占下一行。
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: belowName == null
+                  ? pinnedNameText
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Flexible(fit: FlexFit.loose, child: pinnedNameText),
+                        SizedBox(width: _fs(3)),
+                        // 往上提一点，跟省份名那一行的字对齐。
+                        Transform.translate(
+                          offset: Offset(0, -_fs(1.5)),
+                          child: belowName,
+                        ),
+                      ],
+                    ),
+            ),
           ),
         ],
       );
@@ -39670,6 +39807,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         Align(
                           alignment: Alignment.centerLeft,
                           child: _buildReconChip(reconStatus, name),
+                        ),
+                      ],
+                      if (belowName != null) ...[
+                        SizedBox(height: _fs(6)),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: belowName,
                         ),
                       ],
                       SizedBox(height: _fs(reconStatus != null ? 5 : 8)),
@@ -41807,6 +41951,49 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 供给卡片资金池预览：左总资产、右票税（应开发票金额）。两格同形，
   /// 不再让票税撑成三行 —— 异形格会把整行顶高，冻结列也得跟着补高。
   /// 两格各自点开自己的面板：总资产 → 资金 / 券 / 对账 / 资产；票税 → 发票。
+  /// 省份名旁的「总资产」钱袋子：点一下展开 / 收起资产面板。
+  Widget _fundPoolBagButton({required bool open, required VoidCallback onTap}) {
+    final plum = DunesColors.resolve(context, _LhPlum.primary);
+    final deep = DunesColors.resolve(context, _LhPlum.deep);
+    final paper = DunesColors.resolve(context, LhColors.paper);
+    final icon = _fs(15);
+    // 不要底板：只画一只橐。收起 = 紫线描边 + 一层很淡的紫；
+    // 展开 = 整只填成深紫，绳结和 ¥ 反白。
+    return Semantics(
+      button: true,
+      toggled: open,
+      label: open ? '收起总资产' : '看总资产',
+      child: Tooltip(
+        message: '总资产',
+        waitDuration: const Duration(milliseconds: 400),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: SizedBox.square(
+            dimension: _fs(22),
+            child: Center(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(end: open ? 1 : 0),
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                builder: (context, t, _) => CustomPaint(
+                  size: Size.square(icon),
+                  painter: _LhMoneyBagPainter(
+                    ink: Color.lerp(plum, deep, t)!,
+                    fill: Color.lerp(plum.withAlpha(26), deep, t)!,
+                    tie: Color.lerp(deep, paper, t)!,
+                    mark: Color.lerp(plum, paper, t)!,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+
   Widget _buildSupplyFundPoolPreview(
     double cellHeight, {
     required LighthouseFundPoolAmounts? amounts,
@@ -41876,16 +42063,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         child: Semantics(
           button: true,
           label: selected ? '收起$label明细' : '展开$label明细',
-          child: Container(
-            // v23 · 与摘要面板同一套皮：无描边、同底色、同圆角；上方留一条缝
-            // 跟三行面板分开。选中才出紫边。
+          child: AnimatedContainer(
+            // 与销售额、成本合计的激活格一致：白底、细描边和轻投影。
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
             margin: EdgeInsets.fromLTRB(_fs(3), _fs(4), _fs(3), _fs(1)),
             decoration: BoxDecoration(
-              // 选中用实色淡紫，不用 alpha 叠色 —— alpha 12 压在白底上看不出来。
               color: selected
                   ? DunesColors.resolve(
                       context,
-                      _LhPlum.mist,
+                      Colors.white,
                       role: DunesColorRole.surface,
                     )
                   : DunesColors.resolve(
@@ -41900,12 +42087,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 color: selected
                     ? DunesColors.resolve(
                         context,
-                        _LhPlum.soft,
+                        _LhPlum.primary,
                         role: DunesColorRole.border,
-                      )
+                      ).withAlpha(46)
                     : Colors.transparent,
-                width: 1,
+                width: 0.8,
               ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: _LhPlum.deep.withAlpha(28),
+                        blurRadius: 6,
+                        offset: const Offset(0, 1.5),
+                      ),
+                    ]
+                  : null,
             ),
             clipBehavior: Clip.none,
             child: Material(
@@ -42005,19 +42201,28 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Widget metricGrid(List<Widget> items, {int columns = 1}) {
       final rows = <Widget>[];
       for (var start = 0; start < items.length; start += columns) {
+        // 跟账本指标格同一套：每格一块浅紫灰底，同一行等高，空位也画一块
+        // 空格子 —— 四张卡的格子横竖都对得齐。
         rows.add(
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var index = 0; index < columns; index++) ...[
-                if (index > 0) SizedBox(width: _fs(2)),
-                Expanded(
-                  child: start + index < items.length
-                      ? items[start + index]
-                      : const SizedBox.shrink(),
-                ),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var index = 0; index < columns; index++) ...[
+                  if (index > 0) SizedBox(width: _fs(4)),
+                  Expanded(
+                    child: start + index < items.length
+                        ? items[start + index]
+                        : DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: _fundPoolTileColor(),
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                          ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         );
         if (start + columns < items.length) rows.add(SizedBox(height: _fs(4)));
@@ -42065,8 +42270,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // 格子带 3 的内边距，标题也缩 3，两者左边缘才对齐。
-                SizedBox(width: _fs(3)),
+                // 格子现在是实底的块，图标贴着格子左边缘对齐。
+                SizedBox(width: _fs(1)),
                 Container(
                   width: _fs(17),
                   height: _fs(17),
@@ -42165,6 +42370,43 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }
 
+    // 资产明细保留两列等式，外壳与销售额、成本合计展开区统一。
+    if (panel == lighthouseFundPoolPanelAssets) {
+      final divider = DunesColors.resolve(
+        context,
+        _LhPlum.line,
+        role: DunesColorRole.surface,
+      );
+      return AnimatedSize(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        child: Container(
+          width: double.infinity,
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(height: 0.5, color: divider),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                child: _buildFundPoolEquations(
+                  amounts,
+                  externals: externals,
+                  traced: traced,
+                  onTraceTap: onTraceTap,
+                ),
+              ),
+              Container(height: 0.5, color: divider),
+            ],
+          ),
+        ),
+      );
+    }
+
     final rows = lighthouseFundPoolPanelRows(panel);
     return Container(
       padding: EdgeInsets.fromLTRB(_fs(10), _fs(9), _fs(10), _fs(11)),
@@ -42223,6 +42465,803 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
+  /// 资产面板：按两条等式排成两张「竖式」，像算账一样从上往下加减 ——
+  ///   账面资产 = 已入账 + 待入账 + 期末预付
+  ///   对账差额 = 期末预付 − 可动用额度 − 券资产（在手券 + 同步在途）− 期末应收返利
+  /// 期末预付两边共用，两张里都用同一个紫色写。不进等式的（期间利润、
+  /// 已预支、周转周期）单独一排，利润不会和对账差额混在一起读。
+  /// 对账差额不为 0 不一定是错，只标中性的「有差额」，不染红。
+  Widget _buildFundPoolEquations(
+    LighthouseFundPoolAmounts? amounts, {
+    required Map<String, double?> externals,
+    String? traced,
+    ValueChanged<String>? onTraceTap,
+    bool? compactLayout,
+  }) {
+    if (compactLayout == null) {
+      return LayoutBuilder(
+        builder: (context, constraints) => _buildFundPoolEquations(
+          amounts,
+          externals: externals,
+          traced: traced,
+          onTraceTap: onTraceTap,
+          compactLayout: constraints.maxWidth < 560,
+        ),
+      );
+    }
+    final compact = compactLayout;
+    // 点「期末预付」（左右哪张都行）→ 两行一起点亮、右边整张亮起来，并写出
+    // 「期末预付 = 可动用额度 + 券资产 + 期末应收返利 + 对账差额」：右边那张
+    // 就是在把期末预付拆开。复用每行自己的追溯状态，再点一下收起。
+    final linked = traced == 'systemDifference';
+    final canLink = onTraceTap != null;
+    void toggleLink() {
+      LighthouseFeedback.instance.play(
+        linked ? LighthouseFeedbackKind.collapse : LighthouseFeedbackKind.expand,
+      );
+      onTraceTap?.call('systemDifference');
+    }
+
+    double? v(String key) => lighthouseFundPoolExternalMetricKeys.contains(key)
+        ? externals[key]
+        : lighthouseFundPoolAmountByKey(amounts, key);
+    final ink = DunesColors.resolve(context, LhColors.ink);
+    final ink2 = DunesColors.resolve(context, LhColors.ink2);
+    final mute = DunesColors.resolve(context, LhColors.mute2);
+    final tile = DunesColors.resolve(
+      context,
+      const Color(0xFFF1F4F8),
+      role: DunesColorRole.surface,
+    );
+    final hair = DunesColors.resolve(
+      context,
+      const Color(0xFFE2E8EF),
+      role: DunesColorRole.border,
+    );
+    final cardFill = DunesColors.resolveNullable(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    );
+    final cardEdge = DunesColors.resolve(
+      context,
+      const Color(0xFFDDE5ED),
+      role: DunesColorRole.border,
+    );
+    final (assetIcon, _, _, _, _) = _fundPoolSectionPalette(
+      LighthouseFundPoolSectionKind.assets,
+    );
+    final (reconIcon, _, _, _, _) = _fundPoolSectionPalette(
+      LighthouseFundPoolSectionKind.recon,
+    );
+    final accent = DunesColors.resolve(context, LhColors.product);
+    final prepaymentColor = DunesColors.resolve(context, _LhPlum.deep);
+    // 两列始终并排；窄屏只收紧字重、字号和留白。
+
+    Widget amountText(
+      double? amount, {
+      double size = lighthouseLedgerValueFontSize,
+      Color? color,
+      FontWeight weight = FontWeight.w700,
+      bool growth = false,
+    }) {
+      final parts = lighthouseFormatFundPoolWanParts(amount);
+      final missing = parts.number == '—';
+      final up = (amount ?? 0) >= 0;
+      final gc = up
+          ? DunesColors.resolve(context, LhColors.neg)
+          : DunesColors.resolve(context, LhColors.pos);
+      final c = missing ? mute : (growth ? gc : (color ?? ink));
+      return Text.rich(
+        TextSpan(
+          children: [
+            if (growth && !missing) TextSpan(text: up ? '↑' : '↓'),
+            TextSpan(
+              text: growth ? parts.number.replaceFirst('-', '') : parts.number,
+            ),
+            if (parts.unit.isNotEmpty)
+              TextSpan(
+                text: parts.unit,
+                style: TextStyle(
+                  fontSize: _fs(size * 0.66),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+          ],
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: _tabular(
+          LhTypography.mono(
+            size: _fs(size),
+            color: c,
+            weight: missing ? FontWeight.w500 : weight,
+            height: 1.0,
+            context: context,
+          ),
+        ),
+      );
+    }
+
+    Widget tag(String text, Color fg, Color bg) => Container(
+      padding: EdgeInsets.symmetric(horizontal: _fs(5), vertical: _fs(2.5)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(context, bg, role: DunesColorRole.surface),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: LhTypography.sans(
+          size: _fs(8.5),
+          color: fg,
+          weight: FontWeight.w700,
+          height: 1.0,
+          context: context,
+        ),
+      ),
+    );
+
+    final pre = v('endingPrepaymentBalance');
+    const prepaymentNote = '统计时点余额 · 正数为预付，负数为欠供给方';
+    // 期末预付只在负数时挂一个「欠供应商」：正数是常态，不再写字。
+    Widget? prepaidTag() => pre != null && pre < 0
+        ? tag(
+            '欠供应商',
+            DunesColors.resolve(context, const Color(0xFFB06E12)),
+            const Color(0xFFFBEFDD),
+          )
+        : null;
+
+    final diff = v('systemDifference');
+    final Widget? diffTag = diff == null
+        ? null
+        : (diff.abs() < 50
+              ? tag(
+                  '✓ 已对平',
+                  DunesColors.resolve(context, const Color(0xFF0E9A57)),
+                  const Color(0xFFE6F5EC),
+                )
+              : tag('有差额', ink2, const Color(0xFFE8EDF2)));
+
+    Widget line({
+      required String op,
+      required Color opColor,
+      required String label,
+      required double? amount,
+      String? hint,
+      String? note,
+      Widget? badge,
+      bool sharedPrepayment = false,
+      bool linkFromLeft = false,
+      List<(String, double?)> parts = const [],
+      bool divider = true,
+      bool lit = false,
+      Widget? trailing,
+      VoidCallback? onTap,
+    }) {
+      final box = AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        margin: EdgeInsets.symmetric(vertical: lit ? _fs(3) : 0),
+        padding: EdgeInsets.symmetric(
+          horizontal: lit ? _fs(5) : 0,
+          vertical: _fs(lit ? 5 : (compact ? 7 : 8)),
+        ),
+        decoration: lit
+            ? BoxDecoration(
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.paper,
+                  role: DunesColorRole.surface,
+                ),
+                border: Border.all(color: prepaymentColor, width: 1.1),
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: _LhPlum.deep.withAlpha(28),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              )
+            : BoxDecoration(
+                border: divider
+                    ? Border(bottom: BorderSide(color: hair, width: 0.8))
+                    : null,
+              ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: _fs(14),
+                  child: linkFromLeft
+                      ? Icon(
+                          Icons.arrow_back_rounded,
+                          size: _fs(12),
+                          color: prepaymentColor,
+                        )
+                      : Text(
+                          op,
+                          style: LhTypography.mono(
+                            size: _fs(12.5),
+                            color: sharedPrepayment ? prepaymentColor : opColor,
+                            weight: FontWeight.w800,
+                            height: 1.0,
+                            context: context,
+                          ),
+                        ),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: compact ? 2 : 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: LhTypography.sans(
+                            size: _fs(lighthouseLedgerMetricLabelFontSize),
+                            color: sharedPrepayment ? prepaymentColor : ink2,
+                            weight: FontWeight.w600,
+                            height: 1.0,
+                            context: context,
+                          ),
+                        ),
+                      ),
+                      if (hint != null && !compact) ...[
+                        SizedBox(width: _fs(3)),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: _fs(4),
+                            vertical: _fs(2),
+                          ),
+                          decoration: BoxDecoration(
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFE8EDF2),
+                              role: DunesColorRole.surface,
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            hint,
+                            maxLines: 1,
+                            style: LhTypography.sans(
+                              size: _fs(8.5),
+                              color: ink2,
+                              weight: FontWeight.w600,
+                              height: 1.0,
+                              context: context,
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (badge != null) ...[
+                        SizedBox(width: _fs(6)),
+                        Flexible(child: badge),
+                      ],
+                      if (trailing != null) ...[
+                        SizedBox(width: _fs(4)),
+                        trailing,
+                      ],
+                    ],
+                  ),
+                ),
+                SizedBox(width: _fs(4)),
+                amountText(
+                  amount,
+                  color: sharedPrepayment ? prepaymentColor : null,
+                ),
+              ],
+            ),
+            if (hint != null && compact)
+              Padding(
+                padding: EdgeInsets.only(left: _fs(14), top: _fs(3)),
+                child: Text(
+                  hint,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: LhTypography.sans(
+                    size: _fs(8.5),
+                    color: mute,
+                    height: 1,
+                    context: context,
+                  ),
+                ),
+              ),
+            if (note != null)
+              Padding(
+                padding: EdgeInsets.only(left: _fs(14), top: _fs(3)),
+                child: Text(
+                  note,
+                  maxLines: 3,
+                  softWrap: true,
+                  overflow: TextOverflow.ellipsis,
+                  style: LhTypography.sans(
+                    size: _fs(8.5),
+                    color: mute,
+                    height: 1.25,
+                    context: context,
+                  ),
+                ),
+              ),
+            if (parts.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.fromLTRB(_fs(24), _fs(6), 0, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < parts.length; i++)
+                      Padding(
+                        padding: EdgeInsets.only(top: i == 0 ? 0 : _fs(4)),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                parts[i].$1,
+                                maxLines: 1,
+                                style: LhTypography.sans(
+                                  size: _fs(9),
+                                  color: mute,
+                                  height: 1.0,
+                                  context: context,
+                                ),
+                              ),
+                            ),
+                            amountText(
+                              parts[i].$2,
+                              size: 9.5,
+                              color: mute,
+                              weight: FontWeight.w500,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
+      if (onTap == null) return box;
+      return Semantics(
+        button: true,
+        label: lit ? '收起$label的拆分' : '看$label拆开落到了哪里',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: box,
+        ),
+      );
+    }
+
+    Widget result({
+      required String label,
+      required double? amount,
+      Widget? badge,
+    }) {
+      return Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: _fs(compact ? 6 : 8),
+          vertical: _fs(7),
+        ),
+        decoration: BoxDecoration(
+          color: tile,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (badge != null && compact)
+              Padding(
+                padding: EdgeInsets.only(bottom: _fs(4)),
+                child: Align(alignment: Alignment.centerLeft, child: badge),
+              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: LhTypography.sans(
+                            size: _fs(10.5),
+                            color: ink2,
+                            weight: FontWeight.w700,
+                            height: 1.0,
+                            context: context,
+                          ),
+                        ),
+                      ),
+                      if (badge != null && !compact) ...[
+                        SizedBox(width: _fs(6)),
+                        Flexible(child: badge),
+                      ],
+                    ],
+                  ),
+                ),
+                SizedBox(width: _fs(4)),
+                amountText(
+                  amount,
+                  size: compact ? 13 : 14,
+                  weight: FontWeight.w800,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    BoxDecoration cardDeco() => BoxDecoration(
+      color: cardFill,
+      border: Border.all(color: cardEdge, width: 0.7),
+      borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
+    );
+
+    Widget card({
+      required IconData icon,
+      required Color accent,
+      required String title,
+      required String subtitle,
+      required List<Widget> lines,
+      required Widget bottom,
+      bool lit = false,
+      Widget? caption,
+    }) {
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.fromLTRB(
+          _fs(compact ? 7 : 9),
+          _fs(9),
+          _fs(compact ? 7 : 9),
+          _fs(10),
+        ),
+        decoration: lit
+            ? BoxDecoration(
+                color: cardFill,
+                border: Border.all(color: prepaymentColor, width: 1.3),
+                borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
+                boxShadow: [
+                  BoxShadow(
+                    color: _LhPlum.deep.withAlpha(34),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              )
+            : cardDeco(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: _fs(17),
+                  height: _fs(17),
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolveNullable(
+                      context,
+                      accent,
+                      role: DunesColorRole.surface,
+                    ),
+                    borderRadius: BorderRadius.circular(4.5),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: _fs(10),
+                    color: DunesColors.resolve(context, LhColors.paper),
+                  ),
+                ),
+                SizedBox(width: _fs(6)),
+                Text(
+                  title,
+                  style: LhTypography.sans(
+                    size: _fs(10.5),
+                    color: ink,
+                    weight: FontWeight.w700,
+                    height: 1.0,
+                    context: context,
+                  ),
+                ),
+                SizedBox(width: _fs(4)),
+                Flexible(
+                  child: Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: LhTypography.sans(
+                      size: _fs(8.5),
+                      color: mute,
+                      height: 1.0,
+                      context: context,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: _fs(8)),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: _fs(compact ? 6 : 10)),
+              decoration: BoxDecoration(
+                color: tile,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: lines,
+              ),
+            ),
+            if (caption != null) ...[SizedBox(height: _fs(6)), caption],
+            SizedBox(height: _fs(10)),
+            const Spacer(),
+            bottom,
+          ],
+        ),
+      );
+    }
+
+    // 左边「期末预付」后面的小钮：拆开看 → / 收起 ×。
+    Widget linkHint() => AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      padding: EdgeInsets.symmetric(horizontal: _fs(4), vertical: _fs(2)),
+      decoration: BoxDecoration(
+        color: linked
+            ? prepaymentColor
+            : DunesColors.resolve(
+                context,
+                const Color(0xFFEDE7FA),
+                role: DunesColorRole.surface,
+              ),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            linked ? '收起' : '拆开看',
+            style: LhTypography.sans(
+              size: _fs(8.5),
+              color: linked
+                  ? DunesColors.resolve(context, LhColors.paper)
+                  : prepaymentColor,
+              weight: FontWeight.w700,
+              height: 1.0,
+              context: context,
+            ),
+          ),
+          SizedBox(width: _fs(2)),
+          Icon(
+            linked ? Icons.close_rounded : Icons.arrow_forward_rounded,
+            size: _fs(9),
+            color: linked
+                ? DunesColors.resolve(context, LhColors.paper)
+                : prepaymentColor,
+          ),
+        ],
+      ),
+    );
+
+    // 点亮时右边多出的一行字：把等式换个方向写，期末预付拆成了哪几块。
+    final Widget? compositionLine = linked
+        ? Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: _fs(8),
+              vertical: _fs(6),
+            ),
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF4F0FC),
+                role: DunesColorRole.surface,
+              ),
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Text(
+              '期末预付 = 可动用额度 + 券资产 + 期末应收返利 + 对账差额',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: LhTypography.sans(
+                size: _fs(9),
+                color: prepaymentColor,
+                weight: FontWeight.w700,
+                height: 1.3,
+                context: context,
+              ),
+            ),
+          )
+        : null;
+
+    final assetsCard = card(
+      icon: assetIcon,
+      accent: accent,
+      title: '账面资产',
+      subtitle: '我方手上有多少',
+      lines: [
+        line(
+          op: '',
+          opColor: accent,
+          label: '已入账',
+          hint: '监管户',
+          amount: v('regulatoryAccountBalance'),
+        ),
+        line(
+          op: '+',
+          opColor: ink2,
+          label: '待入账',
+          hint: '在途',
+          amount: v('inTransitFunds'),
+        ),
+        line(
+          op: '+',
+          opColor: ink2,
+          label: '期末预付',
+          note: prepaymentNote,
+          badge: prepaidTag(),
+          sharedPrepayment: true,
+          amount: pre,
+          divider: false,
+          lit: linked,
+          trailing: canLink ? linkHint() : null,
+          onTap: canLink ? toggleLink : null,
+        ),
+      ],
+      bottom: result(label: '账面资产', amount: v('totalAssets')),
+    );
+
+    final reconCard = card(
+      icon: reconIcon,
+      accent: accent,
+      title: '对账差额',
+      subtitle: '拆开左边的期末预付',
+      lit: linked,
+      caption: compositionLine,
+      lines: [
+        line(
+          op: '',
+          opColor: accent,
+          label: '期末预付',
+          note: prepaymentNote,
+          badge: prepaidTag(),
+          sharedPrepayment: true,
+          linkFromLeft: true,
+          amount: pre,
+          lit: linked,
+          onTap: canLink ? toggleLink : null,
+        ),
+        line(
+          op: '−',
+          opColor: ink2,
+          label: '可动用额度',
+          hint: '资金池',
+          amount: v('fundPoolBalance'),
+        ),
+        line(
+          op: '−',
+          opColor: ink2,
+          label: '券资产',
+          amount: v('stockAndSyncVouchers'),
+          parts: [
+            ('在手券', v('inventoryVoucherBalance')),
+            ('＋ 同步在途', v('contractVoucherBalance')),
+          ],
+        ),
+        line(
+          op: '−',
+          opColor: ink2,
+          label: '期末应收返利',
+          amount: v('endingReceivableRebate'),
+          divider: false,
+        ),
+      ],
+      bottom: result(label: '对账差额', amount: diff, badge: diffTag),
+    );
+
+    Widget strip({
+      required String title,
+      String? hint,
+      required List<(String, double?, bool)> items,
+    }) {
+      return Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: _fs(compact ? 8 : 12),
+          vertical: _fs(9),
+        ),
+        decoration: cardDeco(),
+        child: Row(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Text(
+                    title,
+                    style: LhTypography.sans(
+                      size: _fs(10.5),
+                      color: ink,
+                      weight: FontWeight.w600,
+                      height: 1.0,
+                      context: context,
+                    ),
+                  ),
+                  if (hint != null) ...[
+                    SizedBox(width: _fs(4)),
+                    Flexible(
+                      child: Text(
+                        hint,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: LhTypography.sans(
+                          size: _fs(8.5),
+                          color: mute,
+                          height: 1.0,
+                          context: context,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            for (final (label, amount, growth) in items) ...[
+              SizedBox(width: _fs(compact ? 7 : 12)),
+              Text(
+                label,
+                style: LhTypography.sans(
+                  size: _fs(9),
+                  color: ink2,
+                  height: 1.0,
+                  context: context,
+                ),
+              ),
+              SizedBox(width: _fs(4)),
+              amountText(amount, size: 11.5, growth: growth),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final profitStrip = strip(
+      title: '期间利润',
+      hint: '赚了多少只看这里',
+      items: [('本月', v('profitMonth'), true), ('今日', v('profitDay'), true)],
+    );
+
+    Widget pair(Widget a, Widget b) => IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: a),
+          SizedBox(width: _fs(compact ? 6 : 8)),
+          Expanded(child: b),
+        ],
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        pair(assetsCard, reconCard),
+        SizedBox(height: _fs(8)),
+        profitStrip,
+        SizedBox(height: _fs(6)),
+      ],
+    );
+  }
+
   Widget _fundPoolSectionCard(
     LighthouseFundPoolSectionSpec spec,
     LighthouseFundPoolAmounts? amounts,
@@ -42242,15 +43281,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     required String? traced,
     required ValueChanged<String> onTraceTap,
   }) {
-    // 标签浅、数字深 —— 原来两者同色（ink2 == mute），一格里没有主次。
+    // 跟账本指标格同款：标签深一档、半粗，数字最深。
     Widget metricLabel(String label) => LhScrollText(
       label,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: LhTypography.sans(
-        size: _fs(9),
-        color: DunesColors.resolve(context, LhColors.mute2),
-        weight: FontWeight.w500,
+        size: _fs(9.5),
+        color: DunesColors.resolve(context, LhColors.ink2),
+        weight: FontWeight.w600,
         height: 1.0,
         context: context,
       ),
@@ -42435,6 +43474,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     ),
   };
 
+  /// 资产四宫格里每一格的底色 —— 跟账本指标格同一块浅紫灰。
+  Color _fundPoolTileColor() => DunesColors.resolve(
+    context,
+    const Color(0xFFF3F1F7),
+    role: DunesColorRole.surface,
+  );
+
   Widget _fundPoolMetricAmount(
     Widget Function(String) metricLabel,
     String label,
@@ -42468,6 +43514,50 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ? DunesColors.resolve(context, LhColors.ink2)
         : _fundPoolSectionPalette(ownFormula.kind).$2;
 
+    // 会变的两格：右上角一个小字说状态，格子本身不变（跟账本「利润 ↓ ↑360%」
+    // 那个位置一样）。期末预付：正 = 我方预付、负 = 欠供应商；
+    // 对账差额：0 = 已对平、非 0 = 待核查。
+    final (String, Color)? status = missing
+        ? null
+        : switch (metricKey) {
+            'endingPrepaymentBalance' when (amount ?? 0) > 0 => (
+              '我方预付',
+              DunesColors.resolve(context, _LhPlum.deep),
+            ),
+            'endingPrepaymentBalance' when (amount ?? 0) < 0 => (
+              '欠供应商',
+              DunesColors.resolve(context, const Color(0xFFB06E12)),
+            ),
+            'systemDifference' when (amount ?? 0).abs() < 50 => (
+              '✓ 已对平',
+              DunesColors.resolve(context, const Color(0xFF0E9A57)),
+            ),
+            'systemDifference' => (
+              '有差额',
+              DunesColors.resolve(context, LhColors.mute2),
+            ),
+            _ => null,
+          };
+    // 差额不为 0 不一定是错（记账时间差、口径不同、公式没包含的项），
+    // 所以不再把数字染红。
+    const diffAlarm = false;
+    Widget? statusTag() => status == null
+        ? null
+        : Padding(
+            padding: EdgeInsets.only(left: _fs(4)),
+            child: Text(
+              status.$1,
+              maxLines: 1,
+              style: LhTypography.sans(
+                size: _fs(8.5),
+                color: status.$2,
+                weight: FontWeight.w700,
+                height: 1.0,
+                context: context,
+              ),
+            ),
+          );
+
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -42499,6 +43589,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       : ownAccent,
                 ),
               ),
+              if (status != null) ...[const Spacer(), statusTag()!],
+            ],
+          )
+        else if (status != null)
+          Row(
+            children: [
+              Flexible(child: metricLabel(label)),
+              const Spacer(),
+              statusTag()!,
             ],
           )
         else
@@ -42531,7 +43630,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         ? DunesColors.resolve(context, LhColors.mute2)
                         : (isGrowth
                               ? growthColor
-                              : DunesColors.resolve(context, LhColors.ink)),
+                              : (diffAlarm
+                                    ? DunesColors.resolve(context, LhColors.neg)
+                                    : DunesColors.resolve(
+                                        context,
+                                        LhColors.ink,
+                                      ))),
                     weight: missing ? FontWeight.w500 : FontWeight.w700,
                     height: 1.0,
                     context: context,
@@ -42564,15 +43668,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 点亮用白底 + 主色描边 —— 卡底本身是淡色的，再叠一层淡色反而看不出来。
     final cell = AnimatedContainer(
       duration: const Duration(milliseconds: 140),
-      padding: EdgeInsets.all(_fs(3)),
+      padding: EdgeInsets.fromLTRB(_fs(7), _fs(6), _fs(6), _fs(6)),
       decoration: BoxDecoration(
+        // 平时是一块浅紫灰底（账本指标格同款）；被追溯时换白底 + 主色描边。
         color: isSource
             ? DunesColors.resolve(
                 context,
                 LhColors.paper,
                 role: DunesColorRole.surface,
               )
-            : Colors.transparent,
+            : _fundPoolTileColor(),
         border: Border.all(
           color: isSource ? traceAccent : Colors.transparent,
           width: 1,
@@ -42717,16 +43822,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         final summaryCellH = _ledgerSummaryCellH(tab);
         // 供给维在四项经营指标下增加一行资金摘要：两格与 KPI 格等高，
         // 冻结列只需按多出的一行网格补高，不再额外加高度。
-        final summaryMetricCount =
-            cols.length + (lighthouseLedgerShowsFundPoolPreview(tab) ? 2 : 0);
-        final rowH =
-            _ledgerSummaryRowH(summaryMetricCount, cellHeight: summaryCellH) +
-            (lighthouseLedgerShowsFundPoolPreview(tab)
-                ? lighthouseFundPoolPreviewExtraHeight(
-                    summaryCellHeight: summaryCellH,
-                    scale: _ledgerScale,
-                  )
-                : 0);
+        // 总资产 / 票税那一行已撤掉：总资产入口移到省名旁，票税不再展示。
+        final summaryMetricCount = cols.length;
+        final rowH = _ledgerSummaryRowH(
+          summaryMetricCount,
+          cellHeight: summaryCellH,
+        );
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -42782,7 +43883,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       rangeLabel: _selectedRangeLabel,
       metrics: <String, double?>{
         for (final m in lhPkMetrics)
-          m.key: shown.contains(m.key) ? _pkFinite(_rowMetricValueOrNull(r, m.key)) : null,
+          m.key: shown.contains(m.key)
+              ? _pkFinite(_rowMetricValueOrNull(r, m.key))
+              : null,
       },
       marginFormula: _grossMarginFormula(r),
     );
@@ -43111,6 +44214,34 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       pinned: _buildLedgerPinned(
                         r,
                         idx,
+                        belowName: lighthouseLedgerShowsFundPoolPreview(tab)
+                            ? _fundPoolBagButton(
+                                open:
+                                    fundPoolPanel ==
+                                    lighthouseFundPoolPanelAssets,
+                                onTap: () {
+                                  LighthouseFeedback.instance.play(
+                                    fundPoolPanel ==
+                                            lighthouseFundPoolPanelAssets
+                                        ? LighthouseFeedbackKind.collapse
+                                        : LighthouseFeedbackKind.expand,
+                                  );
+                                  setState(() {
+                                    if (fundPoolPanel ==
+                                        lighthouseFundPoolPanelAssets) {
+                                      _expandedFundPools.remove(fundPoolKey);
+                                    } else {
+                                      _expandedFundPools[fundPoolKey] =
+                                          lighthouseFundPoolPanelAssets;
+                                      // 打开资产就收起指标走势，一次只展开一样。
+                                      _expandedLedgerSolo.remove(trendKey);
+                                      _expandedTrends.remove(trendKey);
+                                    }
+                                    _fundPoolTraces.remove(fundPoolKey);
+                                  });
+                                },
+                              )
+                            : null,
                         shareIcon: pkEnabled
                             ? _withPkButton(r, tab, name, group, shareIcon)
                             : shareIcon,
@@ -43141,6 +44272,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             if (!wasOpen) {
                               _expandedProductL3.remove(l3Key);
                               _expandedTrends.add(trendKey);
+                              _expandedFundPools.remove(fundPoolKey);
+                              _fundPoolTraces.remove(fundPoolKey);
                             }
                           });
                         },
@@ -43199,6 +44332,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                             _expandedProductL3.remove(l3Key);
                                             _expandedLedgerSolo[trendKey] =
                                                 next;
+                                            // 点指标看走势：钱袋子的总资产面板收起来。
+                                            _expandedFundPools.remove(
+                                              fundPoolKey,
+                                            );
+                                            _fundPoolTraces.remove(
+                                              fundPoolKey,
+                                            );
                                           }
                                         });
                                       }
@@ -43208,36 +44348,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               cellHeight: summaryCellH,
                               rowGap: 0,
                             ),
-                            if (lighthouseLedgerShowsFundPoolPreview(tab))
-                              _buildSupplyFundPoolPreview(
-                                summaryCellH,
-                                // 选了中石油 / 中石化等分类时，一行只是该省的一部分
-                                // 账本，资产没法按分类拆，不再把全省资产挂上来。
-                                amounts: _supplyAssetsHiddenByGroup
-                                    ? null
-                                    : lighthouseFundPoolForRow(
-                                        r,
-                                        _fundPoolByProvince,
-                                      ),
-                                expandedPanel: fundPoolPanel,
-                                onTapMetric: (metricKey) {
-                                  setState(() {
-                                    final next =
-                                        lighthouseFundPoolPanelAfterTap(
-                                          fundPoolPanel,
-                                          metricKey,
-                                        );
-                                    if (next == null) {
-                                      _expandedFundPools.remove(fundPoolKey);
-                                    } else {
-                                      _expandedFundPools[fundPoolKey] = next;
-                                    }
-                                    // 换面板 / 收起都把追溯清掉，
-                                    // 否则点亮的格子会留在看不见的面板里。
-                                    _fundPoolTraces.remove(fundPoolKey);
-                                  });
-                                },
-                              ),
                           ],
                         ),
                       ),
@@ -51061,4 +52171,90 @@ class _LedgerCol {
   final double width;
 
   bool get isSynthetic => key.startsWith('__');
+}
+
+/// 橐：上口收褶、细绳扎腰、垂一截绳头，袋身一个细 ¥。16×16 设计坐标里画，再缩放。
+class _LhMoneyBagPainter extends CustomPainter {
+  const _LhMoneyBagPainter({
+    required this.ink,
+    required this.fill,
+    required this.tie,
+    required this.mark,
+  });
+
+  final Color ink;
+  final Color fill;
+  final Color tie;
+  final Color mark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 16, size.height / 16);
+    Paint stroke(Color c, double w) => Paint()
+      ..color = c
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+    final body = Paint()
+      ..color = fill
+      ..isAntiAlias = true;
+
+    // 袋口：扎紧后散开的布褶，三道小波浪。
+    final ruffle = Path()
+      ..moveTo(6.5, 4.9)
+      ..quadraticBezierTo(5.6, 3.7, 4.9, 2.4)
+      ..quadraticBezierTo(6.1, 2.9, 6.9, 2.1)
+      ..quadraticBezierTo(8.0, 2.85, 9.1, 2.1)
+      ..quadraticBezierTo(9.9, 2.9, 11.1, 2.4)
+      ..quadraticBezierTo(10.4, 3.7, 9.5, 4.9)
+      ..close();
+    // 袋身：收口窄、底部圆鼓。
+    final sack = Path()
+      ..moveTo(6.6, 5.6)
+      ..cubicTo(3.0, 7.0, 1.7, 10.4, 2.6, 12.7)
+      ..cubicTo(3.3, 14.4, 5.5, 14.9, 8.0, 14.9)
+      ..cubicTo(10.5, 14.9, 12.7, 14.4, 13.4, 12.7)
+      ..cubicTo(14.3, 10.4, 13.0, 7.0, 9.4, 5.6)
+      ..close();
+    canvas.drawPath(ruffle, body);
+    canvas.drawPath(sack, body);
+    final outline = stroke(ink, 1.05);
+    canvas.drawPath(ruffle, outline);
+    canvas.drawPath(sack, outline);
+
+    // 扎绳：一道横绳 + 右边垂下一截打了结的绳头。
+    final cord = stroke(tie, 1.05);
+    canvas.drawLine(const Offset(6.2, 5.25), const Offset(9.8, 5.25), cord);
+    canvas.drawPath(
+      Path()
+        ..moveTo(9.6, 5.3)
+        ..quadraticBezierTo(10.9, 5.6, 11.3, 7.0),
+      stroke(tie, 0.85),
+    );
+    canvas.drawCircle(const Offset(11.35, 7.35), 0.55, Paint()..color = tie);
+
+    // 细 ¥。
+    final yen = stroke(mark, 0.95);
+    canvas.drawPath(
+      Path()
+        ..moveTo(6.6, 8.6)
+        ..lineTo(8.0, 10.3)
+        ..lineTo(9.4, 8.6),
+      yen,
+    );
+    canvas.drawLine(const Offset(8.0, 10.3), const Offset(8.0, 13.0), yen);
+    canvas.drawLine(const Offset(6.8, 10.9), const Offset(9.2, 10.9), yen);
+    canvas.drawLine(const Offset(6.8, 12.0), const Offset(9.2, 12.0), yen);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _LhMoneyBagPainter old) =>
+      old.ink != ink ||
+      old.fill != fill ||
+      old.tie != tie ||
+      old.mark != mark;
 }

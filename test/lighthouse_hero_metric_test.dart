@@ -918,24 +918,15 @@ void main() {
       ],
     );
     expect(
-      lighthouseGrossMarginDenominatorKey(
-        product: '移动点播（积分）',
-        group: '运营商',
-      ),
+      lighthouseGrossMarginDenominatorKey(product: '移动点播（积分）', group: '运营商'),
       'sales',
     );
     expect(
-      lighthouseGrossMarginDenominatorKey(
-        product: '会员套餐订阅',
-        group: '运营商',
-      ),
+      lighthouseGrossMarginDenominatorKey(product: '会员套餐订阅', group: '运营商'),
       'sales',
     );
     expect(
-      lighthouseLedgerSummaryMetricRowsForEntity(
-        tab: 'product',
-        basis: 'gmv',
-      ),
+      lighthouseLedgerSummaryMetricRowsForEntity(tab: 'product', basis: 'gmv'),
       [
         ['sales', 'prepaid'],
         ['gmv', 'profit'],
@@ -1040,10 +1031,7 @@ void main() {
       lighthouseLedgerSummaryMetricRows,
     );
     expect(
-      lighthouseLedgerSummaryMetricRowsForEntity(
-        tab: 'product',
-        basis: 'gmv',
-      ),
+      lighthouseLedgerSummaryMetricRowsForEntity(tab: 'product', basis: 'gmv'),
       [
         ['sales', 'prepaid'],
         ['gmv', 'profit'],
@@ -1134,8 +1122,8 @@ void main() {
     expect(
       lighthouseFundPoolFormulas.map((f) => [f.result, f.expression]).toList(),
       [
-        ['资产合计', '现金·监管户 + 现金·在途 + 期末预付款余额'],
-        ['系统差异', '期末预付款余额 − 资金池可用 − 库存/同步券 − 应收资金'],
+        ['账面资产', '已入账 + 待入账 + 期末预付'],
+        ['对账差额', '期末预付 − 可动用额度 − 券资产 − 期末应收返利'],
       ],
     );
     // Hero 十三格式子。算出来的会点亮来源格；取数项只出口径，不代数。
@@ -1264,7 +1252,7 @@ void main() {
     ]);
     expect(
       lighthouseFundPoolAssetsSection.metrics.map((m) => m.label).toList(),
-      ['资产合计', '本月新增利润', '本日新增利润'],
+      ['账面资产', '本月利润', '今日利润'],
     );
     // 资产卡是唯一存量 / 流量混排的卡：第 1 格起是流量，中间画分隔。
     expect(lighthouseFundPoolAssetsSection.flowStartIndex, 1);
@@ -1732,7 +1720,7 @@ void main() {
       lighthouseTrendStockLegendValue(series: const [20, 22, 13.52]),
       13.52,
     );
-    expect(lighthouseFundPoolFlowDividerLabel, '期间新增');
+    expect(lighthouseFundPoolFlowDividerLabel, '期间利润');
     // 只有这两格按增长显示；余额格保持中性，不染涨跌色。
     expect(lighthouseFundPoolGrowthMetricKeys, {'profitMonth', 'profitDay'});
     expect(lighthouseFundPoolGrowthMetricKeys.contains('totalAssets'), isFalse);

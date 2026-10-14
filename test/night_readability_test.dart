@@ -127,9 +127,10 @@ void main() {
       for (final color in period.pillGradient) {
         expect(color.computeLuminance(), lessThan(.15));
       }
-      await tester.ensureVisible(find.text('选区间').first);
+      // 选区间已并进期间条第 6 格「区间」。
+      await tester.ensureVisible(find.text('区间').first);
       await tester.pump(const Duration(milliseconds: 200));
-      await tester.tap(find.text('选区间').first);
+      await tester.tap(find.text('区间').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('开始'), findsOneWidget);

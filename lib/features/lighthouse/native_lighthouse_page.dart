@@ -41324,9 +41324,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               ),
                             ),
                           ),
-                        )
-                      else
-                        const Spacer(),
+                        ),
+                      // 不要 Spacer：它会跟标签平分剩余宽度，FittedBox 就把
+                      // 「中石油资产 / 中石化资产」缩成半格。
                     ],
                   ),
                   const SizedBox(height: 3),

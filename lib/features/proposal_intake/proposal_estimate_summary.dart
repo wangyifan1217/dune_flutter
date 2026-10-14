@@ -95,10 +95,12 @@ class ProposalEstimateSummaryData {
     this.channelFromSku = false,
     this.channelKey = 'skuDetails',
     this.platform = '',
+    this.remoteSummary,
   });
 
   /// 科技部「τ-标签一」的简称（如 三桶油），放在年化利润下面。
   final String platform;
+  final Map<String, dynamic>? remoteSummary;
 
   /// 渠道取自各产品的渠道分类 / 渠道名（科技部 SKU），点它跳科技部 SKU 清单。
   final bool channelFromSku;
@@ -139,14 +141,30 @@ class ProposalEstimateSummaryData {
   final int skuCount;
   final String faceRange;
 
-  /// 原型里的「收入（利差）」= 收入 − 采购成本。
-  double? get spread =>
-      revenue == null ? null : revenue! - (procurement ?? 0);
+  /// 独立指标：收入减去本测算的成本合计，不依赖利润字段。
+  double? get spread {
+    if (remoteSummary != null) return (remoteSummary!['spread'] as num?)?.toDouble();
+    final cost = costTotal;
+    if (revenue == null || cost == null) return null;
+    return proposalRoundWan(revenue! - cost);
+  }
 
-  double? get monthlyScale => scale == null ? null : scale! / 12;
+  double? get monthlyScale => remoteSummary != null
+      ? (remoteSummary!['monthlyScale'] as num?)?.toDouble()
+      : scale == null ? null : scale! / 12;
   double? get monthlyProfit => profit == null ? null : profit! / 12;
 
   double? pctOfScale(double? value) {
+    if (remoteSummary != null) {
+      if (value == null) return null;
+      final raw = remoteSummary!['percentages'];
+      if (raw is Map) {
+        for (final entry in raw.entries) {
+          if (double.tryParse('${entry.key}') == value) return (entry.value as num?)?.toDouble();
+        }
+      }
+      return null;
+    }
     final s = scale;
     if (value == null || s == null || s <= 0) return null;
     return value / s * 100;
@@ -166,6 +184,7 @@ class ProposalEstimateSummaryData {
   }
 
   double? get costTotal {
+    if (remoteSummary != null) return (remoteSummary!['costTotal'] as num?)?.toDouble();
     final parts = [procurement, projectCost, businessCost, operatingCost, taxCost];
     if (parts.every((v) => v == null)) return null;
     return parts.fold<double>(0, (sum, v) => sum + (v ?? 0));
@@ -224,7 +243,7 @@ class ProposalEstimateSummary extends StatelessWidget {
   /// 测算里每个数的出处：板块 + 填报内容里那一行的锚点 + 说明。
   static const _sources = <String, (ProposalIntakeNavSection, String, String)>{
     '年化规模': (ProposalIntakeNavSection.market, 'salesScale', '市场部 · 规模'),
-    '收入（利差）': (ProposalIntakeNavSection.finance, 'revenue', '财务部 · 利润 · 收入'),
+    '收入（利差）': (ProposalIntakeNavSection.finance, 'revenue', '财务部 · 收入与成本测算'),
     // 下方财务部「成本」「利润」两块：hero 点一下直接跳过去并展开对应行。
     '成本': (ProposalIntakeNavSection.finance, 'financeCost', '财务部 · 成本'),
     '收入': (ProposalIntakeNavSection.finance, 'revenue', '财务部 · 利润 · 收入'),
@@ -410,7 +429,7 @@ class ProposalEstimateSummary extends StatelessWidget {
             child: _t(
               context,
               kProposalFinanceShowProfit
-                  ? '= 收入 ${proposalEstimateWan(spread)} − 成本合计 ${proposalEstimateWan(data.costTotal)}  明细 ›'
+                  ? '= 收入 ${proposalEstimateWan(data.revenue)} − 成本合计 ${proposalEstimateWan(data.costTotal)}  明细 ›'
                   : '月均 ${proposalEstimateWan(data.monthlyScale)} 万${data.rating == '—' ? '' : ' · 评级 ${data.rating}'}  来自 市场部 ›',
               size: 11,
               color: _C.text2,
@@ -435,8 +454,8 @@ class ProposalEstimateSummary extends StatelessWidget {
           proposalEstimateWan(spread),
           '万',
           data.pctOfScale(spread) == null
-              ? '来自 产品结算'
-              : '利差 ${_pct(data.pctOfScale(spread))} · 来自 产品结算',
+              ? '来自 财务测算'
+              : '利差 ${_pct(data.pctOfScale(spread))} · 来自 财务测算',
           '',
         ),
         _Cell('项目成本', proposalEstimateWan(data.projectCost), '万', '来自 财务部', ''),
@@ -1627,7 +1646,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
               borderRadius: BorderRadius.circular(4),
               child: _t(
                 kProposalFinanceShowProfit
-                    ? '= 收入 ${proposalEstimateWan(d.spread)} − 成本合计 ${proposalEstimateWan(d.costTotal)}  明细 ›'
+                    ? '= 收入 ${proposalEstimateWan(d.revenue)} − 成本合计 ${proposalEstimateWan(d.costTotal)}  明细 ›'
                     : '${d.costBreakdown}  明细 ›',
                 size: _compact ? 9 : 10,
                 color: _C.text2,
@@ -1707,9 +1726,17 @@ class _CompactEstimateState extends State<_CompactEstimate> {
   (List<_Bar>, String) _barsFor(String metric) {
     final d = _d;
     final spread = d.spread;
-    final cost = d.projectCost ?? 0;
     final profit = d.profit;
     switch (metric) {
+      case '收入（利差）':
+        return (
+          [
+            _Bar('收入', d.revenue, _C.purpleLight),
+            _Bar('成本合计', d.costTotal, _C.purpleLight),
+            _Bar('收入（利差）', spread, _C.purple),
+          ],
+          '收入（利差）= 收入 − 所有成本 · 年化',
+        );
       case '年化规模':
         if (!kProposalFinanceShowEstimates) {
           return (
@@ -1772,11 +1799,11 @@ class _CompactEstimateState extends State<_CompactEstimate> {
         final profitLift = profit != null && profit > 0 ? profit : 0.0;
         return (
           [
-            _Bar('收入（利差）', spread, _C.purple),
-            _Bar('项目成本', cost, _C.purpleLight, minus: true, lift: profitLift),
+            _Bar('收入', d.revenue, _C.purple),
+            _Bar('成本合计', d.costTotal, _C.purpleLight, minus: true, lift: profitLift),
             _Bar('利润', profit, _C.red),
           ],
-          '收入 − 项目成本 = 利润 · 年化',
+          '收入 − 所有成本 = 利润 · 年化',
         );
     }
   }

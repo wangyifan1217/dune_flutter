@@ -232,6 +232,14 @@ String taskInboxBucketTitle(TaskInboxBucket bucket) {
   };
 }
 
+/// 与服务端 canEditTask 一致：负责人、创建人、协同负责人可以标记完成。
+/// 目标看板还会列出参与人、下级负责、以及只关联了子目标的主目标，这些人只能看。
+bool taskViewerCanComplete(TaskItem task, int userId) {
+  if (userId <= 0) return false;
+  if (task.ownerUserId == userId || task.creatorUserId == userId) return true;
+  return task.coOwnerUserIds.contains(userId);
+}
+
 /// 还不能标记完成时返回原因；可以完成时返回 null。已结束的任务也返回说明。
 String? taskCompleteBlockReason(TaskItem task, {DateTime? now}) {
   if (task.status == 'completed' || task.status == 'cancelled') {

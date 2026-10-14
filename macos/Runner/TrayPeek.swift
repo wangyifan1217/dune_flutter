@@ -16,6 +16,7 @@ final class TrayPeekController {
   private var globalMouseMonitor: Any?
   private var localMouseMonitor: Any?
   private var overIcon = false
+  private var suppressHoverUntilExit = false
 
   func setup(with messenger: FlutterBinaryMessenger) {
     let methodChannel = FlutterMethodChannel(
@@ -32,9 +33,10 @@ final class TrayPeekController {
         self.update(call.arguments)
         result(nil)
       case "show":
-        self.show()
+        if !self.suppressHoverUntilExit { self.show() }
         result(nil)
       case "hide":
+        self.suppressHoverUntilExit = true
         self.hide(force: true)
         result(nil)
       case "scheduleHide":
@@ -82,7 +84,7 @@ final class TrayPeekController {
       hide(force: true)
       return
     }
-    if panel?.isVisible == true || shouldKeepPeek() {
+    if !suppressHoverUntilExit && (panel?.isVisible == true || shouldKeepPeek()) {
       show()
     }
   }
@@ -117,6 +119,15 @@ final class TrayPeekController {
     guard let iconFrame = statusItemFrame() else { return }
     let over = iconFrame.insetBy(dx: -4, dy: -4).contains(mouse)
     let overPanel = panel?.isVisible == true && (panel?.frame.insetBy(dx: -4, dy: -4).contains(mouse) ?? false)
+    if suppressHoverUntilExit {
+      if over { return }
+      suppressHoverUntilExit = false
+      overIcon = false
+    }
+    if over || overPanel {
+      hideTimer?.invalidate()
+      hideTimer = nil
+    }
     if over, !items.isEmpty {
       if !overIcon {
         overIcon = true
@@ -155,9 +166,12 @@ final class TrayPeekController {
   }
 
   private func scheduleHide() {
-    hideTimer?.invalidate()
-    hideTimer = Timer.scheduledTimer(withTimeInterval: 0.28, repeats: false) { [weak self] _ in
-      self?.hide(force: false)
+    // Mouse-move events outside the panel must not keep postponing dismissal.
+    guard hideTimer == nil else { return }
+    hideTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { [weak self] _ in
+      guard let self else { return }
+      self.hideTimer = nil
+      self.hide(force: false)
     }
   }
 
@@ -168,7 +182,9 @@ final class TrayPeekController {
         return true
       }
     }
-    return anchorRect().insetBy(dx: -10, dy: -10).contains(mouse)
+    // A cursor-based fallback anchor always contains the cursor and would
+    // otherwise keep the popup open forever when the status item disappears.
+    return statusItemFrame()?.insetBy(dx: -10, dy: -10).contains(mouse) ?? false
   }
 
   private func ensurePanel() {
@@ -184,6 +200,7 @@ final class TrayPeekController {
       }
     }
     view.onOpen = { [weak self] id in
+      self?.suppressHoverUntilExit = true
       self?.hide(force: true)
       self?.channel?.invokeMethod("open", arguments: id)
     }
@@ -214,6 +231,7 @@ final class TrayPeekController {
     panel.hasShadow = true
     panel.hidesOnDeactivate = false
     panel.becomesKeyOnlyIfNeeded = true
+    panel.acceptsMouseMovedEvents = true
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
     panel.contentView = view
     self.panel = panel
@@ -234,6 +252,7 @@ final class TrayPeekController {
       if y < visible.minY + 8 {
         y = anchor.maxY + 6
       }
+      y = min(max(y, visible.minY + 8), max(visible.minY + 8, visible.maxY - size.height - 8))
     }
     panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
   }
@@ -267,7 +286,7 @@ final class TrayPeekController {
   }
 }
 
-private struct TrayPeekItem {
+struct TrayPeekItem {
   let id: Int
   let title: String
   let preview: String
@@ -319,13 +338,13 @@ private struct TrayPeekItem {
   }
 }
 
-private final class TrayPeekView: NSView {
-  static let cardWidth: CGFloat = 248
-  static let pad: CGFloat = 10
-  static let headerH: CGFloat = 28
-  static let rowH: CGFloat = 44
+final class TrayPeekView: NSView {
+  static let cardWidth: CGFloat = 288
+  static let pad: CGFloat = 12
+  static let headerH: CGFloat = 38
+  static let rowH: CGFloat = 52
   static let footerH: CGFloat = 32
-  static let avatar: CGFloat = 28
+  static let avatar: CGFloat = 32
   static let maxRows = 6
 
   var onHover: ((Bool) -> Void)?
@@ -337,12 +356,13 @@ private final class TrayPeekView: NSView {
   private var flashing = false
   private var items: [TrayPeekItem] = []
   private var hot = -1
+  private var pressedTarget = -1
   private var tracking: NSTrackingArea?
 
   var preferredSize: NSSize {
     let rows = min(items.count, Self.maxRows)
     let height = Self.headerH + CGFloat(max(rows, 0)) * Self.rowH
-      + (flashing ? Self.footerH : 0)
+      + Self.footerH
     return NSSize(width: Self.cardWidth, height: max(height, 40))
   }
 
@@ -353,11 +373,14 @@ private final class TrayPeekView: NSView {
     self.total = total
     self.flashing = flashing
     self.items = Array(items.prefix(Self.maxRows))
+    pressedTarget = -1
+    hot = -1
     needsDisplay = true
   }
 
   func clearHot() {
     hot = -1
+    pressedTarget = -1
     needsDisplay = true
   }
 
@@ -378,10 +401,12 @@ private final class TrayPeekView: NSView {
 
   override func mouseEntered(with event: NSEvent) {
     onHover?(true)
+    updateHot(at: convert(event.locationInWindow, from: nil))
   }
 
   override func mouseExited(with event: NSEvent) {
     hot = -1
+    NSCursor.arrow.set()
     needsDisplay = true
     onHover?(false)
   }
@@ -390,20 +415,35 @@ private final class TrayPeekView: NSView {
     updateHot(at: convert(event.locationInWindow, from: nil))
   }
 
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+  override func mouseDown(with event: NSEvent) {
+    pressedTarget = target(at: convert(event.locationInWindow, from: nil))
+  }
+
+  override func mouseDragged(with event: NSEvent) {
+    updateHot(at: convert(event.locationInWindow, from: nil))
+  }
+
   override func mouseUp(with event: NSEvent) {
     let point = convert(event.locationInWindow, from: nil)
-    if hitFooter(point) {
+    let selected = target(at: point)
+    let pressed = pressedTarget
+    pressedTarget = -1
+    guard selected != -1, selected == pressed else { return }
+    if selected == -2 {
       onCancelFlash?()
       return
     }
-    let row = hitRow(point)
+    let row = selected
     if row >= 0, row < items.count {
       onOpen?(items[row].id)
     }
   }
 
   private func updateHot(at point: NSPoint) {
-    let next = hitFooter(point) ? -2 : hitRow(point)
+    let next = target(at: point)
+    if next == -1 { NSCursor.arrow.set() } else { NSCursor.pointingHand.set() }
     if next != hot {
       hot = next
       needsDisplay = true
@@ -411,6 +451,7 @@ private final class TrayPeekView: NSView {
   }
 
   private func hitRow(_ point: NSPoint) -> Int {
+    guard bounds.contains(point), point.y >= Self.headerH else { return -1 }
     let idx = Int((point.y - Self.headerH) / Self.rowH)
     if idx < 0 || idx >= items.count { return -1 }
     return idx
@@ -418,32 +459,34 @@ private final class TrayPeekView: NSView {
 
   private func hitFooter(_ point: NSPoint) -> Bool {
     guard flashing else { return false }
-    return point.y >= bounds.height - Self.footerH
+    return bounds.contains(point) && point.y >= bounds.height - Self.footerH
+      && point.x >= bounds.width - Self.pad - 65
+  }
+
+  private func target(at point: NSPoint) -> Int {
+    return hitFooter(point) ? -2 : hitRow(point)
   }
 
   override func draw(_ dirtyRect: NSRect) {
     let card = bounds.insetBy(dx: 0.5, dy: 0.5)
     let path = NSBezierPath(roundedRect: card, xRadius: 8, yRadius: 8)
-    NSColor.white.setFill()
+    NSGraphicsContext.saveGraphicsState()
+    defer { NSGraphicsContext.restoreGraphicsState() }
+    path.addClip()
+    NSColor.windowBackgroundColor.setFill()
     path.fill()
-    NSColor(srgbRed: 228 / 255, green: 230 / 255, blue: 235 / 255, alpha: 1).setStroke()
-    path.lineWidth = 1
-    path.stroke()
-
-    let header = "\(titleText) · \(max(total, items.count))"
-    drawText(
-      header,
-      in: NSRect(x: Self.pad, y: 0, width: bounds.width - Self.pad * 2, height: Self.headerH),
-      font: .systemFont(ofSize: 12),
-      color: NSColor(srgbRed: 136 / 255, green: 136 / 255, blue: 136 / 255, alpha: 1),
-      align: .left
-    )
+    drawText("\(titleText) · 未读消息",
+      in: NSRect(x: Self.pad, y: 0, width: bounds.width - Self.pad * 2 - 64, height: Self.headerH),
+      font: .systemFont(ofSize: 12, weight: .semibold), color: .systemPurple, align: .left)
+    drawText("\(max(total, items.count)) 条",
+      in: NSRect(x: bounds.width - Self.pad - 64, y: 0, width: 64, height: Self.headerH),
+      font: .systemFont(ofSize: 11), color: .secondaryLabelColor, align: .right)
 
     for (i, item) in items.enumerated() {
       let rowY = Self.headerH + CGFloat(i) * Self.rowH
       let row = NSRect(x: 0, y: rowY, width: bounds.width, height: Self.rowH)
       if i == hot {
-        NSColor(srgbRed: 246 / 255, green: 247 / 255, blue: 250 / 255, alpha: 1).setFill()
+        NSColor.systemPurple.withAlphaComponent(0.08).setFill()
         NSBezierPath(rect: row).fill()
       }
       let av = Self.avatar
@@ -459,60 +502,40 @@ private final class TrayPeekView: NSView {
       } else {
         item.color.setFill()
         NSBezierPath(roundedRect: avatarRect, xRadius: corner, yRadius: corner).fill()
-        drawText(
-          item.initial,
-          in: avatarRect,
-          font: .systemFont(ofSize: 12, weight: .semibold),
-          color: .white,
-          align: .center
-        )
+        drawText(item.initial, in: avatarRect, font: .systemFont(ofSize: 12, weight: .semibold), color: .white, align: .center)
       }
-
+      let badge = item.unread > 99 ? "99+" : "\(item.unread)"
+      let badgeWidth = max(18, (badge as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width + 10)
       let textLeft = ax + av + 8
-      let textRight = bounds.width - 28
-      drawText(
-        item.title,
-        in: NSRect(x: textLeft, y: rowY + 4, width: textRight - textLeft, height: 18),
-        font: .systemFont(ofSize: 13, weight: .semibold),
-        color: NSColor(srgbRed: 25 / 255, green: 25 / 255, blue: 25 / 255, alpha: 1),
-        align: .left
-      )
-      drawPreview(
-        item.preview.isEmpty ? "有未读消息" : item.preview,
-        in: NSRect(x: textLeft, y: rowY + 22, width: textRight - textLeft, height: 18)
-      )
-
-      let dot: CGFloat = 8
-      let dx = bounds.width - Self.pad - dot
-      let dy = row.midY - dot / 2
-      NSColor(srgbRed: 250 / 255, green: 81 / 255, blue: 81 / 255, alpha: 1).setFill()
-      NSBezierPath(ovalIn: NSRect(x: dx, y: dy, width: dot, height: dot)).fill()
+      let textRight = bounds.width - Self.pad - badgeWidth - 10
+      drawText(item.title,
+        in: NSRect(x: textLeft, y: rowY + 7, width: textRight - textLeft, height: 19),
+        font: .systemFont(ofSize: 12, weight: .semibold), color: .labelColor, align: .left)
+      drawPreview(item.preview.isEmpty ? "有未读消息" : item.preview,
+        in: NSRect(x: textLeft, y: rowY + 27, width: textRight - textLeft, height: 19))
+      let badgeRect = NSRect(x: bounds.width - Self.pad - badgeWidth, y: row.midY - 9, width: badgeWidth, height: 18)
+      NSColor.systemRed.setFill()
+      NSBezierPath(roundedRect: badgeRect, xRadius: 9, yRadius: 9).fill()
+      drawText(badge, in: badgeRect, font: .systemFont(ofSize: 11), color: .white, align: .center)
     }
-
+    let footer = NSRect(x: 0, y: bounds.height - Self.footerH, width: bounds.width, height: Self.footerH)
+    NSColor.controlBackgroundColor.setFill()
+    NSBezierPath(rect: footer).fill()
+    if hot == -2 {
+      NSColor.systemPurple.withAlphaComponent(0.08).setFill()
+      NSBezierPath(rect: footer).fill()
+    }
+    drawText("点击会话查看消息",
+      in: NSRect(x: Self.pad, y: footer.minY, width: bounds.width - Self.pad * 2 - (flashing ? 65 : 0), height: Self.footerH),
+      font: .systemFont(ofSize: 11), color: .secondaryLabelColor, align: .left)
     if flashing {
-      let footer = NSRect(
-        x: 0,
-        y: bounds.height - Self.footerH,
-        width: bounds.width,
-        height: Self.footerH
-      )
-      if hot == -2 {
-        NSColor(srgbRed: 246 / 255, green: 247 / 255, blue: 250 / 255, alpha: 1).setFill()
-        NSBezierPath(rect: footer).fill()
-      }
-      drawText(
-        "取消闪烁",
-        in: NSRect(
-          x: Self.pad,
-          y: footer.minY,
-          width: bounds.width - Self.pad * 2,
-          height: Self.footerH
-        ),
-        font: .systemFont(ofSize: 12),
-        color: NSColor(srgbRed: 87 / 255, green: 107 / 255, blue: 149 / 255, alpha: 1),
-        align: .right
-      )
+      drawText("停止闪烁",
+        in: NSRect(x: bounds.width - Self.pad - 65, y: footer.minY, width: 65, height: Self.footerH),
+        font: .systemFont(ofSize: 11), color: .systemPurple, align: .right)
     }
+    NSColor.separatorColor.setStroke()
+    path.lineWidth = 1
+    path.stroke()
   }
 
   private func drawPreview(_ text: String, in rect: NSRect) {
@@ -524,15 +547,15 @@ private final class TrayPeekView: NSView {
     } else if text.hasPrefix("@") {
       mention = text.count
     }
-    let gray = NSColor(srgbRed: 136 / 255, green: 136 / 255, blue: 136 / 255, alpha: 1)
+    let gray = NSColor.secondaryLabelColor
     if mention <= 0 {
-      drawText(text, in: rect, font: .systemFont(ofSize: 12), color: gray, align: .left)
+      drawText(text, in: rect, font: .systemFont(ofSize: 11), color: gray, align: .left)
       return
     }
     let mentionText = String(text.prefix(mention))
     let rest = String(text.dropFirst(mention))
     let mentionAttr: [NSAttributedString.Key: Any] = [
-      .font: NSFont.systemFont(ofSize: 12),
+      .font: NSFont.systemFont(ofSize: 11),
       .foregroundColor: NSColor(srgbRed: 250 / 255, green: 81 / 255, blue: 81 / 255, alpha: 1),
     ]
     let mentionSize = (mentionText as NSString).size(withAttributes: mentionAttr)
@@ -545,7 +568,7 @@ private final class TrayPeekView: NSView {
     drawText(
       mentionText,
       in: mentionRect,
-      font: .systemFont(ofSize: 12),
+      font: .systemFont(ofSize: 11),
       color: NSColor(srgbRed: 250 / 255, green: 81 / 255, blue: 81 / 255, alpha: 1),
       align: .left
     )
@@ -558,7 +581,7 @@ private final class TrayPeekView: NSView {
           width: rect.maxX - mentionRect.maxX,
           height: rect.height
         ),
-        font: .systemFont(ofSize: 12),
+        font: .systemFont(ofSize: 11),
         color: gray,
         align: .left
       )

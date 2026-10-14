@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/im_celebration.dart';
 import '../shell/dunes_toast.dart';
@@ -1607,10 +1608,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       );
     }
     if (!_canCompleteFromList(task)) {
+      final hint = _completeHint(task);
+      if (hint == null || hint.trim().isEmpty) return const SizedBox.shrink();
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Text(
-          _completeHint(task) ?? '—',
+          hint,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -2111,15 +2114,21 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
 
   bool _canCompleteFromList(TaskItem task) {
     if (task.status == 'completed' || task.status == 'cancelled') return false;
+    if (!taskViewerCanComplete(task, widget.session.userId)) return false;
     return taskCompleteBlockReason(task) == null;
   }
 
   String? _completeHint(TaskItem task) {
     if (task.status == 'completed' || task.status == 'cancelled') return null;
+    if (!taskViewerCanComplete(task, widget.session.userId)) return null;
     return taskCompleteBlockReason(task);
   }
 
   Future<void> _completeFromList(TaskItem task) async {
+    if (!taskViewerCanComplete(task, widget.session.userId)) {
+      showDunesCenterToast(context, '仅负责人和创建人可以标记完成');
+      return;
+    }
     final blocked = taskCompleteBlockReason(task);
     if (blocked != null) {
       showDunesCenterToast(context, blocked);
@@ -2137,7 +2146,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       maybeShowTaskCompletionEffect(context, widget.session.userId);
       await _reload();
     } catch (e) {
-      if (mounted) showDunesCenterToast(context, '$e');
+      if (mounted) {
+        showDunesCenterToast(
+          context,
+          friendlyErrorText(e, fallback: '标记完成失败，请稍后重试'),
+        );
+      }
     }
   }
 

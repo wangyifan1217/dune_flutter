@@ -260,34 +260,15 @@ class _NativeFavoritesPageState extends State<NativeFavoritesPage> {
     }
 
     try {
-      if (ConversationService.hasAuthMedia(payload)) {
-        final bytes = await _service.downloadAttachmentBytes(
-          objectKey: ConversationService.mediaObjectKey(payload),
-          fileName: fileName,
-        );
-        final path = await file_dl.saveBytesAsCachedFile(
-          bytes,
-          cacheKey,
-          fileName,
-          conversationId: conversationId,
-        );
-        if (path != null && path.isNotEmpty) {
-          await file_dl.openLocalFile(path);
-        } else {
-          _toast('下载完成');
-        }
+      final path = await file_dl.downloadChatAttachment(
+        _service, payload, fileName,
+        cacheKey: cacheKey.isEmpty ? null : cacheKey,
+        conversationId: conversationId,
+      );
+      if (path != null && path.isNotEmpty) {
+        await file_dl.openLocalFile(path);
       } else {
-        final url = ConversationService.mediaDirectUrl(payload);
-        if (url.isEmpty) {
-          _toast('附件地址为空', error: true);
-          return;
-        }
-        await file_dl.openUrlAsFile(
-          url,
-          fileName,
-          cacheKey: cacheKey.isEmpty ? null : cacheKey,
-          conversationId: conversationId,
-        );
+        _toast('下载完成');
       }
     } catch (e) {
       _toast('打开失败：${friendlyErrorText(e)}', error: true);

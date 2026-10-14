@@ -891,9 +891,17 @@ class XflowService {
   Future<List<ApprovalCommentItem>> fetchApprovalComments({
     required String businessType,
     required int businessId,
+    int chatConversationId = 0,
+    int chatMessageId = 0,
   }) async {
     final bt = Uri.encodeComponent(businessType.trim().toUpperCase());
-    final rows = await _requestList('/approvals/$bt/$businessId/comments');
+    final rows = await _requestList(
+      _withChatReadQuery(
+        '/approvals/$bt/$businessId/comments',
+        chatConversationId: chatConversationId,
+        chatMessageId: chatMessageId,
+      ),
+    );
     final out = <ApprovalCommentItem>[];
     for (final row in rows) {
       if (row is! Map) continue;
@@ -949,9 +957,17 @@ class XflowService {
   Future<List<ApprovalStakeholderPerson>> fetchApprovalStakeholders({
     required String businessType,
     required int businessId,
+    int chatConversationId = 0,
+    int chatMessageId = 0,
   }) async {
     final bt = Uri.encodeComponent(businessType.trim().toUpperCase());
-    final raw = await _request('/approvals/$bt/$businessId/stakeholders');
+    final raw = await _request(
+      _withChatReadQuery(
+        '/approvals/$bt/$businessId/stakeholders',
+        chatConversationId: chatConversationId,
+        chatMessageId: chatMessageId,
+      ),
+    );
     final people = raw['people'];
     final out = <ApprovalStakeholderPerson>[];
     if (people is List) {
@@ -1857,6 +1873,16 @@ class XflowService {
     final streamed = await _client.send(req);
     final resp = await http.Response.fromStream(streamed);
     return _unwrap(path, resp);
+  }
+
+  String _withChatReadQuery(
+    String path, {
+    required int chatConversationId,
+    required int chatMessageId,
+  }) {
+    if (chatConversationId <= 0 || chatMessageId <= 0) return path;
+    final joiner = path.contains('?') ? '&' : '?';
+    return '$path${joiner}chatConversationId=$chatConversationId&chatMessageId=$chatMessageId';
   }
 
   Future<List<dynamic>> _requestList(String path) async {

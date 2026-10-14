@@ -43,6 +43,7 @@ Future<String?> openUrlAsFileImpl(
   String? cacheKey,
   int? conversationId,
   ChatUploadCancelToken? cancelToken,
+  Map<String, String>? headers,
 }) async {
   cancelToken?.throwIfCancelled(download: true);
   onProgress?.call(0);
@@ -51,6 +52,7 @@ Future<String?> openUrlAsFileImpl(
       url,
       method: 'GET',
       responseType: 'blob',
+      requestHeaders: headers,
     );
     cancelToken?.throwIfCancelled(download: true);
     final blob = response.response as html.Blob?;
@@ -67,6 +69,7 @@ Future<String?> openUrlAsFileImpl(
     if (cancelToken?.isCancelled == true) {
       throw const ChatDownloadCancelledException();
     }
+    if (headers != null && headers.isNotEmpty) rethrow;
     /* fall through to anchor download */
   }
 

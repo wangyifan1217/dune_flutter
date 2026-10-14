@@ -341,6 +341,11 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     } catch (_) {}
   }
 
+  Future<void> _openTrayContextMenu() async {
+    await _peekInvoke('hide');
+    if (!_quitting) await trayManager.popUpContextMenu();
+  }
+
   void updateUnread(int total) {
     if (!_ready) return;
     final next = total < 0 ? 0 : total;
@@ -685,15 +690,18 @@ class WindowsDesktopTray with WindowListener, TrayListener {
 
   @override
   void onTrayIconRightMouseDown() {
-    unawaited(_peekInvoke('hide'));
-    unawaited(trayManager.popUpContextMenu());
+    if (Platform.isMacOS) {
+      unawaited(_peekInvoke('hide'));
+    } else {
+      unawaited(_openTrayContextMenu());
+    }
   }
 
   @override
   void onTrayIconRightMouseUp() {
-    // macOS 部分版本在 mouseUp 弹出菜单更稳
+    // macOS only opens on mouseUp, avoiding a second menu after mouseDown.
     if (Platform.isMacOS) {
-      unawaited(trayManager.popUpContextMenu());
+      unawaited(_openTrayContextMenu());
     }
   }
 

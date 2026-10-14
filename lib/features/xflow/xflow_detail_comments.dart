@@ -46,6 +46,8 @@ class XfDetCommentsSection extends StatefulWidget {
     required this.businessId,
     this.fallbackPeople = const [],
     this.palette,
+    this.chatConversationId = 0,
+    this.chatMessageId = 0,
   });
 
   /// 可选配色；不传时与原来完全一样。
@@ -55,6 +57,8 @@ class XfDetCommentsSection extends StatefulWidget {
   final String businessType;
   final int businessId;
   final List<ApprovalStakeholderPerson> fallbackPeople;
+  final int chatConversationId;
+  final int chatMessageId;
 
   @override
   State<XfDetCommentsSection> createState() => _XfDetCommentsSectionState();
@@ -221,12 +225,16 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
       final comments = await widget.service.fetchApprovalComments(
         businessType: widget.businessType,
         businessId: widget.businessId,
+        chatConversationId: widget.chatConversationId,
+        chatMessageId: widget.chatMessageId,
       );
       List<ApprovalStakeholderPerson> people = const [];
       try {
         people = await widget.service.fetchApprovalStakeholders(
           businessType: widget.businessType,
           businessId: widget.businessId,
+          chatConversationId: widget.chatConversationId,
+          chatMessageId: widget.chatMessageId,
         );
       } catch (_) {
         people = widget.fallbackPeople;

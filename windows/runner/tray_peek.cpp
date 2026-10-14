@@ -40,6 +40,7 @@ std::wstring g_title = L"沙丘";
 int g_total = 0;
 bool g_flashing = false;
 int g_hot = -1;  // row index, or -2 footer
+int g_pressed = -1;
 bool g_class_reg = false;
 int g_dpi = 96;
 ULONG_PTR g_gdiplus_token = 0;
@@ -97,19 +98,22 @@ std::unique_ptr<Gdiplus::Bitmap> BitmapFromPng(
   }
   std::unique_ptr<Gdiplus::Bitmap> src(Gdiplus::Bitmap::FromStream(stream));
   if (!src || src->GetLastStatus() != Gdiplus::Ok) {
+    src.reset();
     stream->Release();
     return nullptr;
   }
   const UINT w = src->GetWidth();
   const UINT h = src->GetHeight();
   if (w == 0 || h == 0) {
+    src.reset();
     stream->Release();
     return nullptr;
   }
   std::unique_ptr<Gdiplus::Bitmap> clone(src->Clone(
       0, 0, static_cast<INT>(w), static_cast<INT>(h), PixelFormat32bppPARGB));
+  src.reset();  // The source must not outlive the IStream used to decode it.
   stream->Release();
-  if (!clone || clone->GetLastStatus() != Gdiplus::Ok) return src;
+  if (!clone || clone->GetLastStatus() != Gdiplus::Ok) return nullptr;
   return clone;
 }
 
@@ -127,12 +131,12 @@ void DrawAvatarImage(HDC hdc, Gdiplus::Bitmap* bmp, int x, int y, int size,
 }
 
 int Dip(int v) { return MulDiv(v, g_dpi, 96); }
-int Width() { return Dip(248); }
-int Pad() { return Dip(10); }
-int HeaderH() { return Dip(28); }
-int RowH() { return Dip(44); }
-int FooterH() { return g_flashing ? Dip(32) : 0; }
-int Avatar() { return Dip(28); }
+int Width() { return Dip(288); }
+int Pad() { return Dip(12); }
+int HeaderH() { return Dip(38); }
+int RowH() { return Dip(52); }
+int FooterH() { return Dip(32); }
+int Avatar() { return Dip(32); }
 
 std::wstring Utf8ToWide(const std::string& utf8) {
   if (utf8.empty()) return std::wstring();
@@ -191,7 +195,12 @@ void TrackLeave(HWND hwnd) {
 
 bool GetTrayIconRect(RECT* out) {
   if (!out) return false;
-  HWND main = FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", nullptr);
+  HWND main = nullptr;
+  while ((main = FindWindowExW(nullptr, main, L"FLUTTER_RUNNER_WIN32_WINDOW", nullptr)) != nullptr) {
+    DWORD process_id = 0;
+    GetWindowThreadProcessId(main, &process_id);
+    if (process_id == GetCurrentProcessId()) break;
+  }
   if (!main) return false;
   NOTIFYICONIDENTIFIER id{};
   id.cbSize = sizeof(id);
@@ -222,16 +231,18 @@ void HidePeek(bool force) {
   }
   if (g_hwnd) {
     KillTimer(g_hwnd, kHideTimer);
+    if (GetCapture() == g_hwnd) ReleaseCapture();
     if (IsWindowVisible(g_hwnd)) {
       ShowWindow(g_hwnd, SW_HIDE);
     }
   }
   g_hot = -1;
+  g_pressed = -1;
 }
 
 void ScheduleHide() {
   if (!g_hwnd) return;
-  SetTimer(g_hwnd, kHideTimer, 280, nullptr);
+  SetTimer(g_hwnd, kHideTimer, 400, nullptr);
 }
 
 void NotifyOpen(int64_t id) {
@@ -242,10 +253,11 @@ void NotifyOpen(int64_t id) {
 }
 
 void NotifyCancelFlash() {
-  if (!g_channel) return;
   g_flashing = false;
-  g_channel->InvokeMethod(
-      "cancelFlash", std::make_unique<flutter::EncodableValue>());
+  if (g_channel) {
+    g_channel->InvokeMethod(
+        "cancelFlash", std::make_unique<flutter::EncodableValue>());
+  }
   if (g_hwnd && IsWindowVisible(g_hwnd)) {
     InvalidateRect(g_hwnd, nullptr, FALSE);
   }
@@ -304,9 +316,9 @@ void Paint(HWND hwnd) {
   FillRect(mem, &rc, bg);
   DeleteObject(bg);
 
-  HFONT header_font = MakeFont(12, FW_NORMAL);
-  HFONT title_font = MakeFont(13, FW_SEMIBOLD);
-  HFONT body_font = MakeFont(12, FW_NORMAL);
+  HFONT header_font = MakeFont(12, FW_SEMIBOLD);
+  HFONT title_font = MakeFont(12, FW_SEMIBOLD);
+  HFONT body_font = MakeFont(11, FW_NORMAL);
   HFONT av_font = MakeFont(12, FW_SEMIBOLD);
 
   SetBkMode(mem, TRANSPARENT);
@@ -317,19 +329,23 @@ void Paint(HWND hwnd) {
   const int av = Avatar();
 
   SelectObject(mem, header_font);
-  SetTextColor(mem, RGB(136, 136, 136));
-  wchar_t header[64];
+  SetTextColor(mem, RGB(91, 72, 139));
   const int total = g_total > 0 ? g_total : rows;
-  wsprintfW(header, L"%s · %d", g_title.c_str(), total);
-  RECT header_rc = {pad, 0, rc.right - pad, header_h};
-  DrawTextW(mem, header, -1, &header_rc,
+  const std::wstring header = g_title + L" · 未读消息";
+  RECT header_rc = {pad, 0, rc.right - pad - Dip(64), header_h};
+  DrawTextW(mem, header.c_str(), -1, &header_rc,
             DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+  SelectObject(mem, body_font);
+  SetTextColor(mem, RGB(136, 136, 145));
+  const std::wstring count = std::to_wstring(total) + L" 条";
+  RECT count_rc = {rc.right - pad - Dip(64), 0, rc.right - pad, header_h};
+  DrawTextW(mem, count.c_str(), -1, &count_rc, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
   for (int i = 0; i < rows; ++i) {
     const PeekItem& it = g_items[static_cast<size_t>(i)];
     RECT row = {0, header_h + i * row_h, rc.right, header_h + (i + 1) * row_h};
     if (i == g_hot) {
-      HBRUSH hot = CreateSolidBrush(RGB(246, 247, 250));
+      HBRUSH hot = CreateSolidBrush(RGB(245, 241, 252));
       FillRect(mem, &row, hot);
       DeleteObject(hot);
     }
@@ -356,40 +372,56 @@ void Paint(HWND hwnd) {
     }
 
     const int text_left = ax + av + Dip(8);
-    const int text_right = rc.right - Dip(28);
+    const std::wstring badge = it.unread > 99 ? L"99+" : std::to_wstring(it.unread);
+    SelectObject(mem, body_font);
+    SIZE badge_size{};
+    GetTextExtentPoint32W(mem, badge.c_str(), static_cast<int>(badge.size()), &badge_size);
+    const int badge_w = (std::max)(Dip(18), static_cast<int>(badge_size.cx) + Dip(10));
+    const int text_right = rc.right - pad - badge_w - Dip(10);
     SelectObject(mem, title_font);
-    SetTextColor(mem, RGB(25, 25, 25));
-    RECT name = {text_left, row.top + Dip(4), text_right, row.top + Dip(22)};
+    SetTextColor(mem, RGB(38, 36, 44));
+    RECT name = {text_left, row.top + Dip(7), text_right, row.top + Dip(26)};
     DrawTextW(mem, it.title.c_str(), -1, &name,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     SelectObject(mem, body_font);
-    RECT preview = {text_left, row.top + Dip(22), text_right, row.bottom - Dip(4)};
+    RECT preview = {text_left, row.top + Dip(27), text_right, row.bottom - Dip(6)};
     DrawPreview(mem, it.preview, preview);
 
-    const int dot = Dip(8);
-    const int dx = rc.right - pad - dot;
-    const int dy = cy - dot / 2;
-    HBRUSH red = CreateSolidBrush(RGB(250, 81, 81));
+    const int dx = rc.right - pad - badge_w;
+    const int dy = cy - Dip(18) / 2;
+    HBRUSH red = CreateSolidBrush(RGB(231, 86, 100));
     HGDIOBJ obr = SelectObject(mem, red);
     HGDIOBJ open = SelectObject(mem, GetStockObject(NULL_PEN));
-    Ellipse(mem, dx, dy, dx + dot, dy + dot);
+    RoundRect(mem, dx, dy, dx + badge_w, dy + Dip(18), Dip(16), Dip(16));
     SelectObject(mem, obr);
     SelectObject(mem, open);
     DeleteObject(red);
+    RECT badge_rc = {dx, dy, dx + badge_w, dy + Dip(18)};
+    SelectObject(mem, body_font);
+    SetTextColor(mem, RGB(255, 255, 255));
+    DrawTextW(mem, badge.c_str(), -1, &badge_rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   }
 
-  if (g_flashing) {
+  {
     RECT footer = {0, rc.bottom - FooterH(), rc.right, rc.bottom};
+    HBRUSH footer_bg = CreateSolidBrush(RGB(250, 249, 252));
+    FillRect(mem, &footer, footer_bg);
+    DeleteObject(footer_bg);
     if (g_hot == -2) {
-      HBRUSH hot = CreateSolidBrush(RGB(246, 247, 250));
+      HBRUSH hot = CreateSolidBrush(RGB(243, 238, 251));
       FillRect(mem, &footer, hot);
       DeleteObject(hot);
     }
     SelectObject(mem, body_font);
-    SetTextColor(mem, RGB(87, 107, 149));
-    RECT link = {pad, footer.top, rc.right - pad, footer.bottom};
-    DrawTextW(mem, L"取消闪烁", -1, &link,
-              DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+    SetTextColor(mem, RGB(145, 141, 153));
+    RECT hint = {pad, footer.top, rc.right - pad - (g_flashing ? Dip(65) : 0), footer.bottom};
+    DrawTextW(mem, L"点击会话查看消息", -1, &hint,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    if (g_flashing) {
+      SetTextColor(mem, RGB(112, 82, 178));
+      RECT link = {rc.right - pad - Dip(65), footer.top, rc.right - pad, footer.bottom};
+      DrawTextW(mem, L"停止闪烁", -1, &link, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+    }
   }
 
   HPEN border = CreatePen(PS_SOLID, 1, RGB(228, 230, 235));
@@ -414,7 +446,8 @@ void Paint(HWND hwnd) {
 
 int HitRow(int y) {
   const int rows = RowCount();
-  if (rows <= 0) return -1;
+  // Negative integer division truncates toward zero: guard the header first.
+  if (rows <= 0 || y < HeaderH()) return -1;
   const int idx = (y - HeaderH()) / RowH();
   if (idx < 0 || idx >= rows) return -1;
   return idx;
@@ -422,13 +455,16 @@ int HitRow(int y) {
 
 bool HitFooter(int y, int height) {
   if (!g_flashing) return false;
-  return y >= height - FooterH();
+  return y >= height - FooterH() && y < height;
+}
+
+int HitTarget(int x, int y, int width, int height) {
+  if (x < 0 || x >= width || y < 0 || y >= height) return -1;
+  if (HitFooter(y, height) && x >= width - Pad() - Dip(65)) return -2;
+  return HitRow(y);
 }
 
 void PlaceWindow() {
-  RefreshDpi();
-  const int w = Width();
-  const int h = ContentHeight();
   RECT icon{};
   POINT anchor{};
   if (GetTrayIconRect(&icon)) {
@@ -438,9 +474,18 @@ void PlaceWindow() {
     GetCursorPos(&anchor);
     icon = {anchor.x - 12, anchor.y - 12, anchor.x + 12, anchor.y + 12};
   }
+  HMONITOR mon = MonitorFromRect(&icon, MONITOR_DEFAULTTONEAREST);
+  // GetDpiForWindow follows the window's monitor. Move to the icon's monitor
+  // before measuring, otherwise the first hover uses the previous display DPI.
+  if (MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTONEAREST) != mon) {
+    SetWindowPos(g_hwnd, nullptr, anchor.x, anchor.y, 0, 0,
+                 SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
+  }
+  RefreshDpi();
+  const int w = Width();
+  const int h = ContentHeight();
   int x = anchor.x - w / 2;
   int y = icon.top - h - Dip(8);
-  HMONITOR mon = MonitorFromRect(&icon, MONITOR_DEFAULTTONEAREST);
   MONITORINFO mi{sizeof(mi)};
   if (GetMonitorInfoW(mon, &mi)) {
     const RECT& work = mi.rcWork;
@@ -468,7 +513,7 @@ LRESULT CALLBACK PeekProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
       RECT rc;
       GetClientRect(hwnd, &rc);
       const int y = GET_Y_LPARAM(lparam);
-      const int next = HitFooter(y, rc.bottom) ? -2 : HitRow(y);
+      const int next = HitTarget(GET_X_LPARAM(lparam), y, rc.right, rc.bottom);
       if (next != g_hot) {
         g_hot = next;
         InvalidateRect(hwnd, nullptr, FALSE);
@@ -476,19 +521,47 @@ LRESULT CALLBACK PeekProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
       return 0;
     }
     case WM_MOUSELEAVE:
+      g_hot = -1;
+      InvalidateRect(hwnd, nullptr, FALSE);
       ScheduleHide();
+      return 0;
+    case WM_MOUSEACTIVATE:
+      return MA_NOACTIVATE;
+    case WM_SETCURSOR: {
+      POINT point{};
+      GetCursorPos(&point);
+      ScreenToClient(hwnd, &point);
+      RECT rc{};
+      GetClientRect(hwnd, &rc);
+      const int target = HitTarget(point.x, point.y, rc.right, rc.bottom);
+      SetCursor(LoadCursor(nullptr, target == -1 ? IDC_ARROW : IDC_HAND));
+      return TRUE;
+    }
+    case WM_LBUTTONDOWN: {
+      RECT rc{};
+      GetClientRect(hwnd, &rc);
+      g_pressed = HitTarget(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam), rc.right, rc.bottom);
+      if (g_pressed != -1) SetCapture(hwnd);
+      return 0;
+    }
+    case WM_CAPTURECHANGED:
+      g_pressed = -1;
       return 0;
     case WM_LBUTTONUP: {
       RECT rc;
       GetClientRect(hwnd, &rc);
-      const int y = GET_Y_LPARAM(lparam);
-      if (HitFooter(y, rc.bottom)) {
+      const int target = HitTarget(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam), rc.right, rc.bottom);
+      const int pressed = g_pressed;
+      g_pressed = -1;
+      if (GetCapture() == hwnd) ReleaseCapture();
+      if (target == -1 || pressed != target) return 0;
+      if (target == -2) {
         NotifyCancelFlash();
         PlaceWindow();
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
       }
-      const int row = HitRow(y);
+      const int row = target;
       if (row >= 0 && static_cast<size_t>(row) < g_items.size()) {
         NotifyOpen(g_items[static_cast<size_t>(row)].id);
       }
@@ -601,6 +674,8 @@ void UpdateFromList(const flutter::EncodableList& list) {
 }
 
 void UpdateItems(const flutter::EncodableValue* args) {
+  g_hot = -1;
+  g_pressed = -1;
   g_items.clear();
   g_total = 0;
   g_flashing = false;

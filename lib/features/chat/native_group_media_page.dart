@@ -198,35 +198,11 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
 
     setState(() => _downloadingIds.add(key));
     try {
-      String? savedPath;
-      if (ConversationService.hasAuthMedia(payload)) {
-        final bytes = await _service.downloadAttachmentBytes(
-          objectKey: ConversationService.mediaObjectKey(payload),
-          fileName: fileName,
-        );
-        if (cacheKey.isNotEmpty || widget.conversationId > 0) {
-          savedPath = await file_dl.saveBytesAsCachedFile(
-            bytes,
-            cacheKey,
-            fileName,
-            conversationId: widget.conversationId,
-          );
-        } else {
-          savedPath = await file_dl.saveBytesAsFile(bytes, fileName);
-        }
-      } else {
-        final url = ConversationService.mediaDirectUrl(payload);
-        if (url.isEmpty) {
-          _toast('附件地址为空');
-          return;
-        }
-        savedPath = await file_dl.openUrlAsFile(
-          url,
-          fileName,
-          cacheKey: cacheKey.isEmpty ? null : cacheKey,
-          conversationId: widget.conversationId,
-        );
-      }
+      final savedPath = await file_dl.downloadChatAttachment(
+        _service, payload, fileName,
+        cacheKey: cacheKey.isEmpty ? null : cacheKey,
+        conversationId: widget.conversationId,
+      );
       if (!mounted) return;
       setState(() => _downloadedIds.add(key));
       if (savedPath != null && savedPath.isNotEmpty && isDesktopCommOnly) {

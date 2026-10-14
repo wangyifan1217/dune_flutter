@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../conversation/conversation_service.dart';
 import 'im_cached_file_names.dart';
+import 'download_progress.dart';
 import 'im_file_save_dir.dart';
 
 Future<Directory> _defaultDesktopSaveDir() async {
@@ -269,20 +270,37 @@ Future<String> saveBytesAsCachedFileImpl(
   String cacheKey,
   String fileName, {
   int? conversationId,
+}) => _saveCachedFileImpl(
+  cacheKey,
+  fileName,
+  conversationId: conversationId,
+  write: (dir, name) =>
+      _writeBytesAllowingRename(dir: dir, basename: name, bytes: bytes),
+);
+
+Future<String> _saveCachedFileImpl(
+  String cacheKey,
+  String fileName, {
+  int? conversationId,
+  required Future<void> Function(Directory dir, String name) write,
 }) async {
   final key = cacheKey.trim();
   if (key.isEmpty && (conversationId == null || conversationId <= 0)) {
-    return saveBytesAsFileImpl(bytes, fileName);
+    final dir = await _resolveSaveDir();
+    final name = File(_uniqueFilePath(dir, fileName)).uri.pathSegments.last;
+    await write(dir, name);
+    return '${dir.path}${Platform.pathSeparator}$name';
   }
   final dir = await _resolveSaveDir();
   if (conversationId == null || conversationId <= 0) {
-    if (key.isEmpty) return saveBytesAsFileImpl(bytes, fileName);
-    final parent = Directory(File(_legacyCachedFilePath(dir, key, fileName)).parent.path);
+    final parent = Directory(
+      File(_legacyCachedFilePath(dir, key, fileName)).parent.path,
+    );
     return _writeWithBusyFallback(
       dir: parent,
       preferredName: _safeFileName(fileName),
       originalFileName: fileName,
-      bytes: bytes,
+      write: write,
     );
   }
 
@@ -304,21 +322,13 @@ Future<String> saveBytesAsCachedFileImpl(
     exists: exists,
   );
   try {
-    await _writeBytesAllowingRename(
-      dir: convDir,
-      basename: targetName,
-      bytes: bytes,
-    );
+    await write(convDir, targetName);
   } catch (e) {
     if (!_isFileBusyError(e)) rethrow;
     existsCache[targetName] = true;
     final renamed = uniqueChatFileName(fileName, exists);
     if (renamed == targetName) rethrow;
-    await _writeBytesAllowingRename(
-      dir: convDir,
-      basename: renamed,
-      bytes: bytes,
-    );
+    await write(convDir, renamed);
     targetName = renamed;
   }
   if (key.isNotEmpty) {
@@ -340,21 +350,17 @@ Future<String> _writeWithBusyFallback({
   required Directory dir,
   required String preferredName,
   required String originalFileName,
-  required Uint8List bytes,
+  required Future<void> Function(Directory dir, String name) write,
 }) async {
   try {
-    await _writeBytesAllowingRename(
-      dir: dir,
-      basename: preferredName,
-      bytes: bytes,
-    );
+    await write(dir, preferredName);
     return '${dir.path}${Platform.pathSeparator}$preferredName';
   } catch (e) {
     if (!_isFileBusyError(e)) rethrow;
     final renamed = uniqueChatFileName(originalFileName, (name) {
       return File('${dir.path}${Platform.pathSeparator}$name').existsSync();
     });
-    await _writeBytesAllowingRename(dir: dir, basename: renamed, bytes: bytes);
+    await write(dir, renamed);
     return '${dir.path}${Platform.pathSeparator}$renamed';
   }
 }
@@ -425,52 +431,98 @@ Future<String> openUrlAsFileImpl(
   String? cacheKey,
   int? conversationId,
   ChatUploadCancelToken? cancelToken,
+  Map<String, String>? headers,
 }) async {
   final uri = Uri.tryParse(url);
   if (uri == null) throw Exception('下载链接无效');
   cancelToken?.throwIfCancelled(download: true);
   final client = http.Client();
   cancelToken?.bindClient(client);
+  Directory? temporaryDirectory;
+  IOSink? sink;
   try {
     final req = http.Request('GET', uri);
+    if (headers != null) req.headers.addAll(headers);
     final resp = await client.send(req);
     cancelToken?.throwIfCancelled(download: true);
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('下载失败（HTTP ${resp.statusCode}）');
     }
-    final total = resp.contentLength ?? 0;
+    if (resp.statusCode == 206) throw const HttpException('下载返回了不完整文件，请重试');
+    final root = await _resolveSaveDir();
+    await root.create(recursive: true);
+    // Same filesystem as the final destination, so committing is a rename.
+    temporaryDirectory = await root.createTemp('.dunes-download-');
+    final partial = File(
+      '${temporaryDirectory.path}${Platform.pathSeparator}download.part',
+    );
+    final output = partial.openWrite();
+    sink = output;
+    // Observe asynchronous disk failures immediately, including during addStream.
+    output.done.ignore();
+    final progress = DownloadProgressReporter(onProgress);
+    // Content-Length can describe compressed transport bytes while the HTTP
+    // client exposes decompressed bytes. Only compare matching representations.
+    final encoding = resp.headers['content-encoding']?.toLowerCase();
+    final total = encoding == null || encoding == 'identity'
+        ? resp.contentLength
+        : null;
     var received = 0;
-    final chunks = <int>[];
-    await for (final chunk in resp.stream) {
-      cancelToken?.throwIfCancelled(download: true);
-      chunks.addAll(chunk);
-      if (total > 0) {
+    Stream<List<int>> checkedStream() async* {
+      await for (final chunk in resp.stream) {
+        cancelToken?.throwIfCancelled(download: true);
         received += chunk.length;
-        onProgress?.call((received / total).clamp(0.0, 1.0));
+        if (total != null && received > total) {
+          throw const HttpException('下载文件长度不匹配');
+        }
+        progress.received(received, total);
+        yield chunk;
       }
     }
+
+    // addStream applies backpressure instead of accumulating the whole file.
+    await output.addStream(checkedStream());
+    await output.flush();
+    await output.close();
+    sink = null;
     cancelToken?.throwIfCancelled(download: true);
-    if (total <= 0) onProgress?.call(1.0);
-    final bytes = Uint8List.fromList(chunks);
-    final key = (cacheKey ?? '').trim();
-    if (key.isNotEmpty || (conversationId != null && conversationId > 0)) {
-      return saveBytesAsCachedFileImpl(
-        bytes,
-        key,
-        fileName,
-        conversationId: conversationId,
-      );
+    if (total != null && received != total) {
+      throw const HttpException('下载不完整，请重试');
     }
-    return saveBytesAsFileImpl(bytes, fileName);
+    final path = await _saveCachedFileImpl(
+      (cacheKey ?? '').trim(),
+      fileName,
+      conversationId: conversationId,
+      write: (dir, name) async {
+        await dir.create(recursive: true);
+        cancelToken?.throwIfCancelled(download: true);
+        await partial.rename('${dir.path}${Platform.pathSeparator}$name');
+      },
+    );
+    progress.complete();
+    return path;
   } on ChatDownloadCancelledException {
     rethrow;
-  } catch (e) {
+  } catch (_) {
     if (cancelToken?.isCancelled == true) {
       throw const ChatDownloadCancelledException();
     }
     rethrow;
   } finally {
     client.close();
+    try {
+      await sink?.close();
+    } catch (_) {}
+    // A partial file is never visible to cache lookups or normal file opening.
+    if (temporaryDirectory != null) {
+      try {
+        final partial = File(
+          '${temporaryDirectory.path}${Platform.pathSeparator}download.part',
+        );
+        if (await partial.exists()) await partial.delete();
+        await temporaryDirectory.delete();
+      } catch (_) {}
+    }
   }
 }
 

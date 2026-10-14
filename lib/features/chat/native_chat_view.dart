@@ -355,6 +355,8 @@ class _NativeChatViewState extends State<NativeChatView>
   /// 当前正在下载的附件 cacheKey；非空时仅该文件气泡转圈。
   String? _downloadingFileKey;
   double _downloadProgress = 0;
+  final Stopwatch _downloadProgressClock = Stopwatch();
+  int _lastDownloadProgressUpdate = -200;
 
   /// 本地已缓存的文件 cacheKey（或 fileName 兜底），用于气泡勾选。
   final Set<String> _downloadedFileKeys = <String>{};
@@ -4976,6 +4978,8 @@ class _NativeChatViewState extends State<NativeChatView>
   void _beginDownload(String fileKey) {
     if (!mounted) return;
     _activeDownloadCancel = ChatUploadCancelToken();
+    _downloadProgressClock..reset()..start();
+    _lastDownloadProgressUpdate = -200;
     setState(() {
       _downloadingFileKey = fileKey.isEmpty ? '__download__' : fileKey;
       _downloadProgress = 0;
@@ -4983,7 +4987,10 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   void _setDownloadProgress(double progress) {
-    if (!mounted) return;
+    if (!mounted || !_downloadingMedia) return;
+    final now = _downloadProgressClock.elapsedMilliseconds;
+    if (progress < 1 && now - _lastDownloadProgressUpdate < 200) return;
+    _lastDownloadProgressUpdate = now;
     setState(() {
       _downloadProgress = progress.clamp(0.0, 1.0);
     });
@@ -7805,10 +7812,18 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
-  void _openApprovalShare(ApprovalChatShare share) {
+  void _openApprovalShare(ApprovalChatShare share, {int messageId = 0}) {
     final open = widget.onOpenApprovalShare;
     if (open != null) {
-      open(share);
+      final convId = _conversation?.id ?? 0;
+      open(
+        messageId > 0 && convId > 0
+            ? share.withChatAnchor(
+                conversationId: convId,
+                messageId: messageId,
+              )
+            : share,
+      );
       return;
     }
     _showToast('无法打开审批详情', error: true);
@@ -8439,33 +8454,8 @@ class _NativeChatViewState extends State<NativeChatView>
   }) async {
     final conversationId = _chatConversationId;
     final cancel = _activeDownloadCancel;
-    if (ConversationService.hasAuthMedia(payload)) {
-      final bytes = await _service.loadChatMediaBytes(
-        payload,
-        onProgress: _setDownloadProgress,
-        cancelToken: cancel,
-      );
-      if (cacheKey.isNotEmpty || conversationId != null) {
-        final path = await file_dl.saveBytesAsCachedFile(
-          bytes,
-          cacheKey,
-          fileName,
-          conversationId: conversationId,
-        );
-        _notifyIfFileSavedAsCopy(fileName, path);
-        return path;
-      }
-      final path = await file_dl.saveBytesAsFile(bytes, fileName);
-      _notifyIfFileSavedAsCopy(fileName, path);
-      return path;
-    }
-    final url = ConversationService.mediaDirectUrl(payload);
-    if (url.isEmpty) {
-      throw Exception('附件地址为空');
-    }
-    final path = await file_dl.openUrlAsFile(
-      url,
-      fileName,
+    final path = await file_dl.downloadChatAttachment(
+      _service, payload, fileName,
       onProgress: _setDownloadProgress,
       cacheKey: cacheKey.isEmpty ? null : cacheKey,
       conversationId: conversationId,
@@ -8539,13 +8529,8 @@ class _NativeChatViewState extends State<NativeChatView>
     final cacheKey = _fileCacheKey(payload);
     _beginDownload(cacheKey);
     try {
-      if (force) {
-        await file_dl.deleteCachedChatFile(
-          cacheKey,
-          fileName,
-          conversationId: _chatConversationId,
-        );
-      }
+      // This path always sends a fresh GET, including re-downloads. Keep the
+      // previous complete file until the streamed replacement is committed.
       final savedPath = await _saveAttachmentToDisk(
         payload,
         fileName,
@@ -9012,7 +8997,8 @@ class _NativeChatViewState extends State<NativeChatView>
         return ProposalIntakeShareCard(
           session: widget.session,
           share: approvalShare,
-          onTap: () => _openApprovalShare(approvalShare),
+          onTap: () =>
+              _openApprovalShare(approvalShare, messageId: m.id),
           onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
               ? (details) =>
                     _onMessageActions(m, mine, anchor: details.globalPosition)
@@ -9031,7 +9017,7 @@ class _NativeChatViewState extends State<NativeChatView>
             : '审批单据',
         brandLabel: approvalShare.isProposalIntake ? '协作提案' : '沙丘审批',
         subtitleMaxLines: approvalShare.isProposalIntake ? 2 : 1,
-        onTap: () => _openApprovalShare(approvalShare),
+        onTap: () => _openApprovalShare(approvalShare, messageId: m.id),
         onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
             ? (details) =>
                   _onMessageActions(m, mine, anchor: details.globalPosition)

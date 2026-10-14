@@ -7,11 +7,20 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import 'proposal_intake_models.dart';
 import 'proposal_intake_unreviewed.dart';
+import 'proposal_remote_finance.dart';
 
 class ProposalIntakeService {
   ProposalIntakeService({required this.session});
 
   final AuthSession session;
+
+  Future<ProposalRemoteFinanceResult> estimateFinance(Map<String, dynamic> form) async {
+    final response = await http.post(
+      _uri('/proposal-intakes/estimate'), headers: _headers,
+      body: jsonEncode({'form': proposalRemoteFinanceInputs(form)}),
+    ).timeout(const Duration(seconds: 20));
+    return ProposalRemoteFinanceResult.fromJson(_asMap(_unwrap(response)));
+  }
 
   Map<String, String> get _headers => {
     'Authorization': 'Bearer ${session.token}',
@@ -203,11 +212,35 @@ class ProposalIntakeService {
     return ProposalIntakeRow.fromJson(_asMap(data));
   }
 
-  Future<ProposalIntakeRow> fetchDetail(int id) async {
+  Future<ProposalIntakeRow> fetchDetail(
+    int id, {
+    int chatConversationId = 0,
+    int chatMessageId = 0,
+  }) async {
     final data = _unwrap(
-      await http.get(_uri('/proposal-intakes/$id'), headers: _headers),
+      await http.get(
+        _uri(
+          '/proposal-intakes/$id',
+          _chatReadQuery(
+            chatConversationId: chatConversationId,
+            chatMessageId: chatMessageId,
+          ),
+        ),
+        headers: _headers,
+      ),
     );
     return ProposalIntakeRow.fromJson(_asMap(data));
+  }
+
+  Map<String, String>? _chatReadQuery({
+    required int chatConversationId,
+    required int chatMessageId,
+  }) {
+    if (chatConversationId <= 0 || chatMessageId <= 0) return null;
+    return {
+      'chatConversationId': '$chatConversationId',
+      'chatMessageId': '$chatMessageId',
+    };
   }
 
   Future<ProposalIntakeRow> save(ProposalIntakeRow row) async {

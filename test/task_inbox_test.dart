@@ -93,6 +93,23 @@ void main() {
     expect(taskCompleteBlockReason(ready, now: now), isNull);
   });
 
+  test('only owner, creator, and co-owner can mark complete', () {
+    final task = TaskItem(
+      id: 8,
+      title: '下级目标',
+      ownerUserId: 1,
+      creatorUserId: 2,
+      coOwnerUserIds: const [3],
+      status: 'active',
+    );
+
+    expect(taskViewerCanComplete(task, 1), isTrue);
+    expect(taskViewerCanComplete(task, 2), isTrue);
+    expect(taskViewerCanComplete(task, 3), isTrue);
+    expect(taskViewerCanComplete(task, 4), isFalse);
+    expect(taskViewerCanComplete(task, 0), isFalse);
+  });
+
   test('future start dates stay out of today execution', () {
     final snapshot = TaskInboxSnapshot.build(
       now: now,

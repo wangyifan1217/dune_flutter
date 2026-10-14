@@ -37,6 +37,7 @@ Future<String?> openUrlAsFileImpl(
   String? cacheKey,
   int? conversationId,
   ChatUploadCancelToken? cancelToken,
+  Map<String, String>? headers,
 }) async {
   throw UnsupportedError('当前平台不支持下载');
 }

@@ -1205,13 +1205,14 @@ class ProposalFinanceLine {
 }
 
 class ProposalFinanceBucket {
-  const ProposalFinanceBucket({required this.category, required this.lines});
+  const ProposalFinanceBucket({required this.category, required this.lines, this.computedTotal});
 
   final ProposalCostCategory category;
   final List<ProposalFinanceLine> lines;
+  final double? computedTotal;
 
   double get total =>
-      proposalRoundWan(lines.fold<double>(0, (sum, line) => sum + line.amount));
+      computedTotal ?? proposalRoundWan(lines.fold<double>(0, (sum, line) => sum + line.amount));
 
   List<String> get names => [for (final line in lines) line.name];
 }
@@ -1229,6 +1230,7 @@ class ProposalFinanceEvaluation {
     required this.marginSubstitution,
     this.products = const [],
     this.procurement = const ProposalFinanceLine(name: '采购成本', amount: 0),
+    this.computedCostTotal,
   });
 
   final double salesScale;
@@ -1250,6 +1252,7 @@ class ProposalFinanceEvaluation {
   final double profit;
   final String profitSubstitution;
   final double? margin;
+  final double? computedCostTotal;
   final String marginSubstitution;
 
   ProposalFinanceBucket? bucket(String key) => buckets[key];
@@ -1257,7 +1260,7 @@ class ProposalFinanceEvaluation {
   double total(String key) => buckets[key]?.total ?? 0;
 
   /// 成本合计 = 项目 / 业务 / 税务（经营成本只选类型，金额为 0）。
-  double get costTotal => proposalRoundWan(
+  double get costTotal => computedCostTotal ?? proposalRoundWan(
     buckets.values.fold<double>(0, (sum, bucket) => sum + bucket.total),
   );
 }

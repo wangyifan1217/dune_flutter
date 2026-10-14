@@ -53,6 +53,7 @@ Future<String?> openUrlAsFile(
   String? cacheKey,
   int? conversationId,
   ChatUploadCancelToken? cancelToken,
+  Map<String, String>? headers,
 }) async {
   final path = await openUrlAsFileImpl(
     url,
@@ -61,8 +62,40 @@ Future<String?> openUrlAsFile(
     cacheKey: cacheKey,
     conversationId: conversationId,
     cancelToken: cancelToken,
+    headers: headers,
   );
   return path;
+}
+
+/// Save IM files from every entry point through the same streaming/auth path.
+Future<String?> downloadChatAttachment(
+  ConversationService service,
+  Map<String, dynamic>? payload,
+  String fileName, {
+  void Function(double progress)? onProgress,
+  String? cacheKey,
+  int? conversationId,
+  ChatUploadCancelToken? cancelToken,
+}) {
+  final objectKey = ConversationService.mediaAuthObjectKey(payload);
+  final request = objectKey.isNotEmpty
+      ? service.attachmentDownloadRequest(
+          objectKey: objectKey,
+          fileName: fileName,
+        )
+      : null;
+  final url =
+      request?.url.toString() ?? ConversationService.mediaDirectUrl(payload);
+  if (url.isEmpty) throw Exception('附件地址为空');
+  return openUrlAsFile(
+    url,
+    fileName,
+    headers: request?.headers,
+    onProgress: onProgress,
+    cacheKey: cacheKey,
+    conversationId: conversationId,
+    cancelToken: cancelToken,
+  );
 }
 
 /// 用系统默认应用打开本地文件。

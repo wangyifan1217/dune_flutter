@@ -3364,6 +3364,26 @@ class ConversationService {
     return _uri('/storage/download?${Uri(queryParameters: q).query}');
   }
 
+  /// Shared URL/authentication resolution for byte previews and streamed saves.
+  http.Request attachmentDownloadRequest({
+    required String objectKey,
+    String bucket = 'im-attachments',
+    String? fileName,
+  }) {
+    if (objectKey.isEmpty) throw Exception('附件地址为空');
+    final public = _isPublicMediaUrl(objectKey);
+    final request = http.Request(
+      'GET',
+      public ? Uri.parse(objectKey) : downloadUri(
+        objectKey: _normalizeObjectKeyForBucket(objectKey, bucket: bucket),
+        bucket: bucket,
+        fileName: fileName,
+      ),
+    );
+    if (!public) request.headers.addAll(_headers);
+    return request;
+  }
+
   Future<Uint8List> downloadAttachmentBytes({
     required String objectKey,
     String bucket = 'im-attachments',
@@ -3373,21 +3393,13 @@ class ConversationService {
   }) async {
     if (objectKey.isEmpty) throw Exception('附件地址为空');
     cancelToken?.throwIfCancelled(download: true);
-    final uri = _isPublicMediaUrl(objectKey)
-        ? Uri.parse(objectKey)
-        : downloadUri(
-            objectKey: _normalizeObjectKeyForBucket(objectKey, bucket: bucket),
-            bucket: bucket,
-            fileName: fileName,
-          );
+    final req = attachmentDownloadRequest(
+      objectKey: objectKey, bucket: bucket, fileName: fileName,
+    );
     final ownsClient = cancelToken != null;
     final client = ownsClient ? http.Client() : _client;
     if (ownsClient) cancelToken.bindClient(client);
     try {
-      final req = http.Request('GET', uri);
-      if (!_isPublicMediaUrl(objectKey)) {
-        req.headers.addAll(_headers);
-      }
       final streamed = await client.send(req);
       cancelToken?.throwIfCancelled(download: true);
       if (streamed.statusCode < 200 || streamed.statusCode >= 300) {

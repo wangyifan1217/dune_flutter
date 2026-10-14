@@ -34,7 +34,7 @@ import 'proposal_finance_formula.dart';
 import 'proposal_finance_formula_board.dart';
 import 'proposal_view_style.dart';
 import 'proposal_intake_models.dart';
-import 'proposal_intake_review_mock.dart';
+import 'proposal_remote_finance.dart';
 import 'proposal_product_card.dart';
 import 'proposal_intake_unreviewed.dart';
 import 'proposal_intake_select.dart';
@@ -555,53 +555,6 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
 
   /// 本地调试（只在 debug 包出现）：以这条提案为底生成「复核中 · 财务填完整」的 mock。
   /// 负责人全是自己；新建后自动走 通知财务填写 → 提交复核 两步，直接进入复核中并打开。
-  Future<void> _makeReviewMock(ProposalIntakeRow row) async {
-    if (_saving) return;
-    setState(() => _saving = true);
-    try {
-      await _refreshLookups();
-      final source = row.id > 0 ? await _service.fetchDetail(row.id) : row;
-      final me = widget.session.userId;
-      final myName = _people
-          .where((p) => p.userId == me)
-          .map((p) => p.name.trim())
-          .firstWhere((name) => name.isNotEmpty, orElse: () => '我');
-      final form = proposalIntakeReviewMockForm(
-        source.form,
-        me: me,
-        myName: myName,
-        options: _options,
-      );
-      final baseTitle = source.title.trim().isEmpty
-          ? '销售提案'
-          : source.title.trim().replaceAll('（复核mock）', '');
-      var created = await _service.create(
-        title: '$baseTitle（复核mock）',
-        kind: 'sales',
-        form: form,
-      );
-      created = (await _service.handoff(
-        created.id,
-        'notify_tech',
-        created.version,
-      )).row;
-      created = (await _service.handoff(
-        created.id,
-        'confirm_tech',
-        created.version,
-      )).row;
-      if (!mounted) return;
-      _toast('已生成复核 mock ${created.code}，已进入复核中');
-      await _load();
-      if (!mounted) return;
-      _openForm(created);
-    } catch (error) {
-      _toast('生成复核 mock 失败：${friendlyErrorText(error)}', error: true);
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
   Future<void> _duplicateRow(ProposalIntakeRow row) async {
     if (row.id <= 0 || _saving) return;
     final name = row.title.trim().isEmpty
@@ -832,13 +785,15 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           viewAll: widget.session.proposalIntakeViewAll,
         )) {
       try {
-        final persistForm = proposalIntakeBuildPersistForm(
+        final persistForm = proposalIntakeIsPurchase(editing.kind) ? proposalIntakeBuildPersistForm(
           editing.form,
           businessCatalog: _options?.businessCostItemOptions ?? const [],
           costCatalog: _options?.costItemOptions ?? const [],
           costNames: _options?.resolvedProjectCostItems ?? const [],
           formulaCatalog: _options?.resolvedFinanceFormulaCatalog,
-        );
+        ) : proposalIntakeJsonSafeForm(proposalIntakeConfirmContractEdits(
+          (await _service.estimateFinance(editing.form)).applyToForm(editing.form),
+        ));
         final fallbackForm = proposalIntakeJsonSafeForm(
           proposalIntakeConfirmContractEdits(editing.form),
         );
@@ -2099,8 +2054,6 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         switch (value) {
           case 'copy':
             unawaited(_duplicateRow(row));
-          case 'reviewMock':
-            unawaited(_makeReviewMock(row));
           case 'people':
             unawaited(_showStakeholders(row));
           case 'forward':
@@ -2135,10 +2088,6 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         );
         return [
           if (widget.showCreate) item('copy', '复制新建', Icons.file_copy_outlined),
-          if (kDebugMode &&
-              widget.showCreate &&
-              !proposalIntakeIsPurchase(row.kind))
-            item('reviewMock', '生成复核 mock', Icons.science_outlined),
           item('people', '相关人员', Icons.people_alt_outlined),
           item('forward', '转发', Icons.forward_outlined),
           if (canDelete)
@@ -2151,7 +2100,72 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       key: ValueKey('proposal-proto-row-${row.id}'),
       data: _listCardData(row, index < 0 ? 0 : index),
       onTap: () => unawaited(_openExisting(row)),
-      more: SizedBox(width: 30, height: 30, child: moreMenu),
+      more: Row(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(width: 30, height: 30, child: IconButton(
+          padding: EdgeInsets.zero,
+          tooltip: '轮回次数 · ${row.restartCount} 次',
+          icon: Icon(Icons.restart_alt, size: 18, color: c(0xFF4F3488)),
+          onPressed: () => _showProposalRejections(row, history: false),
+        )),
+        SizedBox(width: 30, height: 30, child: IconButton(
+          padding: EdgeInsets.zero,
+          tooltip: '历史驳回记录',
+          icon: Icon(Icons.history, size: 18, color: c(0xFF4F3488)),
+          onPressed: () => _showProposalRejections(row, history: true),
+        )),
+        SizedBox(width: 30, height: 30, child: moreMenu),
+      ]),
+    );
+  }
+
+  Future<void> _showProposalRejections(ProposalIntakeRow row, {required bool history}) async {
+    final records = row.finalRejectionHistory;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(history ? '历史最终驳回' : '提案轮回次数'),
+        contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('已轮回 ${records.length} 次 · 当前第 ${records.length + 1} 轮',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              const Text('最终审批人驳回、退回重新填写计为一次轮回；普通复核退回不计入。',
+                style: TextStyle(fontSize: 12)),
+              if (history && records.isEmpty) ...[
+                const SizedBox(height: 20), const Text('暂无最终驳回记录'),
+              ],
+              if (history) ...records.reversed.map((record) {
+                final actor = '${record['actorUserId'] ?? ''}';
+                final names = _people.where((p) => '${p.userId}' == actor);
+                final name = names.isEmpty ? (actor.isEmpty ? '未知审批人' : '用户 $actor') : names.first.name;
+                final rawDate = '${record['decidedAt'] ?? ''}';
+                final parsedDate = DateTime.tryParse(rawDate)?.toLocal();
+                final date = parsedDate == null ? rawDate : parsedDate.toString().split('.').first;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('第 ${record['round']} 次轮回 · $name',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    if (date.isNotEmpty) Text(date, style: const TextStyle(fontSize: 11)),
+                    const SizedBox(height: 4),
+                    SelectableText('${record['comment'] ?? ''}', style: const TextStyle(fontSize: 13)),
+                  ]),
+                );
+              }),
+              if (records.any((r) => r['legacy'] == true)) ...[
+                const SizedBox(height: 12),
+                const Text('旧数据仅包含仍保留的最近一次驳回，更早的已覆盖记录无法恢复。', style: TextStyle(fontSize: 11)),
+              ],
+            ],
+          )),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
+      ),
     );
   }
 
@@ -2179,7 +2193,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     final rating = mainScale == null
         ? ''
         : (_options?.ratingFor(mainScale) ?? '');
-    final figures = proposalEstimateListFigures(form);
+    final figures = proposalRemoteListFigures(row);
     final scale = figures.scale.isEmpty
         ? '—'
         : proposalEstimateGrouped(
@@ -2231,7 +2245,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       form,
       owner: kProposalProductFinanceMain,
     );
-    final turnover = proposalTurnoverCashAmount(scope);
+    final estimateMain = row.financeEstimate['main'];
+    final estimateSummary = estimateMain is Map ? estimateMain['summary'] : null;
+    final turnover = estimateSummary is Map ? (estimateSummary['turnoverCash'] as num?)?.toDouble() : null;
     final times = proposalFinanceAmount(scope, kProposalTurnoverTimesKey);
 
     // 底：复核进度条。和提案详情里的「审批进度」用同一份步骤（proposalIntakeProgressSteps），
@@ -2500,7 +2516,7 @@ class _ProposalListTile extends StatelessWidget {
     final showFigures =
         kProposalListFiguresEnabled && !proposalIntakeIsPurchase(row.kind);
     final figures = showFigures
-        ? proposalEstimateListFigures(row.form)
+        ? proposalRemoteListFigures(row)
         : (scale: '', margin: '');
     final figureStyle = TextStyle(
       color: DunesColors.resolve(context, ProposalPalette.text),
@@ -2852,6 +2868,8 @@ class ProposalIntakeForm extends StatefulWidget {
     this.nextCount = 0,
     this.nextBusy = false,
     this.catalog,
+    this.chatConversationId = 0,
+    this.chatMessageId = 0,
   });
 
   final ProposalIntakeRow row;
@@ -2874,6 +2892,8 @@ class ProposalIntakeForm extends StatefulWidget {
   final int nextCount;
   final bool nextBusy;
   final SettlementCatalogService? catalog;
+  final int chatConversationId;
+  final int chatMessageId;
 
   @override
   State<ProposalIntakeForm> createState() => _ProposalIntakeFormState();
@@ -2881,6 +2901,32 @@ class ProposalIntakeForm extends StatefulWidget {
 
 class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   late ProposalIntakeRow _row;
+  late final ProposalRemoteFinanceController _remoteFinance;
+
+  void _remoteFinanceChanged() {
+    if (!mounted) return;
+    _productEvaluationForm = null;
+    setState(() {});
+    _estimateTick.value++;
+  }
+
+  static const _emptyRemoteFinanceEvaluation = ProposalFinanceEvaluation(
+    salesScale: 0, revenueGroup: null, revenueGroups: [],
+    revenue: ProposalFinanceLine(name: '收入', amount: 0, pending: true),
+    buckets: {}, profit: 0, profitSubstitution: '', margin: null, marginSubstitution: '',
+  );
+
+  Widget _remoteFinanceStatus() => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+    child: Row(children: [
+      if (_remoteFinance.loading) ...[
+        const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+        const SizedBox(width: 8),
+      ],
+      Expanded(child: Text(_remoteFinance.loading ? '正在测算…' : '测算暂不可用：${friendlyErrorText(_remoteFinance.error)}', style: const TextStyle(fontSize: 12))),
+      if (!_remoteFinance.loading) TextButton(onPressed: _remoteFinance.retry, child: const Text('重试')),
+    ]),
+  );
 
   /// 每次表单内容变化加一，只让顶部「年化测算」单独刷新；
   /// 打字时不重建整页的输入框也能边填边算。
@@ -3031,6 +3077,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ? widget.row
         : widget.row.copyWith(form: form);
     _serverForm = proposalIntakeCloneForm(_row.form);
+    _remoteFinance = ProposalRemoteFinanceController(widget.service.estimateFinance)
+      ..addListener(_remoteFinanceChanged);
+    if (!_isPurchase) _remoteFinance.setForm(_row.form);
     _visibleSection = _isPurchase && !_protoForm
         ? ProposalIntakeNavSection.toc
         : (_taskSection ?? ProposalIntakeNavSection.market);
@@ -3064,6 +3113,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   @override
   void dispose() {
+    _remoteFinance.removeListener(_remoteFinanceChanged);
+    _remoteFinance.dispose();
     _estimateTick.dispose();
     _flashTimer?.cancel();
     _scroll.removeListener(_syncVisibleSection);
@@ -3597,7 +3648,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       );
     }
     var estimated = false;
-    if (proposalIsFinanceEstimateInputKey(key)) {
+    if (_isPurchase && proposalIsFinanceEstimateInputKey(key)) {
       final before = Map<String, dynamic>.from(form);
       form = proposalApplyEstimatedFinanceCosts(
         form,
@@ -3701,6 +3752,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Map<String, dynamic> _withEstimatedFinanceCosts(Map<String, dynamic> form) {
+    if (!_isPurchase) return _keepUnreviewed(form);
     final before = Map<String, dynamic>.from(form);
     final next = proposalApplyEstimatedFinanceCosts(
       form,
@@ -3713,7 +3765,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return _keepUnreviewed(next);
   }
 
-  Map<String, dynamic> _persistableForm(Map<String, dynamic> form) {
+  Future<Map<String, dynamic>> _persistableForm(Map<String, dynamic> form) async {
+    if (!_isPurchase) {
+      final result = await _remoteFinance.calculateNow(form);
+      return proposalIntakeJsonSafeForm(_keepUnreviewed(
+        proposalIntakeConfirmContractEdits(result.applyToForm(form)),
+      ));
+    }
     return proposalIntakeBuildPersistForm(
       form,
       keepUnreviewed: _keepUnreviewed,
@@ -5086,6 +5144,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   /// 采购提案、或规模与收入利润都还没有时不显示。
   ProposalEstimateSummaryData? get _estimateSummaryData {
     if (!kProposalEstimateSummaryEnabled || _isPurchase) return null;
+    if (_remoteFinance.result == null) return null;
     final scope = proposalIntakeProductFinanceScope(
       _form,
       owner: kProposalProductFinanceMain,
@@ -5129,9 +5188,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _ => '',
     };
     return ProposalEstimateSummaryData(
+      remoteSummary: _remoteFinance.result!.summary,
       rating: rating,
       ratingRule: ratingRule,
-      scale: scale,
+      scale: _remoteFinance.result!.main.salesScale,
       revenue: revenue,
       procurement: known ? eval.procurement.amount : null,
       projectCost: known ? eval.total(kProposalCostCategoryProject) : null,
@@ -5206,6 +5266,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   /// 所有表单改动都经这里通知外层；顺带让顶部测算刷新。
   void _emitChanged(ProposalIntakeRow row) {
+    if (!_isPurchase) _remoteFinance.setForm(row.form);
     _estimateTick.value++;
     widget.onChanged(row);
   }
@@ -7100,6 +7161,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   /// 财务部「产品结算」块：填写、复核、查看共用一套版式。
   /// 只读时行里是「字段：值」；填写时同一行展开就是输入框。
   Widget _financeSimpleRows(bool wide) {
+    if (!_isPurchase && _remoteFinance.result == null) return _remoteFinanceStatus();
     final editing = !_simpleView;
     final rows = proposalIntakeSkuDetails(_form);
     final shared = kProposalSharedSettleEnabled
@@ -8461,7 +8523,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     await Future<void>.delayed(Duration.zero);
     if (!mounted) return;
     try {
-      final prepared = _row.copyWith(form: _persistableForm(_form));
+      final prepared = _row.copyWith(form: await _persistableForm(_form));
       final fallback = _row.copyWith(
         form: proposalIntakeJsonSafeForm(
           proposalIntakePreserveUserFinanceEdits(
@@ -8579,6 +8641,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           _anchorUseCount.clear();
+          if (!_isPurchase) _remoteFinance.setForm(_row.form);
           final wide = !ProposalLayout.isMedium(constraints.maxWidth);
           final compact = ProposalLayout.isCompact(constraints.maxWidth);
           return _protoFonts(
@@ -8669,14 +8732,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                                         _openEstimateField,
                                                   );
                                             if (!kProposalPrototypeStyleEnabled) {
-                                              return card ??
-                                                  const SizedBox.shrink();
+                                              return card ?? _remoteFinanceStatus();
                                             }
                                             // 原型：测算下面是「流程」格子。
                                             return Column(
                                               crossAxisAlignment:
                                                   CrossAxisAlignment.stretch,
                                               children: [
+                                                if (card == null) _remoteFinanceStatus(),
                                                 ?card,
                                                 Padding(
                                                   padding:
@@ -10398,6 +10461,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         service: XflowService(session: widget.session),
         businessType: 'PROPOSAL_INTAKE',
         businessId: _row.id,
+        chatConversationId: widget.chatConversationId,
+        chatMessageId: widget.chatMessageId,
         // 原型配色：紫色按钮、浅紫底；不开原型样式时与原来一样。
         palette: _protoForm
             ? const XfCommentsPalette(
@@ -11638,6 +11703,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   /// 整单测算：主产品 + 子产品加总。成本 / 利润块顶、下面按产品的各行、
   /// 市场部三格、左侧格子和主 hero 都用这一份，数字对得上。
   ProposalFinanceEvaluation get _allFinanceEvaluation {
+    if (!_isPurchase) return _remoteFinance.result?.total ?? _emptyRemoteFinanceEvaluation;
     final main = _mainFinanceEvaluation;
     if (!proposalIntakeHasChildProducts(_form) || main.products.isEmpty) {
       return main;
@@ -13116,6 +13182,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Widget _financeSection(bool wide) {
     if (_isPurchase) return _purchaseFinanceSection(wide);
+    if (_remoteFinance.result == null) return _remoteFinanceStatus();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -13278,6 +13345,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     Map<String, dynamic> scope, {
     String owner = kProposalProductFinanceMain,
   }) {
+    if (!_isPurchase) {
+      final result = _remoteFinance.result;
+      return (owner == kProposalProductFinanceChildren ? result?.children : result?.main) ?? _emptyRemoteFinanceEvaluation;
+    }
     return proposalEvaluateFinance(
       scope,
       catalog: _financeFormulaCatalog,
@@ -13375,6 +13446,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   /// 全部产品的测算：主产品在前、子产品在后。
   List<ProposalProductFinanceEvaluation> get _financeProductEvaluations {
+    if (!_isPurchase) return _remoteFinance.result?.total.products ?? const [];
     final products = [..._mainFinanceEvaluation.products];
     if (proposalIntakeHasChildProducts(_form)) {
       products.addAll(
@@ -13612,7 +13684,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ].join('   ');
       },
       turnoverTimes: times > 0 ? times : null,
-      turnoverCash: proposalTurnoverCashAmount(scope),
+      turnoverCash: (_remoteFinance.result?.summary['turnoverCash'] as num?)?.toDouble(),
       turnoverField: _scopedFinanceField(
         ('turnoverTimes', '月周转次数'),
         owner: owner,
@@ -17043,12 +17115,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             // 按单价结的：比例列空着，单价写在「每张」列。
             final ratio = t.displayRatio.trim();
             final unitPrice = t.displayUnitPrice.trim();
-            final share = proposalIntakeSettleShare(t, face: faceValue);
-            final amount = base > 0 && share > 0 ? base * share : 0.0;
+            final remote = _isPurchase ? <String, dynamic>{
+              'share': proposalIntakeSettleShare(t, face: faceValue),
+              'amount': base * proposalIntakeSettleShare(t, face: faceValue),
+              'perUnit': faceValue * proposalIntakeSettleShare(t, face: faceValue),
+            } : _remoteFinance.result?.settlement(product.id, ordered[i].id);
+            final share = (remote?['share'] as num?)?.toDouble() ?? 0;
+            final amount = (remote?['amount'] as num?)?.toDouble();
             final perUnit = ratio.isEmpty && unitPrice.isNotEmpty
                 ? (unitPrice.endsWith('元') ? unitPrice : '$unitPrice 元')
                 : (faceValue > 0 && share > 0
-                      ? '${proposalFormatWan(faceValue * share)} 元'
+                      ? '${proposalFormatWan((remote?['perUnit'] as num?)?.toDouble() ?? 0)} 元'
                       : '');
             final formula = t.displayFormula.trim();
             return ProposalProductCardLine(
@@ -17056,7 +17133,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   ? name
                   : '$prefix · ${cost ? '项目成本' : '收入'} $name',
               ratio: ratio,
-              amount: amount > 0 ? '${proposalFormatWan(amount)} 万' : '',
+              amount: amount == null ? '—' : '${proposalFormatWan(amount)} 万',
               basis: _settleBasisShort(formula),
               perUnit: perUnit,
               // 第二行灰字：计算公式 · 发票类型 · 税率。
@@ -17068,13 +17145,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               // 悬停提示：资管公式原文 + 怎么乘出来的。
               note: [
                 if (formula.isNotEmpty) '资管公式：$formula',
-                _settleLineNote(
-                  t,
-                  base: base,
-                  share: share,
-                  face: faceValue,
-                  faceWord: _skuFaceWord(product),
-                ),
+                '${remote?['substitution'] ?? '等待测算结果'}',
               ].where((item) => item.isNotEmpty).join('\n'),
             );
           }(),
@@ -19752,16 +19823,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         cost ? ProposalPalette.coralSoft : ProposalPalette.greenSoft,
         role: DunesColorRole.surface,
       );
-      var total = 0.0;
-      for (final row in rows) {
-        final way = _settleWayOf(
-          row.terms,
-          legacyPromotion: legacyPromotion && cost,
-        );
-        if (way == _settleWayTier) continue;
-        final share = proposalIntakeSettleShare(row.terms, face: face);
-        if (scale > 0 && share > 0) total += scale * share;
-      }
+      final evaluation = _productEvaluationOf(product.id)?.evaluation;
+      final total = cost ? evaluation?.total(kProposalCostCategoryProject) ?? 0 : evaluation?.revenue.amount ?? 0;
       final verb = cost ? '付钱' : '收钱';
       return Container(
         key: ValueKey('settle-dialog-group-${product.id}-$cost'),
@@ -20423,10 +20486,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
 
     // 测算一行
-    final share = proposalIntakeSettleShare(terms, face: face);
+    final remoteLine = _remoteFinance.result?.settlement(skuId, settle.id);
+    final share = (remoteLine?['share'] as num?)?.toDouble() ?? 0;
     var estimate = '';
     var estimateReady = false;
-    if (way == _settleWayTier) {
+    if (remoteLine == null) {
+      estimate = _remoteFinance.loading ? '正在测算…' : '测算暂不可用，请重试。';
+    } else if (way == _settleWayTier) {
       estimate = '按阶梯分档算，金额见市场部「成本测算」。';
     } else if (way == _settleWayUnit &&
         terms.displayUnitPrice.trim().isNotEmpty &&
@@ -20438,11 +20504,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       estimate = '相当于规模的 ${proposalFormatSharePct(share)}；产品年化规模填好后自动算出金额。';
     } else {
       estimateReady = true;
-      final amount = proposalFormatWan(scale * share);
-      final base = proposalFormatWan(scale);
-      estimate = way == _settleWayUnit
-          ? '测算：$base 万 × (单价 ${terms.displayUnitPrice.trim()} ÷ 面值 ${proposalFormatWan(face)}) = $amount 万/年'
-          : '测算：$base 万 × ${terms.displayRatio.trim()} = $amount 万/年';
+      estimate = '测算：${remoteLine['substitution']}';
     }
     final estimateLine = Container(
       margin: const EdgeInsets.only(top: 8),
@@ -23264,15 +23326,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final form = formOverride ?? _form;
     switch (key) {
       case 'turnoverCash':
-        final cash = proposalTurnoverCashAmount(form);
+        final cash = _isPurchase ? proposalTurnoverCashAmount(form)
+            : (_remoteFinance.result?.mainSummary['turnoverCash'] as num?)?.toDouble();
         return (
           display: cash == null ? '' : proposalFormatWan(cash),
           formula: kProposalTurnoverCashFormula,
         );
       case 'salesScale':
-        final rollup = proposalProductScaleRollup(form);
+        if (_isPurchase) {
+          final rollup = proposalProductScaleRollup(form);
+          return (display: rollup == null ? '' : proposalFormatWan(rollup.salesScale), formula: kProposalSalesScaleFormula);
+        }
         return (
-          display: rollup == null ? '' : proposalFormatWan(rollup.salesScale),
+          display: _remoteFinance.result == null ? '' : proposalFormatWan(_remoteFinance.result!.main.salesScale),
           formula: kProposalSalesScaleFormula,
         );
       case 'revenue':

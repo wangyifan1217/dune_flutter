@@ -433,6 +433,7 @@ class ProposalIntakeRow {
     this.kind = 'sales',
     this.stage = '',
     this.myAction = '',
+    this.financeEstimate = const {},
   });
 
   final int id;
@@ -448,6 +449,28 @@ class ProposalIntakeRow {
   final int version;
   final String stage;
   final String myAction;
+  final Map<String, dynamic> financeEstimate;
+
+  /// Only final-approval rejections restart the full proposal workflow.
+  List<Map<String, dynamic>> get finalRejectionHistory {
+    final raw = review['finalRejectionHistory'];
+    if (raw is List) {
+      return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+    if (review['presidentRejected'] == true &&
+        '${review['presidentComment'] ?? ''}'.trim().isNotEmpty) {
+      return [{
+        'round': 1,
+        'actorUserId': review['presidentRejectUserId'],
+        'comment': review['presidentComment'],
+        'decidedAt': review['presidentDecidedAt'],
+        'legacy': true,
+      }];
+    }
+    return const [];
+  }
+
+  int get restartCount => finalRejectionHistory.length;
 
   factory ProposalIntakeRow.fromJson(Map<String, dynamic> json) {
     final review = _map(json['review']);
@@ -465,6 +488,7 @@ class ProposalIntakeRow {
       version: (json['version'] as num?)?.toInt() ?? 1,
       stage: '${json['stage'] ?? review['stage'] ?? ''}'.trim(),
       myAction: '${json['myAction'] ?? ''}'.trim(),
+      financeEstimate: _map(json['financeEstimate']),
     );
   }
 
@@ -516,6 +540,7 @@ class ProposalIntakeRow {
     version: version ?? this.version,
     stage: stage ?? this.stage,
     myAction: myAction ?? this.myAction,
+    financeEstimate: financeEstimate,
   );
 
   String initiatorDisplayName(List<ProposalPerson> people) {
@@ -5029,6 +5054,7 @@ const kProposalProductFinanceMain = 'main';
 const kProposalProductFinanceChildren = 'children';
 
 const _kProposalProductFinanceFields = <String>[
+  'businessFormulaCodes',
   'salesScale',
   'revenue',
   'revenueManual',
@@ -5086,6 +5112,7 @@ bool proposalIntakeIsProductFinanceField(String key) =>
 
 /// 用户手填的财务字段。估算和接口回包都不能用空值盖掉。
 const kProposalUserOwnedFinanceKeys = <String>{
+  'businessFormulaCodes',
   'turnoverTimes',
   'supplySettleMode',
   'supplySettleCycle',

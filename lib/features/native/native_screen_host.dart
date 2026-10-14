@@ -6210,6 +6210,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         context: context,
         session: widget.session,
         proposalId: share.businessId,
+        chatConversationId: share.chatConversationId,
+        chatMessageId: share.chatMessageId,
       );
     }
     return showApprovalDetailOverlay(

@@ -16,12 +16,16 @@ Future<void> showProposalIntakeOverlay({
   required AuthSession session,
   required int proposalId,
   bool linkedFromApproval = false,
+  int chatConversationId = 0,
+  int chatMessageId = 0,
 }) {
   Widget hostFor(VoidCallback close) {
     return _ProposalIntakeOverlayHost(
       session: session,
       proposalId: proposalId,
       linkedFromApproval: linkedFromApproval,
+      chatConversationId: chatConversationId,
+      chatMessageId: chatMessageId,
       onClose: close,
     );
   }
@@ -94,12 +98,16 @@ class _ProposalIntakeOverlayHost extends StatefulWidget {
     required this.proposalId,
     required this.onClose,
     this.linkedFromApproval = false,
+    this.chatConversationId = 0,
+    this.chatMessageId = 0,
   });
 
   final AuthSession session;
   final int proposalId;
   final VoidCallback onClose;
   final bool linkedFromApproval;
+  final int chatConversationId;
+  final int chatMessageId;
 
   @override
   State<_ProposalIntakeOverlayHost> createState() =>
@@ -147,10 +155,16 @@ class _ProposalIntakeOverlayHostState
       setState(() => _proposalId = target);
     }
     try {
-      final detail = _service.fetchDetail(target);
+      final fromChat =
+          widget.chatConversationId > 0 && widget.chatMessageId > 0;
+      final detail = _service.fetchDetail(
+        target,
+        chatConversationId: widget.chatConversationId,
+        chatMessageId: widget.chatMessageId,
+      );
       final options = _service.fetchOptions();
       final people = _service.fetchPeople();
-      if (widget.linkedFromApproval) {
+      if (widget.linkedFromApproval || fromChat) {
         final result = await Future.wait([detail, options, people]);
         if (!mounted) return;
         setState(() {
@@ -273,6 +287,7 @@ class _ProposalIntakeOverlayHostState
     }
     final row = _row!;
     final fromApproval = widget.linkedFromApproval;
+    final fromChat = widget.chatConversationId > 0 && widget.chatMessageId > 0;
     return ProposalIntakeForm(
       key: ValueKey('overlay-form-$_formSession'),
       row: row,
@@ -294,10 +309,12 @@ class _ProposalIntakeOverlayHostState
       onError: (message) =>
           showProposalCenterToast(context, message, error: true),
       onDeleted: widget.onClose,
-      onNext: fromApproval
+      chatConversationId: widget.chatConversationId,
+      chatMessageId: widget.chatMessageId,
+      onNext: fromApproval || fromChat
           ? null
           : () => unawaited(_goNext(afterDecision: false)),
-      onAfterFinalDecision: fromApproval
+      onAfterFinalDecision: fromApproval || fromChat
           ? null
           : (id) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -305,7 +322,7 @@ class _ProposalIntakeOverlayHostState
                 unawaited(_goNext(afterDecision: true));
               });
             },
-      nextCount: fromApproval
+      nextCount: fromApproval || fromChat
           ? 0
           : _actionQueue.where((item) => item.id != row.id).length,
       nextBusy: _nextBusy,

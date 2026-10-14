@@ -13,6 +13,8 @@ class ApprovalChatShare {
     this.actionLabel = '',
     this.todoId = 0,
     this.kind = '',
+    this.chatConversationId = 0,
+    this.chatMessageId = 0,
   });
 
   final String businessType;
@@ -25,6 +27,28 @@ class ApprovalChatShare {
   final String actionLabel;
   final int todoId;
   final String kind;
+  final int chatConversationId;
+  final int chatMessageId;
+
+  ApprovalChatShare withChatAnchor({
+    required int conversationId,
+    required int messageId,
+  }) {
+    return ApprovalChatShare(
+      businessType: businessType,
+      businessId: businessId,
+      title: title,
+      status: status,
+      templateKey: templateKey,
+      code: code,
+      submitterName: submitterName,
+      actionLabel: actionLabel,
+      todoId: todoId,
+      kind: kind,
+      chatConversationId: conversationId,
+      chatMessageId: messageId,
+    );
+  }
 
   bool get isProposalIntake =>
       businessType.toUpperCase() == 'PROPOSAL_INTAKE';

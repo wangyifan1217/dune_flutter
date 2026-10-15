@@ -14389,6 +14389,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   int? _supplyAssetPointIndex;
   String _supplyAssetTrendPrimeKey = '';
 
+  /// 供给二级（省）页面的资产走势：选中哪一格（null = 本省总资产）。
+  String? _detailAssetLineKey;
+
   /// 资管标签二快照：省级合计、底部石油 / 石化 / 总资产。
   LighthouseFundPoolSnapshot _fundPoolSnapshot =
       LighthouseFundPoolSnapshot.empty;
@@ -14499,6 +14502,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   //   每 30 秒轻量对一次，避免别处新增 OPEN 通知后本机喇叭一直是灰的。
   List<LighthouseDelayNotice> _delayNotices = const <LighthouseDelayNotice>[];
   bool _delayNoticeOpen = false;
+
+  /// 上一次自动展开时那批预警的指纹。小喇叭有预警就默认展开；
+  /// 用户手动收起后，30 秒轮询拿到同一批预警不再弹开，换了新预警才再展开。
+  String _delayNoticeAutoOpenedFor = '';
   bool _delayNoticeLoading = false;
   _LhNoticeFetch _delayNoticeFetch = _LhNoticeFetch.pending;
   Timer? _delayNoticeTimer;
@@ -15513,6 +15520,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         _delayNotices = res.notices;
         _delayNoticeFetch = res.ok ? _LhNoticeFetch.ok : _LhNoticeFetch.failed;
         if (res.notices.isEmpty) _delayNoticeOpen = false;
+        final active = res.notices.where((n) => !n.isEmpty).toList();
+        if (active.isEmpty) {
+          _delayNoticeAutoOpenedFor = '';
+        } else {
+          final sig = active
+              .map(
+                (n) =>
+                    '${n.sourceCode}|${n.bizDeptCode}|${n.message}|${n.raisedAt}',
+              )
+              .join('\n');
+          if (sig != _delayNoticeAutoOpenedFor) {
+            _delayNoticeAutoOpenedFor = sig;
+            _delayNoticeOpen = true;
+          }
+        }
       });
     } finally {
       _delayNoticeLoading = false;
@@ -42246,8 +42268,68 @@ SafeArea(
   /// 外壳、字号、圆角、灰阶与主 Hero 同源。左边是总资产 / 中石油 / 中石化
   /// 三个紧凑切换项，右边直接复用主 Hero 的趋势图。紫色只留给走势强调线，
   /// 不再把整块资产区染成紫色。
-  Widget _buildSupplyAssetOverview(List<Map<String, dynamic>> rows) {
-    final lines = lighthouseSupplyAssetFooter(rows, _fundPoolSnapshot);
+  /// 供给二级（省）页面的资产格：本省总资产 + 本省下的资管主体（中石油 / 中石化）。
+  /// 只有一个主体时它就等于总资产，不再重复列。资管里没有这个省就返回空。
+  List<LighthouseAssetFooterLine> _provinceAssetLines(String provinceName) {
+    final snap = _fundPoolSnapshot;
+    final key = lighthouseProvinceKey(provinceName);
+    if (key.isEmpty) return const <LighthouseAssetFooterLine>[];
+    final amounts = snap.provinceAmounts[key];
+    if (amounts == null) return const <LighthouseAssetFooterLine>[];
+    final lines = <LighthouseAssetFooterLine>[
+      LighthouseAssetFooterLine(
+        key: 'total',
+        label: '总资产',
+        amounts: LighthouseFundPoolAmounts.fromJson(amounts),
+        scope: 'province:$key',
+      ),
+    ];
+    final entities = [...(snap.entitiesByProvince[key] ?? const [])];
+    if (entities.length < 2) return lines;
+    double size(LighthouseFundPoolEntity e) =>
+        (LighthouseFundPoolAmounts.fromJson(e.amountsJson)?.totalAssets ?? 0)
+            .abs();
+    entities.sort((a, b) => size(b).compareTo(size(a)));
+    String base(LighthouseFundPoolEntity e) => switch (e.category) {
+      lighthouseAssetCategoryOil => '中石油资产',
+      lighthouseAssetCategoryPetro => '中石化资产',
+      _ => '',
+    };
+    final counts = <String, int>{};
+    for (final e in entities) {
+      counts[base(e)] = (counts[base(e)] ?? 0) + 1;
+    }
+    for (final e in entities) {
+      final b = base(e);
+      final own = e.supplierName.trim().isNotEmpty
+          ? e.supplierName.trim()
+          : e.counterpartyName.trim();
+      // 同一品牌有两个主体时，品牌名分不开，换成主体自己的名字。
+      final label = b.isEmpty || (counts[b] ?? 0) > 1
+          ? (own.isEmpty ? (b.isEmpty ? '主体' : b) : own)
+          : b;
+      lines.add(
+        LighthouseAssetFooterLine(
+          key: '${e.category}::${e.rowKey}',
+          label: label,
+          amounts: LighthouseFundPoolAmounts.fromJson(e.amountsJson),
+          scope: 'entity:${e.rowKey}',
+        ),
+      );
+    }
+    return lines;
+  }
+
+  /// [provinceLines] 非空 = 供给二级（省）页面：本省总资产 + 本省下的中石油 /
+  /// 中石化主体，选中态存在 [_detailAssetLineKey]，不动一级的分类筛选。
+  Widget _buildSupplyAssetOverview(
+    List<Map<String, dynamic>> rows, {
+    List<LighthouseAssetFooterLine>? provinceLines,
+    String? provinceTitle,
+  }) {
+    final inProvince = provinceLines != null;
+    final lines =
+        provinceLines ?? lighthouseSupplyAssetFooter(rows, _fundPoolSnapshot);
     if (lines.isEmpty) return const SizedBox.shrink();
     LighthouseAssetFooterLine? lineOf(String key) {
       for (final line in lines) {
@@ -42259,10 +42341,18 @@ SafeArea(
     final oil = lineOf(lighthouseAssetCategoryOil);
     final petro = lineOf(lighthouseAssetCategoryPetro);
     final total = lineOf('total');
-    final selectedKey = _groupFilter.contains('中石化')
-        ? lighthouseAssetCategoryPetro
-        : (_groupFilter.contains('中石油') ? lighthouseAssetCategoryOil : 'total');
+    final selectedKey = inProvince
+        ? (_detailAssetLineKey ?? 'total')
+        : (_groupFilter.contains('中石化')
+              ? lighthouseAssetCategoryPetro
+              : (_groupFilter.contains('中石油')
+                    ? lighthouseAssetCategoryOil
+                    : 'total'));
     final selected = lineOf(selectedKey) ?? total ?? lines.first;
+    // 省页面：总资产在上，下面是本省的主体（最多两格，放不下更多）。
+    final provinceRest = inProvince
+        ? [for (final l in lines) if (l.key != 'total') l].take(2).toList()
+        : const <LighthouseAssetFooterLine>[];
 
     final trendScopes = <String>{
       for (final line in lines)
@@ -42270,7 +42360,8 @@ SafeArea(
     };
     final trendPeriod = _period;
     final primeKey = '$trendPeriod::${trendScopes.join('|')}';
-    if (_supplyAssetTrendPrimeKey != primeKey) {
+    // 省页面不预热：一级列表保活在后面，两边抢同一个 primeKey 会来回重拉。
+    if (!inProvince && _supplyAssetTrendPrimeKey != primeKey) {
       _supplyAssetTrendPrimeKey = primeKey;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
@@ -42319,6 +42410,13 @@ SafeArea(
 
     void select(LighthouseAssetFooterLine line) {
       LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
+      if (inProvince) {
+        setState(() {
+          _supplyAssetPointIndex = null;
+          _detailAssetLineKey = line.key;
+        });
+        return;
+      }
       final group = switch (line.key) {
         lighthouseAssetCategoryOil => '中石油',
         lighthouseAssetCategoryPetro => '中石化',
@@ -42329,7 +42427,8 @@ SafeArea(
     }
 
     Widget badge(LighthouseAssetFooterLine line, bool active) {
-      final asset = switch (line.key) {
+      // 省页面的主体 key 是「oil::rowKey」/「petro::rowKey」，取前半截认品牌。
+      final asset = switch (line.key.split('::').first) {
         lighthouseAssetCategoryOil => lighthouseCategoryBrandAsset('中石油'),
         lighthouseAssetCategoryPetro => lighthouseCategoryBrandAsset('中石化'),
         _ => null,
@@ -42440,7 +42539,7 @@ SafeArea(
                         ),
                       ),
                       // 「总资产」旁的钱袋：点开看各省资产对比。点袋子不切换上面的走势。
-                      if (line.key == 'total')
+                      if (line.key == 'total' && !inProvince)
                         Semantics(
                           button: true,
                           label: '各省资产对比',
@@ -42610,7 +42709,7 @@ SafeArea(
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  '资产走势',
+                  provinceTitle == null ? '资产走势' : '$provinceTitle · 资产走势',
                   style: LhTypography.sans(
                     size: 12,
                     weight: FontWeight.w700,
@@ -42647,12 +42746,19 @@ SafeArea(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (total != null) tile(total),
-                      if (total != null && oil != null)
-                        const SizedBox(height: 5),
-                      if (oil != null) tile(oil),
-                      if (oil != null && petro != null)
-                        const SizedBox(height: 5),
-                      if (petro != null) tile(petro),
+                      if (inProvince) ...[
+                        for (final l in provinceRest) ...[
+                          const SizedBox(height: 5),
+                          tile(l),
+                        ],
+                      ] else ...[
+                        if (total != null && oil != null)
+                          const SizedBox(height: 5),
+                        if (oil != null) tile(oil),
+                        if (oil != null && petro != null)
+                          const SizedBox(height: 5),
+                        if (petro != null) tile(petro),
+                      ],
                     ],
                   ),
                 ),
@@ -42960,10 +43066,13 @@ SafeArea(
   }
 
   /// 资产走势「总资产」旁的钱袋 → 各省资产对比。
-  ///   · 顶上三格：总资产 / 中石油资产 / 中石化资产，点哪格就只看那一类的省；
-  ///   · 下面一省一张卡：左边排名 + 省名 + 资产占比条，右边四个格子
-  ///     （账面资产 / 已入账 / 待入账 / 期末预付），格子样式跟账本里
-  ///     销售额、核销额那排一样；点格子按那一项排序。
+  ///
+  /// v2 · 一张排名表，不再一省一张卡、一卡四个大格子（太重、太「土」）。
+  ///   · 顶上：全部 / 中石油 / 中石化 一条分段，选中的浮起来
+  ///   · 每省一行：左排名 + 省名，名字下面一行小字是另外三项；
+  ///     右边是正在排序的那一项，底下一根细占比条
+  ///   · 宽屏：直接是表，点表头排序；窄屏：表头换成一排排序小字
+  ///   · 字号整体是上一版的 80%
   void _showProvinceAssetCompare(
     List<LighthouseAssetFooterLine> lines, {
     String initialFilter = 'total',
@@ -42987,145 +43096,75 @@ SafeArea(
     var sortKey = 'totalAssets';
     var sortDesc = true;
 
-    const cellKeys = <(String, String)>[
+    const columns = <(String, String)>[
       ('totalAssets', '账面资产'),
       ('regulatoryAccountBalance', '已入账'),
       ('inTransitFunds', '待入账'),
       ('endingPrepaymentBalance', '期末预付'),
     ];
+    String labelOf(String key) {
+      for (final (k, l) in columns) {
+        if (k == key) return l;
+      }
+      return key;
+    }
 
-    Widget cell({
-      required String label,
-      required double? amount,
-      bool sorted = false,
-      bool active = false,
-      bool primary = false,
-      Widget? lead,
-      VoidCallback? onTap,
+    double? valueOf(LighthouseFundPoolAmounts? a, String key) =>
+        lighthouseFundPoolAmountByKey(a, key);
+
+    final ink = DunesColors.resolve(context, LhColors.ink);
+    final ink2 = DunesColors.resolve(context, LhColors.ink2);
+    final mute = DunesColors.resolve(context, LhColors.mute);
+    final mute2 = DunesColors.resolve(context, LhColors.mute2);
+    final plum = DunesColors.resolve(context, _LhPlum.primary);
+    final deep = DunesColors.resolve(context, _LhPlum.deep);
+    final down = DunesColors.resolve(context, LhColors.pos);
+    final hair = DunesColors.resolve(
+      context,
+      const Color(0xFFF0EDF5),
+      role: DunesColorRole.border,
+    );
+
+    TextStyle numStyle(double size, Color color, {FontWeight w = FontWeight.w700}) =>
+        _tabular(
+          LhTypography.mono(
+            size: size,
+            color: color,
+            weight: w,
+            height: 1.0,
+            context: context,
+          ),
+        );
+
+    Widget amount(
+      double? v,
+      double size, {
+      Color? color,
+      FontWeight weight = FontWeight.w700,
+      TextAlign align = TextAlign.right,
     }) {
-      final parts = lighthouseFormatFundPoolWanParts(amount);
-      final missing = amount == null;
-      final negative = (amount ?? 0) < 0;
-      final numColor = missing
-          ? DunesColors.resolve(context, LhColors.mute2)
-          : (negative
-                ? DunesColors.resolve(context, LhColors.pos)
-                : (primary
-                      ? DunesColors.resolve(context, _LhPlum.deep)
-                      : DunesColors.resolve(context, LhColors.ink)));
-      final body = AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOut,
-        margin: EdgeInsets.symmetric(horizontal: _fs(3)),
-        padding: EdgeInsets.fromLTRB(_fs(9), _fs(6), _fs(8), _fs(6)),
-        decoration: BoxDecoration(
-          color: active
-              ? DunesColors.resolve(
-                  context,
-                  Colors.white,
-                  role: DunesColorRole.surface,
-                )
-              : DunesColors.resolve(
-                  context,
-                  const Color(0xFFF1F5FA),
-                  role: DunesColorRole.surface,
-                ),
-          borderRadius: BorderRadius.circular(
-            _fs(lighthouseLedgerSummaryPanelRadius - 2),
-          ),
-          border: Border.all(
-            color: active
-                ? DunesColors.resolve(
-                    context,
-                    _LhPlum.primary,
-                    role: DunesColorRole.border,
-                  ).withAlpha(70)
-                : Colors.transparent,
-            width: 0.8,
-          ),
-          boxShadow: active
-              ? [
-                  BoxShadow(
-                    color: _LhPlum.deep.withAlpha(28),
-                    blurRadius: 6,
-                    offset: const Offset(0, 1.5),
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      final parts = lighthouseFormatFundPoolWanParts(v);
+      final c = v == null ? mute2 : (v < 0 ? down : (color ?? ink));
+      return Text.rich(
+        TextSpan(
           children: [
-            Row(
-              children: [
-                if (lead != null) ...[lead, SizedBox(width: _fs(4))],
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: LhTypography.sans(
-                      size: _fs(lighthouseLedgerMetricLabelFontSize),
-                      color: active || sorted
-                          ? DunesColors.resolve(context, _LhPlum.deep)
-                          : DunesColors.resolve(context, LhColors.ink2),
-                      weight: FontWeight.w700,
-                      letterSpacing: 0.2,
-                      height: 1.0,
-                      context: context,
-                    ),
-                  ),
-                ),
-                if (sorted)
-                  Padding(
-                    padding: EdgeInsets.only(left: _fs(1.5)),
-                    child: Icon(
-                      sortDesc
-                          ? Icons.arrow_downward_rounded
-                          : Icons.arrow_upward_rounded,
-                      size: _fs(9.5),
-                      color: DunesColors.resolve(context, _LhPlum.deep),
-                    ),
-                  ),
-              ],
-            ),
-            SizedBox(height: _fs(5)),
-            Text.rich(
+            TextSpan(text: parts.number, style: numStyle(size, c, w: weight)),
+            if (parts.unit.isNotEmpty)
               TextSpan(
-                children: [
-                  TextSpan(
-                    text: parts.number,
-                    style: LhTypography.number(
-                      size: _fs(lighthouseLedgerSummaryValueFontSize),
-                      color: numColor,
-                      context: context,
-                    ).copyWith(fontWeight: FontWeight.w700, height: 1.0),
-                  ),
-                  if (parts.unit.isNotEmpty)
-                    TextSpan(
-                      text: parts.unit,
-                      style: LhTypography.sans(
-                        size: _fs(lighthouseLedgerSummaryUnitFontSize),
-                        color: DunesColors.resolve(context, LhColors.mute),
-                        weight: FontWeight.w500,
-                        height: 1.0,
-                        context: context,
-                      ),
-                    ),
-                ],
+                text: parts.unit,
+                style: LhTypography.sans(
+                  size: size * 0.66,
+                  color: mute,
+                  weight: FontWeight.w500,
+                  height: 1.0,
+                  context: context,
+                ),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
           ],
         ),
-      );
-      if (onTap == null) return body;
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: body,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: align,
       );
     }
 
@@ -43145,10 +43184,33 @@ SafeArea(
     Widget bag(double size) => CustomPaint(
       size: Size.square(size),
       painter: _LhMoneyBagPainter(
-        ink: DunesColors.resolve(context, _LhPlum.deep),
-        fill: DunesColors.resolve(context, _LhPlum.deep),
+        ink: deep,
+        fill: deep,
         tie: DunesColors.resolve(context, LhColors.paper),
         mark: DunesColors.resolve(context, LhColors.paper),
+      ),
+    );
+
+    Widget bar(double frac, {bool negative = false}) => Container(
+      height: 3,
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFEFECF5),
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: FractionallySizedBox(
+        widthFactor: frac.clamp(0.0, 1.0),
+        heightFactor: 1,
+        child: Container(
+          decoration: BoxDecoration(
+            color: negative ? down : plum,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
       ),
     );
 
@@ -43157,8 +43219,6 @@ SafeArea(
         for (final it in items)
           if (filter == 'total' || it.category == filter) it,
       ];
-      double? valueOf(LighthouseFundPoolAmounts? a, String key) =>
-          lighthouseFundPoolAmountByKey(a, key);
       shown.sort((a, b) {
         final va = valueOf(a.amounts, sortKey);
         final vb = valueOf(b.amounts, sortKey);
@@ -43167,13 +43227,13 @@ SafeArea(
         final c = (va ?? 0).compareTo(vb ?? 0);
         return sortDesc ? -c : c;
       });
-      var sum = 0.0;
-      var maxAbs = 0.0;
+      var totalSum = 0.0;
+      var sortMaxAbs = 0.0;
       for (final it in shown) {
         final t = it.amounts?.totalAssets;
-        if (t == null) continue;
-        sum += t;
-        if (t.abs() > maxAbs) maxAbs = t.abs();
+        if (t != null) totalSum += t;
+        final v = valueOf(it.amounts, sortKey);
+        if (v != null && v.abs() > sortMaxAbs) sortMaxAbs = v.abs();
       }
 
       void sortBy(String key) {
@@ -43195,298 +43255,503 @@ SafeArea(
         return null;
       }
 
-      Widget summaryCell(String key, String label) {
-        final l = lineOf(key);
-        return Expanded(
-          child: cell(
-            label: label,
-            amount: l?.amounts?.totalAssets,
-            active: filter == key,
-            primary: key == 'total',
-            lead: key == 'total' ? bag(_fs(12)) : brand(key, _fs(12)),
-            onTap: () {
-              if (filter == key) return;
-              LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
-              setLocal(() => filter = key);
-            },
+      // 全部 / 中石油 / 中石化：一条分段，选中的那段浮起来。
+      Widget segment() => Container(
+        height: 34,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFF4F2F8),
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            for (final (key, label) in const [
+              ('total', '全部'),
+              (lighthouseAssetCategoryOil, '中石油'),
+              (lighthouseAssetCategoryPetro, '中石化'),
+            ])
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    if (filter == key) return;
+                    LighthouseFeedback.instance.play(
+                      LighthouseFeedbackKind.select,
+                    );
+                    setLocal(() => filter = key);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    curve: Curves.easeOut,
+                    decoration: BoxDecoration(
+                      color: filter == key
+                          ? DunesColors.resolve(
+                              context,
+                              Colors.white,
+                              role: DunesColorRole.surface,
+                            )
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: filter == key
+                          ? [
+                              BoxShadow(
+                                color: _LhPlum.deep.withAlpha(26),
+                                blurRadius: 6,
+                                offset: const Offset(0, 1.5),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        key == 'total' ? bag(11) : brand(key, 11),
+                        const SizedBox(width: 4),
+                        Text(
+                          label,
+                          style: LhTypography.sans(
+                            size: 9.5,
+                            color: filter == key ? deep : ink2,
+                            weight: filter == key
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            height: 1.0,
+                            context: context,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: amount(
+                            lineOf(key)?.amounts?.totalAssets,
+                            10,
+                            color: filter == key ? ink : ink2,
+                            align: TextAlign.left,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+
+      Widget sortLabel(String key, {TextAlign align = TextAlign.right}) {
+        final on = sortKey == key;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => sortBy(key),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: align == TextAlign.right
+                  ? MainAxisAlignment.end
+                  : MainAxisAlignment.start,
+              children: [
+                Text(
+                  labelOf(key),
+                  style: LhTypography.sans(
+                    size: 9,
+                    color: on ? deep : mute2,
+                    weight: on ? FontWeight.w700 : FontWeight.w500,
+                    height: 1.0,
+                    context: context,
+                  ),
+                ),
+                if (on)
+                  Icon(
+                    sortDesc
+                        ? Icons.arrow_downward_rounded
+                        : Icons.arrow_upward_rounded,
+                    size: 9,
+                    color: deep,
+                  ),
+              ],
+            ),
           ),
         );
       }
 
       return LayoutBuilder(
-        builder: (context, cons) {
-          final compact = cons.maxWidth < 560;
-          final pinnedW = compact ? _fs(86) : _fs(140);
+        builder: (context, c) {
+          final wide = c.maxWidth >= 560;
+          const padH = 14.0;
 
-          Widget provinceCard(
-            int idx,
+          // ── 窄屏一行：左名字 + 一行小字，右边是正在排序的那一项 ──
+          Widget narrowRow(
+            int i,
             ({String name, String category, LighthouseFundPoolAmounts? amounts})
             it,
           ) {
+            final v = valueOf(it.amounts, sortKey);
+            final frac = (v == null || sortMaxAbs <= 0) ? 0.0 : v.abs() / sortMaxAbs;
             final t = it.amounts?.totalAssets;
-            final frac = (t == null || maxAbs <= 0) ? 0.0 : t.abs() / maxAbs;
-            final share = (t == null || sum <= 0) ? null : t / sum * 100;
-            final barColor = (t ?? 0) < 0
-                ? DunesColors.resolve(context, LhColors.pos)
-                : DunesColors.resolve(context, _LhPlum.primary);
-            final cells = [
-              for (final (key, label) in cellKeys)
-                cell(
-                  label: label,
-                  amount: valueOf(it.amounts, key),
-                  sorted: sortKey == key,
-                  primary: key == 'totalAssets',
-                  onTap: () => sortBy(key),
-                ),
+            final share = sortKey == 'totalAssets' && t != null && totalSum > 0
+                ? t / totalSum * 100
+                : null;
+            final others = [
+              for (final (k, l) in columns)
+                if (k != sortKey) (l, valueOf(it.amounts, k)),
             ];
-            final grid = compact
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(child: cells[0]),
-                          Expanded(child: cells[1]),
-                        ],
-                      ),
-                      SizedBox(height: _fs(4)),
-                      Row(
-                        children: [
-                          Expanded(child: cells[2]),
-                          Expanded(child: cells[3]),
-                        ],
-                      ),
-                    ],
-                  )
-                : Row(children: [for (final c in cells) Expanded(child: c)]);
-            final rank = (idx + 1).toString().padLeft(2, '0');
             return Container(
-              margin: EdgeInsets.only(bottom: _fs(6)),
-              padding: EdgeInsets.fromLTRB(_fs(10), _fs(7), _fs(5), _fs(7)),
+              padding: const EdgeInsets.fromLTRB(padH, 9, padH, 9),
               decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  Colors.white,
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(_fs(12)),
-                border: Border.all(
-                  color: DunesColors.resolve(
-                    context,
-                    LhColors.line2,
-                    role: DunesColorRole.border,
-                  ),
-                  width: 0.8,
-                ),
+                border: Border(bottom: BorderSide(color: hair, width: 0.7)),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   SizedBox(
-                    width: pinnedW,
+                    width: 20,
+                    child: Text(
+                      (i + 1).toString().padLeft(2, '0'),
+                      style: numStyle(9, i < 3 ? deep : mute2),
+                    ),
+                  ),
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Row(
                           children: [
-                            Text(
-                              rank,
-                              style: _tabular(
-                                LhTypography.mono(
-                                  size: _fs(10),
-                                  color: idx < 3
-                                      ? DunesColors.resolve(
-                                          context,
-                                          _LhPlum.deep,
-                                        )
-                                      : DunesColors.resolve(
-                                          context,
-                                          LhColors.mute2,
-                                        ),
-                                  weight: FontWeight.w700,
-                                  height: 1.0,
+                            brand(it.category, 10),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                it.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: LhTypography.sans(
+                                  size: 11.5,
+                                  color: ink,
+                                  weight: FontWeight.w600,
+                                  height: 1.1,
                                   context: context,
                                 ),
                               ),
                             ),
-                            SizedBox(width: _fs(4)),
-                            brand(it.category, _fs(11)),
                           ],
                         ),
-                        SizedBox(height: _fs(4)),
-                        Text(
-                          it.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: LhTypography.sans(
-                            size: _fs(12.5),
-                            color: DunesColors.resolve(context, LhColors.ink),
-                            weight: FontWeight.w700,
-                            height: 1.15,
-                            context: context,
+                        const SizedBox(height: 4),
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              for (var k = 0; k < others.length; k++) ...[
+                                if (k > 0)
+                                  TextSpan(
+                                    text: '   ',
+                                    style: LhTypography.sans(
+                                      size: 8.5,
+                                      color: mute2,
+                                      context: context,
+                                    ),
+                                  ),
+                                TextSpan(
+                                  text: '${others[k].$1} ',
+                                  style: LhTypography.sans(
+                                    size: 8.5,
+                                    color: mute2,
+                                    height: 1.0,
+                                    context: context,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: lighthouseFormatFundPoolWan(others[k].$2),
+                                  style: numStyle(
+                                    8.5,
+                                    (others[k].$2 ?? 0) < 0 ? down : ink2,
+                                    w: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        SizedBox(height: _fs(6)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 92,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        amount(
+                          v,
+                          12.5,
+                          color: sortKey == 'totalAssets' ? deep : ink,
+                        ),
+                        const SizedBox(height: 5),
                         Row(
                           children: [
                             Expanded(
-                              child: Container(
-                                height: _fs(3),
-                                alignment: Alignment.centerLeft,
-                                decoration: BoxDecoration(
-                                  color: DunesColors.resolve(
-                                    context,
-                                    const Color(0xFFEDEAF5),
-                                    role: DunesColorRole.surface,
-                                  ),
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                                child: FractionallySizedBox(
-                                  widthFactor: frac.clamp(0.0, 1.0),
-                                  heightFactor: 1,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: barColor,
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                ),
-                              ),
+                              child: bar(frac, negative: (v ?? 0) < 0),
                             ),
-                            SizedBox(width: _fs(4)),
-                            Text(
-                              share == null
-                                  ? '—'
-                                  : '${share.toStringAsFixed(share.abs() >= 10 ? 0 : 1)}%',
-                              style: _tabular(
-                                LhTypography.mono(
-                                  size: _fs(9),
-                                  color: DunesColors.resolve(
-                                    context,
-                                    LhColors.mute,
-                                  ),
-                                  weight: FontWeight.w600,
-                                  height: 1.0,
-                                  context: context,
-                                ),
+                            if (share != null) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                '${share.toStringAsFixed(share.abs() >= 10 ? 0 : 1)}%',
+                                style: numStyle(8, mute, w: FontWeight.w600),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ],
                     ),
                   ),
-                  SizedBox(width: _fs(4)),
-                  Expanded(child: grid),
                 ],
               ),
             );
           }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(_fs(14), _fs(12), _fs(6), _fs(8)),
-                child: Row(
-                  children: [
-                    bag(_fs(17)),
-                    SizedBox(width: _fs(7)),
-                    Text(
-                      '各省资产对比',
-                      style: LhTypography.sans(
-                        size: _fs(14),
-                        color: DunesColors.resolve(context, LhColors.ink),
-                        weight: FontWeight.w800,
-                        height: 1.1,
-                        context: context,
-                      ),
+          // ── 宽屏一行：表格，四列都在 ──
+          const flexes = <int>[26, 14, 14, 14];
+          Widget wideRow(
+            int i,
+            ({String name, String category, LighthouseFundPoolAmounts? amounts})
+            it,
+          ) {
+            final t = it.amounts?.totalAssets;
+            final frac = (t == null)
+                ? 0.0
+                : () {
+                    var maxT = 0.0;
+                    for (final s in shown) {
+                      final x = s.amounts?.totalAssets;
+                      if (x != null && x.abs() > maxT) maxT = x.abs();
+                    }
+                    return maxT <= 0 ? 0.0 : t.abs() / maxT;
+                  }();
+            final share = t != null && totalSum > 0 ? t / totalSum * 100 : null;
+            return Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: padH),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: hair, width: 0.7)),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    child: Text(
+                      (i + 1).toString().padLeft(2, '0'),
+                      style: numStyle(9, i < 3 ? deep : mute2),
                     ),
-                    SizedBox(width: _fs(8)),
-                    Expanded(
-                      child: Text(
-                        [
-                          if (asOfShort.isNotEmpty) '截至 $asOfShort',
-                          '${shown.length} 个省',
-                          if (snap.restricted) '仅含可见省份',
-                        ].join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: LhTypography.mono(
-                          size: _fs(9.5),
-                          color: DunesColors.resolve(context, LhColors.mute2),
-                          weight: FontWeight.w500,
-                          height: 1.1,
-                          context: context,
-                        ),
-                      ),
-                    ),
-                    Semantics(
-                      button: true,
-                      label: '关闭',
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => Navigator.of(ctx).pop(),
-                        child: SizedBox.square(
-                          dimension: _fs(32),
-                          child: Icon(
-                            Icons.close_rounded,
-                            size: _fs(18),
-                            color: DunesColors.resolve(context, LhColors.mute),
+                  ),
+                  Expanded(
+                    flex: 22,
+                    child: Row(
+                      children: [
+                        brand(it.category, 10),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            it.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: LhTypography.sans(
+                              size: 11,
+                              color: ink,
+                              weight: FontWeight.w600,
+                              height: 1.1,
+                              context: context,
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    flex: flexes[0],
+                    child: Row(
+                      children: [
+                        Expanded(child: bar(frac, negative: (t ?? 0) < 0)),
+                        SizedBox(
+                          width: 34,
+                          child: Text(
+                            share == null
+                                ? ''
+                                : '${share.toStringAsFixed(share.abs() >= 10 ? 0 : 1)}%',
+                            textAlign: TextAlign.right,
+                            style: numStyle(8, mute, w: FontWeight.w600),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 70,
+                          child: amount(
+                            t,
+                            11.5,
+                            color: deep,
+                            weight: sortKey == 'totalAssets'
+                                ? FontWeight.w700
+                                : FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  for (var k = 1; k < columns.length; k++)
+                    Expanded(
+                      flex: flexes[k],
+                      child: amount(
+                        valueOf(it.amounts, columns[k].$1),
+                        10.5,
+                        color: sortKey == columns[k].$1 ? ink : ink2,
+                        weight: sortKey == columns[k].$1
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                       ),
                     ),
-                  ],
-                ),
+                ],
               ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: _fs(9)),
-                child: Row(
-                  children: [
-                    summaryCell('total', '总资产'),
-                    summaryCell(lighthouseAssetCategoryOil, '中石油资产'),
-                    summaryCell(lighthouseAssetCategoryPetro, '中石化资产'),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.fromLTRB(_fs(14), _fs(8), _fs(14), _fs(6)),
-                child: Text(
-                  '点上面三格只看那一类 · 点省份里的格子按那一项排序，再点一次反过来',
-                  maxLines: 2,
+            );
+          }
+
+          final header = Padding(
+            padding: const EdgeInsets.fromLTRB(padH, 12, 8, 10),
+            child: Row(
+              children: [
+                bag(14),
+                const SizedBox(width: 6),
+                Text(
+                  '各省资产对比',
                   style: LhTypography.sans(
-                    size: _fs(9.5),
-                    color: DunesColors.resolve(context, LhColors.mute2),
-                    height: 1.3,
+                    size: 12,
+                    color: ink,
+                    weight: FontWeight.w700,
+                    height: 1.1,
                     context: context,
                   ),
                 ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    [
+                      if (asOfShort.isNotEmpty) '截至 $asOfShort',
+                      '${shown.length} 个省',
+                      if (snap.restricted) '仅含可见省份',
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: LhTypography.mono(
+                      size: 8.5,
+                      color: mute2,
+                      weight: FontWeight.w500,
+                      height: 1.1,
+                      context: context,
+                    ),
+                  ),
+                ),
+                Semantics(
+                  button: true,
+                  label: '关闭',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.of(ctx).pop(),
+                    child: SizedBox.square(
+                      dimension: 28,
+                      child: Icon(Icons.close_rounded, size: 15, color: mute),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+
+          // 宽屏：表头（可点排序）；窄屏：一排排序小字。
+          final sortRow = wide
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: padH),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: hair, width: 0.7)),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 24),
+                      Expanded(
+                        flex: 22,
+                        child: Text(
+                          '省份',
+                          style: LhTypography.sans(
+                            size: 9,
+                            color: mute2,
+                            height: 1.0,
+                            context: context,
+                          ),
+                        ),
+                      ),
+                      for (var k = 0; k < columns.length; k++)
+                        Expanded(
+                          flex: flexes[k],
+                          child: sortLabel(columns[k].$1),
+                        ),
+                    ],
+                  ),
+                )
+              : Container(
+                  padding: const EdgeInsets.fromLTRB(padH, 2, padH, 2),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: hair, width: 0.7)),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '排序',
+                        style: LhTypography.sans(
+                          size: 8.5,
+                          color: mute2,
+                          height: 1.0,
+                          context: context,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      for (final (k, _) in columns) ...[
+                        sortLabel(k, align: TextAlign.left),
+                        const SizedBox(width: 12),
+                      ],
+                    ],
+                  ),
+                );
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              header,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: padH),
+                child: segment(),
               ),
+              const SizedBox(height: 8),
+              sortRow,
               Expanded(
                 child: shown.isEmpty
                     ? Center(
                         child: Text(
                           '暂无省份资产数据',
                           style: LhTypography.sans(
-                            size: _fs(11),
-                            color: DunesColors.resolve(
-                              context,
-                              LhColors.mute2,
-                            ),
+                            size: 10,
+                            color: mute2,
                             context: context,
                           ),
                         ),
                       )
                     : ListView.builder(
-                        padding: EdgeInsets.fromLTRB(
-                          _fs(10),
-                          0,
-                          _fs(10),
-                          _fs(12),
-                        ),
+                        padding: const EdgeInsets.only(bottom: 10),
                         itemCount: shown.length,
-                        itemBuilder: (_, i) => provinceCard(i, shown[i]),
+                        itemBuilder: (_, i) => wide
+                            ? wideRow(i, shown[i])
+                            : narrowRow(i, shown[i]),
                       ),
               ),
             ],
@@ -43508,27 +43773,28 @@ SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 820),
+                constraints: const BoxConstraints(maxWidth: 760),
                 child: Material(
                   color: DunesColors.resolve(
                     ctx,
-                    const Color(0xFFFAF9FD),
+                    Colors.white,
                     role: DunesColorRole.surface,
                   ),
                   clipBehavior: Clip.antiAlias,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                     side: BorderSide(
                       color: DunesColors.resolve(
                         ctx,
-                        _LhPlum.lavender,
+                        _LhPlum.line,
                         role: DunesColorRole.border,
                       ),
+                      width: 0.8,
                     ),
                   ),
                   elevation: 0,
                   child: SizedBox(
-                    height: size.height * 0.82,
+                    height: size.height * 0.8,
                     child: StatefulBuilder(builder: sheet),
                   ),
                 ),
@@ -43545,7 +43811,7 @@ SafeArea(
         return FadeTransition(
           opacity: curved,
           child: ScaleTransition(
-            scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+            scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
             child: child,
           ),
         );
@@ -46095,7 +46361,11 @@ SafeArea(
                       pinned: _buildLedgerPinned(
                         r,
                         idx,
-                        belowName: lighthouseLedgerShowsFundPoolPreview(tab)
+                        // 钱袋只挂一级供给（省）行；二级页面里列的是这个省下面的
+                        // 产品 / 渠道等，没有「这一行的资产」可言。
+                        belowName:
+                            lighthouseLedgerShowsFundPoolPreview(tab) &&
+                                _detailKey == null
                             ? _fundPoolBagButton(
                                 amount: _supplyAssetsHiddenByGroup
                                     ? null
@@ -46273,6 +46543,7 @@ SafeArea(
                         },
                       ),
                     if (lighthouseLedgerShowsFundPoolPreview(tab) &&
+                        _detailKey == null &&
                         fundPoolPanel != null)
                       _buildSupplyFundPoolDetails(
                         _supplyAssetsHiddenByGroup
@@ -49956,6 +50227,23 @@ SafeArea(
               ),
 
               const SizedBox(height: 10),
+
+              // ── 供给二级（省）：本省总资产 + 资产走势，跟一级那张同一块卡 ──
+              if (type == 'supply' && !isDrill && productL3Key == null)
+                Builder(
+                  builder: (context) {
+                    final lines = _provinceAssetLines(rootDisplayName);
+                    if (lines.isEmpty) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(22, 0, 22, 12),
+                      child: _buildSupplyAssetOverview(
+                        const <Map<String, dynamic>>[],
+                        provinceLines: lines,
+                        provinceTitle: rootDisplayName,
+                      ),
+                    );
+                  },
+                ),
 
               // ── 与一级同款白卡：维度段（无分类）· 选区间/指标 · 账本 ──
               Container(

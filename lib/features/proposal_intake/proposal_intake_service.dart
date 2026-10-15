@@ -297,6 +297,7 @@ class ProposalIntakeService {
     int version, {
     String comment = '',
     List<String> sections = const <String>[],
+    bool withdraw = false,
   }) async {
     final data = _unwrap(
       await http.post(
@@ -306,6 +307,7 @@ class ProposalIntakeService {
           'section': section,
           'sections': sections,
           'approved': approved,
+          if (withdraw) 'withdraw': true,
           'comment': comment,
           'version': version,
         }),
@@ -358,6 +360,29 @@ class ProposalIntakeService {
       ),
     );
     return ProposalIntakeWriteResult.fromJson(_asMap(data));
+  }
+
+  /// 时限详情；功能关闭或该提案未纳入时返回 null。
+  Future<ProposalSlaDetail?> fetchSla(int id) async {
+    final data = _unwrap(
+      await http.get(_uri('/proposal-intakes/$id/sla'), headers: _headers),
+    );
+    return ProposalSlaDetail.tryParse(data);
+  }
+
+  Future<ProposalSlaDetail?> appealSla({
+    required int id,
+    required int scoreId,
+    required String reason,
+  }) async {
+    final data = _unwrap(
+      await http.post(
+        _uri('/proposal-intakes/$id/sla/appeals'),
+        headers: _headers,
+        body: jsonEncode({'scoreId': scoreId, 'reason': reason}),
+      ),
+    );
+    return ProposalSlaDetail.tryParse(data);
   }
 
   Future<void> delete(int id) async {

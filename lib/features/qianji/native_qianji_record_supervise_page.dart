@@ -13,6 +13,7 @@ import '../auth/auth_session.dart';
 import '../tasks/task_api.dart';
 import '../tasks/task_avatar.dart';
 import '../tasks/task_models.dart';
+import '../tasks/task_widgets.dart';
 import 'qianji_record_supervise_service.dart';
 import 'qianji_group_reply_person_card.dart';
 
@@ -383,7 +384,8 @@ class _NativeQianjiRecordSupervisePageState
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
+    return TaskCopyableScope(
+      child: ColoredBox(
       color: DunesColors.resolve(
         context,
         const Color(0xFFF5F6F8),
@@ -407,6 +409,7 @@ class _NativeQianjiRecordSupervisePageState
             ),
           ],
         ),
+      ),
       ),
     );
   }

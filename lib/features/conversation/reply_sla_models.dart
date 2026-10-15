@@ -17,6 +17,7 @@ class ReplySlaItem {
     required this.unrepliedSeconds,
     required this.unreadSeconds,
     required this.fetchedAt,
+    this.createdAt,
   });
 
   final int messageId;
@@ -35,6 +36,12 @@ class ReplySlaItem {
   /// 与 [unrepliedSeconds] 分开展示，不合并。
   final int unreadSeconds;
   final DateTime fetchedAt;
+
+  /// 义务创建时间（服务端 createdAt，与对应消息发出时间一致）。
+  final DateTime? createdAt;
+
+  /// 「去回复」只跟发出未满此时长的消息。更早的未关义务仍在，但不再挂定位按钮。
+  static const Duration jumpButtonMaxAge = Duration(hours: 24);
 
   bool get isOpen =>
       status == ReplySlaStatus.unread || status == ReplySlaStatus.pending;
@@ -73,6 +80,22 @@ class ReplySlaItem {
     return delta.isNegative ? base : base + delta;
   }
 
+  /// 从发出到 [now]。未读只用未读计时；已读未回 = 发出到已读 + 已读到现在。
+  Duration liveSinceSent(DateTime now) {
+    if (status == ReplySlaStatus.unread) return liveUnread(now);
+    return Duration(seconds: unreadSeconds) + liveUnreplied(now);
+  }
+
+  /// 对应消息已超过 [maxAge]（默认 24 小时）。优先用 [createdAt]。
+  bool isOlderThan(DateTime now, [Duration maxAge = jumpButtonMaxAge]) {
+    final sent = createdAt;
+    if (sent != null) {
+      final age = now.difference(sent);
+      return !age.isNegative && age >= maxAge;
+    }
+    return liveSinceSent(now) >= maxAge;
+  }
+
   static ReplySlaStatus _parseStatus(String raw) {
     switch (raw.toUpperCase()) {
       case 'PENDING':
@@ -101,6 +124,7 @@ class ReplySlaItem {
       unrepliedSeconds: toInt(m['unrepliedSeconds']),
       unreadSeconds: toInt(m['unreadSeconds']),
       fetchedAt: fetchedAt,
+      createdAt: DateTime.tryParse((m['createdAt'] ?? '').toString()),
     );
   }
 }
@@ -122,12 +146,18 @@ class ReplySlaSnapshot {
   bool get hasPending =>
       byMessage.values.any((list) => list.any((i) => i.isTicking));
 
-  /// 我作为被 @ 人、还没关掉的最早一条义务（「去回复」的定位目标）。
-  int earliestOpenForReceiver(int userId) {
+  /// 我作为被 @ 人、还没关掉、且发出未满 24 小时的最早一条义务（「去回复」的定位目标）。
+  /// 超过 24 小时的消息不再作为目标，避免按钮一直留在输入框旁。
+  int earliestOpenForReceiver(int userId, {DateTime? now}) {
+    final clock = now ?? DateTime.now();
     var best = 0;
     byMessage.forEach((msgId, list) {
       final open = list.any(
-        (i) => i.isReceiver && i.receiverUserId == userId && i.isOpen,
+        (i) =>
+            i.isReceiver &&
+            i.receiverUserId == userId &&
+            i.isOpen &&
+            !i.isOlderThan(clock),
       );
       if (open && (best == 0 || msgId < best)) best = msgId;
     });

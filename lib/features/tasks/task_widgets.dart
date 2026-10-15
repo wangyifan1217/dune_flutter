@@ -1679,6 +1679,36 @@ class TaskTheme extends StatelessWidget {
   }
 }
 
+/// 任务相关文字可以拖选、右键和 Ctrl+C 复制。
+/// 点输入框外收起键盘用 Listener，避免 GestureDetector 抢走选区。
+class TaskCopyableScope extends StatelessWidget {
+  const TaskCopyableScope({super.key, required this.child});
+
+  final Widget child;
+
+  void _unfocusOutsideField(PointerDownEvent event) {
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus == null || !focus.hasFocus) return;
+    final render = focus.context?.findRenderObject();
+    if (render is RenderBox && render.attached && render.hasSize) {
+      final rect = render.localToGlobal(Offset.zero) & render.size;
+      if (rect.contains(event.position)) return;
+    }
+    focus.unfocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SelectionArea(
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _unfocusOutsideField,
+        child: child,
+      ),
+    );
+  }
+}
+
 class TaskDropdownField<T> extends StatelessWidget {
   const TaskDropdownField({
     super.key,

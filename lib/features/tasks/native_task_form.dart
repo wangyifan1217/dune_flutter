@@ -109,10 +109,7 @@ class TaskEditorPage extends StatelessWidget {
           const Color(0xFFF5F6F8),
           role: DunesColorRole.surface,
         ),
-        // 点击空白处收起软键盘
-        body: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        body: TaskCopyableScope(
           child: SafeArea(
             child: _TaskEditorBody(
               session: session,
@@ -156,13 +153,15 @@ class TaskEditorDialog extends StatelessWidget {
             constraints: BoxConstraints(
               maxHeight: MediaQuery.sizeOf(context).height * 0.78,
             ),
-            child: _TaskEditorBody(
-              session: session,
-              parentTaskId: parentTaskId,
-              parentTask: parentTask,
-              fullscreen: false,
-              onCancel: () => Navigator.pop(context),
-              onCreated: (item) => Navigator.pop(context, item),
+            child: TaskCopyableScope(
+              child: _TaskEditorBody(
+                session: session,
+                parentTaskId: parentTaskId,
+                parentTask: parentTask,
+                fullscreen: false,
+                onCancel: () => Navigator.pop(context),
+                onCreated: (item) => Navigator.pop(context, item),
+              ),
             ),
           ),
         ),

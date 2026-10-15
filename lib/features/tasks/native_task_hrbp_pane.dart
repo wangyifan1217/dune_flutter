@@ -540,7 +540,8 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
   Widget build(BuildContext context) {
     final isBack = _pageNavBack;
     final child = KeyedSubtree(key: _pageKey, child: _pageBody());
-    return TaskTheme(
+    return TaskCopyableScope(
+      child: TaskTheme(
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 280),
         reverseDuration: const Duration(milliseconds: 240),
@@ -569,6 +570,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
           );
         },
         child: child,
+      ),
       ),
     );
   }

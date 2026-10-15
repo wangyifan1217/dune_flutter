@@ -583,7 +583,8 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
 
   @override
   Widget build(BuildContext context) {
-    return TaskTheme(
+    return TaskCopyableScope(
+      child: TaskTheme(
       child: Material(
         color: DunesColors.resolve(
           context,
@@ -682,6 +683,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:dunes_app/features/proposal_intake/proposal_cost_estimate.dart';
+import 'package:dunes_app/features/proposal_intake/proposal_finance_formula.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_models.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_unreviewed.dart';
 import 'package:dunes_app/features/proposal_intake/settlement_catalog.dart';
@@ -370,6 +371,26 @@ void main() {
       ),
       'DIGITALG',
     );
+  });
+
+  test('legacy sku platform yields to the tech platform shown on screen', () {
+    final form = <String, dynamic>{
+      'syncSourceRef': {'code': 'YD', 'name': '移动运营商'},
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'productName': '现金券',
+          'syncSourceRef': {'code': 'POWER_PACKET', 'name': '星和动力券包'},
+        },
+      ],
+    };
+    final sku = proposalIntakeSkuDetails(form).single;
+    expect(proposalIntakeResolvedSyncSourceCode(form, sku), 'YD');
+    expect(proposalIntakeResolvedSyncSourceName(form, sku), '移动运营商');
+    expect(proposalFinanceSyncSources(form), {'YD'});
+
+    form.remove('syncSourceRef');
+    expect(proposalIntakeResolvedSyncSourceCode(form, sku), 'POWER_PACKET');
   });
 
   test('proposal options parse institution label and code', () {

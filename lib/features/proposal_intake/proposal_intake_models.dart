@@ -1,7 +1,10 @@
 import 'dart:convert';
 
 import 'proposal_finance_formula.dart';
+import 'proposal_sla_models.dart';
 import 'settlement_catalog.dart';
+
+export 'proposal_sla_models.dart';
 
 String normalizeProposalIntakeKind(String raw) {
   switch (raw.trim().toLowerCase()) {
@@ -437,6 +440,7 @@ class ProposalIntakeRow {
     this.stage = '',
     this.myAction = '',
     this.financeEstimate = const {},
+    this.sla,
   });
 
   final int id;
@@ -453,6 +457,9 @@ class ProposalIntakeRow {
   final String stage;
   final String myAction;
   final Map<String, dynamic> financeEstimate;
+
+  /// 时限管理摘要。功能关闭、采购提案、历史在途单据没有。
+  final ProposalSlaSummary? sla;
 
   /// Only final-approval rejections restart the full proposal workflow.
   List<Map<String, dynamic>> get finalRejectionHistory {
@@ -492,6 +499,7 @@ class ProposalIntakeRow {
       stage: '${json['stage'] ?? review['stage'] ?? ''}'.trim(),
       myAction: '${json['myAction'] ?? ''}'.trim(),
       financeEstimate: _map(json['financeEstimate']),
+      sla: ProposalSlaSummary.tryParse(json['sla']),
     );
   }
 
@@ -544,6 +552,7 @@ class ProposalIntakeRow {
     stage: stage ?? this.stage,
     myAction: myAction ?? this.myAction,
     financeEstimate: financeEstimate,
+    sla: sla,
   );
 
   String initiatorDisplayName(List<ProposalPerson> people) {
@@ -4466,14 +4475,32 @@ Map<String, dynamic> proposalIntakeApplyFormSyncSource(
   return next;
 }
 
-/// 产品自身业务平台优先，否则用科技板块选的平台。
+/// 产品卡上能单独选平台时，产品自身业务平台优先；否则以科技板块选的平台为准。
+/// 历史提案的产品上可能还留着旧平台，但界面只显示科技板块的平台，按它去资管取字典。
 String proposalIntakeResolvedSyncSourceCode(
   Map<String, dynamic> form, [
   ProposalSkuDetailRow? sku,
 ]) {
   final fromSku = (sku?.syncSourceCode ?? '').trim();
+  final fromForm = proposalIntakeFormSyncSourceCode(form);
+  if (!kProposalSkuChannelSettingsEnabled && fromForm.isNotEmpty) {
+    return fromForm;
+  }
   if (fromSku.isNotEmpty) return fromSku;
-  return proposalIntakeFormSyncSourceCode(form);
+  return fromForm;
+}
+
+/// 与 [proposalIntakeResolvedSyncSourceCode] 同一口径的平台名称，用于按名称绑定字典。
+String proposalIntakeResolvedSyncSourceName(
+  Map<String, dynamic> form, [
+  ProposalSkuDetailRow? sku,
+]) {
+  final fromSku = (sku?.syncSourceRef?.name ?? '').trim();
+  final fromForm = (proposalIntakeFormSyncSourceRef(form)?.name ?? '').trim();
+  if (!kProposalSkuChannelSettingsEnabled && fromForm.isNotEmpty) {
+    return fromForm;
+  }
+  return fromSku.isNotEmpty ? fromSku : fromForm;
 }
 
 /// 业务平台：优先 `syncSourceRef`，兼容对外 JSON 里的 `syncSource` 对象或纯 code。

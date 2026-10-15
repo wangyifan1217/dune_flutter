@@ -8,6 +8,7 @@ import 'task_approval_confirm.dart';
 import 'task_attachment_field.dart';
 import 'task_first_use_guide.dart';
 import 'task_models.dart';
+import 'task_widgets.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 const _workbenchBg = Color(0xFFF5F6F8);
@@ -232,10 +233,7 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
         widget.backgroundColor,
         role: DunesColorRole.surface,
       ),
-      // 点击输入框外的空白处收起软键盘
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      child: TaskCopyableScope(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

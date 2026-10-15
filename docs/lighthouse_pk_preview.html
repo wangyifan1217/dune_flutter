@@ -3,659 +3,405 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>灯塔 · PK 静态预览</title>
+<title>灯塔 · PK 对比</title>
 <style>
   :root {
-    --deep: #5A458F;
-    --primary: #7B5CD8;
-    --soft: #B5AAD5;
-    --lavender: #F0ECF6;
-    --mist: #F4F2F8;
-    --page: #F5F3F8;
-    --line: #E4DCF4;
-    --edge: #E2D8F0;
-    --backA: #F1ECFB;
-    --backB: #E6DEF6;
-    --backEdge: #DCD0F0;
-    --ink: #2A2633;
-    --ink2: #4A4558;
-    --mute: #8C8798;
-    --up: #E0362C;
-    --down: #0E9A57;
-    --a: #7B5CD8;
-    --b: #3F78E0;
-    --c: #E39A1F;
-    --warnBg: #FFF6E5;
-    --warnEdge: #F3D9A6;
-    --warnInk: #8A5A00;
+    --page: #f5f3f8;
+    --ink: #2a2633;
+    --ink2: #4a4558;
+    --mute: #8c8798;
+    --line: #e4dcf4;
+    --deep: #5a458f;
+    --primary: #7b5cd8;
+    --lavender: #f0ecf6;
+    --a: #7b5cd8;
+    --b: #3f78e0;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
   body {
-    margin: 0;
-    background: #ece8f3;
+    background: #ece8f2;
     color: var(--ink);
-    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-family: "Geist", "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
-  .wrap {
-    max-width: 980px;
+  button { font: inherit; color: inherit; }
+  .frame {
+    width: min(390px, 100%);
+    height: 100%;
     margin: 0 auto;
-    padding: 28px 20px 48px;
-  }
-  h1 {
-    margin: 0 0 6px;
-    font-size: 20px;
-    letter-spacing: 0.2px;
-  }
-  .lead {
-    margin: 0 0 22px;
-    color: var(--ink2);
-    font-size: 13px;
-    line-height: 1.55;
-  }
-  .lead b { color: var(--deep); }
-  .stage {
-    display: flex;
-    gap: 28px;
-    align-items: flex-start;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-  .phone {
-    width: 390px;
     background: var(--page);
-    border-radius: 28px;
-    box-shadow: 0 18px 50px rgba(90, 69, 143, 0.16);
-    overflow: hidden;
-    border: 1px solid #ddd4ee;
     display: flex;
     flex-direction: column;
-    min-height: 820px;
-  }
-  .cap {
-    text-align: center;
-    font-size: 12px;
-    color: var(--mute);
-    margin: 0 0 8px;
-    font-weight: 700;
-    letter-spacing: 0.4px;
-  }
-  .body {
-    flex: 1;
-    padding: 14px 14px 18px;
-  }
-  .bar {
-    background: #fff;
-    border-top: 1px solid #ece7f4;
-    box-shadow: 0 -6px 18px rgba(90, 69, 143, 0.06);
-    padding: 10px 14px 14px;
+    overflow: hidden;
+    position: relative;
   }
   .top {
-    display: flex;
+    height: 48px;
+    display: grid;
+    grid-template-columns: 72px 1fr 72px;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
+    padding: 0 8px;
+    flex: none;
   }
-  .back {
-    color: var(--deep);
-    font-size: 13px;
-    font-weight: 700;
+  .top button {
+    border: 0; background: transparent; cursor: pointer;
+    color: var(--deep); font-size: 12px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 0; padding: 0;
   }
-  .titles { flex: 1; min-width: 0; }
-  .titles h2 {
-    margin: 0;
-    font-size: 17px;
-    font-weight: 800;
-  }
-  .titles p {
-    margin: 1px 0 0;
-    font-size: 11px;
-    color: var(--mute);
-  }
-  .ghost {
-    color: var(--mute);
-    font-size: 12px;
-  }
-  .sec {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin: 0 0 8px;
-  }
-  .sec b { font-size: 13px; }
-  .sec span { font-size: 10.5px; color: var(--mute); }
-  .card {
-    position: relative;
-    background: #fff;
-    border: 0.8px solid var(--line);
-    border-radius: 14px;
-    overflow: hidden;
-  }
-  .card.on-a { border: 1.4px solid #c9b8ef; box-shadow: 0 4px 12px rgba(123, 92, 216, 0.10); }
-  .card.on-b { border: 1.4px solid #b7c9f4; box-shadow: 0 4px 12px rgba(63, 120, 224, 0.10); }
-  .card.off { opacity: 0.72; }
-  .corner {
-    position: absolute;
-    right: 0; bottom: 0;
-    width: 12px; height: 12px;
-    border-top-left-radius: 12px;
-  }
-  .entry {
-    display: flex;
-    align-items: center;
+  .top .title { text-align: center; }
+  .top .title b { display: block; font-size: 16px; font-weight: 800; letter-spacing: .3px; color: var(--ink); }
+  .top .title span { display: block; font-size: 10px; color: var(--mute); margin-top: 1px; }
+  .top .end { justify-content: flex-end; }
+  .head { padding: 2px 12px 0; flex: none; }
+  .pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 10px;
-    padding: 11px 8px 11px 12px;
+    position: relative;
+    min-width: 0;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    min-height: 92px;
+    min-width: 0;
+    padding: 8px 8px 7px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(90, 69, 143, .08);
+  }
+  .card.a { border-color: #d4c6f2; }
+  .card.b { border-color: #c9d7f6; }
+  .card.empty {
+    display: grid; place-items: center;
+    color: var(--deep); font-size: 12px; font-weight: 650; cursor: pointer;
+    width: 100%;
   }
   .badge {
-    width: 30px; height: 30px;
-    border-radius: 10px;
-    color: #fff;
-    display: grid;
-    place-items: center;
-    font-family: "Cascadia Mono", Consolas, monospace;
-    font-weight: 800;
-    font-size: 15px;
-    flex: none;
+    width: 18px; height: 18px; border-radius: 5px;
+    color: #fff; font-size: 10px; font-weight: 700;
+    display: grid; place-items: center;
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", monospace;
   }
-  .badge.sm { width: 16px; height: 16px; border-radius: 5px; font-size: 9px; }
-  .badge.lg { width: 26px; height: 26px; border-radius: 8px; font-size: 13px; }
-  .a { background: var(--a); }
-  .b { background: var(--b); }
-  .c { background: var(--c); }
-  .entry .name { font-size: 13px; font-weight: 700; }
-  .meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
-  .pill {
-    height: 17px;
-    padding: 0 6px;
-    border-radius: 5px;
-    font-size: 9.5px;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    white-space: nowrap;
-  }
-  .nums {
-    font-family: "Cascadia Mono", Consolas, monospace;
-    font-size: 10px;
-    color: var(--mute);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .up { color: var(--up); }
-  .down { color: var(--down); }
-  .check {
-    width: 22px; height: 22px;
-    border-radius: 7px;
-    border: 1.4px solid var(--deep);
-    background: var(--deep);
-    color: #fff;
-    display: grid;
-    place-items: center;
-    font-size: 13px;
-    flex: none;
-  }
-  .check.empty { background: transparent; border-color: var(--soft); }
-  .x { color: var(--mute); font-size: 16px; padding: 0 4px; }
-  .gap8 { height: 8px; }
-  .add {
-    height: 50px;
-    border-radius: 14px;
-    border: 1.2px dashed #cfc3ea;
-    background: #fbfafd;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    color: var(--primary);
+  .card h3 {
+    margin: 5px 0 0;
     font-size: 12px;
-    font-weight: 600;
-  }
-  .slot-outline {
-    width: 22px; height: 22px;
-    border-radius: 7px;
-    border: 1.2px solid #c9b8ef;
-    display: grid;
-    place-items: center;
-    color: #a992e4;
-    font-family: "Cascadia Mono", Consolas, monospace;
-    font-weight: 800;
-    font-size: 11px;
-  }
-  .panel { padding: 12px; margin-top: 16px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip {
-    position: relative;
-    height: 28px;
-    padding: 0 12px;
-    border-radius: 8px;
-    background: #fff;
-    border: 0.8px solid #d9ccf2;
-    color: var(--deep);
-    font-size: 12px;
-    font-weight: 700;
-    display: inline-flex;
-    align-items: center;
-    overflow: hidden;
-  }
-  .chip .corner { width: 8px; height: 8px; border-top-left-radius: 8px; background: var(--primary); }
-  .chip.off {
-    background: #eeebf3;
-    border-color: transparent;
-    color: var(--mute);
-    font-weight: 500;
-  }
-  .time { font-size: 11.5px; color: var(--ink2); }
-  .foot {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .vsline { display: flex; align-items: center; gap: 8px; }
-  .vs {
-    font-family: "Cascadia Mono", Consolas, monospace;
-    font-size: 9.5px;
-    font-weight: 800;
-    color: var(--soft);
-  }
-  .letter {
-    font-family: "Cascadia Mono", Consolas, monospace;
-    font-size: 13px;
-    font-weight: 800;
-  }
-  .hint { font-size: 10.5px; color: var(--mute); margin-top: 2px; }
-  .btn {
-    height: 46px;
-    padding: 0 22px;
-    border-radius: 13px;
-    background: var(--deep);
-    color: #fff;
-    font-size: 14.5px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    display: inline-flex;
-    align-items: center;
-    box-shadow: 0 6px 16px rgba(90, 69, 143, 0.32);
-    white-space: nowrap;
-  }
-  .btn.sec {
-    height: 44px;
-    flex: 1;
-    justify-content: center;
-    background: var(--mist);
-    color: var(--deep);
-    border: 1px solid var(--line);
-    box-shadow: none;
-    border-radius: 12px;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0;
-    padding: 0 8px;
-  }
-  .btn.pri { flex: 1.3; justify-content: center; }
-  .close {
-    width: 32px; height: 32px;
-    border-radius: 10px;
-    border: 0.8px solid var(--line);
-    background: #fff;
-    display: grid;
-    place-items: center;
-    color: var(--deep);
-    font-size: 16px;
-  }
-  .heads { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; position: relative; }
-  .hcard { padding: 12px; border-radius: 16px; min-height: 118px; }
-  .hcard .nm {
-    height: 36px;
-    margin-top: 8px;
-    font-size: 12.5px;
-    font-weight: 700;
     line-height: 1.35;
+    font-weight: 700;
+    min-height: 32px;
   }
-  .score-num {
-    font-family: "Cascadia Mono", Consolas, monospace;
-    font-size: 24px;
-    font-weight: 800;
-    line-height: 1;
+  .meta {
+    margin-top: 4px;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 4px;
+    min-width: 0;
+    font-size: 10px; color: var(--mute);
   }
-  .score-unit { font-size: 10.5px; color: var(--mute); font-weight: 600; margin-left: 4px; }
-  .vsbadge {
-    position: absolute;
-    left: 50%; top: 50%;
-    width: 42px; height: 42px;
-    margin: -21px 0 0 -21px;
-    background: #fff;
-    border: 0.8px solid var(--edge);
-    border-radius: 12px;
-    display: grid;
-    place-items: center;
-    font-family: "Cascadia Mono", Consolas, monospace;
-    font-weight: 800;
-    color: var(--deep);
-    font-size: 14px;
-    box-shadow: 3px -3px 0 var(--backB);
-    overflow: hidden;
+  .meta span { min-width: 0; }
+  .meta b {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", monospace;
+    font-size: 11px; font-weight: 700;
+    flex: none;
+  }
+  .card.a .meta b { color: var(--a); }
+  .card.b .meta b { color: var(--b); }
+  .ops { display: flex; gap: 8px; margin-top: 6px; }
+  .ops button {
+    border: 0; background: transparent; padding: 0; cursor: pointer;
+    font-size: 10.5px; color: var(--deep); font-weight: 600;
+  }
+  .corner {
+    position: absolute; right: 0; bottom: 0;
+    width: 12px; height: 12px;
+    border-radius: 10px 0 0 0;
+  }
+  .card.a .corner { background: var(--a); }
+  .card.b .corner { background: var(--b); }
+  .vs {
+    position: absolute; left: 50%; top: 38px;
+    transform: translate(-50%, 0);
+    width: 32px; height: 32px; border-radius: 10px;
+    background: #fff; border: 1px solid #e2d8f0;
+    box-shadow: 0 4px 10px rgba(90, 69, 143, .12);
+    display: grid; place-items: center;
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", monospace;
+    font-size: 11px; font-weight: 800; color: var(--deep); letter-spacing: -.4px;
+    z-index: 1;
   }
   .score {
-    margin-top: 12px;
-    padding: 12px 14px;
-    text-align: center;
+    margin-top: 10px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 12px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
   }
-  .tally {
-    display: flex;
-    justify-content: center;
+  .score .n {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", monospace;
+    font-size: 16px; font-weight: 800;
+  }
+  .score .n.a { color: var(--a); }
+  .score .n.b { color: var(--b); }
+  .score .colon { color: #b5aad5; font-weight: 700; font-size: 13px; }
+  .pill {
+    height: 18px; padding: 0 7px; border-radius: 9px;
+    background: var(--lavender); color: var(--deep);
+    font-size: 10px; font-weight: 700;
+    display: inline-flex; align-items: center;
+  }
+  .cats {
+    display: flex; gap: 6px; overflow: auto;
+    padding: 10px 14px 8px;
+    scrollbar-width: none; flex: none;
+  }
+  .cats::-webkit-scrollbar { display: none; }
+  .cats button {
+    border: 1px solid transparent; background: #fff; color: var(--ink2);
+    height: 26px; padding: 0 10px; border-radius: 8px;
+    font-size: 11.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  }
+  .cats button.on { background: var(--deep); color: #fff; border-color: var(--deep); }
+  .scroll { flex: 1; min-width: 0; overflow-x: hidden; overflow-y: auto; padding: 0 12px 20px; }
+  .sec { margin-top: 4px; min-width: 0; }
+  .row > * { min-width: 0; }
+  .sec h2 {
+    margin: 10px 0 6px;
+    font-size: 12px; font-weight: 700; color: var(--ink2); letter-spacing: .2px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 68px minmax(0, 1fr);
+    gap: 4px;
     align-items: center;
-    gap: 8px;
-    font-family: "Cascadia Mono", Consolas, monospace;
-    font-weight: 800;
-    font-size: 22px;
+    width: 100%;
+    min-width: 0;
+    min-height: 26px;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(228, 220, 244, .7);
   }
-  .colon { color: var(--soft); font-size: 16px; }
-  .verdict {
-    height: 20px;
-    padding: 0 8px;
-    border-radius: 6px;
-    background: var(--lavender);
-    color: var(--deep);
-    font-size: 11px;
-    font-weight: 700;
-    display: inline-flex;
-    align-items: center;
-    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
-  }
-  .track {
-    margin: 8px 0;
-    height: 8px;
-    border-radius: 4px;
+  .row .v {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", monospace;
+    font-size: 12px; font-weight: 650; color: var(--mute);
+    min-width: 0;
     overflow: hidden;
-    display: flex;
-    gap: 2px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .track i { display: block; height: 8px; }
-  .sum { font-size: 11px; color: var(--ink2); line-height: 1.4; }
-  .row { padding: 10px 12px; margin-bottom: 8px; border-radius: 12px; }
-  .mline {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    gap: 6px;
+  .row.main .v { font-size: 13px; }
+  .row .v.r { text-align: right; }
+  .row .v.wa { color: var(--a); font-weight: 800; }
+  .row .v.wb { color: var(--b); font-weight: 800; }
+  .mid { text-align: center; }
+  .mid b { display: block; font-size: 11px; font-weight: 700; }
+  .mid i { display: block; font-style: normal; font-size: 9px; color: var(--mute); margin-top: 1px; }
+  .note {
+    grid-column: 1 / -1;
+    font-size: 10px; color: var(--mute); text-align: center; margin-top: -2px;
   }
-  .val {
-    font-family: "Cascadia Mono", Consolas, monospace;
-    font-size: 14.5px;
-    font-weight: 600;
-    color: var(--mute);
+  .fine { margin: 8px 0 0; font-size: 10px; line-height: 1.45; color: var(--mute); }
+  .sheet-mask {
+    position: absolute; inset: 0; background: rgba(42, 38, 51, .28);
+    display: none; align-items: flex-end; z-index: 4;
   }
-  .val.win { font-weight: 800; }
-  .val.right { text-align: right; }
-  .tag {
-    height: 16px;
-    padding: 0 5px;
-    border-radius: 4px;
-    color: #fff;
-    font-size: 9.5px;
-    font-weight: 700;
-    display: inline-flex;
-    align-items: center;
-    margin: 0 4px;
+  .sheet-mask.show { display: flex; }
+  .sheet {
+    width: 100%; background: #fff; border-radius: 14px 14px 0 0;
+    padding: 12px 14px 18px;
   }
-  .mlabel { text-align: center; }
-  .mlabel b { display: block; font-size: 12px; }
-  .mlabel em { display: block; font-style: normal; font-size: 9px; color: var(--mute); }
-  .bars {
-    margin-top: 7px;
-    height: 8px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 3px;
+  .sheet h4 { margin: 2px 0 8px; font-size: 13px; }
+  .opt {
+    width: 100%; text-align: left; border: 1px solid var(--line);
+    background: #fff; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer;
   }
-  .bars span { display: flex; }
-  .bars .l { justify-content: flex-end; }
-  .bars .r { justify-content: flex-start; }
-  .bars i {
-    display: block;
-    height: 8px;
+  .opt b { display: block; font-size: 12.5px; }
+  .opt span { color: var(--mute); font-size: 10.5px; }
+  .toast {
+    position: absolute; left: 50%; top: 56px; transform: translateX(-50%);
+    background: rgba(42, 38, 51, .9); color: #fff;
+    font-size: 12px; padding: 6px 10px; border-radius: 8px;
+    opacity: 0; pointer-events: none;
   }
-  .bars .l i { border-radius: 4px 0 0 4px; }
-  .bars .r i { border-radius: 0 4px 4px 0; }
-  .note { margin-top: 7px; text-align: center; font-size: 10.5px; color: var(--ink2); }
-  .acts { display: flex; gap: 8px; }
+  .toast.show { opacity: 1; }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>灯塔 · 隐藏的 PK 页</h1>
-    <p class="lead">开关 <b>kLighthousePkEnabled</b> 现在是关的，灯塔上看不到「＋PK」和 PK 篮。下面按现有页面样式，用两条产品的示例数把 <b>PK 擂台</b> 和 <b>PK 结果</b> 摆出来。数字是示意，不是线上账本。</p>
-    <div class="stage">
-      <div>
-        <p class="cap">① PK 擂台</p>
-        <div class="phone">
-          <div class="body">
-            <div class="top">
-              <div class="back">‹ 灯塔</div>
-              <div class="titles">
-                <h2>PK 擂台</h2>
-                <p>选 2–4 个，同一口径逐项比</p>
-              </div>
-              <div class="ghost">清空</div>
-            </div>
-            <div class="sec"><b>PK 篮</b><span>3 / 4 · 点卡片选或不选</span></div>
-
-            <div class="card on-a">
-              <div class="entry">
-                <div class="badge a">A</div>
-                <div style="flex:1;min-width:0">
-                  <div class="name">中石油现金券 · 北京中抚</div>
-                  <div class="meta">
-                    <span class="pill" style="background:#f3eefe;color:#5d469f">产品 · 能源</span>
-                    <span class="nums">销售额 1.28亿 · 利润 <span class="up">420.00万</span></span>
-                  </div>
-                </div>
-                <div class="check">✓</div>
-                <div class="x">×</div>
-              </div>
-              <i class="corner" style="background:var(--a)"></i>
-            </div>
-            <div class="gap8"></div>
-            <div class="card on-b">
-              <div class="entry">
-                <div class="badge b">B</div>
-                <div style="flex:1;min-width:0">
-                  <div class="name">江苏泰康人寿预付卡</div>
-                  <div class="meta">
-                    <span class="pill" style="background:#eef3fc;color:#2f5cb0">产品 · 保险</span>
-                    <span class="nums">销售额 8,600.0万 · 利润 <span class="up">180.00万</span></span>
-                  </div>
-                </div>
-                <div class="check">✓</div>
-                <div class="x">×</div>
-              </div>
-              <i class="corner" style="background:var(--b)"></i>
-            </div>
-            <div class="gap8"></div>
-            <div class="card off">
-              <div class="entry">
-                <div class="badge c" style="opacity:.35">C</div>
-                <div style="flex:1;min-width:0">
-                  <div class="name" style="color:var(--mute)">中石化加油券</div>
-                  <div class="meta">
-                    <span class="pill" style="background:#fbf4e6;color:#a87416">产品 · 能源</span>
-                    <span class="nums">销售额 6,400.0万 · 利润 <span class="up">90.00万</span></span>
-                  </div>
-                </div>
-                <div class="check empty"></div>
-                <div class="x">×</div>
-              </div>
-              <i class="corner" style="background:var(--line)"></i>
-            </div>
-            <div class="gap8"></div>
-            <div class="add"><span class="slot-outline">D</span>回灯塔再挑一个 · 产品 / 供给 / 渠道都能加</div>
-
-            <div class="card panel">
-              <div class="sec"><b>比什么</b><span>选中的几个都有的指标才能比</span></div>
-              <div class="chips">
-                <span class="chip">销售额<i class="corner"></i></span>
-                <span class="chip">核销额<i class="corner"></i></span>
-                <span class="chip">GMV<i class="corner"></i></span>
-                <span class="chip">利润<i class="corner"></i></span>
-                <span class="chip">毛利率<i class="corner"></i></span>
-                <span class="chip">收入<i class="corner"></i></span>
-                <span class="chip">成本合计<i class="corner"></i></span>
-                <span class="chip">经营性净现金流<i class="corner"></i></span>
-                <span class="chip off">人员产能 · 仅 A</span>
-              </div>
-            </div>
-            <div class="card panel" style="margin-top:12px">
-              <div class="sec"><b>看多久</b></div>
-              <div class="time">跟灯塔当前选的时间段走：10.1–10.13</div>
-            </div>
-          </div>
-          <div class="bar">
-            <div class="foot">
-              <div style="flex:1">
-                <div class="vsline">
-                  <span class="letter" style="color:var(--a)">A</span>
-                  <span class="vs">VS</span>
-                  <span class="letter" style="color:var(--b)">B</span>
-                </div>
-                <div class="hint">2 个 · 8 项指标</div>
-              </div>
-              <div class="btn">开始 PK ›</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <p class="cap">② PK 结果</p>
-        <div class="phone">
-          <div class="body">
-            <div class="top">
-              <div class="back">‹ 擂台</div>
-              <div class="titles">
-                <h2>PK 结果</h2>
-                <p>10.1–10.13 · 产品 › 示例</p>
-              </div>
-              <div class="close">×</div>
-            </div>
-
-            <div class="heads">
-              <div class="card hcard on-a">
-                <div class="badge lg a">A</div>
-                <div class="nm">中石油现金券 · 北京中抚</div>
-                <div><span class="score-num" style="color:var(--a)">7</span><span class="score-unit">项胜出</span></div>
-                <i class="corner" style="background:var(--a);width:16px;height:16px;border-top-left-radius:16px"></i>
-              </div>
-              <div class="card hcard on-b">
-                <div class="badge lg b">B</div>
-                <div class="nm">江苏泰康人寿预付卡</div>
-                <div><span class="score-num" style="color:var(--b)">1</span><span class="score-unit">项胜出</span></div>
-                <i class="corner" style="background:var(--b);width:16px;height:16px;border-top-left-radius:16px"></i>
-              </div>
-              <div class="vsbadge">VS<i class="corner" style="background:var(--primary);width:11px;height:11px;border-top-left-radius:11px"></i></div>
-            </div>
-
-            <div class="card score">
-              <div class="tally">
-                <span style="color:var(--a)">7</span>
-                <span class="colon">:</span>
-                <span style="color:var(--b)">1</span>
-                <span class="verdict">A 领先</span>
-              </div>
-              <div class="track">
-                <i style="flex:70;background:var(--a)"></i>
-                <i style="flex:10;background:var(--b)"></i>
-              </div>
-              <div class="sum">A 赢在 销售额、核销额、GMV、利润、毛利率、收入、经营性净现金流；B 赢在 成本合计</div>
-            </div>
-
-            <div class="sec" style="margin-top:14px"><b>逐项对比</b><span>条从中线往两边长，赢的一边实色</span></div>
-
-            <div class="card row">
-              <div class="mline">
-                <div><span class="val win" style="color:var(--a)">1.28亿</span><span class="tag a">胜</span></div>
-                <div class="mlabel"><b>销售额</b><em>高者胜</em></div>
-                <div class="val right">8,600.0万</div>
-              </div>
-              <div class="bars"><span class="l"><i style="width:100%;background:var(--a)"></i></span><span class="r"><i style="width:67%;background:#b7c9f4"></i></span></div>
-              <div class="note">A 多 49%</div>
-            </div>
-            <div class="card row">
-              <div class="mline">
-                <div><span class="val win" style="color:var(--a)">8,600.0万</span><span class="tag a">胜</span></div>
-                <div class="mlabel"><b>核销额</b><em>高者胜</em></div>
-                <div class="val right">5,400.0万</div>
-              </div>
-              <div class="bars"><span class="l"><i style="width:100%;background:var(--a)"></i></span><span class="r"><i style="width:63%;background:#b7c9f4"></i></span></div>
-              <div class="note">A 是 B 的 1.6 倍</div>
-            </div>
-            <div class="card row">
-              <div class="mline">
-                <div><span class="val win" style="color:var(--a)">1.52亿</span><span class="tag a">胜</span></div>
-                <div class="mlabel"><b>GMV</b><em>高者胜</em></div>
-                <div class="val right">9,100.0万</div>
-              </div>
-              <div class="bars"><span class="l"><i style="width:100%;background:var(--a)"></i></span><span class="r"><i style="width:60%;background:#b7c9f4"></i></span></div>
-              <div class="note">A 是 B 的 1.7 倍</div>
-            </div>
-            <div class="card row">
-              <div class="mline">
-                <div><span class="val win" style="color:var(--a)">420.00万</span><span class="tag a">胜</span></div>
-                <div class="mlabel"><b>利润</b><em>高者胜</em></div>
-                <div class="val right">180.00万</div>
-              </div>
-              <div class="bars"><span class="l"><i style="width:100%;background:var(--a)"></i></span><span class="r"><i style="width:43%;background:#b7c9f4"></i></span></div>
-              <div class="note">A 是 B 的 2.3 倍</div>
-            </div>
-            <div class="card row">
-              <div class="mline">
-                <div><span class="val win" style="color:var(--a)">18.6%</span><span class="tag a">胜</span></div>
-                <div class="mlabel"><b>毛利率</b><em>高者胜</em></div>
-                <div class="val right">12.4%</div>
-              </div>
-              <div class="bars"><span class="l"><i style="width:100%;background:var(--a)"></i></span><span class="r"><i style="width:67%;background:#b7c9f4"></i></span></div>
-              <div class="note">A 高 6.2pp</div>
-            </div>
-            <div class="card row">
-              <div class="mline">
-                <div><span class="val win" style="color:var(--a)">2,260.0万</span><span class="tag a">胜</span></div>
-                <div class="mlabel"><b>收入</b><em>高者胜</em></div>
-                <div class="val right">1,450.0万</div>
-              </div>
-              <div class="bars"><span class="l"><i style="width:100%;background:var(--a)"></i></span><span class="r"><i style="width:64%;background:#b7c9f4"></i></span></div>
-              <div class="note">A 是 B 的 1.6 倍</div>
-            </div>
-            <div class="card row">
-              <div class="mline">
-                <div><span class="val">1,840.0万</span></div>
-                <div class="mlabel"><b>成本合计</b><em>低者胜</em></div>
-                <div class="val right"><span class="tag b">胜</span><span class="val win" style="color:var(--b)">1,270.0万</span></div>
-              </div>
-              <div class="bars"><span class="l"><i style="width:100%;background:#d4c6f2"></i></span><span class="r"><i style="width:69%;background:var(--b)"></i></span></div>
-              <div class="note">A 多 45%</div>
-            </div>
-            <div class="card row">
-              <div class="mline">
-                <div><span class="val win" style="color:var(--a)">310.00万</span><span class="tag a">胜</span></div>
-                <div class="mlabel"><b>经营性净现金流</b><em>高者胜</em></div>
-                <div class="val right down">-40.00万</div>
-              </div>
-              <div class="bars">
-                <span class="l"><i style="width:100%;background:var(--a)"></i></span>
-                <span class="r"><i style="width:13%;background:#eef3fc;box-shadow:inset 0 0 0 1.1px #8eafec"></i></span>
-              </div>
-              <div class="note">B 为负 · 空心条 = 负数</div>
-            </div>
-          </div>
-          <div class="bar">
-            <div class="acts">
-              <div class="btn sec">＋ 加对手</div>
-              <div class="btn sec">换指标</div>
-              <div class="btn pri">复制结论</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+<div class="frame">
+  <div class="top">
+    <button id="back">‹ 擂台</button>
+    <div class="title"><b>PK 对比</b><span id="sub">本月 · 产品</span></div>
+    <button class="end" id="copy">复制</button>
   </div>
+  <div class="head">
+    <div class="pair" id="pair"></div>
+    <div class="score" id="score"></div>
+  </div>
+  <div class="cats" id="cats"></div>
+  <div class="scroll" id="scroll"></div>
+  <div class="sheet-mask" id="mask"><div class="sheet"><h4>更换对比对象</h4><div id="options"></div></div></div>
+  <div class="toast" id="toast"></div>
+</div>
+<script>
+const GROUPS = [
+  { id: "scale", title: "规模", keys: ["sales", "verifiedSales", "gmv"] },
+  { id: "profit", title: "利润", keys: ["profit", "grossMargin", "revenue"] },
+  { id: "cost", title: "成本", keys: ["costTotal"] },
+  { id: "cash", title: "现金流", keys: ["prepaid"] },
+];
+const METRICS = {
+  sales: { label: "销售额" },
+  verifiedSales: { label: "核销额" },
+  gmv: { label: "GMV" },
+  profit: { label: "利润" },
+  grossMargin: { label: "毛利率", isRate: true },
+  revenue: { label: "收入" },
+  costTotal: { label: "成本合计", lowerWins: true },
+  prepaid: { label: "净现金流" },
+};
+const pool = [
+  { id: "a", letter: "A", name: "中石油现金券 · 北京中抚", group: "能源", short: "中石油券",
+    metrics: { sales: 128000000, verifiedSales: 86000000, gmv: 152000000, profit: 4200000, grossMargin: 18.6, revenue: 22600000, costTotal: 18400000, prepaid: 3100000 } },
+  { id: "b", letter: "B", name: "江苏泰康人寿预付卡", group: "保险", short: "泰康预付卡",
+    metrics: { sales: 86000000, verifiedSales: 54000000, gmv: 91000000, profit: 1800000, grossMargin: 12.4, revenue: 14500000, costTotal: 12700000, prepaid: -400000 } },
+  { id: "c", letter: "C", name: "中石化加油券", group: "能源", short: "中石化券",
+    metrics: { sales: 64000000, verifiedSales: 41000000, gmv: 72000000, profit: 900000, grossMargin: 9.8, revenue: 9200000, costTotal: 8300000, prepaid: 1200000 } },
+];
+let slots = ["a", "b"];
+let swapSide = 0;
+
+function money(v) {
+  if (v == null) return "—";
+  const sign = v < 0 ? "-" : "";
+  const a = Math.abs(v);
+  if (a >= 1e8) return sign + (a / 1e8).toFixed(2) + "亿";
+  const w = a / 1e4;
+  if (w >= 1000) return sign + (a / 1e8).toFixed(2) + "亿";
+  return sign + (w >= 100 ? w.toFixed(0) : w.toFixed(1)).replace(/\.0$/, "") + "万";
+}
+function fmt(key, v) {
+  if (v == null) return "—";
+  return METRICS[key].isRate ? v.toFixed(1) + "%" : money(v);
+}
+function find(id) { return pool.find(p => p.id === id); }
+function sideClass(i) { return i === 0 ? "a" : "b"; }
+function toast(t) {
+  const el = document.getElementById("toast");
+  el.textContent = t;
+  el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 1400);
+}
+function winner(key, L, R) {
+  if (L == null || R == null || L === R) return -1;
+  return (METRICS[key].lowerWins ? L < R : L > R) ? 0 : 1;
+}
+function note(key, L, R) {
+  const w = winner(key, L, R);
+  if (w < 0) return "打平";
+  const who = w === 0 ? "A" : "B";
+  if (METRICS[key].isRate) return who + " 高 " + Math.abs(L - R).toFixed(1) + " 个点";
+  return who + (METRICS[key].lowerWins ? " 低 " : " 多 ") + money(Math.abs(L - R));
+}
+function tally() {
+  const wins = [0, 0];
+  if (!slots[0] || !slots[1]) return wins;
+  const L = find(slots[0]).metrics, R = find(slots[1]).metrics;
+  for (const key of Object.keys(METRICS)) {
+    const w = winner(key, L[key], R[key]);
+    if (w >= 0) wins[w]++;
+  }
+  return wins;
+}
+
+function renderPair() {
+  document.getElementById("pair").innerHTML = slots.map((id, side) => {
+    if (!id) return `<button class="card empty" data-act="pick" data-side="${side}">＋ 添加</button>`;
+    const p = find(id);
+    const wins = tally()[side];
+    return `<div class="card ${sideClass(side)}">
+      <div class="badge" style="background:${side === 0 ? "var(--a)" : "var(--b)"}">${side === 0 ? "A" : "B"}</div>
+      <h3>${p.name}</h3>
+      <div class="meta"><span>${wins} 项胜出</span><b>${money(p.metrics.sales)}</b></div>
+      <div class="ops">
+        <button data-act="pin" data-side="${side}">钉在左侧</button>
+        <button data-act="pick" data-side="${side}">更换</button>
+        <button data-act="close" data-side="${side}">移除</button>
+      </div>
+      <i class="corner"></i>
+    </div>`;
+  }).join("") + `<div class="vs">VS</div>`;
+  const wins = tally();
+  const lead = wins[0] === wins[1] ? "打平" : (wins[0] > wins[1] ? "A 领先" : "B 领先");
+  document.getElementById("score").innerHTML =
+    `<span class="n a">${wins[0]}</span><span class="colon">:</span><span class="n b">${wins[1]}</span><span class="pill">${lead}</span>`;
+}
+
+function renderBody() {
+  document.getElementById("cats").innerHTML = GROUPS.map((g, i) =>
+    `<button data-act="jump" data-id="${g.id}" class="${i === 0 ? "on" : ""}">${g.title}</button>`
+  ).join("");
+  const L = slots[0] ? find(slots[0]).metrics : null;
+  const R = slots[1] ? find(slots[1]).metrics : null;
+  document.getElementById("scroll").innerHTML = GROUPS.map(g => `
+    <section class="sec" id="sec-${g.id}">
+      <h2>${g.title}</h2>
+      ${g.keys.map((key, i) => {
+        const lv = L ? L[key] : null, rv = R ? R[key] : null;
+        const w = winner(key, lv, rv);
+        return `<div class="row ${i === 0 ? "main" : ""}">
+          <div class="v ${w === 0 ? "wa" : ""}">${fmt(key, lv)}</div>
+          <div class="mid"><b>${METRICS[key].label}</b><i>${METRICS[key].lowerWins ? "低者胜" : "高者胜"}</i></div>
+          <div class="v r ${w === 1 ? "wb" : ""}">${fmt(key, rv)}</div>
+          <div class="note">${L && R ? note(key, lv, rv) : ""}</div>
+        </div>`;
+      }).join("")}
+    </section>`).join("") + `<p class="fine">示例快照，用来看对比页。成本合计低者更优，其余高者更优。</p>`;
+}
+
+function render() { renderPair(); renderBody(); }
+
+function openSheet(side) {
+  swapSide = side;
+  const used = new Set(slots.filter(Boolean));
+  document.getElementById("options").innerHTML = pool.filter(p => !used.has(p.id) || p.id === slots[side]).map(p =>
+    `<button class="opt" data-act="choose" data-id="${p.id}"><b>${p.name}</b><span>${p.group} · 销售额 ${money(p.metrics.sales)}</span></button>`
+  ).join("") || `<p class="fine">没有可更换的对象了。</p>`;
+  document.getElementById("mask").classList.add("show");
+}
+
+document.body.addEventListener("click", (ev) => {
+  if (ev.target.id === "mask") document.getElementById("mask").classList.remove("show");
+  const el = ev.target.closest("[data-act]");
+  if (!el) return;
+  const act = el.dataset.act;
+  if (act === "pick") openSheet(Number(el.dataset.side));
+  if (act === "choose") {
+    slots[swapSide] = el.dataset.id;
+    document.getElementById("mask").classList.remove("show");
+    render();
+  }
+  if (act === "close") { slots[Number(el.dataset.side)] = null; render(); }
+  if (act === "pin") {
+    const side = Number(el.dataset.side);
+    if (side === 1 && slots[0] && slots[1]) slots = [slots[1], slots[0]];
+    render();
+    toast("已钉在左侧");
+  }
+  if (act === "jump") {
+    document.querySelectorAll(".cats button").forEach(b => b.classList.toggle("on", b === el));
+    const sec = document.getElementById("sec-" + el.dataset.id);
+    if (sec) sec.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+});
+document.getElementById("back").onclick = () => toast("预览停在对比页");
+document.getElementById("copy").onclick = async () => {
+  const [l, r] = slots.map(id => id ? find(id).short : "空");
+  const wins = tally();
+  const text = `灯塔 PK · ${l} ${wins[0]} : ${wins[1]} ${r}`;
+  try { await navigator.clipboard.writeText(text); } catch (_) {}
+  toast("结论已复制");
+};
+render();
+</script>
 </body>
 </html>

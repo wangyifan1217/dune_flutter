@@ -565,7 +565,8 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
 
   @override
   Widget build(BuildContext context) {
-    return TaskTheme(
+    return TaskCopyableScope(
+      child: TaskTheme(
       child: ColoredBox(
         color: DunesColors.resolve(
           context,
@@ -578,6 +579,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
             Expanded(child: _buildBody()),
           ],
         ),
+      ),
       ),
     );
   }

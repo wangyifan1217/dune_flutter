@@ -11,6 +11,7 @@ import '../conversation/conversation_service.dart';
 import '../tasks/task_api.dart';
 import '../tasks/task_avatar.dart';
 import '../tasks/task_models.dart';
+import '../tasks/task_widgets.dart';
 import '../shell/dunes_toast.dart';
 import 'qianji_record_supervise_service.dart';
 
@@ -217,7 +218,8 @@ class _NativeQianjiDailyReportSupervisePageState
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
+    return TaskCopyableScope(
+      child: ColoredBox(
       color: DunesColors.resolve(
         context,
         const Color(0xFFF5F6F8),
@@ -254,6 +256,7 @@ class _NativeQianjiDailyReportSupervisePageState
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1213,7 +1216,8 @@ Future<void> showQianjiDailyReportDetail({
         ),
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: Column(
+      child: TaskCopyableScope(
+        child: Column(
         children: [
           Container(
             margin: const EdgeInsets.only(top: 10),
@@ -1318,6 +1322,7 @@ Future<void> showQianjiDailyReportDetail({
             ),
           ),
         ],
+        ),
       ),
     ),
   ),

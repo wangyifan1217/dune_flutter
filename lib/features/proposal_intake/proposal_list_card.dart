@@ -5,6 +5,7 @@ import 'package:dunes_app/core/theme/dunes_theme.dart';
 import 'proposal_estimate_summary.dart';
 import 'proposal_intake_models.dart';
 import 'proposal_intake_ui.dart';
+import 'proposal_sla_widgets.dart';
 
 /// 销售提案列表的一张卡：照灯塔的产品卡排版。
 ///
@@ -233,7 +234,11 @@ class ProposalListCardData {
     this.nowText = '',
     this.days = '',
     this.daysWarn = false,
+    this.sla,
   });
+
+  /// 时限管理摘要；有时，底栏右侧用时限胶囊替换「停 N 天」。
+  final ProposalSlaSummary? sla;
 
   /// 从 0 开始，显示 01、02。
   final int index;
@@ -516,7 +521,13 @@ class ProposalListCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (data.days.isNotEmpty) ...[
+              if (data.sla != null) ...[
+                const SizedBox(width: 8),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: narrow ? 120 : 200),
+                  child: ProposalSlaChip(sla: data.sla!),
+                ),
+              ] else if (data.days.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

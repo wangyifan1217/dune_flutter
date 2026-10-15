@@ -1305,7 +1305,9 @@ String _pct(double ratio) => '${proposalFormatWan(ratio * 100)}%';
 Set<String> proposalFinanceSyncSources(Map<String, dynamic> form) {
   return {
     for (final sku in proposalIntakeSkuDetails(form))
-      if (sku.syncSourceCode.isNotEmpty) sku.syncSourceCode,
+      if (proposalIntakeResolvedSyncSourceCode(form, sku) case final code
+          when code.isNotEmpty)
+        code,
   };
 }
 

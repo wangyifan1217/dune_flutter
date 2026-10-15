@@ -14,6 +14,7 @@ import '../tasks/task_api.dart';
 import '../tasks/task_avatar.dart';
 import '../tasks/task_chat_forward.dart';
 import '../tasks/task_models.dart';
+import '../tasks/task_widgets.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 
@@ -488,7 +489,8 @@ class _NativeQianjiTaskPeoplePageState
   @override
   Widget build(BuildContext context) {
     final people = _people;
-    return ColoredBox(
+    return TaskCopyableScope(
+      child: ColoredBox(
       color: DunesColors.resolve(
         context,
         const Color(0xFFF5F6F8),
@@ -508,6 +510,7 @@ class _NativeQianjiTaskPeoplePageState
             Expanded(child: _body(people)),
           ],
         ),
+      ),
       ),
     );
   }

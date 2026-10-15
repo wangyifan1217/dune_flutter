@@ -10,6 +10,7 @@ import '../auth/auth_session.dart';
 import '../meeting/meeting_minutes_markdown.dart';
 import '../shell/dunes_toast.dart';
 import 'task_models.dart';
+import 'task_widgets.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 
@@ -166,10 +167,12 @@ Future<void> showTaskAiAnalysis({
             borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
           ),
           clipBehavior: Clip.antiAlias,
-          child: _TaskAiAnalysisPanel(
-            session: session,
-            task: task,
-            onClose: () => Navigator.of(ctx).maybePop(),
+          child: TaskCopyableScope(
+            child: _TaskAiAnalysisPanel(
+              session: session,
+              task: task,
+              onClose: () => Navigator.of(ctx).maybePop(),
+            ),
           ),
         ),
       );
@@ -263,9 +266,7 @@ class _TaskAiAnalysisPanelState extends State<_TaskAiAnalysisPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+    return TaskCopyableScope(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

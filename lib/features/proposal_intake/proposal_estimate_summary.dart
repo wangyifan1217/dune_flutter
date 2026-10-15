@@ -1295,16 +1295,16 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     '月均规模': '月均规模',
     '售价': '收入',
     'SKU': '年化规模',
-    '成本合计': '项目成本',
-    '项目成本': '项目成本',
-    '业务成本': '项目成本',
+    '成本合计': '成本',
+    '项目成本': '成本',
+    '业务成本': '成本',
     '周转资金': '周转资金',
     '利润': '利润',
     '月均利润': '月均规模',
     '收入': '收入',
-    '税务成本': '项目成本',
+    '税务成本': '成本',
     '毛利率': '利润',
-    '成本率': '项目成本',
+    '成本率': '成本',
   };
 
   ProposalEstimateSummary get _s => widget.summary;
@@ -1715,9 +1715,9 @@ class _CompactEstimateState extends State<_CompactEstimate> {
           _C.purple,
         ),
         (
-          '项目成本',
-          proposalEstimateWan(d.projectCost),
-          _pct(d.pctOfScale(d.projectCost)),
+          '成本',
+          proposalEstimateWan(d.costTotal),
+          _pct(d.pctOfScale(d.costTotal)),
           _C.purpleLight,
         ),
         if (kProposalFinanceShowProfit)
@@ -1930,6 +1930,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
           (_selected == '收入' && b.label == '收入');
       final color =
           active ||
+              _selected == '成本' ||
               _selected == '年化规模' ||
               _selected == '月均规模' ||
               _selected == '周转资金'

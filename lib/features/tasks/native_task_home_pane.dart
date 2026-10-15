@@ -883,11 +883,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     final child = KeyedSubtree(
       key: _pageKey,
       // 点击输入框外的空白处收起软键盘（覆盖任务列表/详情/进度/评价等各级页）
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-        child: _pageBody(),
-      ),
+      child: TaskCopyableScope(child: _pageBody()),
     );
     return TaskTheme(
       child: AnimatedSwitcher(

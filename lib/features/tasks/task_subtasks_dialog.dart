@@ -41,7 +41,8 @@ class _TaskSubtasksDialogState extends State<TaskSubtasksDialog> {
       child: SizedBox(
         width: 680,
         height: (size.height * .78).clamp(0.0, 620.0),
-        child: Column(
+        child: TaskCopyableScope(
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
@@ -153,6 +154,7 @@ class _TaskSubtasksDialogState extends State<TaskSubtasksDialog> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );

@@ -1259,12 +1259,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
           const Color(0xFFF5F6F8),
           role: DunesColorRole.surface,
         ),
-        // 点击输入框外的空白处收起软键盘（详情页含描述内联编辑）
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-          child: _buildContent(d),
-        ),
+        child: TaskCopyableScope(child: _buildContent(d)),
       ),
     );
   }

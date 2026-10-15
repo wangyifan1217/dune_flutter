@@ -1969,6 +1969,7 @@ class ChatTextBubble extends StatelessWidget {
                 _ChatSelectableRichText(
                   textSpan: _buildMentionTextSpan(context),
                   text: text,
+                  mine: mine,
                   selectAllOnLongPress: selectAllOnLongPress,
                   preferPartialTextCopy: preferPartialTextCopy,
                   onActionsMenu: onActionsMenu,
@@ -1997,6 +1998,7 @@ class _ChatSelectableRichText extends StatefulWidget {
   const _ChatSelectableRichText({
     required this.textSpan,
     required this.text,
+    required this.mine,
     required this.selectAllOnLongPress,
     required this.preferPartialTextCopy,
     this.onActionsMenu,
@@ -2009,6 +2011,7 @@ class _ChatSelectableRichText extends StatefulWidget {
 
   final TextSpan textSpan;
   final String text;
+  final bool mine;
   final bool selectAllOnLongPress;
   final bool preferPartialTextCopy;
   final void Function(Offset anchor, String selectedText)? onActionsMenu;
@@ -2093,7 +2096,7 @@ class _ChatSelectableRichTextState extends State<_ChatSelectableRichText> {
 
   @override
   Widget build(BuildContext context) {
-    return SelectableText.rich(
+    final selectable = SelectableText.rich(
       widget.textSpan,
       onSelectionChanged: _onSelectionChanged,
       contextMenuBuilder: (context, editableTextState) {
@@ -2209,6 +2212,14 @@ class _ChatSelectableRichTextState extends State<_ChatSelectableRichText> {
           ],
         );
       },
+    );
+    if (!widget.mine) return selectable;
+    // 己方紫底气泡上默认的主色选区几乎看不见，改用白色半透明高亮。
+    return TextSelectionTheme(
+      data: TextSelectionTheme.of(context).copyWith(
+        selectionColor: Colors.white.withValues(alpha: 0.38),
+      ),
+      child: selectable,
     );
   }
 }

@@ -26902,35 +26902,11 @@ SafeArea(
     ];
   }
 
-  /// 金额 → (数字, 单位)。[plus] 给流入一个「+」。
+  /// 金额 → (数字, 单位)。经营成本一律按绝对值显示，不带「-」「+」：
+  /// 流出 / 流入已经由所在的分组说清楚了。[plus] 保留参数位，不再加号。
   ({String number, String unit}) _opCostAmount(double v, {bool plus = false}) {
-    final n = _fmt(v);
-    return (number: plus && v > 0 ? '+$n' : n, unit: _unit(v));
+    return (number: _fmt(v.abs()), unit: _unit(v.abs()));
   }
-
-  Widget _opCostTag() => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-    decoration: BoxDecoration(
-      color: DunesColors.resolve(
-        context,
-        const Color(0xFFEEF1F6),
-        role: DunesColorRole.surface,
-      ),
-      borderRadius: BorderRadius.circular(4),
-    ),
-    child: Text(
-      '银行流水',
-      maxLines: 1,
-      softWrap: false,
-      style: LhTypography.sans(
-        size: 8.5,
-        color: DunesColors.resolve(context, const Color(0xFF5C6B80)),
-        weight: FontWeight.w600,
-        height: 1.1,
-        context: context,
-      ),
-    ),
-  );
 
   /// 成本栏第四格。
   Widget _buildOpCostCell() {
@@ -26948,11 +26924,14 @@ SafeArea(
     String? deltaText;
     var deltaColor = DunesColors.resolve(context, LhColors.mute2);
     if (available && pct is num && (dir == 'up' || dir == 'down')) {
+      // 后端按带符号的净额算方向；这里显示的是支出金额（正数），
+      // 净额为负时方向要翻过来：净额更负 = 支出变多 = ↑。
+      final costUp = net < 0 ? dir == 'down' : dir == 'up';
       deltaText =
-          '${dir == 'up' ? '↑' : '↓'}${pct.toStringAsFixed(pct.abs() >= 10 ? 0 : 1)}%';
+          '${costUp ? '↑' : '↓'}${pct.toStringAsFixed(pct.abs() >= 10 ? 0 : 1)}%';
       deltaColor = DunesColors.resolve(
         context,
-        dir == 'up' ? LhColors.neg : LhColors.pos,
+        costUp ? LhColors.neg : LhColors.pos,
       );
     }
     return Semantics(
@@ -27046,8 +27025,6 @@ SafeArea(
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 4),
-                              _opCostTag(),
                             ],
                           ),
                         ),
@@ -27221,8 +27198,6 @@ SafeArea(
             context: context,
           ),
         ),
-        const SizedBox(width: 6),
-        _opCostTag(),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
@@ -27416,58 +27391,6 @@ SafeArea(
       );
     }
 
-    Widget emptyCell(String name) => Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 7),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            const Color(0xFFE3DEEC),
-            role: DunesColorRole.border,
-          ),
-          width: 0.8,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: LhTypography.sans(
-              size: 10,
-              color: mute2,
-              weight: FontWeight.w700,
-              height: 1.0,
-              context: context,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '—',
-            style: LhTypography.number(
-              size: 13,
-              color: DunesColors.resolve(context, const Color(0xFFC3BDCD)),
-              context: context,
-            ).copyWith(height: 1.0),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            '本期无流水',
-            style: LhTypography.sans(
-              size: 9,
-              color: mute2,
-              height: 1.0,
-              context: context,
-            ),
-          ),
-        ],
-      ),
-    );
-
     Widget body;
     if (!fresh) {
       body = Padding(
@@ -27496,10 +27419,6 @@ SafeArea(
       final ins = [for (final r in rows) if (_opNum(r['net']) >= 0) r];
       final outTotal = outs.fold<double>(0, (s, r) => s + _opNum(r['net']).abs());
       final inTotal = ins.fold<double>(0, (s, r) => s + _opNum(r['net']));
-      final empty = [
-        for (final e in (data?['empty'] as List? ?? const []))
-          if (e.toString().trim().isNotEmpty) e.toString().trim(),
-      ];
       // 不用 LayoutBuilder：Hero 外层若有量固有尺寸的祖先会直接报错。
       // 列数按屏宽定，格子用 Row + Expanded 排，哪种父布局都能算。
       final screenW = MediaQuery.sizeOf(context).width / _uiZoom.clamp(0.5, 2.0);
@@ -27542,7 +27461,11 @@ SafeArea(
                 children: [
                   Expanded(
                     flex: 13,
-                    child: totalCell('净额', _opNum(data?['net']), result: true),
+                    child: totalCell(
+                      _opNum(data?['net']) > 0 ? '净流入' : '净支出',
+                      _opNum(data?['net']),
+                      result: true,
+                    ),
                   ),
                   const SizedBox(width: gap),
                   Expanded(
@@ -27569,19 +27492,12 @@ SafeArea(
                     secCell(outs[k], outTotal, top: k < 2),
                 ]),
               ],
-              if (ins.isNotEmpty || empty.isNotEmpty) ...[
+              // 没有流水的二级分类（字典里有、这段时间 0 笔）不显示。
+              if (ins.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                groupTitle(
-                  ins.isNotEmpty ? '流入' : '本期无流水',
-                  ins.isNotEmpty
-                      ? '${ins.length} 类 · 右上角是占流入'
-                      : '字典里有、这段时间没有流水',
-                ),
+                groupTitle('流入', '${ins.length} 类 · 右上角是占流入'),
                 const SizedBox(height: 6),
-                grid([
-                  for (final r in ins) secCell(r, inTotal),
-                  for (final name in empty) emptyCell(name),
-                ]),
+                grid([for (final r in ins) secCell(r, inTotal)]),
               ],
             ],
           );

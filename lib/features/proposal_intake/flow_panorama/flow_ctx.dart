@@ -150,7 +150,38 @@ class FlowCtx {
     this.salesTaxRate = '',
     this.purchaseInvoiceType = '',
     this.purchaseTaxRate = '',
+    this.invoiceItems = const [],
   });
+
+  /// 发票流跟着产品走：每个产品每条结算规则填的发票类型 / 税率，按「开票 / 收票 + 票种税率」归组。
+  final List<FlowInvoiceItem> invoiceItems;
+
+  /// 我方向渠道开的票（产品的收入结算）。
+  List<FlowInvoiceItem> get salesInvoiceItems =>
+      invoiceItems.where((item) => item.issue).toList();
+
+  /// 销售侧发票链路的标题：只有一种票就写那一种，多种写「N 种票种税率」。
+  String get salesInvoiceEdgeLabel {
+    final sales = salesInvoiceItems;
+    if (sales.length == 1) return sales.first.tax;
+    if (sales.length > 1) return '${sales.length} 种票种税率 · 按产品';
+    return taxLabel;
+  }
+
+  /// 销售侧发票链路的副标题：涉及几个产品 / 几条收票。
+  String get salesInvoiceEdgeSub {
+    if (invoiceItems.isEmpty) {
+      return salesInvoiceType.isEmpty ? salesName : salesInvoiceType;
+    }
+    final products = <String>{
+      for (final item in salesInvoiceItems) ...item.products,
+    };
+    final receive = invoiceItems.length - salesInvoiceItems.length;
+    return [
+      if (products.isNotEmpty) '${products.length} 个产品开票',
+      if (receive > 0) '$receive 组成本收票',
+    ].join(' · ');
+  }
 
   final String proposal, sector, productTag, project;
   final List<String> supplies, channels, purchaseProducts;
@@ -248,6 +279,35 @@ class FlowCtx {
 }
 
 const kProposalFlowTaxPending = '票种与税率待确认';
+
+/// 发票流里的一组票：开票（收入，我方 → 渠道）或收票（项目成本 / 用券成本），
+/// 同一票种税率的产品归在一起。
+class FlowInvoiceItem {
+  const FlowInvoiceItem({
+    required this.issue,
+    required this.tax,
+    this.bill = '',
+    this.products = const [],
+  });
+
+  /// true：我方开给渠道（收入结算）；false：我方收票（成本结算）。
+  final bool issue;
+
+  /// 成本类型，如「推广费」「用券成本」；收入为空。
+  final String bill;
+
+  /// 「增值税专用发票 6%」。
+  final String tax;
+  final List<String> products;
+
+  String get text {
+    final head = [issue ? '开票' : '收票', if (bill.isNotEmpty) bill].join(' · ');
+    final names = products.length > 3
+        ? '${products.take(3).join('、')} 等 ${products.length} 个'
+        : products.join('、');
+    return names.isEmpty ? '$head $tax' : '$head $tax：$names';
+  }
+}
 
 String proposalFlowInvoiceTaxLabel({
   String invoiceType = '',

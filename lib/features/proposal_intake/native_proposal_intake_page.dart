@@ -3576,6 +3576,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     };
   }
 
+  /// 整板块驳回：本板块复核人可以驳回；销售提案里财务部负责人一和总裁一样，
+  /// 可以驳回前面任何一个板块（市场部负责人一已复核的也行），后端同样放开。
+  bool _moduleRejectEnabled(String keyName) {
+    if (_moduleReviewEnabled(keyName)) return true;
+    if (_isPurchase || !_isReviewing || _me <= 0 || _row.techRevisionOpen) {
+      return false;
+    }
+    if (!_isOwner('financeOwner1')) return false;
+    return const {
+      'marketCompleted',
+      'technologyCompleted',
+      'financeCompleted',
+      'purchaseContractCompleted',
+      'salesContractCompleted',
+    }.contains(keyName);
+  }
+
   Map<String, dynamic> get _form => _row.form;
   Map<String, dynamic> get _review => _row.review;
 
@@ -4250,13 +4267,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
     );
     if (comment.isEmpty) return dot;
-    return Column(
+    // 驳回意见限宽两行，完整内容在圆点的悬停提示里，不把标题行撑出右边。
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 240),
+      child: Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         dot,
         const SizedBox(height: 4),
         Text(
           comment,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.right,
           style: TextStyle(
             color: DunesColors.resolveNullable(context, Color(0xFFB42318)),
             fontSize: 11,
@@ -4264,6 +4288,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
         ),
       ],
+      ),
     );
   }
 
@@ -4292,20 +4317,32 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       onReject: canAct ? () => unawaited(_rejectItemReview(section)) : null,
     );
     if (comment.isEmpty) return toggle;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        toggle,
-        const SizedBox(height: 4),
-        Text(
-          comment,
-          style: TextStyle(
-            color: DunesColors.resolveNullable(context, Color(0xFFB42318)),
-            fontSize: 11,
-            height: 1.35,
+    // 驳回意见可能很长：限宽、最多两行，完整内容悬停看，别把标题行撑爆。
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 240),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          toggle,
+          const SizedBox(height: 4),
+          Tooltip(
+            message: comment,
+            waitDuration: const Duration(milliseconds: 300),
+            child: Text(
+              comment,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: DunesColors.resolveNullable(context, Color(0xFFB42318)),
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -5221,6 +5258,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ? 'channelTagL1'
           : 'skuDetails',
       platform: _platformShortName,
+      businessCostHidden: _businessCostSealed,
     );
   }
 
@@ -7033,7 +7071,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ('产品名称', _kvText(sku.displayName)),
         for (final (label, value) in _skuFieldKv(sku)) (label, _kvText(value)),
         if (scale > 0) ('规模', _kvText('${proposalFormatWan(scale)} 万（年）')),
-        ('业务平台状态', _kvText(proposalSkuPlatformStatusChipLabel(sku))),
+        if (kProposalSkuPlatformStatusVisible)
+          ('业务平台状态', _kvText(proposalSkuPlatformStatusChipLabel(sku))),
       ];
       return Container(
         decoration: BoxDecoration(
@@ -7065,21 +7104,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         style: TextStyle(fontSize: 12, color: c(0xFF2A2638)),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 1,
+                    if (kProposalSkuPlatformStatusVisible) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: c(bg, DunesColorRole.surface),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          proposalSkuPlatformStatusLabel(sku.platformStatus),
+                          style: TextStyle(fontSize: 10, color: c(fg)),
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: c(bg, DunesColorRole.surface),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        proposalSkuPlatformStatusLabel(sku.platformStatus),
-                        style: TextStyle(fontSize: 10, color: c(fg)),
-                      ),
-                    ),
+                    ],
                     const SizedBox(width: 6),
                     AnimatedRotation(
                       turns: open ? .25 : 0,
@@ -15847,6 +15888,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         },
                         onRemove: (settleId) {
                           _removeSkuSettle(current.id, settleId);
+                          // 删收入时，挂在它下面的用券成本一起删。
+                          _removeCouponCost(current.id, settleId);
                           refresh();
                         },
                         onPatch: (settleId, terms) {
@@ -15860,6 +15903,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         onClipboardChanged: refresh,
                         includeScale: false,
                         scaleOnly: false,
+                        // 收入框里的「是否有用券成本」：选「是」加一条挂在这条收入下的项目成本。
+                        onAddCoupon: (incomeId) {
+                          _addCouponCost(current.id, incomeId);
+                          refresh();
+                        },
                       ),
                       // 应付里有「推广费」时：可配阶梯，不配就按应付行比例算。
                       ..._promotionPayableField(current.id, enabled, refresh),
@@ -15983,15 +16031,33 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   ) {
     final copied = _skuSettlementsClipboard;
     if (copied == null || copied.isEmpty) return current;
+    // 先给普通行分 id（沿用原位置的 id），再让用券成本跟着它的收入走：
+    // 「<收入 id>-coupon」，粘贴后仍挂在对应的收入下面。
+    final idMap = <String, String>{};
+    final out = <ProposalSkuSettleRow>[];
+    for (var i = 0; i < copied.length; i++) {
+      final coupon = _isCouponCostOf(copied[i], copied);
+      var id = i < current.length ? current[i].id : proposalIntakeNewSkuSettleId();
+      if (!coupon && id.endsWith('-coupon')) id = proposalIntakeNewSkuSettleId();
+      if (!coupon) idMap[copied[i].id] = id;
+      out.add(ProposalSkuSettleRow(id: id, kind: copied[i].kind, terms: copied[i].terms));
+    }
     return [
-      for (var i = 0; i < copied.length; i++)
-        ProposalSkuSettleRow(
-          id: i < current.length
-              ? current[i].id
-              : proposalIntakeNewSkuSettleId(),
-          kind: copied[i].kind,
-          terms: copied[i].terms,
-        ),
+      for (var i = 0; i < out.length; i++)
+        if (_isCouponCostOf(copied[i], copied))
+          ProposalSkuSettleRow(
+            id: _couponCostId(
+              idMap[copied[i].id.substring(
+                    0,
+                    copied[i].id.length - '-coupon'.length,
+                  )] ??
+                  proposalIntakeNewSkuSettleId(),
+            ),
+            kind: out[i].kind,
+            terms: out[i].terms,
+          )
+        else
+          out[i],
     ];
   }
 
@@ -17128,19 +17194,27 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String prefix = '',
   }) {
     final items = proposalIntakeSkuSettlements(product);
+    // 收入下面挂的用券成本紧跟在那条收入后面，算「收入」这一边（从收入里扣），不进项目成本。
     final ordered = [
       for (final item in items)
-        if (!item.isCost) item,
+        if (!item.isCost) ...[
+          item,
+          for (final coupon in items)
+            if (coupon.isCost && coupon.id == _couponCostId(item.id)) coupon,
+        ],
       for (final item in items)
-        if (item.isCost) item,
+        if (item.isCost && !_isCouponCostOf(item, items)) item,
     ];
     final labels = _settleRowLabels(ordered);
     final faceValue = proposalIntakeSkuSettleFace(product);
     return [
       for (var i = 0; i < ordered.length; i++)
-        if (ordered[i].isCost == cost)
+        if (_isCouponCostOf(ordered[i], items)
+            ? !cost
+            : ordered[i].isCost == cost)
           () {
             final t = ordered[i].terms;
+            final coupon = _isCouponCostOf(ordered[i], items);
             final side = cost ? '应付' : '应收';
             final label = labels[i];
             var name = label.startsWith('$side · ')
@@ -17154,6 +17228,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             if (!cost && name.startsWith('应收')) {
               name = '收入${name.substring(2)}';
             }
+            if (coupon) name = '用券成本';
             // 按单价结的：比例列空着，单价写在「每张」列。
             final ratio = t.displayRatio.trim();
             final unitPrice = t.displayUnitPrice.trim();
@@ -17170,12 +17245,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       ? '${proposalFormatWan((remote?['perUnit'] as num?)?.toDouble() ?? 0)} 元'
                       : '');
             final formula = t.displayFormula.trim();
+            // 比例、单价都没填：年化测算没法算，显示「—」，不显示一个假的 0。
+            final unfilled = ratio.isEmpty &&
+                unitPrice.isEmpty &&
+                !t.settleByTier;
             return ProposalProductCardLine(
               name: prefix.isEmpty
                   ? name
                   : '$prefix · ${cost ? '项目成本' : '收入'} $name',
-              ratio: ratio,
-              amount: amount == null ? '—' : '${proposalFormatWan(amount)} 万',
+              tag: coupon ? '用券成本' : '',
+              minus: coupon,
+              ratio: ratio.isEmpty && t.settleByTier ? '按阶梯' : ratio,
+              amount: amount == null || unfilled
+                  ? '—'
+                  : '${proposalFormatWan(amount)} 万',
               basis: _settleBasisShort(formula),
               perUnit: perUnit,
               // 第二行灰字：计算公式 · 发票类型 · 税率。
@@ -17288,7 +17371,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         financeAction: side == ProposalProductCardSide.finance
             ? _productCardSettleButton(sku)
             : null,
-        // 点一条收入 / 项目成本：跳到财务部「收入与成本」对应那一行并展开。
+        // 每条结算右下「看明细 ›」打开这个产品的结算明细；「去复核 ›」跳到财务部「收入与成本」那一行并展开。
+        onSettleDetail: () =>
+            unawaited(_openSkuSettleDialog(sku: sku, child: false)),
         onSettleTap: (cost) => _openEstimateField(
           ProposalIntakeNavSection.finance,
           cost ? 'costItems' : 'revenue',
@@ -17435,7 +17520,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ? '收入单价 ${first.displayUnitPrice.trim()}'
                     : ''));
     final empty = settlements.isEmpty;
-    final status = product == null
+    final status = product == null || !kProposalSkuPlatformStatusVisible
         ? ''
         : proposalSkuPlatformStatusLabel(product.platformStatus);
     final statusColor = switch (product?.platformStatus ?? '') {
@@ -17640,6 +17725,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   /// 业务平台状态：小圆点 + 「待配置 / 创建中 / 已创建 / 失败」，不再用大色块。
   Widget _skuPlatformStatusDot(ProposalSkuDetailRow row) {
+    if (!kProposalSkuPlatformStatusVisible) return const SizedBox.shrink();
     final color = switch (normalizeProposalSkuPlatformStatus(
       row.platformStatus,
     )) {
@@ -17887,11 +17973,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _skuPlatformStatusChip(row),
-          ),
+          if (kProposalSkuPlatformStatusVisible) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _skuPlatformStatusChip(row),
+            ),
+          ],
           const SizedBox(height: 4),
           if (!child) ...[
             Text(
@@ -19387,6 +19475,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     VoidCallback? onOpenEditor,
     VoidCallback? onClipboardChanged,
     ProposalSkuDetailRow? product,
+    ValueChanged<String>? onAddCoupon,
   }) {
     // 财务部「产品结算」列表：一行一个产品，看得懂、只有一个主按钮。
     if (compact && _protoForm) {
@@ -19479,7 +19568,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   color: DunesColors.resolve(context, ProposalPalette.text),
                 ),
               ),
-              if (product != null)
+              // 业务平台状态（资管回执）还没对接，先不显示；以前失败原因太长会把弹窗撑出右边。
+              if (product != null && kProposalSkuPlatformStatusVisible)
                 _skuPlatformStatusChip(product, slot: 'settle'),
               if (compact && summaryBits.isNotEmpty)
                 Text(
@@ -19645,6 +19735,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   for (final item in settlements)
                     if (!item.isCost) item,
                 ],
+                couponRows: onAddCoupon == null
+                    ? const []
+                    : [
+                        for (final item in settlements)
+                          if (item.isCost && _isCouponCostOf(item, settlements))
+                            item,
+                      ],
+                onAddCoupon: onAddCoupon,
                 skuId: skuId,
                 wide: wide,
                 enabled: enabled,
@@ -19666,9 +19764,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               _skuSettleKindSection(
                 label: '项目成本（采购成本）',
                 kind: kProposalSkuSettleKindCost,
+                // 挂在收入下的用券成本已经在收入框里填，这里不再重复列出。
                 rows: [
                   for (final item in settlements)
-                    if (item.isCost) item,
+                    if (item.isCost &&
+                        !(onAddCoupon != null &&
+                            _isCouponCostOf(item, settlements)))
+                      item,
                 ],
                 skuId: skuId,
                 wide: wide,
@@ -20937,6 +21039,164 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  // ───────── 收入下的「用券成本」 ─────────
+  // 存成一条普通的项目成本结算（kind = cost，成本类型「券使用成本」），
+  // id 固定为「<收入 id>-coupon」挂在这条收入下面。测算、复核、列表都按项目成本走，不用改数据结构。
+
+  static const _couponCostName = '券使用成本';
+
+  String _couponCostId(String incomeId) => '$incomeId-coupon';
+
+  /// 这条成本是不是挂在某条收入下的用券成本。
+  bool _isCouponCostOf(
+    ProposalSkuSettleRow row,
+    List<ProposalSkuSettleRow> settlements,
+  ) {
+    if (!row.isCost || !row.id.endsWith('-coupon')) return false;
+    final incomeId = row.id.substring(0, row.id.length - '-coupon'.length);
+    return settlements.any((item) => !item.isCost && item.id == incomeId);
+  }
+
+  void _addCouponCost(String skuId, String incomeId) {
+    if (!_canEditSkuSettlements) return;
+    final row = _sellableSkuById(skuId);
+    if (row == null) return;
+    final settlements = proposalIntakeSkuSettlements(row);
+    final id = _couponCostId(incomeId);
+    if (settlements.any((item) => item.id == id)) return;
+    _writeSkuSettlements(skuId, [
+      ...settlements,
+      ProposalSkuSettleRow(
+        id: id,
+        kind: proposalIntakeNormalizeSkuSettleKind(kProposalSkuSettleKindCost),
+        terms: ProposalFinanceSettleTerms(
+          channelRef: row.channelRef,
+          billType: _couponCostName,
+          billTypeRef: CatalogRef.fromName(_couponCostName),
+        ),
+      ),
+    ]);
+  }
+
+  void _removeCouponCost(String skuId, String incomeId) {
+    final row = _sellableSkuById(skuId);
+    if (row == null) return;
+    final id = _couponCostId(incomeId);
+    if (!proposalIntakeSkuSettlements(row).any((item) => item.id == id)) {
+      return;
+    }
+    _removeSkuSettle(skuId, id);
+  }
+
+  /// 收入框底部：「是否有用券成本」是 / 否；选「是」展开和下面项目成本一样的字段
+  /// （结算比例：固定比例 / 按阶梯，结算单价，计算公式，发票类型，税率）。
+  Widget _couponCostBlock({
+    required String skuId,
+    required ProposalSkuSettleRow income,
+    required ProposalSkuSettleRow? coupon,
+    required bool wide,
+    required bool enabled,
+    required String reviewPrefix,
+    required String syncSource,
+    required String productSource,
+    required ValueChanged<String> onAddCoupon,
+    required ValueChanged<String> onRemove,
+    required void Function(String settleId, ProposalFinanceSettleTerms terms)
+    onPatch,
+  }) {
+    final line = DunesColors.resolve(
+      context,
+      ProposalPalette.borderSoft,
+      role: DunesColorRole.border,
+    );
+    return Container(
+      key: ValueKey('sku-settle-coupon-$skuId-${income.id}'),
+      decoration: BoxDecoration(border: Border(top: BorderSide(color: line))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  '是否有用券成本',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolve(context, ProposalPalette.text2),
+                  ),
+                ),
+                ProposalChoiceChip(
+                  label: '是',
+                  selected: coupon != null,
+                  enabled: enabled,
+                  onSelected: enabled && coupon == null
+                      ? (_) => onAddCoupon(income.id)
+                      : null,
+                ),
+                ProposalChoiceChip(
+                  label: '否',
+                  selected: coupon == null,
+                  enabled: enabled,
+                  onSelected: enabled && coupon != null
+                      ? (_) => onRemove(coupon.id)
+                      : null,
+                ),
+              ],
+            ),
+          ),
+          if (coupon != null)
+            Container(
+              color: DunesColors.resolve(
+                context,
+                ProposalPalette.soft,
+                role: DunesColorRole.surface,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                    child: Text(
+                      '用券成本（记入项目成本）',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: DunesColors.resolve(context, ProposalPalette.text),
+                      ),
+                    ),
+                  ),
+                  _settleTermsGrid(
+                    wide: wide,
+                    keyPrefix: '$reviewPrefix-$skuId-${coupon.id}',
+                    terms: coupon.terms,
+                    enabled: enabled,
+                    includeParties: false,
+                    includeChannel: false,
+                    includeScale: false,
+                    scaleOnly: false,
+                    includeSalesFields: false,
+                    includeSchedule: false,
+                    includeCostType: false,
+                    choosePriceMode: true,
+                    syncSource: syncSource,
+                    productSource: productSource,
+                    onChanged: (terms) => onPatch(coupon.id, terms),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _skuSettleKindSection({
     required String label,
     required String kind,
@@ -20956,6 +21216,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required ValueChanged<String> onRemove,
     required void Function(String settleId, ProposalFinanceSettleTerms terms)
     onPatch,
+    List<ProposalSkuSettleRow> couponRows = const [],
+    ValueChanged<String>? onAddCoupon,
   }) {
     return Column(
       key: ValueKey('sku-settle-kind-$skuId-$kind'),
@@ -21031,6 +21293,30 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               simplified: true,
               onRemove: () => onRemove(rows[i].id),
               onPatch: (terms) => onPatch(rows[i].id, terms),
+              extra: kind == kProposalSkuSettleKindIncome && onAddCoupon != null
+                  ? _couponCostBlock(
+                      skuId: skuId,
+                      income: rows[i],
+                      coupon: couponRows
+                          .where((c) => c.id == _couponCostId(rows[i].id))
+                          .firstOrNull,
+                      wide: wide,
+                      enabled:
+                          enabled &&
+                          !_skuSettleRowLocked(
+                            reviewItemPrefix,
+                            reviewPrefix,
+                            skuId,
+                            rows[i].id,
+                          ),
+                      reviewPrefix: reviewPrefix,
+                      syncSource: syncSource,
+                      productSource: productSource,
+                      onAddCoupon: onAddCoupon,
+                      onRemove: onRemove,
+                      onPatch: onPatch,
+                    )
+                  : null,
             ),
           ],
         ],
@@ -21059,6 +21345,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool linkSkus = false,
     String labelKind = '结算',
     bool simplified = false,
+    Widget? extra,
   }) {
     final reviewToggle = showItemReview
         ? _rowReviewToggle(
@@ -21104,17 +21391,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             requireSchedule: simplified ? false : requireSchedule,
             onChanged: onPatch,
           );
-          if (!linkSkus) return grid;
+          if (!linkSkus && extra == null) return grid;
           return Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _settleSkuPicker(
-                terms: settle.terms,
-                enabled: enabled,
-                onPatch: onPatch,
-              ),
+              if (linkSkus)
+                _settleSkuPicker(
+                  terms: settle.terms,
+                  enabled: enabled,
+                  onPatch: onPatch,
+                ),
               grid,
+              ?extra,
             ],
           );
         },
@@ -22868,7 +23157,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           final stacked = ProposalLayout.isCompact(constraints.maxWidth);
           final reviewerCanAct = _moduleReviewEnabled(keyName);
           final canApprove = reviewerCanAct && !locked && !done;
-          final canReject = reviewerCanAct;
+          final canReject = _moduleRejectEnabled(keyName);
           final approveChild = Text(
             done ? '已复核' : buttonLabel,
             style: TextStyle(
@@ -23076,11 +23365,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         DunesColors.resolve(context, Color(v), role: role);
     final reviewerCanAct = _moduleReviewEnabled(keyName);
     final canApprove = reviewerCanAct && !locked && !done;
-    final canReject = reviewerCanAct;
+    final canReject = _moduleRejectEnabled(keyName);
     final tag = done ? '已通过' : (reviewerCanAct ? '待你复核' : '待复核');
     final open = _moduleReviewOpen.contains(keyName);
     final tagBg = done ? 0xFF3B8B5A : 0xFF6B4FD8;
-    final hint = showOmissions
+    final hint = !reviewerCanAct && canReject
+        ? '你是财务部负责人一，可以和总裁一样直接驳回本板块（含已复核通过的）。'
+        : showOmissions
         ? '还有 ${omissions.length} 项未复核（${omissions.join('、')}）'
         : (!done && !locked && progress != null && omissions.isEmpty)
         ? '逐条复核已完成，点「$buttonLabel」确认本板块。点保存不会结束复核。'

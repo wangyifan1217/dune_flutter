@@ -28,6 +28,8 @@ abstract final class FlowCtxMapper {
     final financePending = financeReviewKeys
         .where((key) => financeItems[key] != true)
         .length;
+    final invoiceItems = _invoiceItems(form);
+    final firstSales = invoiceItems.where((item) => item.issue).firstOrNull;
 
     return FlowCtx(
       proposal: _orDash(proposalTitle, '未命名销售业务提案'),
@@ -86,15 +88,13 @@ abstract final class FlowCtxMapper {
         'fin2': _text(form, 'financeOwner2'),
       },
       billingName: billing.isEmpty ? salesOurs : billing,
+      // 销售发票取产品收入结算（不再混进成本行的票种）。
       salesInvoiceType: _firstNonEmpty([
-        for (final terms in proposalIntakeProductSalesSettleTerms(form))
-          terms.invoiceType,
+        if (firstSales != null) firstSales.tax,
         _text(form, 'salesInvoiceType'),
       ]),
-      salesTaxRate: _firstNonEmpty([
-        for (final terms in proposalIntakeProductSalesSettleTerms(form))
-          terms.taxRate,
-      ]),
+      salesTaxRate: '',
+      invoiceItems: invoiceItems,
       purchaseInvoiceType: _firstNonEmpty([
         for (final product in proposalIntakeSupplyProducts(form))
           for (final settle in proposalIntakeSupplySettlements(product))
@@ -106,6 +106,68 @@ abstract final class FlowCtxMapper {
             settle.terms.taxRate,
       ]),
     );
+  }
+
+  /// 发票流跟着产品走：每个产品的每条结算规则（含共用结算）填了发票类型 / 税率的，
+  /// 按「开票 / 收票 · 成本类型 · 票种税率」归组，组里列出用到它的产品。
+  static List<FlowInvoiceItem> _invoiceItems(Map<String, dynamic> form) {
+    final groups = <String, (bool, String, String, List<String>)>{};
+    void add(bool issue, String bill, ProposalFinanceSettleTerms t, String product) {
+      if (t.invoiceType.trim().isEmpty && t.taxRate.trim().isEmpty) return;
+      final tax = proposalFlowInvoiceTaxLabel(
+        invoiceType: t.invoiceType,
+        taxRate: t.taxRate,
+      );
+      final key = '$issue|$bill|$tax';
+      final group = groups.putIfAbsent(key, () => (issue, bill, tax, <String>[]));
+      final name = product.trim().isEmpty ? '未命名产品' : product.trim();
+      if (!group.$4.contains(name)) group.$4.add(name);
+    }
+
+    String costBill(ProposalFinanceSettleTerms t) {
+      final bill = t.billType.trim();
+      if (bill == '券使用成本') return '用券成本';
+      final parts = bill.split('/');
+      return parts.last.trim().isEmpty ? '项目成本' : parts.last.trim();
+    }
+
+    bool payable(ProposalFinanceSettleTerms t) {
+      final bill = t.billType.trim();
+      return bill.contains('应付') ||
+          bill == '券使用成本' ||
+          kProposalProjectCostItems.contains(bill.split('/').last.trim());
+    }
+
+    final skus = proposalIntakeAllSellableSkus(form);
+    final byId = {for (final sku in skus) sku.id: sku};
+    final covered = <String>{};
+    for (final group in proposalIntakeSharedSettlements(form)) {
+      final cost = payable(group.terms);
+      for (final id in group.skuIds) {
+        final sku = byId[id];
+        if (sku == null) continue;
+        if (!cost) covered.add(id);
+        add(!cost, cost ? costBill(group.terms) : '', group.terms, sku.displayName);
+      }
+    }
+    for (final sku in skus) {
+      for (final settle in proposalIntakeSkuSettlements(sku)) {
+        if (!settle.isCost && covered.contains(sku.id)) continue;
+        add(
+          !settle.isCost,
+          settle.isCost ? costBill(settle.terms) : '',
+          settle.terms,
+          sku.displayName,
+        );
+      }
+    }
+    final items = [
+      for (final g in groups.values)
+        FlowInvoiceItem(issue: g.$1, bill: g.$2, tax: g.$3, products: g.$4),
+    ];
+    // 开票在前，收票在后。
+    items.sort((a, b) => a.issue == b.issue ? 0 : (a.issue ? -1 : 1));
+    return items;
   }
 
   static String _text(Map<String, dynamic> form, String key) =>

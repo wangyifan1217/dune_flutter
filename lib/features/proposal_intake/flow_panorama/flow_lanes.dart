@@ -85,7 +85,8 @@ const List<FlowLaneDef> kFlowLanes = [
   ),
   FlowLaneDef(
     kind: FlowKind.invoice,
-    height: 250,
+    // 下面要逐条列出各产品的票种税率，比别的泳道高一些。
+    height: 330,
     nodes: [
       LaneNode('supplier', 24, kLaneRowY),
       LaneNode('hub', 486, kLaneRowY),

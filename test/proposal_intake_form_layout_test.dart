@@ -3849,7 +3849,8 @@ void main() {
     );
 
     await _scrollUntil(tester, '测试产品');
-    expect(find.textContaining('业务平台状态 待配置'), findsWidgets);
+    // 业务平台状态还没和资管对接，先隐藏。
+    expect(find.textContaining('业务平台状态'), kProposalSkuPlatformStatusVisible ? findsWidgets : findsNothing);
     await _tapVisible(tester, find.text('编辑').first);
     expect(
       tester
@@ -3979,7 +3980,8 @@ void main() {
     );
 
     await _scrollUntil(tester, '测试产品');
-    expect(find.textContaining('业务平台状态 待配置'), findsWidgets);
+    // 业务平台状态还没和资管对接，先隐藏。
+    expect(find.textContaining('业务平台状态'), kProposalSkuPlatformStatusVisible ? findsWidgets : findsNothing);
     await _tapVisible(tester, find.text('编辑').first);
     expect(
       tester

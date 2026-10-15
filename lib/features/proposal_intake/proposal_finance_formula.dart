@@ -522,7 +522,6 @@ const _kDefaultProjectCostNames = <String>[
   '渠道服务费分润',
   '支付手续费',
   '推广费',
-  '券使用成本',
   '技术对接费',
 ];
 

@@ -164,6 +164,9 @@ String normalizeProposalSkuPlatformStatus(String raw) {
   return value;
 }
 
+/// 业务平台状态（资管建品回执）。还没和资管对接，先全部隐藏；对接好后改成 true。
+const bool kProposalSkuPlatformStatusVisible = false;
+
 String proposalSkuPlatformStatusLabel(String raw) {
   final code = normalizeProposalSkuPlatformStatus(raw);
   return switch (code) {
@@ -803,6 +806,9 @@ bool proposalExcludedProjectCostName(String name) {
     case '电子券采购款':
     case '应付电子券采购款':
     case '电子券采购':
+    // 用券成本挂在收入下面、从收入里扣，不算项目成本，也不在项目成本类型里出现。
+    case '券使用成本':
+    case '用券成本':
       return true;
     default:
       return false;

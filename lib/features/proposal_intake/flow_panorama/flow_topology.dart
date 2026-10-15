@@ -129,6 +129,7 @@ class EdgeDef {
     this.sub,
     this.note,
     this.st,
+    this.items,
   });
 
   final String id;
@@ -142,6 +143,9 @@ class EdgeDef {
   final String Function(FlowCtx c)? sub;
   final String Function(FlowCtx c)? note;
   final FlowStatus? Function(FlowCtx c)? st;
+
+  /// 链路下面逐条列出的明细（如发票流按产品的票种税率）。
+  final List<String> Function(FlowCtx c)? items;
 }
 
 String _join(List<String> items) => items.join('、');
@@ -187,13 +191,15 @@ final List<EdgeDef> kEdges = [
     id: 'f4',
     kind: FlowKind.fund,
     own: 'fin1',
-    a: const Anchor('hub', 'R', -20),
-    b: const Anchor('channel', 'L', -12),
+    // 资金从渠道回到我方：渠道 → 我方。
+    a: const Anchor('channel', 'L', -12),
+    b: const Anchor('hub', 'R', -20),
     d: const [125, 125],
-    t: 0.58,
+    t: 0.42,
     label: (c) => c.channelMode,
     sub: (c) => c.channelCycle,
-    note: (c) => '${c.salesOurs} → ${c.salesTheirs} · ${c.channelMode}',
+    note: (c) =>
+        '${c.salesTheirs} → ${c.salesOurs} 回款 · ${c.channelMode} / ${c.channelCycle}（${c.payeeAccount}）',
     st: (c) => c.hasMargin && c.margin < 4.5
         ? FlowStatus(FlowLevel.warn, '毛利率 ${FlowCtx.n(c.margin)}% 低于红线')
         : null,
@@ -236,9 +242,13 @@ final List<EdgeDef> kEdges = [
     b: const Anchor('channel', 'L', 48),
     d: const [110, 110],
     t: 0.42,
-    label: (c) => c.taxLabel,
-    sub: (c) => c.salesInvoiceType.isEmpty ? c.salesName : c.salesInvoiceType,
-    note: (c) => '${c.salesOurs} 向 ${c.salesTheirs} 开票 · ${c.taxLabel}',
+    // 跟着产品走：每个产品每条结算规则的票种税率都列出来。
+    label: (c) => c.salesInvoiceEdgeLabel,
+    sub: (c) => c.salesInvoiceEdgeSub,
+    note: (c) => c.invoiceItems.isEmpty
+        ? '${c.salesOurs} 向 ${c.salesTheirs} 开票 · ${c.taxLabel}'
+        : [for (final item in c.invoiceItems) item.text].join('\n'),
+    items: (c) => [for (final item in c.invoiceItems) item.text],
   ),
   EdgeDef(
     id: 'n1',

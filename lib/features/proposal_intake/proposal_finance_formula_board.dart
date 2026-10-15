@@ -543,7 +543,14 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
               Expanded(child: summary ?? const SizedBox.shrink()),
               const SizedBox(width: 10),
               value,
-              if (review != null) ...[const SizedBox(width: 8), review],
+              // 复核按钮 / 驳回意见可长可短：给它能用的宽度，不再把整行撑出右边。
+              if (review != null) ...[
+                const SizedBox(width: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 260),
+                  child: review,
+                ),
+              ],
               chevron,
             ],
           );

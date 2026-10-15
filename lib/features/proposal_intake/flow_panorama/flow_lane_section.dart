@@ -470,6 +470,11 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
                         ),
                       ),
                     ),
+                  if (_edgeItems(edge).isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: _itemList(_edgeItems(edge), lane.kind),
+                    ),
                   Padding(
                     padding: const EdgeInsets.only(top: 5),
                     child: Text(
@@ -760,6 +765,7 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
     final centerX = geo.mid.dx;
     final rowTop = geo.from.dy - kLaneNodeH / 2;
     final rowBottom = geo.from.dy + kLaneNodeH / 2;
+    final items = _edgeItems(edge);
     return [
       Positioned(
         left: centerX - 120,
@@ -772,9 +778,73 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
         left: centerX - 120,
         top: rowBottom + 10,
         width: 240,
-        child: tap(metaRow, suffix: '-meta'),
+        child: tap(
+          items.isEmpty
+              ? metaRow
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    metaRow,
+                    const SizedBox(height: 6),
+                    _itemList(items, kind, center: true),
+                  ],
+                ),
+          suffix: '-meta',
+        ),
       ),
     ];
+  }
+
+  List<String> _edgeItems(EdgeDef edge) => [
+    for (final item in edge.items?.call(_ctx) ?? const <String>[])
+      if (_tidy(item).isNotEmpty) _tidy(item),
+  ];
+
+  /// 链路下面的逐条明细（发票流：每个产品每条结算的票种税率），最多 6 条，其余收成「另 N 条」。
+  Widget _itemList(List<String> items, FlowKind kind, {bool center = false}) {
+    final style = kKind[kind]!;
+    const max = 6;
+    final shown = items.length > max ? items.take(max - 1).toList() : items;
+    final rest = items.length - shown.length;
+    Widget line(String text, {bool faint = false}) => Tooltip(
+      message: text,
+      waitDuration: const Duration(milliseconds: 350),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: center ? TextAlign.center : TextAlign.left,
+        style: TextStyle(
+          fontSize: 10.5,
+          height: 1.35,
+          color: DunesColors.resolveNullable(
+            context,
+            faint ? _kFaint : style.ink,
+          ),
+        ),
+      ),
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          style.chip,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: center
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
+        children: [
+          for (final item in shown) line(item),
+          if (rest > 0) line('另 $rest 条，悬停链路看全部', faint: true),
+        ],
+      ),
+    );
   }
 
   Widget _statusPill(FlowStatus status) {

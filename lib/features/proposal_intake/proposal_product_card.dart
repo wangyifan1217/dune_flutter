@@ -24,9 +24,17 @@ class ProposalProductCardLine {
     this.basis = '',
     this.perUnit = '',
     this.detail = '',
+    this.tag = '',
+    this.minus = false,
   });
 
   final String name;
+
+  /// 左边小标签，空时按收入 / 项目成本；收入下面的用券成本写「用券成本」。
+  final String tag;
+
+  /// 从收入里扣的一条（用券成本）：金额前面加「−」，标签用成本色。
+  final bool minus;
   final String ratio;
   final String amount;
 
@@ -120,10 +128,14 @@ class ProposalProductCard extends StatefulWidget {
     this.initiallyExpanded = false,
     this.techExtra,
     this.onSettleTap,
+    this.onSettleDetail,
   });
 
-  /// 点一条收入 / 项目成本：跳到财务部「收入与成本」对应那一行（cost=true 是项目成本）。
+  /// 每条结算的「去复核 ›」：跳到财务部「收入与成本」对应那一行（cost=true 是项目成本）。
   final void Function(bool cost)? onSettleTap;
+
+  /// 每条结算的「看明细 ›」：打开这个产品的结算明细（发票、税率、周期都在里面）。
+  final VoidCallback? onSettleDetail;
 
   /// 产品色序号。关联产品和它的主产品传同一个序号。
   final int? tintIndex;
@@ -312,12 +324,13 @@ class ProposalProductCard extends StatefulWidget {
       },
     );
 
-    /// 一条结算（和财务部「收入与成本」同一个样子）；点一下跳到那里。
+    /// 一条结算（和财务部「收入与成本」同一个样子）：右下「看明细 ›」「去复核 ›」两个按钮。
     Widget settleLine(ProposalProductCardLine item, {required bool cost}) =>
         ProposalSettleLineTile(
           line: item,
           cost: cost,
-          onTap: onSettleTap == null ? null : () => onSettleTap!(cost),
+          onDetail: onSettleDetail,
+          onReview: onSettleTap == null ? null : () => onSettleTap!(cost),
         );
 
     /// 一组结算：主产品每条一张白卡；关联产品卡里每条之间一根细线。
@@ -644,11 +657,19 @@ class ProposalSettleLineTile extends StatelessWidget {
     required this.line,
     required this.cost,
     this.onTap,
+    this.onDetail,
+    this.onReview,
   });
 
   final ProposalProductCardLine line;
   final bool cost;
   final VoidCallback? onTap;
+
+  /// 「看明细 ›」：打开这个产品的结算明细。
+  final VoidCallback? onDetail;
+
+  /// 「去复核 ›」：跳到财务部「收入与成本」。
+  final VoidCallback? onReview;
 
   @override
   Widget build(BuildContext context) {
@@ -664,11 +685,35 @@ class ProposalSettleLineTile extends StatelessWidget {
       fontWeight: weight,
       color: c(color),
     );
-    final value = line.ratio.trim().isNotEmpty
-        ? '比例 ${line.ratio.trim()}'
+    final ratio = line.ratio.trim();
+    // 「0」「0.98」这种没写百分号的比例补上 %，和填写时的写法一致。
+    final parsedRatio = double.tryParse(ratio);
+    final ratioText = ratio.isEmpty || ratio.endsWith('%') || parsedRatio == null
+        ? ratio
+        : '${parsedRatio <= 1 && parsedRatio != 0 ? _trimNumber(parsedRatio * 100) : _trimNumber(parsedRatio)}%';
+    final value = ratioText.isNotEmpty
+        ? '比例 $ratioText'
         : (line.perUnit.trim().isNotEmpty
               ? '单价 ${line.perUnit.trim().replaceAll(' 元', '').replaceAll('元', '')}'
-              : '');
+              : '比例未填');
+    final minusSide = cost || line.minus;
+    final tag = line.tag.isNotEmpty ? line.tag : (cost ? '项目成本' : '收入');
+    final amount = line.amount.trim();
+    Widget action(String label, VoidCallback onPressed) => InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        child: Text(
+          label,
+          style: text(11.5, color: ProposalPalette.purple, weight: FontWeight.w600),
+        ),
+      ),
+    );
+    final actions = [
+      if (onDetail != null) action('看明细 ›', onDetail!),
+      if (onReview != null) action('去复核 ›', onReview!),
+    ];
     Widget body = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       child: Column(
@@ -680,16 +725,20 @@ class ProposalSettleLineTile extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
                   color: c(
-                    cost ? ProposalPalette.coralSoft : ProposalPalette.greenSoft,
+                    minusSide
+                        ? ProposalPalette.coralSoft
+                        : ProposalPalette.greenSoft,
                     DunesColorRole.surface,
                   ),
                   borderRadius: BorderRadius.circular(5),
                 ),
                 child: Text(
-                  cost ? '项目成本' : '收入',
+                  tag,
                   style: text(
                     11,
-                    color: cost ? ProposalPalette.coral : ProposalPalette.green,
+                    color: minusSide
+                        ? ProposalPalette.coral
+                        : ProposalPalette.green,
                     weight: FontWeight.w500,
                   ),
                 ),
@@ -703,15 +752,27 @@ class ProposalSettleLineTile extends StatelessWidget {
                   style: text(13, weight: FontWeight.w600),
                 ),
               ),
-              if (value.isNotEmpty)
-                Text(value, style: text(13, weight: FontWeight.w600)),
-              if (line.amount.trim().isNotEmpty) ...[
-                const SizedBox(width: 10),
-                Text(
-                  '年 ${line.amount.trim()}',
-                  style: text(12, color: ProposalPalette.text2),
+              Text(
+                value,
+                style: text(
+                  13,
+                  weight: FontWeight.w600,
+                  color: value == '比例未填'
+                      ? ProposalPalette.amber
+                      : ProposalPalette.text,
                 ),
-              ],
+              ),
+              // 年化测算：这一条一年大概多少钱（后端按产品年化规模 × 比例算）。
+              const SizedBox(width: 10),
+              Text(
+                amount.isEmpty || amount == '—'
+                    ? '年化 —'
+                    : '年化 ${line.minus ? '−' : ''}$amount',
+                style: text(
+                  12,
+                  color: line.minus ? ProposalPalette.coral : ProposalPalette.text2,
+                ),
+              ),
               if (onTap != null) ...[
                 const SizedBox(width: 4),
                 Icon(
@@ -722,14 +783,22 @@ class ProposalSettleLineTile extends StatelessWidget {
               ],
             ],
           ),
-          if (line.detail.trim().isNotEmpty)
+          if (line.detail.trim().isNotEmpty || actions.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 3),
-              child: Text(
-                line.detail,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: text(12, color: ProposalPalette.text2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      line.detail,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: text(12, color: ProposalPalette.text2),
+                    ),
+                  ),
+                  ...actions,
+                ],
               ),
             ),
         ],
@@ -747,6 +816,14 @@ class ProposalSettleLineTile extends StatelessWidget {
     }
     return body;
   }
+}
+
+/// 「98.00」→「98」、「0.50」→「0.5」。
+String _trimNumber(double v) {
+  final text = v.toStringAsFixed(2);
+  return text.contains('.')
+      ? text.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '')
+      : text;
 }
 
 /// 一个产品某一类结算的只读列表（财务部「收入与成本」里同步产品结算用）：每条一行，细线分隔，外面一圈细框。

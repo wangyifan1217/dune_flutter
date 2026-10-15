@@ -143,7 +143,7 @@ void main() {
         lessThanOrEqualTo(lighthouseTrendForecastStripHeight),
       );
       await _snapshot(tester, 'strip-${width.toInt()}');
-      await tester.tap(find.text('报告 ›'));
+      await tester.tap(find.text('报告'));
       expect(opened, 1);
     });
   }

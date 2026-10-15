@@ -3,7 +3,12 @@ import 'lighthouse_forecast.dart';
 import 'lighthouse_theme.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
 
-/// 主图中的预测摘要。三行固定节奏，报告与图使用同一个结果对象。
+/// 主图中的预测摘要。报告与图使用同一个结果对象。
+///
+/// v2 · 三行压成两行，「报告 ›」从一行字收成一颗小胶囊：
+///   第一行  ▍月末预测 4.45亿            超上月 90%  [报告 ›]
+///   第二行  80% 区间 3.86–5.11亿 · 动态日模型          截至14日
+/// 高度从 76 收到 48（[lighthouseTrendForecastStripHeight]），省下来的给走势图。
 class LighthouseForecastStrip extends StatelessWidget {
   const LighthouseForecastStrip({
     super.key,
@@ -20,9 +25,40 @@ class LighthouseForecastStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final f = forecast;
-    final muted = DunesColors.resolve(context, Color(0xFF616C7C));
+    final muted = DunesColors.resolve(context, const Color(0xFF616C7C));
+    final ink = DunesColors.resolve(context, LhColors.ink);
+    final range = (f.lo != null && f.hi != null)
+        ? '80% 区间 ${money(f.lo!)}–${money(f.hi!)}'
+        : '已发生 ÷ 截止天数 × 月天数';
+    final model = f.modelLabel.trim();
+
+    Widget reportPill() => Container(
+      height: 18,
+      padding: const EdgeInsets.only(left: 7, right: 3),
+      decoration: BoxDecoration(
+        color: accent.withAlpha(22),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '报告',
+            style: LhTypography.sans(
+              size: 9,
+              color: accent,
+              weight: FontWeight.w700,
+              height: 1.0,
+              context: context,
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, size: 12, color: accent),
+        ],
+      ),
+    );
+
     final body = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
@@ -35,112 +71,102 @@ class LighthouseForecastStrip extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 12,
-                color: DunesColors.resolveNullable(
-                  context,
-                  accent,
-                  role: DunesColorRole.surface,
-                ),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                '月末预测',
-                style: LhTypography.sans(
-                  size: 10,
-                  color: muted,
-                  weight: FontWeight.w600,
-                  context: context,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  money(f.forecast),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: LhTypography.sans(
-                    size: 14,
-                    color: accent,
-                    weight: FontWeight.w800,
-                    context: context,
+          SizedBox(
+            height: 18,
+            child: Row(
+              children: [
+                Container(
+                  width: 3,
+                  height: 11,
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolveNullable(
+                      context,
+                      accent,
+                      role: DunesColorRole.surface,
+                    ),
+                    borderRadius: BorderRadius.circular(1.5),
                   ),
                 ),
-              ),
-              if (onOpenReport != null) ...[
-                const SizedBox(width: 4),
-                Text(
-                  '报告 ›',
-                  style: LhTypography.sans(
-                    size: 10,
-                    color: accent,
-                    weight: FontWeight.w700,
-                    context: context,
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '月末预测  ',
+                          style: LhTypography.sans(
+                            size: 9.5,
+                            color: muted,
+                            weight: FontWeight.w600,
+                            height: 1.0,
+                            context: context,
+                          ),
+                        ),
+                        TextSpan(
+                          text: money(f.forecast),
+                          style: LhTypography.sans(
+                            size: 13,
+                            color: accent,
+                            weight: FontWeight.w800,
+                            height: 1.0,
+                            context: context,
+                          ),
+                        ),
+                      ],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (f.beatPrevProb != null) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '超上月 ${lighthouseForecastProbabilityLabel(f.beatPrevProb)}',
+                    maxLines: 1,
+                    style: LhTypography.sans(
+                      size: 9,
+                      color: ink,
+                      weight: FontWeight.w600,
+                      height: 1.0,
+                      context: context,
+                    ),
+                  ),
+                ],
+                if (onOpenReport != null) ...[
+                  const SizedBox(width: 6),
+                  reportPill(),
+                ],
               ],
-            ],
+            ),
           ),
           const SizedBox(height: 4),
-          if (f.lo != null && f.hi != null)
-            Text(
-              '80% 近似区间  ${money(f.lo!)}–${money(f.hi!)}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: LhTypography.sans(
-                size: 9.5,
-                color: muted,
-                context: context,
-              ),
-            )
-          else
-            Text(
-              '已发生 ÷ 截止天数 × 月天数',
-              style: LhTypography.sans(
-                size: 9.5,
-                color: muted,
-                context: context,
-              ),
-            ),
-          const SizedBox(height: 3),
           Row(
             children: [
-              if (f.beatPrevProb != null) ...[
-                Text(
-                  '超上月 ${lighthouseForecastProbabilityLabel(f.beatPrevProb)}',
-                  style: LhTypography.sans(
-                    size: 9.5,
-                    color: DunesColors.resolve(context, LhColors.ink),
-                    weight: FontWeight.w600,
-                    context: context,
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  f.modelLabel,
+                  model.isEmpty ? range : '$range · $model',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: LhTypography.sans(
                     size: 9,
                     color: muted,
+                    height: 1.2,
                     context: context,
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Text(
                 '截至${f.elapsedDays}日',
                 style: LhTypography.sans(
                   size: 9,
                   color: muted,
+                  height: 1.2,
                   context: context,
                 ),
               ),
+              const SizedBox(width: 2),
             ],
           ),
         ],

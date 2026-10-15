@@ -245,8 +245,9 @@ double lighthouseTrendLegendHeightFor({
       (rows - 1) * lighthouseLedgerSummaryRowDividerHeight;
 }
 
-/// 月末预测条（三行：金额 / 区间 / 概率与截止日）。
-const double lighthouseTrendForecastStripHeight = 76;
+/// 月末预测条（两行：金额 + 概率 + 报告胶囊 / 区间 + 截止日）。
+/// v2 从三行收成两行：76 → 48，省下来的高度给走势图。
+const double lighthouseTrendForecastStripHeight = 48;
 
 /// 图例 / 预测条与下一块之间的间距，以及图上方的间距。
 const double lighthouseTrendBlockGap = 7;

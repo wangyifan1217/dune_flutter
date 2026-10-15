@@ -79,3 +79,6 @@ macos_developer_id.p12
 
 # 待删归档（历史副本等），不进版本库
 _to_delete/
+
+# 本地静态站点产物（内含独立 git 仓库，勿提交）
+/site_artifacts/

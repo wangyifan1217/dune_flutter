@@ -698,18 +698,20 @@ class ProposalField extends StatelessWidget {
   /// 字段下方补充信息，例如合同改动对照。
   final Widget? footer;
 
-  /// 原型简单行：名称 104px（手机 76px）在左，值在右，行底一条细线。
-  /// 行距比原型略紧（上下 4），复核、查看时一屏能多看几行。
+  /// 原型简单行：桌面名称在左、值在右。手机改成名称在上、值在下，整行写全。
   Widget _simpleRow(BuildContext context) {
     final narrow = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
-    // 只读简单行（复核、查看）：名称一行写完，放不下省略（悬停看全称）。
-    // 手机名称列 68px，用短名称（去掉括号说明、「合同核心条款」→「条款」），不再折成两三行。
+    // 只读简单行（复核、查看）：桌面名称一行写完，放不下省略（悬停看全称）。
     final readOnly = ProposalSimpleViewScope.textRowsOf(context);
-    final labelWidth = readOnly
-        ? (narrow ? 68.0 : 118.0)
-        : (narrow ? 76.0 : 104.0);
+    if (narrow) {
+      final row = _phoneStackedField(context);
+      return readOnly
+          ? _ProposalRowExpandHost(builder: (_) => row)
+          : row;
+    }
+    final labelWidth = readOnly ? 118.0 : 104.0;
     if (readOnly) {
-      return _readOnlyRow(context, labelWidth, narrow: narrow);
+      return _readOnlyRow(context, labelWidth, narrow: false);
     }
     final inGridRow = ProposalGridRowScope.of(context);
     return Container(
@@ -747,6 +749,67 @@ class ProposalField extends StatelessWidget {
             ),
           ),
           if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+        ],
+      ),
+    );
+  }
+
+  /// 手机：名称单独一行写全，值在下面占满宽度，长文整段换行。
+  Widget _phoneStackedField(BuildContext context) {
+    final inGridRow = ProposalGridRowScope.of(context);
+    Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
+        DunesColors.resolve(context, Color(v), role: role);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        border: inGridRow
+            ? null
+            : Border(
+                bottom: BorderSide(color: c(0xFFE4DFEF, DunesColorRole.border)),
+              ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text.rich(
+                TextSpan(
+                  text: label,
+                  children: [
+                    if (required)
+                      TextSpan(
+                        text: ' *',
+                        style: TextStyle(
+                          color: c(0xFFC0563F),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
+                ),
+                style: TextStyle(
+                  color: c(0xFF5C5670),
+                  fontSize: 12,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if ((formula ?? '').trim().isNotEmpty)
+                ProposalFormulaQuestionMark(
+                  title: label,
+                  formula: formula!.trim(),
+                  detail: formulaDetail ?? '',
+                ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: 4),
+          child,
+          if (footer != null) ...[const SizedBox(height: 6), footer!],
         ],
       ),
     );
@@ -1130,13 +1193,13 @@ class ProposalReviewToggle extends StatelessWidget {
           : Tooltip(message: tip, child: chip);
     }
 
-    final done = pill(narrow ? '✓ 已核' : '✓ 已复核', 0xFFE6F3EB, 0xFF2D6E47);
+    final done = pill('✓ 已复核', 0xFFE6F3EB, 0xFF2D6E47);
     if (onPressed == null) {
       if (reviewed) return done;
       if (rejected) return pill('已驳回', 0xFFFBE9E7, 0xFFB42318);
       // 待复核：淡紫胶囊（不再用橙色）。
       return pill(
-        narrow ? '待核' : '待复核',
+        '待复核',
         0xFFF1ECFF,
         0xFF5B3FD0,
         tip: pendingLabel.startsWith('待') ? pendingLabel : '待$pendingLabel',
@@ -3088,10 +3151,18 @@ List<String> proposalBulletItems(String text) {
 }
 
 class ProposalOneLineText extends StatefulWidget {
-  const ProposalOneLineText(this.text, {super.key, required this.style});
+  const ProposalOneLineText(
+    this.text, {
+    super.key,
+    required this.style,
+    this.collapsedLines = 1,
+  });
 
   final String text;
   final TextStyle style;
+
+  /// 收起时先露出的行数。默认一行。
+  final int collapsedLines;
 
   @override
   State<ProposalOneLineText> createState() => _ProposalOneLineTextState();
@@ -3142,25 +3213,26 @@ class _ProposalOneLineTextState extends State<ProposalOneLineText> {
   Widget build(BuildContext context) {
     final style = DefaultTextStyle.of(context).style.merge(widget.style);
     final line = (style.fontSize ?? 13) * (style.height ?? 1.35);
+    final collapsed = math.max(1, widget.collapsedLines);
     // 结算对照等处用 IntrinsicHeight 对齐左右列。LayoutBuilder 不能参与固有高度，
     // 否则整段填报内容排版失败，第一行会叠到标题上。
     final fallback = _open
         ? line * math.max(1, proposalBulletItems(widget.text).length) + 8
-        : line + 4;
+        : line * collapsed + 4;
     return _IntrinsicHeightFallback(
       height: fallback,
       child: LayoutBuilder(
         builder: (context, box) {
           final painter = TextPainter(
             text: TextSpan(text: widget.text, style: style),
-            maxLines: 1,
+            maxLines: collapsed,
             textDirection: Directionality.of(context),
             textScaler: MediaQuery.textScalerOf(context),
           )..layout(maxWidth: box.maxWidth.isFinite ? box.maxWidth : 10000);
           final overflow = painter.didExceedMaxLines;
           painter.dispose();
           if (!overflow) {
-            return Text(widget.text, maxLines: 1, style: style);
+            return Text(widget.text, style: style);
           }
           if (_open) {
             // 展开后按条目排成「• 一条一行」：先按「 · 」分，只有一段时再按「；」「。」分句。
@@ -3233,11 +3305,12 @@ class _ProposalOneLineTextState extends State<ProposalOneLineText> {
             );
           }
           return Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
                 child: Text(
                   widget.text,
-                  maxLines: 1,
+                  maxLines: collapsed,
                   overflow: TextOverflow.ellipsis,
                   style: style,
                 ),

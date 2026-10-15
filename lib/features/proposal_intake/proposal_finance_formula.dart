@@ -2304,8 +2304,12 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
   }
   final revenue = revenueLine.amount;
 
-  // 兼容旧结构，销售提案不再计入采购成本。
-  const procurementLine = ProposalFinanceLine(name: '采购成本', amount: 0);
+  // 电子券采购款不进项目成本，但收入（利差）仍要扣掉这笔采购款。
+  final couponPurchase = proposalCouponPurchaseAmount(form);
+  final procurementLine = ProposalFinanceLine(
+    name: '采购成本',
+    amount: couponPurchase,
+  );
 
   // ---- 成本 ----
   final totals = <String, double>{};
@@ -2357,7 +2361,8 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
           formula: proposalFinanceItemFormula(form, category, name),
           scale: scale,
           revenue: revenue,
-          project: totals[kProposalCostCategoryProject] ?? 0,
+          project: (totals[kProposalCostCategoryProject] ?? 0) +
+              (key == kProposalCostCategoryProject ? 0 : couponPurchase),
           // 经营成本只选类型、不计金额，公式里按 0 计。
           operating: 0,
           business: totals[kProposalCostCategoryBusiness] ?? 0,
@@ -2370,11 +2375,11 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
     totals[key] = bucket.total;
   }
 
-  // ---- 利润 = 收入 − 项目 − 业务 − 税务 ----
+  // ---- 利润 = 收入 − 采购款 − 项目 − 业务 − 税务 ----
   final p = totals[kProposalCostCategoryProject] ?? 0;
   final b = totals[kProposalCostCategoryBusiness] ?? 0;
   final t = totals[kProposalCostCategoryTax] ?? 0;
-  final profit = proposalRoundWan(revenue - p - b - t);
+  final profit = proposalRoundWan(revenue - couponPurchase - p - b - t);
   final margin = scale > 0 ? proposalRoundWan(profit / scale * 100) : null;
   return ProposalFinanceEvaluation(
     salesScale: scale,
@@ -2387,8 +2392,9 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
         if (buckets[key] != null) key: buckets[key]!,
     },
     profit: profit,
-    profitSubstitution:
-        '${_wan(revenue)} − ${_wan(p)} − ${_wan(b)} − ${_wan(t)} = ${_wan(profit)} 万元',
+    profitSubstitution: couponPurchase > 0
+        ? '${_wan(revenue)} − ${_wan(couponPurchase)} − ${_wan(p)} − ${_wan(b)} − ${_wan(t)} = ${_wan(profit)} 万元'
+        : '${_wan(revenue)} − ${_wan(p)} − ${_wan(b)} − ${_wan(t)} = ${_wan(profit)} 万元',
     margin: margin,
     marginSubstitution: margin == null
         ? '销售规模为空，暂不能算'

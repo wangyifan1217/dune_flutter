@@ -2496,6 +2496,50 @@ void main() {
       },
     });
     expect(configured.resolvedProjectCostItems, ['推广费', '平台交易服务费', '专项活动费']);
+    final withPurchase = ProposalIntakeOptions.fromJson(const {
+      'finance': {
+        'costItems': ['电子券采购款', '机构返佣'],
+      },
+    });
+    expect(withPurchase.resolvedProjectCostItems, ['机构返佣']);
+    final purchaseForm = {
+      'salesScale': 8000,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'faceValue': '100',
+          'settlements': [
+            {
+              'id': 'st-purchase',
+              'kind': 'cost',
+              'billType': '应付账单/采购款/电子券采购款',
+              'settleRatio': '0.97',
+            },
+            {
+              'id': 'st-rebate',
+              'kind': 'cost',
+              'billType': '机构返佣',
+              'settleRatio': '0.01',
+            },
+          ],
+        },
+      ],
+    };
+    expect(
+      proposalMatchedProjectCostNames(
+        purchaseForm,
+        costNames: ['电子券采购款', '机构返佣'],
+      ),
+      ['机构返佣'],
+    );
+    expect(
+      proposalEstimateProjectCostAmount(
+        purchaseForm,
+        '电子券采购款',
+        costNames: ['电子券采购款', '机构返佣'],
+      ),
+      isNull,
+    );
     final form = {
       'salesScale': 100,
       'skuDetails': [

@@ -1349,7 +1349,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     VoidCallback? onTap,
     Key? key,
   }) {
-    // 手机（小屏如 iPhone 14 约 110 宽的卡）：图标 16、名称 8.5、值 11，值最多两行。
+    // 手机：名称、值都按能读清的字号，窄卡里放不下再缩小。
     final chip = _compact ? 16.0 : 22.0;
     final row = Row(
       crossAxisAlignment: CrossAxisAlignment.start,

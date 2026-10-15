@@ -863,7 +863,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         if (showForm) _buildForm() else const SizedBox.shrink(),
       ],
     );
-    // 列表和提案详情整体字号再小一点：手机 0.82 倍、PC 0.95 倍。
+    // 列表和提案详情整体字号：手机 0.82 倍、PC 0.95 倍。
     final media = MediaQuery.of(context);
     final phone = ProposalLayout.isCompact(media.size.width);
     final system = (media.textScaler.scale(100) / 100).clamp(0.8, 1.3);
@@ -3499,9 +3499,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         defaultTargetPlatform == TargetPlatform.linux;
   }
 
-  Widget _readonlySelectedText(String value, {int? maxLines}) {
+  Widget _readonlySelectedText(
+    String value, {
+    int? maxLines,
+    bool oneLine = false,
+  }) {
     final text = value.trim();
     final display = text.isEmpty ? '未填写' : text;
+    final phone = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
     final style = TextStyle(
       fontSize: 13,
       height: 1.35,
@@ -3514,6 +3519,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
     // 空值只占一行。大 maxLines 在 Flutter web 上会按 HTML rows 留白。
     final hug = text.isEmpty || maxLines == 1;
+    // 合同在手机上也保持默认一行，点「展开」再看全文。其余字段手机上整段写全。
+    final collapse = _simpleView && maxLines == null && (!phone || oneLine);
     final child = SizedBox(
       width: double.infinity,
       child: hug
@@ -3523,8 +3530,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               overflow: TextOverflow.ellipsis,
               style: style,
             )
-          // 原型简单行：默认一行，放不下给「展开」。
-          : _simpleView && maxLines == null
+          : collapse
           ? ProposalOneLineText(display, style: style)
           : SelectableText(display, maxLines: maxLines, style: style),
     );
@@ -5358,9 +5364,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         constraints: const BoxConstraints(maxWidth: 1180),
         child: Container(
           key: const ValueKey('proposal-proto-page-box'),
-          // 手机：白框贴边，上下左右只留 8，标题不再离顶栏那么远。
+          // 手机：白框贴边，左右留 12，文字不贴屏幕边。
           padding: phone
-              ? const EdgeInsets.fromLTRB(8, 8, 8, 10)
+              ? const EdgeInsets.fromLTRB(12, 8, 12, 12)
               : const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: DunesColors.resolve(
@@ -5874,12 +5880,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     List<Widget> extras = const [],
     List<(String, Widget)> sub = const [],
     String subKey = '',
+    bool oneLine = false,
   }) {
     // 主值一行；合并进来的次要字段用一行灰色小字跟在下面，不再各占一行。
     // 有 sub 时主值后面给「详情 ▾」，点开是一张小字段表（合同等）。
     final open = sub.isNotEmpty && _simpleOpen.contains(subKey);
     final Widget main = sub.isEmpty
-        ? _readonlySelectedText(value)
+        ? _readonlySelectedText(value, oneLine: oneLine)
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
@@ -5887,7 +5894,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: _readonlySelectedText(value)),
+                  Expanded(child: _readonlySelectedText(value, oneLine: oneLine)),
                   _simpleTextButton(
                     open ? '收起 ▴' : '详情 ▾',
                     () => setState(() {
@@ -5951,32 +5958,64 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   Widget _simpleKvTable(List<(String, Widget)> items, {Color? background}) {
     Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
         DunesColors.resolve(context, Color(v), role: role);
+    final phone = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
     Widget cell((String, Widget) item) => Container(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: EdgeInsets.symmetric(vertical: phone ? 6 : 2),
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(color: c(0xFFF3F0F8, DunesColorRole.border)),
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 76,
-            child: Text(
-              item.$1,
-              style: TextStyle(fontSize: 12, height: 1.6, color: c(0xFF8A8499)),
+      child: phone
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  item.$1,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.6,
+                    color: c(0xFF8A8499),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                DefaultTextStyle.merge(
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.6,
+                    color: c(0xFF2A2638),
+                  ),
+                  child: item.$2,
+                ),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 76,
+                  child: Text(
+                    item.$1,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.6,
+                      color: c(0xFF8A8499),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: DefaultTextStyle.merge(
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.6,
+                      color: c(0xFF2A2638),
+                    ),
+                    child: item.$2,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: DefaultTextStyle.merge(
-              style: TextStyle(fontSize: 12, height: 1.6, color: c(0xFF2A2638)),
-              child: item.$2,
-            ),
-          ),
-        ],
-      ),
     );
     bool isWide((String, Widget) item) {
       final w = item.$2;
@@ -6161,6 +6200,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       anchorKey: '${prefix}No',
       required: true,
       fullWidth: true,
+      oneLine: true,
       trailing: _contractSimpleToggle(prefix),
       subKey: 'contract:$prefix',
       sub: [
@@ -6201,13 +6241,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  /// 合同核心条款单独一行：默认一行，放不下给「展开」。
+  /// 合同核心条款单独一行：手机和桌面都默认一行，放不下给「展开」。
   Widget _contractTermsLine(String title, String prefix) => _simpleLine(
     title,
     _text('${prefix}CoreTerms'),
     anchorKey: '${prefix}CoreTerms',
     required: true,
     fullWidth: true,
+    oneLine: true,
   );
 
   /// 驳回意见（一行合并了几条字段时拼在一起）。
@@ -7542,6 +7583,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       anchorKey: 'profitModes',
       required: true,
       fullWidth: true,
+      oneLine: true,
     );
   }
 
@@ -23960,6 +24002,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  /// 合同与执行里的长文：手机上默认一行，点「展开」再看全文。
+  bool _collapseLongTextOnPhone(String key) {
+    return key.endsWith('CoreTerms') ||
+        const {
+          'supplierPolicy',
+          'channelPolicy',
+          'salesPolicy',
+          'executionPlan',
+          'riskPoints',
+          'profitFormula',
+        }.contains(key);
+  }
+
   Widget _textField(
     String label,
     String key, {
@@ -23987,7 +24042,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ? math.min(minLines ?? 3, compact ? 3 : (minLines ?? 3))
         : 1;
     final Widget input = (_showSelectedAsText || !enabled)
-        ? _readonlySelectedText(_maskIfAccount(key, _text(key)))
+        ? _readonlySelectedText(
+            _maskIfAccount(key, _text(key)),
+            oneLine: _collapseLongTextOnPhone(key),
+          )
         : TextFormField(
             key: ValueKey('$key-${_row.id}-$_fieldEpoch'),
             initialValue: _text(key),

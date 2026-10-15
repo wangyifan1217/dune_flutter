@@ -471,10 +471,10 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
         ],
         Flexible(
           child: Text(
-          widget.title,
+            widget.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-          style: _sans(context, size: 12.5, weight: FontWeight.w700),
+            style: _sans(context, size: 12.5, weight: FontWeight.w700),
           ),
         ),
         if (widget.tag != null) ...[const SizedBox(width: 6), widget.tag!],
@@ -1434,19 +1434,57 @@ class _ProductSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final line = _border(context, ProposalPalette.borderSoft);
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      decoration: BoxDecoration(
-        color: _surface(context, Colors.white),
-        border: Border.all(color: line),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            color: _surface(context, ProposalPalette.app),
+    final compact = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
+    final head = compact
+        ? Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${index + 1}',
+                      style: _mono(context, size: 12, color: _K.text2),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        product.name,
+                        style: _sans(
+                          context,
+                          size: 12.5,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    ProposalFinanceTag(product.isChild ? '关联产品' : '主产品'),
+                  ],
+                ),
+                if (info.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    info,
+                    style: _sans(context, size: 11.5, color: _K.text2),
+                  ),
+                ],
+                if (trailing.isNotEmpty || review != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      if (trailing.isNotEmpty)
+                        Text(trailing, style: _mono(context, size: 12)),
+                      const Spacer(),
+                      if (review != null) review!,
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          )
+        : Padding(
             padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
             child: Row(
               children: [
@@ -1486,6 +1524,21 @@ class _ProductSection extends StatelessWidget {
                 if (review != null) ...[const SizedBox(width: 6), review!],
               ],
             ),
+          );
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        color: _surface(context, Colors.white),
+        border: Border.all(color: line),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            color: _surface(context, ProposalPalette.app),
+            child: head,
           ),
           if (leading != null) ...[Container(height: 1, color: line), leading!],
           if (child != null) ...[

@@ -1066,14 +1066,17 @@ String proposalSettleBillTypeL3(ProposalFinanceSettleTerms terms) {
 String? proposalPayableBillCostName(
   ProposalFinanceSettleTerms terms, {
   List<String> costNames = const [],
+  bool couponPurchaseOnly = false,
 }) {
   final path = proposalSettleBillPath(terms);
   if (path.contains('应收')) return null;
   final display = proposalProjectCostDisplayName(
     proposalSettleBillTypeL3(terms),
   );
+  final excluded = proposalExcludedProjectCostName(display);
+  if (couponPurchaseOnly) return excluded ? display : null;
   final allowed = costNames.isNotEmpty ? costNames : kProposalProjectCostItems;
-  if (display.isEmpty || !allowed.contains(display)) {
+  if (display.isEmpty || excluded || !allowed.contains(display)) {
     return null;
   }
   return display;
@@ -1143,12 +1146,17 @@ List<String> _expandPayableHitSkuIds(
 List<ProposalPayableCostHit> proposalPayableProjectCostHits(
   Map<String, dynamic> form, {
   List<String> costNames = const [],
+  bool couponPurchaseOnly = false,
 }) {
   final hits = <ProposalPayableCostHit>[];
   final covered = <String>{};
 
   void addHit(ProposalFinanceSettleTerms terms, List<String> skuIds) {
-    final costName = proposalPayableBillCostName(terms, costNames: costNames);
+    final costName = proposalPayableBillCostName(
+      terms,
+      costNames: costNames,
+      couponPurchaseOnly: couponPurchaseOnly,
+    );
     if (costName == null) return;
     final ids = [
       for (final id in skuIds)
@@ -1204,7 +1212,11 @@ List<ProposalPayableCostHit> proposalPayableProjectCostHits(
   };
   final salesGroups = [
     for (final group in proposalIntakeSharedSettlements(form))
-      if (proposalPayableBillCostName(group.terms, costNames: costNames) ==
+      if (proposalPayableBillCostName(
+            group.terms,
+            costNames: costNames,
+            couponPurchaseOnly: couponPurchaseOnly,
+          ) ==
           null)
         [
           for (final id in group.skuIds)
@@ -1317,6 +1329,22 @@ Map<String, dynamic> proposalEnsureProjectCostItems(
     amountsKey: 'costItemAmounts',
     totalKey: 'projectCost',
   );
+}
+
+double proposalCouponPurchaseAmount(Map<String, dynamic> form) {
+  var sum = 0.0;
+  var any = false;
+  for (final hit in proposalPayableProjectCostHits(
+    form,
+    couponPurchaseOnly: true,
+  )) {
+    final amount = proposalPayableCostLineAmount(form, hit.terms, hit.skuIds);
+    if (amount <= 0) continue;
+    any = true;
+    sum += amount;
+  }
+  if (!any) return 0;
+  return proposalRoundWan(sum);
 }
 
 double? proposalEstimateProjectCostAmount(

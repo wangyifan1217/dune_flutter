@@ -797,6 +797,18 @@ const kProposalProjectCostItems = [
   '推广费',
 ];
 
+/// 电子券采购款是供给采购结算，不进入提案项目成本测算。
+bool proposalExcludedProjectCostName(String name) {
+  switch (name.trim()) {
+    case '电子券采购款':
+    case '应付电子券采购款':
+    case '电子券采购':
+      return true;
+    default:
+      return false;
+  }
+}
+
 /// 管理后台「项目成本明细」优先；未配置时用默认名单。
 List<String> proposalIntakeProjectCostNameCatalog({
   List<String> names = const [],
@@ -806,7 +818,11 @@ List<String> proposalIntakeProjectCostNameCatalog({
   final out = <String>[];
   void add(String raw) {
     final name = proposalProjectCostDisplayName(raw.trim());
-    if (name.isEmpty || !seen.add(name)) return;
+    if (name.isEmpty ||
+        proposalExcludedProjectCostName(name) ||
+        !seen.add(name)) {
+      return;
+    }
     out.add(name);
   }
 

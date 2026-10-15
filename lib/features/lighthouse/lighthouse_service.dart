@@ -294,6 +294,24 @@ class LighthouseService {
     }, '灯塔净TA加载失败');
   }
 
+  /// 经营成本：银行流水日报里 mapped_category = '经营成本' 的那一组，按二级分类汇总。
+  /// 公司级流水，后端按净TA 权限放行。返回 net / inflow / outflow / activeDays /
+  /// secondaries[{name, net, inflow, outflow, days, inDays, outDays}] / empty[...]。
+  Future<Map<String, dynamic>> fetchOperatingCost({
+    String? period,
+    String? date,
+    int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    return _getData('/lighthouse/operating-cost', {
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (date != null && date.isNotEmpty) 'date': date,
+      if (offset != null && offset != 0) 'offset': '$offset',
+      ..._rangeQuery(startDate, endDate),
+    }, '灯塔经营成本加载失败');
+  }
+
   /// 分析 tab 3D 坐标 + 机会清单（懒加载）。
   Future<Map<String, dynamic>> fetchAnalysisCube({
     String? period,

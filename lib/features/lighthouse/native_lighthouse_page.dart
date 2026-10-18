@@ -2830,9 +2830,7 @@ class _LhMiniCandlesPainter extends CustomPainter {
         final c = closes[i + 1];
         // 入口图标不承担涨跌信息（点开的大图才是），走单色紫：涨深、跌浅，
         // 免得一块灰白区域里跳出一小撮红绿。
-        final col = c >= o
-            ? const Color(0xFF7B5CD8)
-            : const Color(0xFFC3B6EA);
+        final col = c >= o ? const Color(0xFF7B5CD8) : const Color(0xFFC3B6EA);
         var top = math.min(y(o), y(c));
         var bot = math.max(y(o), y(c));
         if (bot - top < 1.2) {
@@ -3291,8 +3289,7 @@ class _LhFutureMonthsPainter extends CustomPainter {
       Paint()..color = _kLhForecastZoneTint,
     );
     final pts = <Offset>[
-      for (var k = 0; k < ys.length; k++)
-        Offset((k + 1) * step, clampY(ys[k])),
+      for (var k = 0; k < ys.length; k++) Offset((k + 1) * step, clampY(ys[k])),
     ];
     // 扇面：上沿从左到右，下沿从右到左。缺区间的月份按中线收口。
     final upper = <Offset>[
@@ -4155,10 +4152,7 @@ class _TrendLinesPainter extends CustomPainter {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     // 已发生只是「到今天为止」，压淡一档，别抢预测点的戏。
-                    colors: [
-                      heroColor.withAlpha(150),
-                      heroColor.withAlpha(60),
-                    ],
+                    colors: [heroColor.withAlpha(150), heroColor.withAlpha(60)],
                   ).createShader(
                     Rect.fromLTRB(
                       lastX - colW / 2,
@@ -12375,16 +12369,17 @@ class _TrendChartState extends State<_TrendChart>
                       momText,
                       maxLines: 1,
                       softWrap: false,
-                      style: LhTypography.mono(
-                        size: lighthouseLedgerSummaryDeltaFontSize,
-                        color: momColor,
-                        weight: loudMom ? FontWeight.w700 : FontWeight.w600,
-                        height: 1.0,
-                        letterSpacing: -0.2,
-                        context: context,
-                      ).copyWith(
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
+                      style:
+                          LhTypography.mono(
+                            size: lighthouseLedgerSummaryDeltaFontSize,
+                            color: momColor,
+                            weight: loudMom ? FontWeight.w700 : FontWeight.w600,
+                            height: 1.0,
+                            letterSpacing: -0.2,
+                            context: context,
+                          ).copyWith(
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                     ),
                   ],
                 ],
@@ -13071,132 +13066,150 @@ class _TrendChartState extends State<_TrendChart>
             clipBehavior: Clip.none,
             children: [
               Positioned.fill(
-          child: LayoutBuilder(
-            builder: (ctx, c) {
-              final w =
-                  c.maxWidth - _futureGutterW(c.maxWidth, _futureShown.length);
-              final usableW = w - _kChartPadH * 2;
-              final n = _n;
-              if (_windowed) {
-                // 视窗模式：标签跟着点平移，只摆看得见的那几个。
-                final step = _stepFor(w);
-                final vs = _viewStart;
-                final slotW = widget.zoomable
-                    ? 44.0
-                    : (usableW / _visible).clamp(18.0, 32.0);
-                final labelSize = widget.zoomable
-                    ? 8.5
-                    : (_visible > 12 ? 7.0 : (_visible > 8 ? 7.5 : 8.5));
-                final first = math.max(0, vs.floor());
-                final last = math.min(n - 1, _viewEnd.ceil());
-                return ClipRect(
-                  child: Stack(
-                    children: [
-                      for (int i = first; i <= last && i < _xLabels.length; i++)
-                        if (_xLabelShown(i, step))
-                          Positioned(
-                            // 点在视窗里的那几个标签贴边收进来，不让 ClipRect
-                            // 把最后一天（本期）裁成半个字；滑出视窗的照旧跟着走。
-                            left: () {
-                              final cx = _kChartPadH + (i - vs) * step;
-                              final raw = cx - slotW / 2;
-                              if (cx < 0 || cx > w) return raw;
-                              return raw
-                                  .clamp(
-                                    0.0,
-                                    math.max(0.0, w - slotW),
-                                  )
-                                  .toDouble();
-                            }(),
-                            width: slotW,
-                            child: Center(
-                              child: Text(
-                                widget.zoomable ? _zoomLabel(i) : _xLabels[i],
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: LhTypography.mono(
-                                  size: labelSize,
-                                  color: widget.partialPeriod && i == n - 1
-                                      ? DunesColors.resolve(ctx, _LhPlum.deep)
-                                      : (widget.zoomable && _isMonthStart(i)
+                child: LayoutBuilder(
+                  builder: (ctx, c) {
+                    final w =
+                        c.maxWidth -
+                        _futureGutterW(c.maxWidth, _futureShown.length);
+                    final usableW = w - _kChartPadH * 2;
+                    final n = _n;
+                    if (_windowed) {
+                      // 视窗模式：标签跟着点平移，只摆看得见的那几个。
+                      final step = _stepFor(w);
+                      final vs = _viewStart;
+                      final slotW = widget.zoomable
+                          ? 44.0
+                          : (usableW / _visible).clamp(18.0, 32.0);
+                      final labelSize = widget.zoomable
+                          ? 8.5
+                          : (_visible > 12 ? 7.0 : (_visible > 8 ? 7.5 : 8.5));
+                      final first = math.max(0, vs.floor());
+                      final last = math.min(n - 1, _viewEnd.ceil());
+                      return ClipRect(
+                        child: Stack(
+                          children: [
+                            for (
+                              int i = first;
+                              i <= last && i < _xLabels.length;
+                              i++
+                            )
+                              if (_xLabelShown(i, step))
+                                Positioned(
+                                  // 点在视窗里的那几个标签贴边收进来，不让 ClipRect
+                                  // 把最后一天（本期）裁成半个字；滑出视窗的照旧跟着走。
+                                  left: () {
+                                    final cx = _kChartPadH + (i - vs) * step;
+                                    final raw = cx - slotW / 2;
+                                    if (cx < 0 || cx > w) return raw;
+                                    return raw
+                                        .clamp(0.0, math.max(0.0, w - slotW))
+                                        .toDouble();
+                                  }(),
+                                  width: slotW,
+                                  child: Center(
+                                    child: Text(
+                                      widget.zoomable
+                                          ? _zoomLabel(i)
+                                          : _xLabels[i],
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: LhTypography.mono(
+                                        size: labelSize,
+                                        color:
+                                            widget.partialPeriod && i == n - 1
                                             ? DunesColors.resolve(
                                                 ctx,
-                                                LhColors.ink2,
+                                                _LhPlum.deep,
                                               )
-                                            : DunesColors.resolve(
-                                                ctx,
-                                                LhColors.mute2,
-                                              )),
-                                  weight:
-                                      (widget.partialPeriod && i == n - 1) ||
-                                          (widget.zoomable && _isMonthStart(i))
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  letterSpacing: 0.1,
-                                  context: ctx,
+                                            : (widget.zoomable &&
+                                                      _isMonthStart(i)
+                                                  ? DunesColors.resolve(
+                                                      ctx,
+                                                      LhColors.ink2,
+                                                    )
+                                                  : DunesColors.resolve(
+                                                      ctx,
+                                                      LhColors.mute2,
+                                                    )),
+                                        weight:
+                                            (widget.partialPeriod &&
+                                                    i == n - 1) ||
+                                                (widget.zoomable &&
+                                                    _isMonthStart(i))
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        letterSpacing: 0.1,
+                                        context: ctx,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                          ],
+                        ),
+                      );
+                    }
+                    final labelCount = _xAnchors.length;
+                    final slotW = labelCount <= 1
+                        ? usableW
+                        : (widget.zoomable
+                              ? 44.0
+                              : (usableW / labelCount).clamp(18.0, 32.0));
+                    final labelSize = widget.zoomable
+                        ? 8.5
+                        : (labelCount > 12
+                              ? 7.0
+                              : (labelCount > 8 ? 7.5 : 8.5));
+                    final pxPerPoint = n <= 1 ? 0.0 : usableW / (n - 1);
+                    bool currentAnchor(int i) =>
+                        widget.partialPeriod && n > 0 && _xAnchors[i] == n - 1;
+                    return Stack(
+                      children: [
+                        for (int i = 0; i < _xAnchors.length; i++)
+                          if (_xLabelShown(_xAnchors[i], pxPerPoint))
+                            Positioned(
+                              left:
+                                  (labelCount <= 1 || n <= 1
+                                          ? _kChartPadH
+                                          : _kChartPadH +
+                                                _xAnchors[i] /
+                                                    (n - 1) *
+                                                    usableW -
+                                                slotW / 2)
+                                      .clamp(
+                                        0.0,
+                                        (w - slotW).clamp(0.0, double.infinity),
+                                      ),
+                              width: slotW,
+                              child: Center(
+                                child: Text(
+                                  widget.zoomable
+                                      ? _zoomLabel(_xAnchors[i])
+                                      : _xLabels[i],
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  // v16 · 本期（没走完的那一列）标签用主色加粗，
+                                  // 和进度胶囊呼应，一眼找到「现在」在哪。
+                                  style: LhTypography.mono(
+                                    size: labelSize,
+                                    color: currentAnchor(i)
+                                        ? DunesColors.resolve(ctx, _LhPlum.deep)
+                                        : DunesColors.resolve(
+                                            ctx,
+                                            LhColors.mute2,
+                                          ),
+                                    weight: currentAnchor(i)
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    letterSpacing: 0.1,
+                                    context: ctx,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                    ],
-                  ),
-                );
-              }
-              final labelCount = _xAnchors.length;
-              final slotW = labelCount <= 1
-                  ? usableW
-                  : (widget.zoomable
-                        ? 44.0
-                        : (usableW / labelCount).clamp(18.0, 32.0));
-              final labelSize = widget.zoomable
-                  ? 8.5
-                  : (labelCount > 12 ? 7.0 : (labelCount > 8 ? 7.5 : 8.5));
-              final pxPerPoint = n <= 1 ? 0.0 : usableW / (n - 1);
-              bool currentAnchor(int i) =>
-                  widget.partialPeriod && n > 0 && _xAnchors[i] == n - 1;
-              return Stack(
-                children: [
-                  for (int i = 0; i < _xAnchors.length; i++)
-                    if (_xLabelShown(_xAnchors[i], pxPerPoint))
-                      Positioned(
-                        left:
-                            (labelCount <= 1 || n <= 1
-                                    ? _kChartPadH
-                                    : _kChartPadH +
-                                          _xAnchors[i] / (n - 1) * usableW -
-                                          slotW / 2)
-                                .clamp(
-                                  0.0,
-                                  (w - slotW).clamp(0.0, double.infinity),
-                                ),
-                        width: slotW,
-                        child: Center(
-                          child: Text(
-                            widget.zoomable
-                                ? _zoomLabel(_xAnchors[i])
-                                : _xLabels[i],
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            // v16 · 本期（没走完的那一列）标签用主色加粗，
-                            // 和进度胶囊呼应，一眼找到「现在」在哪。
-                            style: LhTypography.mono(
-                              size: labelSize,
-                              color: currentAnchor(i)
-                                  ? DunesColors.resolve(ctx, _LhPlum.deep)
-                                  : DunesColors.resolve(ctx, LhColors.mute2),
-                              weight: currentAnchor(i)
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              letterSpacing: 0.1,
-                              context: ctx,
-                            ),
-                          ),
-                        ),
-                      ),
-                ],
-              );
-            },
-          ),
+                      ],
+                    );
+                  },
+                ),
               ),
               _futureAxisLabels(),
             ],
@@ -17193,10 +17206,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         // 新列表拿不到：别把上一期的行当成这一期的数留在那儿。
         if (_staleRowsTab == tab) {
           _staleRowsTab = null;
-          _bundle = _bundle?.withDimension(
-            tab,
-            const <Map<String, dynamic>>[],
-          );
+          _bundle = _bundle?.withDimension(tab, const <Map<String, dynamic>>[]);
           _rowsCacheKey = '';
           _rowsCache = null;
         }
@@ -19540,128 +19550,130 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           // 不会被键盘遮挡。
           resizeToAvoidBottomInset: false,
           body: _withStatusBand(
-SafeArea(
-            bottom: false,
-            // 跟通讯 / 我的一样：内容铺到屏幕底，四个 Tab 浮在灯塔上面。
-            // 末行不被挡住靠 ListView 底部 padding，不在这里垫白板。
-            child: _wrapWithUiZoom(
-              Column(
-                children: [
-                  // L2/L3 详情自带 sticky header（返回·灯塔·缩放/更新），
-                  // 若再挂一级 AppBar 会叠出双份标题与右侧按钮。
-                  if (_detailKey == null && !_biViewOpen) _buildAppBar(),
-                  Expanded(
-                    child: !_hasAccess
-                        ? _buildNoAccessView()
-                        : Stack(
-                            children: [
-                              // 撑满整块区域 —— 别删。
-                              //
-                              //   Stack 默认 StackFit.loose：自身尺寸取「非
-                              //   Positioned 子节点里最大的那个」。这里 Expanded
-                              //   只给了紧高度，宽度是松的（Column 默认 center，
-                              //   不 stretch）。
-                              //   BI 打开时，唯一的非 Positioned 子节点是那个
-                              //   offstage 的主列表，而 offstage 的 RenderBox 尺寸
-                              //   是 0 —— Stack 宽度于是塌成 0，Positioned.fill
-                              //   跟着填了个 0 宽的框，BI 整页存在但没有一个像素。
-                              //   表现正是「点了没反应 / 白屏」。
-                              //   进 L2 不出问题，只是因为详情那层是有尺寸的非
-                              //   Positioned 子节点，替 Stack 把宽度撑住了。
-                              const SizedBox.expand(),
-                              // 一级主列表始终保活（Offstage），进 L2 不销毁，
-                              // 右滑/返回可回到原先滚动浏览位置。
-                              Offstage(
-                                offstage: _detailKey != null || _biViewOpen,
-                                child: TickerMode(
-                                  enabled: _detailKey == null && !_biViewOpen,
-                                  child: KeyedSubtree(
-                                    key: const ValueKey('main'),
-                                    child: _buildMainView(),
+            SafeArea(
+              bottom: false,
+              // 跟通讯 / 我的一样：内容铺到屏幕底，四个 Tab 浮在灯塔上面。
+              // 末行不被挡住靠 ListView 底部 padding，不在这里垫白板。
+              child: _wrapWithUiZoom(
+                Column(
+                  children: [
+                    // L2/L3 详情自带 sticky header（返回·灯塔·缩放/更新），
+                    // 若再挂一级 AppBar 会叠出双份标题与右侧按钮。
+                    if (_detailKey == null && !_biViewOpen) _buildAppBar(),
+                    Expanded(
+                      child: !_hasAccess
+                          ? _buildNoAccessView()
+                          : Stack(
+                              children: [
+                                // 撑满整块区域 —— 别删。
+                                //
+                                //   Stack 默认 StackFit.loose：自身尺寸取「非
+                                //   Positioned 子节点里最大的那个」。这里 Expanded
+                                //   只给了紧高度，宽度是松的（Column 默认 center，
+                                //   不 stretch）。
+                                //   BI 打开时，唯一的非 Positioned 子节点是那个
+                                //   offstage 的主列表，而 offstage 的 RenderBox 尺寸
+                                //   是 0 —— Stack 宽度于是塌成 0，Positioned.fill
+                                //   跟着填了个 0 宽的框，BI 整页存在但没有一个像素。
+                                //   表现正是「点了没反应 / 白屏」。
+                                //   进 L2 不出问题，只是因为详情那层是有尺寸的非
+                                //   Positioned 子节点，替 Stack 把宽度撑住了。
+                                const SizedBox.expand(),
+                                // 一级主列表始终保活（Offstage），进 L2 不销毁，
+                                // 右滑/返回可回到原先滚动浏览位置。
+                                Offstage(
+                                  offstage: _detailKey != null || _biViewOpen,
+                                  child: TickerMode(
+                                    enabled: _detailKey == null && !_biViewOpen,
+                                    child: KeyedSubtree(
+                                      key: const ValueKey('main'),
+                                      child: _buildMainView(),
+                                    ),
                                   ),
                                 ),
-                              ),
-                              if (_detailKey != null)
-                                AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 220),
-                                  switchInCurve: Curves.easeOut,
-                                  switchOutCurve: Curves.easeIn,
-                                  transitionBuilder: (child, animation) {
-                                    final slide = Tween<Offset>(
-                                      begin: const Offset(0.035, 0),
-                                      end: Offset.zero,
-                                    ).animate(animation);
-                                    return FadeTransition(
-                                      opacity: animation,
-                                      child: SlideTransition(
-                                        position: slide,
-                                        child: child,
+                                if (_detailKey != null)
+                                  AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 220),
+                                    switchInCurve: Curves.easeOut,
+                                    switchOutCurve: Curves.easeIn,
+                                    transitionBuilder: (child, animation) {
+                                      final slide = Tween<Offset>(
+                                        begin: const Offset(0.035, 0),
+                                        end: Offset.zero,
+                                      ).animate(animation);
+                                      return FadeTransition(
+                                        opacity: animation,
+                                        child: SlideTransition(
+                                          position: slide,
+                                          child: child,
+                                        ),
+                                      );
+                                    },
+                                    child: KeyedSubtree(
+                                      key: ValueKey(_detailRouteKey()),
+                                      child: _buildDetailView(),
+                                    ),
+                                  ),
+                                if (_showPageBusyOverlay)
+                                  _buildLoadingOverlay(),
+                                if (_biViewOpen)
+                                  Positioned.fill(
+                                    child: Material(
+                                      color: DunesColors.resolve(
+                                        context,
+                                        LhColors.mist,
+                                        role: DunesColorRole.surface,
                                       ),
-                                    );
-                                  },
-                                  child: KeyedSubtree(
-                                    key: ValueKey(_detailRouteKey()),
-                                    child: _buildDetailView(),
-                                  ),
-                                ),
-                              if (_showPageBusyOverlay) _buildLoadingOverlay(),
-                              if (_biViewOpen)
-                                Positioned.fill(
-                                  child: Material(
-                                    color: DunesColors.resolve(
-                                      context,
-                                      LhColors.mist,
-                                      role: DunesColorRole.surface,
-                                    ),
-                                    child: LhBiViewPage(
-                                      initialDim: _biInitialDim(),
-                                      dims: _biDims(),
-                                      initialMetric: _sortField,
-                                      rangeLabel: _selectedRangeLabel,
-                                      periodLabel: _periodLabelFor(_period),
-                                      rowsFor: (d) =>
-                                          _bundle?.rowsOf(d) ??
-                                          const <Map<String, dynamic>>[],
-                                      metricsFor: _biMetricsFor,
-                                      metricValue: _rowMetricValue,
-                                      dimLabel: _biDimLabel,
-                                      categoriesFor: _biCategoriesFor,
-                                      metricDelta: _deltaFromEntityRow,
-                                      breakdownFor: _biBreakdownFor,
-                                      requestBreakdown: _biRequestBreakdown,
-                                      seriesFor: _biSeriesFor,
-                                      loading: _biDimLoading,
-                                      windowRowsFor: _biWindowRowsFor,
-                                      reportFor: _biReportFor,
-                                      reportBusy: _biReportBusyFor,
-                                      requestReport: _biRequestReport,
-                                      forecastFor: _biForecastCard,
-                                      onDimChanged: (d) {
-                                        if (!_kBiDims.contains(d)) return;
-                                        _biDim = d;
-                                        unawaited(_loadTab(d));
-                                        unawaited(_loadBiWindowRows(d));
-                                      },
-                                      onClose: _closeBiView,
-                                      topChrome: _buildBiTopChrome(),
-                                      periodBar: _buildPeriodBar(),
+                                      child: LhBiViewPage(
+                                        initialDim: _biInitialDim(),
+                                        dims: _biDims(),
+                                        initialMetric: _sortField,
+                                        rangeLabel: _selectedRangeLabel,
+                                        periodLabel: _periodLabelFor(_period),
+                                        rowsFor: (d) =>
+                                            _bundle?.rowsOf(d) ??
+                                            const <Map<String, dynamic>>[],
+                                        metricsFor: _biMetricsFor,
+                                        metricValue: _rowMetricValue,
+                                        dimLabel: _biDimLabel,
+                                        categoriesFor: _biCategoriesFor,
+                                        metricDelta: _deltaFromEntityRow,
+                                        breakdownFor: _biBreakdownFor,
+                                        requestBreakdown: _biRequestBreakdown,
+                                        seriesFor: _biSeriesFor,
+                                        loading: _biDimLoading,
+                                        windowRowsFor: _biWindowRowsFor,
+                                        reportFor: _biReportFor,
+                                        reportBusy: _biReportBusyFor,
+                                        requestReport: _biRequestReport,
+                                        forecastFor: _biForecastCard,
+                                        onDimChanged: (d) {
+                                          if (!_kBiDims.contains(d)) return;
+                                          _biDim = d;
+                                          unawaited(_loadTab(d));
+                                          unawaited(_loadBiWindowRows(d));
+                                        },
+                                        onClose: _closeBiView,
+                                        topChrome: _buildBiTopChrome(),
+                                        periodBar: _buildPeriodBar(),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              if (_biViewOpen && _biError != null)
-                                Positioned(
-                                  left: 0,
-                                  right: 0,
-                                  top: 0,
-                                  child: _buildBiErrorBanner(),
-                                ),
-                            ],
-                          ),
-                  ),
-                ],
+                                if (_biViewOpen && _biError != null)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    top: 0,
+                                    child: _buildBiErrorBanner(),
+                                  ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          )),
+          ),
         ),
       ),
     );
@@ -20197,7 +20209,10 @@ SafeArea(
   }
 
   /// 顶栏工具的共用壳：期间条同款凹槽（v24 跟着期间条换成淡紫底 + Hero 卡紫发丝边）。
-  BoxDecoration _appBarToolShell({required double radius, bool onDark = false}) {
+  BoxDecoration _appBarToolShell({
+    required double radius,
+    bool onDark = false,
+  }) {
     if (onDark) {
       return BoxDecoration(
         color: const Color(0x12FFFFFF),
@@ -21481,11 +21496,11 @@ SafeArea(
         _softReloadDim(
           Container(
             margin: const EdgeInsets.fromLTRB(
-        lighthouseHeroShellMarginH,
-        0,
-        lighthouseHeroShellMarginH,
-        18,
-      ),
+              lighthouseHeroShellMarginH,
+              0,
+              lighthouseHeroShellMarginH,
+              18,
+            ),
             decoration: BoxDecoration(
               color: DunesColors.resolve(
                 context,
@@ -21698,8 +21713,7 @@ SafeArea(
       final name = m['name']?.toString() ?? '';
       final v = (m['netTa'] as num?)?.toDouble() ?? 0;
       final rawDelta = _deltaFromEntityRow(m, 'netTa');
-      final delta =
-          rawDelta != null && lighthouseDeltaPctShown(rawDelta.pct)
+      final delta = rawDelta != null && lighthouseDeltaPctShown(rawDelta.pct)
           ? rawDelta
           : null;
       final share = (delta == null && shareBase > 0 && v.abs() > 0)
@@ -22179,11 +22193,11 @@ SafeArea(
     if (lighthouseHeroUsesFlatLayout && !whiteBackground) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(
-        lighthouseHeroShellMarginH,
-        2,
-        lighthouseHeroShellMarginH,
-        0,
-      ),
+          lighthouseHeroShellMarginH,
+          2,
+          lighthouseHeroShellMarginH,
+          0,
+        ),
         child: child,
       );
     }
@@ -24054,14 +24068,11 @@ SafeArea(
       lighthouseAssetCategoryPetro => '中石化',
       _ => '合计',
     };
-    Color accentOf(String key) => DunesColors.resolve(
-      context,
-      switch (key) {
-        lighthouseAssetCategoryOil => LhColors.cnpc,
-        lighthouseAssetCategoryPetro => LhColors.sinopec,
-        _ => _LhPlum.primary,
-      },
-    );
+    Color accentOf(String key) => DunesColors.resolve(context, switch (key) {
+      lighthouseAssetCategoryOil => LhColors.cnpc,
+      lighthouseAssetCategoryPetro => LhColors.sinopec,
+      _ => _LhPlum.primary,
+    });
     bool hasDiff(double? v) => v != null && v.abs() >= 1;
 
     // ── 走势点中的日期：左栏三格跟着换成那一天的总资产 ──
@@ -24335,16 +24346,17 @@ SafeArea(
           Text(
             _heroWan(value),
             maxLines: 1,
-            style: _tabular(
-              LhTypography.number(
-                size: total ? 12.5 : 10,
-                color: valueColor ?? (hl ? deep : ink),
-                context: context,
-              ),
-            ).copyWith(
-              fontWeight: total ? FontWeight.w800 : FontWeight.w600,
-              height: 1.0,
-            ),
+            style:
+                _tabular(
+                  LhTypography.number(
+                    size: total ? 12.5 : 10,
+                    color: valueColor ?? (hl ? deep : ink),
+                    context: context,
+                  ),
+                ).copyWith(
+                  fontWeight: total ? FontWeight.w800 : FontWeight.w600,
+                  height: 1.0,
+                ),
           ),
         ],
       );
@@ -24403,12 +24415,7 @@ SafeArea(
         ledgerColumn('账面资产 = 左栏${shortLabel(selected)}', [
           ledgerRow('', '已入账', v('regulatoryAccountBalance')),
           ledgerRow('+', '待入账', v('inTransitFunds')),
-          ledgerRow(
-            '+',
-            '期末预付',
-            v('endingPrepaymentBalance'),
-            hl: true,
-          ),
+          ledgerRow('+', '期末预付', v('endingPrepaymentBalance'), hl: true),
           ledgerRow(
             '=',
             '账面资产',
@@ -25330,29 +25337,30 @@ SafeArea(
                                                       Flexible(
                                                         flex: 3,
                                                         child: Text(
-                                                        heroPointLabel,
-                                                        maxLines: 1,
-                                                        softWrap: false,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style: _tabular(
-                                                          LhTypography.mono(
-                                                            size:
-                                                                lighthouseHeroMastheadLabelFontSize,
-                                                            color:
-                                                                DunesColors.resolve(
-                                                                  context,
-                                                                  _LhPlum
-                                                                      .primary,
-                                                                ),
-                                                            weight:
-                                                                FontWeight.w700,
-                                                            letterSpacing: 0.2,
-                                                            height: 1.0,
-                                                            context: context,
+                                                          heroPointLabel,
+                                                          maxLines: 1,
+                                                          softWrap: false,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          style: _tabular(
+                                                            LhTypography.mono(
+                                                              size:
+                                                                  lighthouseHeroMastheadLabelFontSize,
+                                                              color:
+                                                                  DunesColors.resolve(
+                                                                    context,
+                                                                    _LhPlum
+                                                                        .primary,
+                                                                  ),
+                                                              weight: FontWeight
+                                                                  .w700,
+                                                              letterSpacing:
+                                                                  0.2,
+                                                              height: 1.0,
+                                                              context: context,
+                                                            ),
                                                           ),
                                                         ),
-                                                      ),
                                                       ),
                                                       const SizedBox(width: 4),
                                                       Flexible(
@@ -27812,11 +27820,7 @@ SafeArea(
               ? Colors.transparent
               : DunesColors.resolve(context, Colors.black).withAlpha(8),
           pillGradient: onDark
-              ? const [
-                  Color(0xFFFFFFFF),
-                  Color(0xFFF5F1FD),
-                  Color(0xFFFFFFFF),
-                ]
+              ? const [Color(0xFFFFFFFF), Color(0xFFF5F1FD), Color(0xFFFFFFFF)]
               : lighthousePeriodUsesHeroSurface
               ? [
                   DunesColors.resolve(
@@ -27931,8 +27935,7 @@ SafeArea(
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.zero,
               itemCount: _periodInstanceCount(_period),
-              itemBuilder: (ctx, i) =>
-                  _periodInstanceChip(-i, onDark: onDark),
+              itemBuilder: (ctx, i) => _periodInstanceChip(-i, onDark: onDark),
             ),
           ),
         ],
@@ -28348,29 +28351,31 @@ SafeArea(
     _opCostKey = key;
     _opCost = null;
     _opCostLoading = true;
-    unawaited(_service
-        .fetchOperatingCost(
-          period: _period,
-          offset: _periodOffset,
-          startDate: _customStart,
-          endDate: _customEnd,
-        )
-        .then(
-          (data) {
-            if (!mounted || _opCostKey != key) return;
-            setState(() {
-              _opCost = data;
-              _opCostLoading = false;
-            });
-          },
-          onError: (Object _) {
-            if (!mounted || _opCostKey != key) return;
-            setState(() {
-              _opCost = const <String, dynamic>{'available': false};
-              _opCostLoading = false;
-            });
-          },
-        ));
+    unawaited(
+      _service
+          .fetchOperatingCost(
+            period: _period,
+            offset: _periodOffset,
+            startDate: _customStart,
+            endDate: _customEnd,
+          )
+          .then(
+            (data) {
+              if (!mounted || _opCostKey != key) return;
+              setState(() {
+                _opCost = data;
+                _opCostLoading = false;
+              });
+            },
+            onError: (Object _) {
+              if (!mounted || _opCostKey != key) return;
+              setState(() {
+                _opCost = const <String, dynamic>{'available': false};
+                _opCostLoading = false;
+              });
+            },
+          ),
+    );
   }
 
   double _opNum(Object? v) => v is num ? v.toDouble() : 0;
@@ -28416,10 +28421,7 @@ SafeArea(
             '${costUp ? '↑' : '↓'}${pct.toStringAsFixed(pct.abs() >= 10 ? 0 : 1)}%';
         // 跟上面几格同一条规矩：越过 ±20% 才上红绿。
         deltaColor = lighthouseHeroDeltaIsLoud('opCost', pct.toDouble())
-            ? DunesColors.resolve(
-                context,
-                costUp ? LhColors.neg : LhColors.pos,
-              )
+            ? DunesColors.resolve(context, costUp ? LhColors.neg : LhColors.pos)
             : DunesColors.resolve(context, LhColors.mute);
       }
     }
@@ -28537,17 +28539,20 @@ SafeArea(
                               children: [
                                 TextSpan(
                                   text: valueText,
-                                  style: LhTypography.number(
-                                    size: lighthouseHeroMetricValueFontSize,
-                                    color: DunesColors.resolve(
-                                      context,
-                                      available ? LhColors.ink : LhColors.mute2,
-                                    ),
-                                    context: context,
-                                  ).copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.0,
-                                  ),
+                                  style:
+                                      LhTypography.number(
+                                        size: lighthouseHeroMetricValueFontSize,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          available
+                                              ? LhColors.ink
+                                              : LhColors.mute2,
+                                        ),
+                                        context: context,
+                                      ).copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.0,
+                                      ),
                                 ),
                                 if (unitText.isNotEmpty)
                                   TextSpan(
@@ -28734,32 +28739,36 @@ SafeArea(
       ],
     );
 
-    Widget totalCell(String label, double v, {bool result = false, bool plus = false}) =>
-        Container(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-          decoration: BoxDecoration(
-            color: result ? resultBg : cellBg,
-            borderRadius: BorderRadius.circular(10),
+    Widget totalCell(
+      String label,
+      double v, {
+      bool result = false,
+      bool plus = false,
+    }) => Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(
+        color: result ? resultBg : cellBg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: LhTypography.sans(
+              size: 10,
+              color: result ? deep : ink2,
+              weight: FontWeight.w700,
+              height: 1.0,
+              context: context,
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: LhTypography.sans(
-                  size: 10,
-                  color: result ? deep : ink2,
-                  weight: FontWeight.w700,
-                  height: 1.0,
-                  context: context,
-                ),
-              ),
-              const SizedBox(height: 6),
-              amountText(v, size: result ? 16 : 13, plus: plus),
-            ],
-          ),
-        );
+          const SizedBox(height: 6),
+          amountText(v, size: result ? 16 : 13, plus: plus),
+        ],
+      ),
+    );
 
     Widget groupTitle(String title, String note) => Row(
       children: [
@@ -28904,13 +28913,23 @@ SafeArea(
       );
     } else {
       final rows = _opCostRows();
-      final outs = [for (final r in rows) if (_opNum(r['net']) < 0) r];
-      final ins = [for (final r in rows) if (_opNum(r['net']) >= 0) r];
-      final outTotal = outs.fold<double>(0, (s, r) => s + _opNum(r['net']).abs());
+      final outs = [
+        for (final r in rows)
+          if (_opNum(r['net']) < 0) r,
+      ];
+      final ins = [
+        for (final r in rows)
+          if (_opNum(r['net']) >= 0) r,
+      ];
+      final outTotal = outs.fold<double>(
+        0,
+        (s, r) => s + _opNum(r['net']).abs(),
+      );
       final inTotal = ins.fold<double>(0, (s, r) => s + _opNum(r['net']));
       // 不用 LayoutBuilder：Hero 外层若有量固有尺寸的祖先会直接报错。
       // 列数按屏宽定，格子用 Row + Expanded 排，哪种父布局都能算。
-      final screenW = MediaQuery.sizeOf(context).width / _uiZoom.clamp(0.5, 2.0);
+      final screenW =
+          MediaQuery.sizeOf(context).width / _uiZoom.clamp(0.5, 2.0);
       final cols = screenW >= 1000 ? 5 : (screenW >= 640 ? 3 : 2);
       const gap = 6.0;
       Widget grid(List<Widget> cells) {
@@ -28964,11 +28983,7 @@ SafeArea(
                   const SizedBox(width: gap),
                   Expanded(
                     flex: 10,
-                    child: totalCell(
-                      '流入',
-                      _opNum(data?['inflow']),
-                      plus: true,
-                    ),
+                    child: totalCell('流入', _opNum(data?['inflow']), plus: true),
                   ),
                 ],
               ),
@@ -29879,29 +29894,29 @@ SafeArea(
                   child: _withOpCostCell(
                     showOpCost,
                     metricGrid(
-                    [
-                      (
-                        key: 'totalCost',
-                        label: '成本合计',
-                        value: totalCost,
-                        isRate: false,
-                      ),
-                      (
-                        key: 'projectCost',
-                        label: '项目成本',
-                        value: projectCost,
-                        isRate: false,
-                      ),
-                      (
-                        key: 'cost',
-                        label: '业务成本',
-                        value: businessCost,
-                        isRate: false,
-                      ),
-                    ],
-                    columns: 1,
-                    divider: ledgerPanels ? sectionDivider('cost') : null,
-                  ),
+                      [
+                        (
+                          key: 'totalCost',
+                          label: '成本合计',
+                          value: totalCost,
+                          isRate: false,
+                        ),
+                        (
+                          key: 'projectCost',
+                          label: '项目成本',
+                          value: projectCost,
+                          isRate: false,
+                        ),
+                        (
+                          key: 'cost',
+                          label: '业务成本',
+                          value: businessCost,
+                          isRate: false,
+                        ),
+                      ],
+                      columns: 1,
+                      divider: ledgerPanels ? sectionDivider('cost') : null,
+                    ),
                   ),
                 ),
               ),
@@ -35099,33 +35114,33 @@ SafeArea(
             // 行名：小一号的灰字 + 一道竖发丝线，跟胶囊分开。
             // kicker 为空 = 不要行名（分类行：胶囊本身就说明了是分类）。
             if (kicker.isNotEmpty) ...[
-            SizedBox(
-              width: lighthouseLedgerFilterKickerWidth - 6,
-              child: Text(
-                kicker,
-                textAlign: TextAlign.left,
-                maxLines: 1,
-                softWrap: false,
-                style: LhTypography.sans(
-                  size: 10,
-                  color: DunesColors.resolve(context, LhColors.mute2),
-                  weight: FontWeight.w600,
-                  letterSpacing: 0.6,
-                  height: 1.0,
-                  context: context,
+              SizedBox(
+                width: lighthouseLedgerFilterKickerWidth - 6,
+                child: Text(
+                  kicker,
+                  textAlign: TextAlign.left,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: LhTypography.sans(
+                    size: 10,
+                    color: DunesColors.resolve(context, LhColors.mute2),
+                    weight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                    height: 1.0,
+                    context: context,
+                  ),
                 ),
               ),
-            ),
-            Container(
-              width: 0.8,
-              height: 14,
-              color: DunesColors.resolve(
-                context,
-                LhColors.line2,
-                role: DunesColorRole.surface,
+              Container(
+                width: 0.8,
+                height: 14,
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.line2,
+                  role: DunesColorRole.surface,
+                ),
               ),
-            ),
-            const SizedBox(width: 9),
+              const SizedBox(width: 9),
             ],
             Expanded(
               // 右沿淡出：胶囊放不下时看得出「还能往右滑」。
@@ -42247,10 +42262,7 @@ SafeArea(
             SizedBox(width: _fs(5)),
           ],
           Expanded(
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: pinnedNameText,
-            ),
+            child: Align(alignment: Alignment.topLeft, child: pinnedNameText),
           ),
           // 钱袋固定在名字这一行的最右边，底下一行紫字是总资产。
           // 只按一行字的高度占位，金额往下溢进名字下方的空白，
@@ -43983,7 +43995,10 @@ SafeArea(
     final selected = lineOf(selectedKey) ?? total ?? lines.first;
     // 省页面：总资产在上，下面是本省的主体（最多两格，放不下更多）。
     final provinceRest = inProvince
-        ? [for (final l in lines) if (l.key != 'total') l].take(2).toList()
+        ? [
+            for (final l in lines)
+              if (l.key != 'total') l,
+          ].take(2).toList()
         : const <LighthouseAssetFooterLine>[];
 
     final trendScopes = <String>{
@@ -44753,39 +44768,39 @@ SafeArea(
                 ),
               )
             else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  LhColors.paper,
-                  role: DunesColorRole.surface,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.paper,
+                    role: DunesColorRole.surface,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                borderRadius: BorderRadius.circular(8),
+                child: Column(
+                  children: [
+                    alignedLegendRow(
+                      'scale',
+                      '总资产',
+                      pickedPoint?.total,
+                      const Color(lighthouseScaleAccentValue),
+                    ),
+                    alignedLegendRow(
+                      'revenue',
+                      '原资产',
+                      hasPrincipal ? pickedPoint?.principal : null,
+                      const Color(lighthouseRevenueAccentValue),
+                    ),
+                    alignedLegendRow(
+                      'profit',
+                      '增值 / 利润',
+                      hasProfit ? pickedPoint?.profit : null,
+                      const Color(lighthouseProfitAccentValue),
+                    ),
+                  ],
+                ),
               ),
-              child: Column(
-                children: [
-                  alignedLegendRow(
-                    'scale',
-                    '总资产',
-                    pickedPoint?.total,
-                    const Color(lighthouseScaleAccentValue),
-                  ),
-                  alignedLegendRow(
-                    'revenue',
-                    '原资产',
-                    hasPrincipal ? pickedPoint?.principal : null,
-                    const Color(lighthouseRevenueAccentValue),
-                  ),
-                  alignedLegendRow(
-                    'profit',
-                    '增值 / 利润',
-                    hasProfit ? pickedPoint?.profit : null,
-                    const Color(lighthouseProfitAccentValue),
-                  ),
-                ],
-              ),
-            ),
             const SizedBox(height: 4),
             Expanded(
               child: _TrendChart(
@@ -44846,7 +44861,9 @@ SafeArea(
     if (snap.isEmpty) return;
     LighthouseFeedback.instance.play(LighthouseFeedbackKind.expand);
     final items =
-        <({String name, String category, LighthouseFundPoolAmounts? amounts})>[];
+        <
+          ({String name, String category, LighthouseFundPoolAmounts? amounts})
+        >[];
     snap.provinceAmounts.forEach((key, json) {
       final raw = (snap.provinceNames[key] ?? '').trim();
       items.add((
@@ -44890,16 +44907,19 @@ SafeArea(
       role: DunesColorRole.border,
     );
 
-    TextStyle numStyle(double size, Color color, {FontWeight w = FontWeight.w700}) =>
-        _tabular(
-          LhTypography.mono(
-            size: size,
-            color: color,
-            weight: w,
-            height: 1.0,
-            context: context,
-          ),
-        );
+    TextStyle numStyle(
+      double size,
+      Color color, {
+      FontWeight w = FontWeight.w700,
+    }) => _tabular(
+      LhTypography.mono(
+        size: size,
+        color: color,
+        weight: w,
+        height: 1.0,
+        context: context,
+      ),
+    );
 
     Widget amount(
       double? v,
@@ -44913,7 +44933,10 @@ SafeArea(
       return Text.rich(
         TextSpan(
           children: [
-            TextSpan(text: parts.number, style: numStyle(size, c, w: weight)),
+            TextSpan(
+              text: parts.number,
+              style: numStyle(size, c, w: weight),
+            ),
             if (parts.unit.isNotEmpty)
               TextSpan(
                 text: parts.unit,
@@ -45156,7 +45179,9 @@ SafeArea(
             it,
           ) {
             final v = valueOf(it.amounts, sortKey);
-            final frac = (v == null || sortMaxAbs <= 0) ? 0.0 : v.abs() / sortMaxAbs;
+            final frac = (v == null || sortMaxAbs <= 0)
+                ? 0.0
+                : v.abs() / sortMaxAbs;
             final t = it.amounts?.totalAssets;
             final share = sortKey == 'totalAssets' && t != null && totalSum > 0
                 ? t / totalSum * 100
@@ -45229,7 +45254,9 @@ SafeArea(
                                   ),
                                 ),
                                 TextSpan(
-                                  text: lighthouseFormatFundPoolWan(others[k].$2),
+                                  text: lighthouseFormatFundPoolWan(
+                                    others[k].$2,
+                                  ),
                                   style: numStyle(
                                     8.5,
                                     (others[k].$2 ?? 0) < 0 ? down : ink2,
@@ -45260,9 +45287,7 @@ SafeArea(
                         const SizedBox(height: 5),
                         Row(
                           children: [
-                            Expanded(
-                              child: bar(frac, negative: (v ?? 0) < 0),
-                            ),
+                            Expanded(child: bar(frac, negative: (v ?? 0) < 0)),
                             if (share != null) ...[
                               const SizedBox(width: 4),
                               Text(
@@ -45815,9 +45840,7 @@ SafeArea(
     return Semantics(
       button: true,
       toggled: open,
-      label: open
-          ? '收起总资产'
-          : '看总资产 ${parts.number}${parts.unit}',
+      label: open ? '收起总资产' : '看总资产 ${parts.number}${parts.unit}',
       child: Tooltip(
         message: '总资产',
         waitDuration: const Duration(milliseconds: 400),
@@ -45854,33 +45877,33 @@ SafeArea(
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(text: parts.number),
-                    if (parts.unit.isNotEmpty)
-                      TextSpan(
-                        text: parts.unit,
-                        style: TextStyle(
-                          fontSize: _fs(8),
-                          fontWeight: FontWeight.w600,
+                  TextSpan(
+                    children: [
+                      TextSpan(text: parts.number),
+                      if (parts.unit.isNotEmpty)
+                        TextSpan(
+                          text: parts.unit,
+                          style: TextStyle(
+                            fontSize: _fs(8),
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                  ],
-                ),
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.visible,
-                style: _tabular(
-                  LhTypography.mono(
-                    size: _fs(10),
-                    color: amountColor,
-                    weight: FontWeight.w700,
-                    height: 1.0,
-                    letterSpacing: -0.2,
-                    context: context,
+                    ],
+                  ),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  style: _tabular(
+                    LhTypography.mono(
+                      size: _fs(10),
+                      color: amountColor,
+                      weight: FontWeight.w700,
+                      height: 1.0,
+                      letterSpacing: -0.2,
+                      context: context,
+                    ),
                   ),
                 ),
-              ),
               ),
             ],
           ),
@@ -45888,8 +45911,6 @@ SafeArea(
       ),
     );
   }
-
-
 
   Widget _buildSupplyFundPoolPreview(
     double cellHeight, {
@@ -46394,7 +46415,9 @@ SafeArea(
     final canLink = onTraceTap != null;
     void toggleLink() {
       LighthouseFeedback.instance.play(
-        linked ? LighthouseFeedbackKind.collapse : LighthouseFeedbackKind.expand,
+        linked
+            ? LighthouseFeedbackKind.collapse
+            : LighthouseFeedbackKind.expand,
       );
       onTraceTap?.call('systemDifference');
     }
@@ -46969,10 +46992,7 @@ SafeArea(
     // 点亮时右边多出的一行字：把等式换个方向写，期末预付拆成了哪几块。
     final Widget? compositionLine = linked
         ? Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: _fs(8),
-              vertical: _fs(6),
-            ),
+            padding: EdgeInsets.symmetric(horizontal: _fs(8), vertical: _fs(6)),
             decoration: BoxDecoration(
               color: DunesColors.resolve(
                 context,
@@ -47980,12 +48000,11 @@ SafeArea(
     );
   }
 
-  List<Map<String, dynamic>> _pkCleanRows(
-    Iterable<Map<String, dynamic>> raw,
-  ) => <Map<String, dynamic>>[
-    for (final r in raw)
-      if ((r['name']?.toString().trim() ?? '').isNotEmpty) r,
-  ];
+  List<Map<String, dynamic>> _pkCleanRows(Iterable<Map<String, dynamic>> raw) =>
+      <Map<String, dynamic>>[
+        for (final r in raw)
+          if ((r['name']?.toString().trim() ?? '').isNotEmpty) r,
+      ];
 
   String _pkProvinceKey(String name) {
     final k = lighthouseProvinceKey(name);
@@ -48158,10 +48177,7 @@ SafeArea(
   String get _pkColorKey => '${_pkByGroup ? 'g' : 'i'}:$_pkDim';
 
   /// 参赛方：记住的选择里还在的留下；一个都没有时用（当前分类里）销售额前三补上。
-  List<LhPkEntity> _pkSides(
-    List<LhPkEntity> pool,
-    List<LhPkEntity> filtered,
-  ) {
+  List<LhPkEntity> _pkSides(List<LhPkEntity> pool, List<LhPkEntity> filtered) {
     final store = _pkByGroup ? _pkGroupPicks : _pkPicks;
     final cur = <String>[
       for (final k in store[_pkDim] ?? const <String>[])
@@ -48438,7 +48454,9 @@ SafeArea(
         return LighthouseSharedCardData.create({
           'kind': 'pk',
           'title': title,
-          'range': _pkCross ? '日周月季年 · ${_selectedRangeLabel}' : _selectedRangeLabel,
+          'range': _pkCross
+              ? '日周月季年 · ${_selectedRangeLabel}'
+              : _selectedRangeLabel,
           'period': _period,
           'tab': dim,
           'mode': _pkCross ? 'cross' : 'now',
@@ -48682,9 +48700,7 @@ SafeArea(
             height: 30,
             padding: const EdgeInsets.symmetric(horizontal: 11),
             decoration: BoxDecoration(
-              color: _pkByGroup
-                  ? surf(_LhPlum.deep)
-                  : surf(_LhPlum.lavender),
+              color: _pkByGroup ? surf(_LhPlum.deep) : surf(_LhPlum.lavender),
               borderRadius: BorderRadius.circular(15),
               border: Border.all(
                 color: _pkByGroup
@@ -48890,7 +48906,11 @@ SafeArea(
               ),
               child: Row(
                 children: [
-                  Icon(Icons.search_rounded, size: 14, color: c(LhColors.mute2)),
+                  Icon(
+                    Icons.search_rounded,
+                    size: 14,
+                    color: c(LhColors.mute2),
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: TextField(
@@ -49194,7 +49214,10 @@ SafeArea(
         for (final p in _kPeriodKeys) {
           final k = '$dim|$p';
           final rows = _pkCrossRows[k];
-          busy.add(_pkCrossLoading.contains(k) || !_pkCrossRows.containsKey(k) && !_pkCrossFailed.contains(k));
+          busy.add(
+            _pkCrossLoading.contains(k) ||
+                !_pkCrossRows.containsKey(k) && !_pkCrossFailed.contains(k),
+          );
           if (rows == null) {
             perPeriod.add(null);
             continue;
@@ -49253,9 +49276,7 @@ SafeArea(
           }
           final vals = <List<double?>?>[
             for (final ents in perPeriod)
-              ents == null
-                  ? null
-                  : <double?>[for (final e in ents) e?.v(k)],
+              ents == null ? null : <double?>[for (final e in ents) e?.v(k)],
           ];
           final any = vals.any((v) => v == null || v.any((x) => x != null));
           if (!any) continue;
@@ -49325,32 +49346,32 @@ SafeArea(
           return false;
         },
         child: ListView(
-        // 屏外多备一屏：图卡第一次滑进来时不在那一帧现排版。
-        cacheExtent: 900,
-        padding: EdgeInsets.fromLTRB(
-          12,
-          12,
-          12,
-          24 + MediaQuery.paddingOf(ctx).bottom,
-        ),
-        children: [
-          contenders,
-          const SizedBox(height: 12),
-          ...figures,
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 12, 4, 0),
-            child: Text(
-              '口径跟灯塔一级一样；赢的一方实心，其他方斜线；资产、折扣进度是时点数。',
-              style: LhTypography.sans(
-                size: 9.5,
-                color: c(LhColors.mute2),
-                height: 1.6,
-                context: context,
+          // 屏外多备一屏：图卡第一次滑进来时不在那一帧现排版。
+          cacheExtent: 900,
+          padding: EdgeInsets.fromLTRB(
+            12,
+            12,
+            12,
+            24 + MediaQuery.paddingOf(ctx).bottom,
+          ),
+          children: [
+            contenders,
+            const SizedBox(height: 12),
+            ...figures,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 12, 4, 0),
+              child: Text(
+                '口径跟灯塔一级一样；赢的一方实心，其他方斜线；资产、折扣进度是时点数。',
+                style: LhTypography.sans(
+                  size: 9.5,
+                  color: c(LhColors.mute2),
+                  height: 1.6,
+                  context: context,
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       );
     }
 
@@ -49772,9 +49793,7 @@ SafeArea(
                                             _expandedFundPools.remove(
                                               fundPoolKey,
                                             );
-                                            _fundPoolTraces.remove(
-                                              fundPoolKey,
-                                            );
+                                            _fundPoolTraces.remove(fundPoolKey);
                                           }
                                         });
                                       }
@@ -53444,11 +53463,11 @@ SafeArea(
         // ── Sticky header：仅保留返回、品牌与工具；层级路径移入 Hero 标题。
         _lhBand(
           padding: const EdgeInsets.fromLTRB(
-        lighthouseHeroShellMarginH,
-        10,
-        lighthouseHeroShellMarginH,
-        8,
-      ),
+            lighthouseHeroShellMarginH,
+            10,
+            lighthouseHeroShellMarginH,
+            8,
+          ),
           child: Column(
             children: [
               Row(
@@ -53496,210 +53515,213 @@ SafeArea(
                 ),
                 children: [
                   // ── Hero：与一级同壳同版式；数值取详情 payload ──────────────
-              _buildHeroShell(
-                child: _buildHero(
-                  totalsOverride: _heroTotalsFromRow(summaryEntity),
-                  profitDeltaOverride: _profitDeltaFromRow(summaryEntity),
-                  profitSeriesOverride: _profitSeriesFromRow(summaryEntity),
-                  profitLabelsOverride: _trendLabelsFromRow(summaryEntity),
-                  summaryTitle: heroTitle,
-                  summaryTitleWidget: _buildDetailBreadcrumb(
-                    type: type,
-                    rootDisplayName: rootDisplayName,
-                    rootGroupLabel: rootGroupLabel,
-                    isDrill: isDrill,
-                  ),
-                  showFilters: false,
-                ),
-              ),
-
-              const SizedBox(height: 10),
-
-              // ── 供给二级（省）：本省总资产 + 资产走势，跟一级那张同一块卡 ──
-              if (type == 'supply' && !isDrill && productL3Key == null)
-                Builder(
-                  builder: (context) {
-                    final lines = _provinceAssetLines(rootDisplayName);
-                    if (lines.isEmpty) return const SizedBox.shrink();
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(
-        lighthouseHeroShellMarginH,
-        0,
-        lighthouseHeroShellMarginH,
-        12,
-      ),
-                      child: _buildSupplyAssetOverview(
-                        const <Map<String, dynamic>>[],
-                        provinceLines: lines,
-                        provinceTitle: rootDisplayName,
+                  _buildHeroShell(
+                    child: _buildHero(
+                      totalsOverride: _heroTotalsFromRow(summaryEntity),
+                      profitDeltaOverride: _profitDeltaFromRow(summaryEntity),
+                      profitSeriesOverride: _profitSeriesFromRow(summaryEntity),
+                      profitLabelsOverride: _trendLabelsFromRow(summaryEntity),
+                      summaryTitle: heroTitle,
+                      summaryTitleWidget: _buildDetailBreadcrumb(
+                        type: type,
+                        rootDisplayName: rootDisplayName,
+                        rootGroupLabel: rootGroupLabel,
+                        isDrill: isDrill,
                       ),
-                    );
-                  },
-                ),
+                      showFilters: false,
+                    ),
+                  ),
 
-              // ── 与一级同款白卡：维度段（无分类）· 选区间/指标 · 账本 ──
-              Container(
-                margin: const EdgeInsets.fromLTRB(
-        lighthouseHeroShellMarginH,
-        0,
-        lighthouseHeroShellMarginH,
-        18,
-      ),
-                decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    Colors.white,
-                    role: DunesColorRole.surface,
-                  ),
-                  border: Border.all(
-                    color: DunesColors.resolve(
-                      context,
-                      _LhPlum.line,
-                      role: DunesColorRole.border,
+                  const SizedBox(height: 10),
+
+                  // ── 供给二级（省）：本省总资产 + 资产走势，跟一级那张同一块卡 ──
+                  if (type == 'supply' && !isDrill && productL3Key == null)
+                    Builder(
+                      builder: (context) {
+                        final lines = _provinceAssetLines(rootDisplayName);
+                        if (lines.isEmpty) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            lighthouseHeroShellMarginH,
+                            0,
+                            lighthouseHeroShellMarginH,
+                            12,
+                          ),
+                          child: _buildSupplyAssetOverview(
+                            const <Map<String, dynamic>>[],
+                            provinceLines: lines,
+                            provinceTitle: rootDisplayName,
+                          ),
+                        );
+                      },
                     ),
-                    width: 0.5,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: LhColors.ink.withAlpha(10),
-                      blurRadius: 10,
-                      spreadRadius: -4,
-                      offset: const Offset(0, 3),
+
+                  // ── 与一级同款白卡：维度段（无分类）· 选区间/指标 · 账本 ──
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(
+                      lighthouseHeroShellMarginH,
+                      0,
+                      lighthouseHeroShellMarginH,
+                      18,
                     ),
-                  ],
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildDetailSubTabSegment(
-                      subTabList: subTabList,
-                      viewDict: viewDict,
-                      activeSubRows: subRows,
-                    ),
-                    if (isSkuTab) _buildDetailSkuSearchBar(),
-                    _buildSortbar(anchorScope: _detailRouteKey()),
-                    Container(
-                      height: 1,
+                    decoration: BoxDecoration(
                       color: DunesColors.resolve(
                         context,
-                        _LhPlum.line,
+                        Colors.white,
                         role: DunesColorRole.surface,
                       ),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          _LhPlum.line,
+                          role: DunesColorRole.border,
+                        ),
+                        width: 0.5,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: LhColors.ink.withAlpha(10),
+                          blurRadius: 10,
+                          spreadRadius: -4,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
                     ),
-                    if (filteredSubRows.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 40),
-                        child: Center(
-                          child: Text(
-                            isSkuTab && _detailSkuQuery.trim().isNotEmpty
-                                ? '无匹配 SKU'
-                                : '暂无数据',
-                            style: LhTypography.sans(
-                              size: 12,
-                              color: DunesColors.resolve(
-                                context,
-                                LhColors.mute,
-                              ),
-                              context: context,
-                            ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildDetailSubTabSegment(
+                          subTabList: subTabList,
+                          viewDict: viewDict,
+                          activeSubRows: subRows,
+                        ),
+                        if (isSkuTab) _buildDetailSkuSearchBar(),
+                        _buildSortbar(anchorScope: _detailRouteKey()),
+                        Container(
+                          height: 1,
+                          color: DunesColors.resolve(
+                            context,
+                            _LhPlum.line,
+                            role: DunesColorRole.surface,
                           ),
                         ),
-                      )
-                    else
-                      Builder(
-                        builder: (context) {
-                          final metricsTab = type;
-                          final sorted =
-                              List<Map<String, dynamic>>.from(filteredSubRows)
-                                ..sort((a, b) {
-                                  final pa = _rowMetricValue(a, _sortField);
-                                  final pb = _rowMetricValue(b, _sortField);
-                                  return _sortDesc
-                                      ? pb.compareTo(pa)
-                                      : pa.compareTo(pb);
-                                });
-                          final totalPages = _totalPages(sorted.length);
-                          // 权益落点可能不在第一页 —— 翻到它那页，只翻一次。
-                          _maybePageToEquityFocus(sorted, totalPages);
-                          final page = _detailPage.clamp(1, totalPages);
-                          final start = (page - 1) * _pageSize;
-                          final end = (start + _pageSize).clamp(
-                            0,
-                            sorted.length,
-                          );
-                          final visible = sorted
-                              .sublist(start, end)
-                              .map(_rowWithResolvedTrend)
-                              .toList();
-                          final isSupplierCodeSubTab =
-                              _detailSubTab == 'supplierCode';
-                          final isProductL3SubTab =
-                              _detailSubTab == lighthouseProductL3SubTab;
-                          final canDrill = !(isDrill || isSupplierCodeSubTab);
-                          final trendPrefix =
-                              'detail:$type:$key:${_detailSubTab}:${isDrill ? _drillKey : ''}';
-
-                          return Column(
-                            children: [
-                              _buildLedger(
-                                visible,
-                                shareRows: sorted,
-                                metricsTab: metricsTab,
-                                trendKeyPrefix: trendPrefix,
-                                showRowChevron: canDrill,
-                                allowDefaultDetailOpen: false,
-                                onRowTap: !canDrill
-                                    ? null
-                                    : isProductL3SubTab
-                                    // 三级行进的是整页三级详情，不是交叉维 drill。
-                                    ? (row) => _openProductL3Detail(
-                                        l3: row['name']?.toString() ?? '',
-                                        l1:
-                                            (detailDict['group']?.toString() ??
-                                                    '')
-                                                .isNotEmpty
-                                            ? detailDict['group'].toString()
-                                            : rootGroupLabel,
-                                        l2: rootDisplayName,
-                                      )
-                                    : (row) => _openDetailDrill(
-                                        detailDict: detailDict,
-                                        dim: _detailSubTab,
-                                        row: row,
-                                      ),
-                              ),
-                              if (totalPages > 1)
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    14,
-                                    8,
-                                    14,
-                                    12,
+                        if (filteredSubRows.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Center(
+                              child: Text(
+                                isSkuTab && _detailSkuQuery.trim().isNotEmpty
+                                    ? '无匹配 SKU'
+                                    : '暂无数据',
+                                style: LhTypography.sans(
+                                  size: 12,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.mute,
                                   ),
-                                  child: _buildPageBar(
-                                    currentPage: page,
-                                    totalPages: totalPages,
-                                    onPageSelected: (p) => setState(() {
-                                      _clearEquityFocus();
-                                      _detailPage = p;
-                                    }),
-                                  ),
+                                  context: context,
                                 ),
-                            ],
-                          );
-                        },
-                      ),
-                  ],
-                ),
-              ),
+                              ),
+                            ),
+                          )
+                        else
+                          Builder(
+                            builder: (context) {
+                              final metricsTab = type;
+                              final sorted =
+                                  List<Map<String, dynamic>>.from(
+                                    filteredSubRows,
+                                  )..sort((a, b) {
+                                    final pa = _rowMetricValue(a, _sortField);
+                                    final pb = _rowMetricValue(b, _sortField);
+                                    return _sortDesc
+                                        ? pb.compareTo(pa)
+                                        : pa.compareTo(pb);
+                                  });
+                              final totalPages = _totalPages(sorted.length);
+                              // 权益落点可能不在第一页 —— 翻到它那页，只翻一次。
+                              _maybePageToEquityFocus(sorted, totalPages);
+                              final page = _detailPage.clamp(1, totalPages);
+                              final start = (page - 1) * _pageSize;
+                              final end = (start + _pageSize).clamp(
+                                0,
+                                sorted.length,
+                              );
+                              final visible = sorted
+                                  .sublist(start, end)
+                                  .map(_rowWithResolvedTrend)
+                                  .toList();
+                              final isSupplierCodeSubTab =
+                                  _detailSubTab == 'supplierCode';
+                              final isProductL3SubTab =
+                                  _detailSubTab == lighthouseProductL3SubTab;
+                              final canDrill =
+                                  !(isDrill || isSupplierCodeSubTab);
+                              final trendPrefix =
+                                  'detail:$type:$key:${_detailSubTab}:${isDrill ? _drillKey : ''}';
 
-              _buildFooter(),
-            ],
+                              return Column(
+                                children: [
+                                  _buildLedger(
+                                    visible,
+                                    shareRows: sorted,
+                                    metricsTab: metricsTab,
+                                    trendKeyPrefix: trendPrefix,
+                                    showRowChevron: canDrill,
+                                    allowDefaultDetailOpen: false,
+                                    onRowTap: !canDrill
+                                        ? null
+                                        : isProductL3SubTab
+                                        // 三级行进的是整页三级详情，不是交叉维 drill。
+                                        ? (row) => _openProductL3Detail(
+                                            l3: row['name']?.toString() ?? '',
+                                            l1:
+                                                (detailDict['group']
+                                                            ?.toString() ??
+                                                        '')
+                                                    .isNotEmpty
+                                                ? detailDict['group'].toString()
+                                                : rootGroupLabel,
+                                            l2: rootDisplayName,
+                                          )
+                                        : (row) => _openDetailDrill(
+                                            detailDict: detailDict,
+                                            dim: _detailSubTab,
+                                            row: row,
+                                          ),
+                                  ),
+                                  if (totalPages > 1)
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        14,
+                                        8,
+                                        14,
+                                        12,
+                                      ),
+                                      child: _buildPageBar(
+                                        currentPage: page,
+                                        totalPages: totalPages,
+                                        onPageSelected: (p) => setState(() {
+                                          _clearEquityFocus();
+                                          _detailPage = p;
+                                        }),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  _buildFooter(),
+                ],
+              ),
+            ),
           ),
-        ),
-        ),
         ),
       ],
     );
@@ -53735,11 +53757,11 @@ SafeArea(
         // ── Sticky header — 对齐一级 AppBar 布局 ──────────────────────────
         _lhBand(
           padding: const EdgeInsets.fromLTRB(
-        lighthouseHeroShellMarginH,
-        10,
-        lighthouseHeroShellMarginH,
-        6,
-      ),
+            lighthouseHeroShellMarginH,
+            10,
+            lighthouseHeroShellMarginH,
+            6,
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -53783,177 +53805,185 @@ SafeArea(
                 ),
                 children: [
                   // ── SKU 汇总卡 ────────────────────────────────────────────────
-              Container(
-                margin: const EdgeInsets.fromLTRB(
-        lighthouseHeroShellMarginH,
-        0,
-        lighthouseHeroShellMarginH,
-        0,
-      ),
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 11),
-                decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    Colors.white,
-                    role: DunesColorRole.surface,
-                  ),
-                  border: Border.all(
-                    color: DunesColors.resolve(
-                      context,
-                      LhColors.line2,
-                      role: DunesColorRole.border,
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(
+                      lighthouseHeroShellMarginH,
+                      0,
+                      lighthouseHeroShellMarginH,
+                      0,
                     ),
-                    width: 1,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: LhColors.ink.withAlpha(12),
-                      blurRadius: 14,
-                      spreadRadius: -4,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    LhScrollText(
-                      _codeDrillDisplayName,
-                      style: LhTypography.sans(
-                        size: 13.5,
-                        weight: FontWeight.w600,
-                        color: DunesColors.resolve(context, LhColors.ink2),
-                        letterSpacing: -0.1,
-                        context: context,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 2,
-                    ),
-                    if (_codeDrillGroup.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        _codeDrillGroup,
-                        style: LhTypography.mono(
-                          size: 8.6,
-                          color: DunesColors.resolve(context, LhColors.mute),
-                          weight: FontWeight.w600,
-                          context: context,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    Container(
-                      height: 1,
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 11),
+                    decoration: BoxDecoration(
                       color: DunesColors.resolve(
                         context,
-                        LhColors.line2,
+                        Colors.white,
                         role: DunesColorRole.surface,
                       ),
-                      margin: const EdgeInsets.only(bottom: 10),
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _l4Stat(
-                            '销售额',
-                            '${_fmt(sumSales.abs())}${_unit(sumSales.abs())}',
-                          ),
+                      border: Border.all(
+                        color: DunesColors.resolve(
+                          context,
+                          LhColors.line2,
+                          role: DunesColorRole.border,
                         ),
-                        Expanded(
-                          child: _l4Stat(
-                            '利润',
-                            '${_fmt(sumProfit.abs())}${_unit(sumProfit.abs())}',
-                            isNeg: sumProfit < 0,
-                          ),
+                        width: 1,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: LhColors.ink.withAlpha(12),
+                          blurRadius: 14,
+                          spreadRadius: -4,
+                          offset: const Offset(0, 4),
                         ),
-                        Expanded(child: _l4Stat('券码数', '${sortedRows.length}')),
                       ],
                     ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 10),
-
-              // ── 归属路径 (只读) ─────────────────────────────────────────
-              _buildLineageCard(
-                type: type,
-                rootDisplayName: rootDisplayName,
-                rootGroupLabel: rootGroupLabel,
-                isDrill: isDrill,
-              ),
-
-              const SizedBox(height: 14),
-
-              // ── totals row ────────────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-        lighthouseHeroShellMarginH,
-        0,
-        lighthouseHeroShellMarginH,
-        4,
-      ),
-                child: Text(
-                  '产品码 · ${sortedRows.length} 项',
-                  style: LhTypography.mono(
-                    size: 8.4,
-                    color: DunesColors.resolve(context, LhColors.mute),
-                    letterSpacing: 0.2,
-                    context: context,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LhScrollText(
+                          _codeDrillDisplayName,
+                          style: LhTypography.sans(
+                            size: 13.5,
+                            weight: FontWeight.w600,
+                            color: DunesColors.resolve(context, LhColors.ink2),
+                            letterSpacing: -0.1,
+                            context: context,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                        ),
+                        if (_codeDrillGroup.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _codeDrillGroup,
+                            style: LhTypography.mono(
+                              size: 8.6,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
+                              weight: FontWeight.w600,
+                              context: context,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        Container(
+                          height: 1,
+                          color: DunesColors.resolve(
+                            context,
+                            LhColors.line2,
+                            role: DunesColorRole.surface,
+                          ),
+                          margin: const EdgeInsets.only(bottom: 10),
+                        ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _l4Stat(
+                                '销售额',
+                                '${_fmt(sumSales.abs())}${_unit(sumSales.abs())}',
+                              ),
+                            ),
+                            Expanded(
+                              child: _l4Stat(
+                                '利润',
+                                '${_fmt(sumProfit.abs())}${_unit(sumProfit.abs())}',
+                                isNeg: sumProfit < 0,
+                              ),
+                            ),
+                            Expanded(
+                              child: _l4Stat('券码数', '${sortedRows.length}'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ),
 
-              // ── 供应商产品码列表 ───────────────────────────────────────────
-              if (sortedRows.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
+                  const SizedBox(height: 10),
+
+                  // ── 归属路径 (只读) ─────────────────────────────────────────
+                  _buildLineageCard(
+                    type: type,
+                    rootDisplayName: rootDisplayName,
+                    rootGroupLabel: rootGroupLabel,
+                    isDrill: isDrill,
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // ── totals row ────────────────────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      lighthouseHeroShellMarginH,
+                      0,
+                      lighthouseHeroShellMarginH,
+                      4,
+                    ),
                     child: Text(
-                      '暂无 supplier_product_code 数据',
-                      style: LhTypography.sans(
-                        size: 12,
+                      '产品码 · ${sortedRows.length} 项',
+                      style: LhTypography.mono(
+                        size: 8.4,
                         color: DunesColors.resolve(context, LhColors.mute),
+                        letterSpacing: 0.2,
                         context: context,
                       ),
                     ),
                   ),
-                )
-              else
-                Builder(
-                  builder: (context) {
-                    final totalPages = _totalPages(sortedRows.length);
-                    final page = _detailPage.clamp(1, totalPages);
-                    final start = (page - 1) * _pageSize;
-                    final end = (start + _pageSize).clamp(0, sortedRows.length);
-                    final visible = sortedRows.sublist(start, end);
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                      child: Column(
-                        children: [
-                          for (int i = 0; i < visible.length; i++)
-                            _buildSupplierCodeRow(visible[i], start + i),
-                          if (totalPages > 1) ...[
-                            const SizedBox(height: 8),
-                            _buildPageBar(
-                              currentPage: page,
-                              totalPages: totalPages,
-                              onPageSelected: (p) =>
-                                  setState(() => _detailPage = p),
-                            ),
-                          ],
-                        ],
-                      ),
-                    );
-                  },
-                ),
 
-              _buildFooter(),
-            ],
+                  // ── 供应商产品码列表 ───────────────────────────────────────────
+                  if (sortedRows.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
+                      child: Center(
+                        child: Text(
+                          '暂无 supplier_product_code 数据',
+                          style: LhTypography.sans(
+                            size: 12,
+                            color: DunesColors.resolve(context, LhColors.mute),
+                            context: context,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    Builder(
+                      builder: (context) {
+                        final totalPages = _totalPages(sortedRows.length);
+                        final page = _detailPage.clamp(1, totalPages);
+                        final start = (page - 1) * _pageSize;
+                        final end = (start + _pageSize).clamp(
+                          0,
+                          sortedRows.length,
+                        );
+                        final visible = sortedRows.sublist(start, end);
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                          child: Column(
+                            children: [
+                              for (int i = 0; i < visible.length; i++)
+                                _buildSupplierCodeRow(visible[i], start + i),
+                              if (totalPages > 1) ...[
+                                const SizedBox(height: 8),
+                                _buildPageBar(
+                                  currentPage: page,
+                                  totalPages: totalPages,
+                                  onPageSelected: (p) =>
+                                      setState(() => _detailPage = p),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                  _buildFooter(),
+                ],
+              ),
+            ),
           ),
-        ),
-        ),
         ),
       ],
     );
@@ -57525,10 +57555,7 @@ class _LhPinnedScrollShadeState extends State<_LhPinnedScrollShade> {
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0x165A458F),
-                        Color(0x005A458F),
-                      ],
+                      colors: [Color(0x165A458F), Color(0x005A458F)],
                     ),
                   ),
                 ),
@@ -57761,10 +57788,7 @@ class _LhMoneyBagPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _LhMoneyBagPainter old) =>
-      old.ink != ink ||
-      old.fill != fill ||
-      old.tie != tie ||
-      old.mark != mark;
+      old.ink != ink || old.fill != fill || old.tie != tie || old.mark != mark;
 }
 
 /// 一道细虚线（经营成本格上面那条，跟账单口径的三格隔开）。
@@ -57860,13 +57884,65 @@ class _LhPkHost extends ChangeNotifier {
   }
 }
 
-class _LhPkRoutePage extends StatelessWidget {
+class _LhPkRoutePage extends StatefulWidget {
   const _LhPkRoutePage({required this.host});
   final _LhPkHost host;
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: host,
-    builder: (ctx, _) => host.builder(ctx),
+  State<_LhPkRoutePage> createState() => _LhPkRoutePageState();
+}
+
+class _LhPkRoutePageState extends State<_LhPkRoutePage> {
+  static const double _backEdgeWidth = 28;
+  static const double _backSwipeDistance = 84;
+  int? _trackingPointer;
+  Offset? _startPosition;
+  Offset? _lastPosition;
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (event.position.dx > _backEdgeWidth) return;
+    _trackingPointer = event.pointer;
+    _startPosition = event.position;
+    _lastPosition = event.position;
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    if (event.pointer == _trackingPointer) _lastPosition = event.position;
+  }
+
+  void _onPointerEnd(PointerEvent event) {
+    if (event.pointer != _trackingPointer) return;
+    final start = _startPosition;
+    final last = _lastPosition;
+    _resetPointer();
+    if (start == null || last == null) return;
+    final delta = last - start;
+    if (delta.dx < _backSwipeDistance || delta.dx <= delta.dy.abs() * 1.25) {
+      return;
+    }
+    unawaited(Navigator.of(context).maybePop());
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    if (event.pointer == _trackingPointer) _resetPointer();
+  }
+
+  void _resetPointer() {
+    _trackingPointer = null;
+    _startPosition = null;
+    _lastPosition = null;
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    behavior: HitTestBehavior.translucent,
+    onPointerDown: _onPointerDown,
+    onPointerMove: _onPointerMove,
+    onPointerUp: _onPointerEnd,
+    onPointerCancel: _onPointerCancel,
+    child: ListenableBuilder(
+      listenable: widget.host,
+      builder: (ctx, _) => widget.host.builder(ctx),
+    ),
   );
 }

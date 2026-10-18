@@ -7,7 +7,6 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'proposal_sla_lookup_service.dart';
-import 'qianji_perf_shared.dart';
 
 const _purple = Color(0xFF7B5CD8);
 const _purpleDeep = Color(0xFF5B3FB0);
@@ -19,7 +18,23 @@ const _sub = Color(0xFF8E8E93);
 const _line = Color(0xFFE5E5EA);
 const _headBg = Color(0xFFF9F9FB);
 
-/// 饕业务查阅 · 提案时效。Apple 风格分段与分组卡片，同时兼容 PC 宽屏与手机 APP。
+Color _cInk(BuildContext context) => DunesColors.resolve(context, _ink);
+Color _cSub(BuildContext context) => DunesColors.resolve(context, _sub);
+Color _cLine(BuildContext context) =>
+    DunesColors.resolve(context, _line, role: DunesColorRole.border);
+Color _cBg(BuildContext context) =>
+    DunesColors.resolve(context, _iosBg, role: DunesColorRole.surface);
+Color _cFill(BuildContext context) =>
+    DunesColors.resolve(context, _iosFill, role: DunesColorRole.surface);
+Color _cCard(BuildContext context) =>
+    DunesColors.resolve(context, Colors.white, role: DunesColorRole.surface);
+Color _cHead(BuildContext context) =>
+    DunesColors.resolve(context, _headBg, role: DunesColorRole.surface);
+Color _cSoft(BuildContext context) =>
+    DunesColors.resolve(context, _purpleSoft, role: DunesColorRole.surface);
+Color _cPurple(BuildContext context) => DunesColors.resolve(context, _purple);
+
+/// 饕业务查阅 · 提案时效。顶栏与会议纪要一致，颜色走昼夜主题。
 class NativeQianjiProposalSlaPage extends StatefulWidget {
   const NativeQianjiProposalSlaPage({
     super.key,
@@ -76,7 +91,7 @@ class _NativeQianjiProposalSlaPageState
       body: SafeArea(
         child: Column(
           children: [
-            QianjiPerfNavBar(title: '提案时效', onBack: widget.onBack),
+            _SlaHeader(onBack: widget.onBack),
             Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 1240),
@@ -122,6 +137,53 @@ class _NativeQianjiProposalSlaPageState
   }
 }
 
+class _SlaHeader extends StatelessWidget {
+  const _SlaHeader({required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final back = DunesColors.resolve(context, DunesColors.text2);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 10, 16, 4),
+      child: Row(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: onBack,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.arrow_back_ios_new, size: 14, color: back),
+                  const SizedBox(width: 2),
+                  Text(
+                    '饕',
+                    style: TextStyle(fontSize: 13, color: back),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '提案时效',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: DunesColors.resolveNullable(context, _purple),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _HeroBanner extends StatelessWidget {
   const _HeroBanner({this.config, this.failed = false});
 
@@ -145,7 +207,7 @@ class _HeroBanner extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: _purple.withValues(alpha: 0.20),
+            color: _cPurple(context).withValues(alpha: 0.20),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -157,12 +219,12 @@ class _HeroBanner extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
+              color: const Color(0xFFFFFFFF).withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
               CupertinoIcons.timer,
-              color: Colors.white,
+              color: Color(0xFFFFFFFF),
               size: 21,
             ),
           ),
@@ -176,7 +238,7 @@ class _HeroBanner extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: Color(0xFFFFFFFF),
                     letterSpacing: -0.2,
                   ),
                 ),
@@ -186,7 +248,7 @@ class _HeroBanner extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.35,
-                    color: Colors.white.withValues(alpha: 0.86),
+                    color: const Color(0xFFFFFFFF).withValues(alpha: 0.86),
                   ),
                 ),
               ],
@@ -226,7 +288,7 @@ class _AppleSegmentBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: _iosFill,
+        color: _cFill(context),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -246,7 +308,7 @@ class _AppleSegmentBar extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: current == item.$1
-                        ? Colors.white
+                        ? _cCard(context)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: current == item.$1
@@ -266,7 +328,7 @@ class _AppleSegmentBar extends StatelessWidget {
                         Icon(
                           item.$3,
                           size: 15,
-                          color: current == item.$1 ? _purple : _sub,
+                          color: current == item.$1 ? _cPurple(context) : _cSub(context),
                         ),
                         const SizedBox(width: 5),
                       ],
@@ -280,7 +342,7 @@ class _AppleSegmentBar extends StatelessWidget {
                             fontWeight: current == item.$1
                                 ? FontWeight.w700
                                 : FontWeight.w500,
-                            color: current == item.$1 ? _ink : _sub,
+                            color: current == item.$1 ? _cInk(context) : _cSub(context),
                           ),
                         ),
                       ),
@@ -386,13 +448,13 @@ class _DashboardPaneState extends State<_DashboardPane> {
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        const Icon(CupertinoIcons.calendar, size: 17, color: _purple),
-        const Text(
+        Icon(CupertinoIcons.calendar, size: 17, color: _cPurple(context)),
+        Text(
           '统计区间',
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: _ink,
+            color: _cInk(context),
           ),
         ),
         _CapsuleButton(
@@ -585,7 +647,7 @@ class _MetricCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cCard(context),
         borderRadius: BorderRadius.circular(18),
         boxShadow: const [
           BoxShadow(
@@ -613,10 +675,10 @@ class _MetricCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   spec.title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: _sub,
+                    color: _cSub(context),
                   ),
                 ),
               ),
@@ -625,15 +687,15 @@ class _MetricCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             spec.value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.w800,
-              color: _ink,
+              color: _cInk(context),
               letterSpacing: -0.5,
             ),
           ),
           const SizedBox(height: 3),
-          Text(spec.hint, style: const TextStyle(fontSize: 12, color: _sub)),
+          Text(spec.hint, style: TextStyle(fontSize: 12, color: _cSub(context))),
         ],
       ),
     );
@@ -668,7 +730,7 @@ class _StatSectionCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       border: i == 0
                           ? null
-                          : const Border(top: BorderSide(color: _line)),
+                          : Border(top: BorderSide(color: _cLine(context))),
                     ),
                     child: Row(
                       children: [
@@ -678,18 +740,18 @@ class _StatSectionCard extends StatelessWidget {
                             children: [
                               Text(
                                 rows[i].name.isEmpty ? '—' : rows[i].name,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
-                                  color: _ink,
+                                  color: _cInk(context),
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 '节点 ${rows[i].nodes} · 提案 ${rows[i].proposalCount} · 平均 ${proposalSlaMinutes(rows[i].avgMinutes.round())} · 轮回 ${rows[i].rejectRounds}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: _sub,
+                                  color: _cSub(context),
                                 ),
                               ),
                             ],
@@ -699,10 +761,10 @@ class _StatSectionCard extends StatelessWidget {
                           label: '超时 ${rows[i].overdueRate}%',
                           fg: rows[i].overdueRate > 0
                               ? const Color(0xFFFF3B30)
-                              : _sub,
+                              : _cSub(context),
                           bg: rows[i].overdueRate > 0
                               ? const Color(0xFFFFF1F0)
-                              : _iosBg,
+                              : _cBg(context),
                         ),
                       ],
                     ),
@@ -712,19 +774,19 @@ class _StatSectionCard extends StatelessWidget {
           : Column(
               children: [
                 Container(
-                  color: _headBg,
+                  color: _cHead(context),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 10,
                   ),
                   child: Row(
                     children: [
-                      Expanded(flex: 3, child: _th(nameLabel)),
-                      Expanded(child: _th('节点数')),
-                      Expanded(child: _th('提案')),
-                      Expanded(flex: 2, child: _th('平均用时')),
-                      Expanded(child: _th('超时率')),
-                      Expanded(child: _th('轮回')),
+                      Expanded(flex: 3, child: _th(context, nameLabel)),
+                      Expanded(child: _th(context, '节点数')),
+                      Expanded(child: _th(context, '提案')),
+                      Expanded(flex: 2, child: _th(context, '平均用时')),
+                      Expanded(child: _th(context, '超时率')),
+                      Expanded(child: _th(context, '轮回')),
                     ],
                   ),
                 ),
@@ -734,8 +796,8 @@ class _StatSectionCard extends StatelessWidget {
                       horizontal: 16,
                       vertical: 12,
                     ),
-                    decoration: const BoxDecoration(
-                      border: Border(top: BorderSide(color: _line)),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: _cLine(context))),
                     ),
                     child: Row(
                       children: [
@@ -743,18 +805,18 @@ class _StatSectionCard extends StatelessWidget {
                           flex: 3,
                           child: Text(
                             row.name.isEmpty ? '—' : row.name,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: _ink,
+                              color: _cInk(context),
                             ),
                           ),
                         ),
-                        Expanded(child: _td('${row.nodes}')),
-                        Expanded(child: _td('${row.proposalCount}')),
+                        Expanded(child: _td(context, '${row.nodes}')),
+                        Expanded(child: _td(context, '${row.proposalCount}')),
                         Expanded(
                           flex: 2,
-                          child: _td(proposalSlaMinutes(row.avgMinutes.round())),
+                          child: _td(context, proposalSlaMinutes(row.avgMinutes.round())),
                         ),
                         Expanded(
                           child: Text(
@@ -764,11 +826,11 @@ class _StatSectionCard extends StatelessWidget {
                               fontWeight: FontWeight.w600,
                               color: row.overdueRate > 0
                                   ? const Color(0xFFFF3B30)
-                                  : _sub,
+                                  : _cSub(context),
                             ),
                           ),
                         ),
-                        Expanded(child: _td('${row.rejectRounds}')),
+                        Expanded(child: _td(context, '${row.rejectRounds}')),
                       ],
                     ),
                   ),
@@ -854,23 +916,30 @@ class _ScoresPaneState extends State<_ScoresPane> {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF8EB),
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFFFF8EB),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   '申诉理由：${row.appealReason}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: Color(0xFFB25000),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFB25000),
+                    ),
                   ),
                 ),
               ),
-            const Text(
+            Text(
               '处理方式',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: _sub,
+                color: _cSub(context),
               ),
             ),
             const SizedBox(height: 8),
@@ -888,35 +957,35 @@ class _ScoresPaneState extends State<_ScoresPane> {
             ),
             if (action == 'adjust') ...[
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 '调整后分数',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: _sub,
+                  color: _cSub(context),
                 ),
               ),
               const SizedBox(height: 6),
               TextFormField(
                 initialValue: '$points',
                 keyboardType: TextInputType.number,
-                decoration: _appleInputDeco(hint: '输入扣分分值'),
+                decoration: _appleInputDeco(context, hint: '输入扣分分值'),
                 onChanged: (v) => points = int.tryParse(v) ?? points,
               ),
             ],
             const SizedBox(height: 14),
-            const Text(
+            Text(
               '复核意见',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: _sub,
+                color: _cSub(context),
               ),
             ),
             const SizedBox(height: 6),
             TextField(
               controller: comment,
-              decoration: _appleInputDeco(hint: '选填或填写复核说明'),
+              decoration: _appleInputDeco(context, hint: '选填或填写复核说明'),
               minLines: 2,
               maxLines: 4,
             ),
@@ -1002,18 +1071,18 @@ class _ScoresPaneState extends State<_ScoresPane> {
         return Column(
           children: [
             Container(
-              color: _headBg,
+              color: _cHead(context),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
               child: Row(
                 children: [
-                  Expanded(flex: 3, child: _th('提案')),
-                  Expanded(flex: 2, child: _th('类型 / 节点')),
-                  Expanded(flex: 2, child: _th('责任人')),
-                  Expanded(flex: 2, child: _th('超时')),
-                  Expanded(child: _th('扣分')),
-                  Expanded(child: _th('状态')),
-                  Expanded(flex: 2, child: _th('申诉')),
-                  SizedBox(width: 78, child: _th('操作')),
+                  Expanded(flex: 3, child: _th(context, '提案')),
+                  Expanded(flex: 2, child: _th(context, '类型 / 节点')),
+                  Expanded(flex: 2, child: _th(context, '责任人')),
+                  Expanded(flex: 2, child: _th(context, '超时')),
+                  Expanded(child: _th(context, '扣分')),
+                  Expanded(child: _th(context, '状态')),
+                  Expanded(flex: 2, child: _th(context, '申诉')),
+                  SizedBox(width: 78, child: _th(context, '操作')),
                 ],
               ),
             ),
@@ -1031,8 +1100,8 @@ class _ScoresPaneState extends State<_ScoresPane> {
                       horizontal: 18,
                       vertical: 12,
                     ),
-                    decoration: const BoxDecoration(
-                      border: Border(top: BorderSide(color: _line)),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: _cLine(context))),
                     ),
                     child: Row(
                       children: [
@@ -1042,14 +1111,14 @@ class _ScoresPaneState extends State<_ScoresPane> {
                         ),
                         Expanded(
                           flex: 2,
-                          child: _td(
+                          child: _td(context, 
                             '${proposalSlaKindLabel(row.kind)}'
                             '${row.nodeLabel.isEmpty ? '' : ' · ${row.nodeLabel}'}',
                           ),
                         ),
                         Expanded(
                           flex: 2,
-                          child: _td(
+                          child: _td(context, 
                             row.sourceUserName.isEmpty
                                 ? row.userName
                                 : '${row.userName}（因 ${row.sourceUserName}）',
@@ -1057,13 +1126,13 @@ class _ScoresPaneState extends State<_ScoresPane> {
                         ),
                         Expanded(
                           flex: 2,
-                          child: _td(
+                          child: _td(context, 
                             row.overdueMinutes > 0
                                 ? proposalSlaMinutes(row.overdueMinutes)
                                 : '—',
                           ),
                         ),
-                        Expanded(child: _td(scoreText)),
+                        Expanded(child: _td(context, scoreText)),
                         Expanded(
                           child: Align(
                             alignment: Alignment.centerLeft,
@@ -1077,12 +1146,15 @@ class _ScoresPaneState extends State<_ScoresPane> {
                                   '申诉中：${row.appealReason}',
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
-                                    color: Color(0xFFB25000),
+                                    color: DunesColors.resolve(
+                                      context,
+                                      const Color(0xFFB25000),
+                                    ),
                                   ),
                                 )
-                              : _td('—'),
+                              : _td(context, '—'),
                         ),
                         SizedBox(
                           width: 78,
@@ -1194,12 +1266,12 @@ class _ExemptPaneState extends State<_ExemptPane> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               '免责范围',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: _sub,
+                color: _cSub(context),
               ),
             ),
             const SizedBox(height: 8),
@@ -1216,12 +1288,12 @@ class _ExemptPaneState extends State<_ExemptPane> {
               ],
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               '免责原因',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: _sub,
+                color: _cSub(context),
               ),
             ),
             const SizedBox(height: 8),
@@ -1238,26 +1310,26 @@ class _ExemptPaneState extends State<_ExemptPane> {
               ],
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               '免责说明',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: _sub,
+                color: _cSub(context),
               ),
             ),
             const SizedBox(height: 6),
             TextField(
               key: const ValueKey('proposal-sla-exempt-reason'),
               controller: reason,
-              decoration: _appleInputDeco(hint: '请填写具体免责说明'),
+              decoration: _appleInputDeco(context, hint: '请填写具体免责说明'),
               minLines: 2,
               maxLines: 4,
             ),
             const SizedBox(height: 10),
-            const Text(
+            Text(
               '登记后该范围内待复核的扣分记录改为「已免责」，节点不再催办。',
-              style: TextStyle(fontSize: 12, color: _sub),
+              style: TextStyle(fontSize: 12, color: _cSub(context)),
             ),
           ],
         );
@@ -1386,27 +1458,27 @@ class _InstanceTable extends StatelessWidget {
     return Column(
       children: [
         Container(
-          color: _headBg,
+          color: _cHead(context),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
           child: Row(
             children: [
-              Expanded(flex: 4, child: _th('提案')),
-              Expanded(child: _th('板块')),
-              Expanded(child: _th('状态')),
-              Expanded(child: _th('轮回')),
-              Expanded(flex: 2, child: _th('总用时')),
-              Expanded(flex: 3, child: _th('当前节点')),
-              Expanded(child: _th('超时节点')),
-              Expanded(flex: 2, child: _th('开始')),
-              if (onExempt != null) SizedBox(width: 92, child: _th('操作')),
+              Expanded(flex: 4, child: _th(context, '提案')),
+              Expanded(child: _th(context, '板块')),
+              Expanded(child: _th(context, '状态')),
+              Expanded(child: _th(context, '轮回')),
+              Expanded(flex: 2, child: _th(context, '总用时')),
+              Expanded(flex: 3, child: _th(context, '当前节点')),
+              Expanded(child: _th(context, '超时节点')),
+              Expanded(flex: 2, child: _th(context, '开始')),
+              if (onExempt != null) SizedBox(width: 92, child: _th(context, '操作')),
             ],
           ),
         ),
         for (final row in rows)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: _line)),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: _cLine(context))),
             ),
             child: Row(
               children: [
@@ -1419,8 +1491,8 @@ class _InstanceTable extends StatelessWidget {
                     alignment: Alignment.centerLeft,
                     child: _PillTag(
                       label: row.sector.isEmpty ? '未填写' : row.sector,
-                      fg: _ink,
-                      bg: _iosBg,
+                      fg: _cInk(context),
+                      bg: _cBg(context),
                     ),
                   ),
                 ),
@@ -1430,7 +1502,7 @@ class _InstanceTable extends StatelessWidget {
                     child: _StatusBadge(status: row.status),
                   ),
                 ),
-                Expanded(child: _td('${row.round > 0 ? row.round - 1 : 0}')),
+                Expanded(child: _td(context, '${row.round > 0 ? row.round - 1 : 0}')),
                 Expanded(
                   flex: 2,
                   child: _UsageBarCell(
@@ -1440,7 +1512,7 @@ class _InstanceTable extends StatelessWidget {
                 ),
                 Expanded(
                   flex: 3,
-                  child: _td(row.current.isEmpty ? '—' : row.current),
+                  child: _td(context, row.current.isEmpty ? '—' : row.current),
                 ),
                 Expanded(
                   child: Text(
@@ -1452,19 +1524,19 @@ class _InstanceTable extends StatelessWidget {
                           : FontWeight.w500,
                       color: row.overdueNodes > 0
                           ? const Color(0xFFFF3B30)
-                          : _ink,
+                          : _cInk(context),
                     ),
                   ),
                 ),
                 Expanded(
                   flex: 2,
-                  child: _td(proposalSlaTimeText(row.startedAt)),
+                  child: _td(context, proposalSlaTimeText(row.startedAt)),
                 ),
                 if (onExempt != null)
                   SizedBox(
                     width: 92,
                     child: row.exempt
-                        ? _td('—')
+                        ? _td(context, '—')
                         : Align(
                             alignment: Alignment.centerLeft,
                             child: _ActionPill(
@@ -1494,9 +1566,9 @@ class _InstanceMobileCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _headBg,
+        color: _cHead(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _line),
+        border: Border.all(color: _cLine(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1517,17 +1589,17 @@ class _InstanceMobileCard extends StatelessWidget {
             children: [
               _PillTag(
                 label: row.sector.isEmpty ? '未填写' : row.sector,
-                fg: _ink,
-                bg: Colors.white,
+                fg: _cInk(context),
+                bg: _cCard(context),
               ),
               _PillTag(
                 label: '总用时 ${row.elapsedHours}/${row.totalHours}h',
                 fg: row.elapsedHours > row.totalHours
                     ? const Color(0xFFFF3B30)
-                    : _ink,
-                bg: Colors.white,
+                    : _cInk(context),
+                bg: _cCard(context),
               ),
-              _PillTag(label: '轮回 $round', fg: _sub, bg: Colors.white),
+              _PillTag(label: '轮回 $round', fg: _cSub(context), bg: _cCard(context)),
               if (row.overdueNodes > 0)
                 _PillTag(
                   label: '超时节点 ${row.overdueNodes}',
@@ -1539,7 +1611,7 @@ class _InstanceMobileCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             '当前节点：${row.current.isEmpty ? '—' : row.current}',
-            style: const TextStyle(fontSize: 12, color: _ink),
+            style: TextStyle(fontSize: 12, color: _cInk(context)),
           ),
           const SizedBox(height: 4),
           Row(
@@ -1547,7 +1619,7 @@ class _InstanceMobileCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   '开始于 ${proposalSlaTimeText(row.startedAt)}',
-                  style: const TextStyle(fontSize: 11, color: _sub),
+                  style: TextStyle(fontSize: 11, color: _cSub(context)),
                 ),
               ),
               if (onExempt != null)
@@ -1578,9 +1650,9 @@ class _ScoreMobileCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _headBg,
+        color: _cHead(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _line),
+        border: Border.all(color: _cLine(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1595,12 +1667,12 @@ class _ScoreMobileCard extends StatelessWidget {
           Text(
             '${proposalSlaKindLabel(row.kind)}${row.nodeLabel.isEmpty ? '' : ' · ${row.nodeLabel}'} · '
             '${row.sourceUserName.isEmpty ? row.userName : '${row.userName}（因 ${row.sourceUserName}）'}',
-            style: const TextStyle(fontSize: 12, color: _ink),
+            style: TextStyle(fontSize: 12, color: _cInk(context)),
           ),
           const SizedBox(height: 6),
           Row(
             children: [
-              _PillTag(label: scoreText, fg: _purple, bg: _purpleSoft),
+              _PillTag(label: scoreText, fg: _cPurple(context), bg: _cSoft(context)),
               const SizedBox(width: 6),
               if (row.overdueMinutes > 0)
                 _PillTag(
@@ -1616,7 +1688,10 @@ class _ScoreMobileCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               '申诉中：${row.appealReason}',
-              style: const TextStyle(fontSize: 12, color: Color(0xFFB25000)),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, const Color(0xFFB25000)),
+              ),
             ),
           ],
         ],
@@ -1649,7 +1724,7 @@ class _UsageBarCell extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: over ? const Color(0xFFFF3B30) : _ink,
+              color: over ? const Color(0xFFFF3B30) : _cInk(context),
             ),
           ),
           const SizedBox(height: 4),
@@ -1658,7 +1733,7 @@ class _UsageBarCell extends StatelessWidget {
             child: LinearProgressIndicator(
               value: ratio,
               minHeight: 5,
-              backgroundColor: _iosFill,
+              backgroundColor: _cFill(context),
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
@@ -1684,15 +1759,15 @@ class _ProposalCell extends StatelessWidget {
             title.isEmpty ? '未命名提案' : title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13.5,
               fontWeight: FontWeight.w600,
-              color: _ink,
+              color: _cInk(context),
             ),
           ),
           if (code.isNotEmpty) ...[
             const SizedBox(height: 2),
-            Text(code, style: const TextStyle(fontSize: 11.5, color: _sub)),
+            Text(code, style: TextStyle(fontSize: 11.5, color: _cSub(context))),
           ],
         ],
       ),
@@ -1717,8 +1792,8 @@ class _StatusBadge extends StatelessWidget {
         const Color(0xFFFFF0EF),
       ),
       'exempt' => (const Color(0xFF34C759), const Color(0xFFEAF9EE)),
-      'adjusted' => (_purple, _purpleSoft),
-      _ => (_sub, _iosBg),
+      'adjusted' => (_cPurple(context), _cSoft(context)),
+      _ => (_cSub(context), _cBg(context)),
     };
     return _PillTag(label: proposalSlaStatusLabel(status), fg: fg, bg: bg);
   }
@@ -1735,7 +1810,7 @@ class _PillTag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: bg,
+        color: DunesColors.resolve(context, bg, role: DunesColorRole.surface),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -1743,7 +1818,7 @@ class _PillTag extends StatelessWidget {
         style: TextStyle(
           fontSize: 11.5,
           fontWeight: FontWeight.w600,
-          color: fg,
+          color: DunesColors.resolve(context, fg),
         ),
       ),
     );
@@ -1758,7 +1833,7 @@ class _ActionPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: _purpleSoft,
+      color: _cSoft(context),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
@@ -1767,10 +1842,10 @@ class _ActionPill extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: _purple,
+              color: _cPurple(context),
             ),
           ),
         ),
@@ -1793,7 +1868,7 @@ class _CapsuleButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: _iosBg,
+      color: _cBg(context),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
@@ -1803,14 +1878,14 @@ class _CapsuleButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 14, color: _ink),
+              Icon(icon, size: 14, color: _cInk(context)),
               const SizedBox(width: 5),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
-                  color: _ink,
+                  color: _cInk(context),
                 ),
               ),
             ],
@@ -1880,13 +1955,13 @@ class _AppleSearchBarState extends State<_AppleSearchBar> {
               decoration: InputDecoration(
                 isDense: true,
                 hintText: widget.hint,
-                hintStyle: const TextStyle(fontSize: 12.5, color: _sub),
+                hintStyle: TextStyle(fontSize: 12.5, color: _cSub(context)),
                 filled: true,
-                fillColor: _iosBg,
-                prefixIcon: const Icon(
+                fillColor: _cBg(context),
+                prefixIcon: Icon(
                   CupertinoIcons.search,
                   size: 16,
-                  color: _sub,
+                  color: _cSub(context),
                 ),
                 prefixIconConstraints: const BoxConstraints(
                   minWidth: 34,
@@ -1898,10 +1973,10 @@ class _AppleSearchBarState extends State<_AppleSearchBar> {
                           widget.controller.clear();
                           widget.onSubmitted();
                         },
-                        child: const Icon(
+                        child: Icon(
                           CupertinoIcons.clear_circled_solid,
                           size: 16,
-                          color: _sub,
+                          color: _cSub(context),
                         ),
                       )
                     : null,
@@ -1971,7 +2046,7 @@ class _FilterBar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          color: _iosBg,
+          color: _cBg(context),
           borderRadius: BorderRadius.circular(11),
         ),
         child: Row(
@@ -1987,7 +2062,7 @@ class _FilterBar extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: status == e.key ? Colors.white : Colors.transparent,
+                    color: status == e.key ? _cCard(context) : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                     boxShadow: status == e.key
                         ? const [
@@ -2006,7 +2081,7 @@ class _FilterBar extends StatelessWidget {
                       fontWeight: status == e.key
                           ? FontWeight.w700
                           : FontWeight.w500,
-                      color: status == e.key ? _purple : _sub,
+                      color: status == e.key ? _cPurple(context) : _cSub(context),
                     ),
                   ),
                 ),
@@ -2068,7 +2143,7 @@ class _AppleCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cCard(context),
         borderRadius: BorderRadius.circular(18),
         boxShadow: const [
           BoxShadow(
@@ -2086,17 +2161,17 @@ class _AppleCard extends StatelessWidget {
           if (title != null)
             Container(
               padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: _line)),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: _cLine(context))),
               ),
               child: Row(
                 children: [
                   Text(
                     title!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: _ink,
+                      color: _cInk(context),
                     ),
                   ),
                   if (subtitle != null) ...[
@@ -2105,7 +2180,7 @@ class _AppleCard extends StatelessWidget {
                       child: Text(
                         subtitle!,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, color: _sub),
+                        style: TextStyle(fontSize: 12, color: _cSub(context)),
                       ),
                     ),
                   ] else
@@ -2140,7 +2215,7 @@ class _ChoicePill extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? _purple : _iosBg,
+          color: selected ? _purple : _cBg(context),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
@@ -2148,7 +2223,7 @@ class _ChoicePill extends StatelessWidget {
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : _ink,
+            color: selected ? const Color(0xFFFFFFFF) : _cInk(context),
           ),
         ),
       ),
@@ -2186,7 +2261,7 @@ Future<T?> _showAppleSheet<T>({
                     height: 4,
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
-                      color: _line,
+                      color: _cLine(context),
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
@@ -2199,10 +2274,10 @@ Future<T?> _showAppleSheet<T>({
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
-                            color: _ink,
+                            color: _cInk(context),
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -2210,16 +2285,16 @@ Future<T?> _showAppleSheet<T>({
                           subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: _sub),
+                          style: TextStyle(fontSize: 12, color: _cSub(context)),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(ctx, false),
-                    icon: const Icon(
+                    icon: Icon(
                       CupertinoIcons.xmark_circle_fill,
-                      color: _sub,
+                      color: _cSub(context),
                     ),
                   ),
                 ],
@@ -2234,8 +2309,8 @@ Future<T?> _showAppleSheet<T>({
                       height: 42,
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: _ink,
-                          side: const BorderSide(color: _line),
+                          foregroundColor: _cInk(context),
+                          side: BorderSide(color: _cLine(context)),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -2275,7 +2350,7 @@ Future<T?> _showAppleSheet<T>({
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: _cCard(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
@@ -2285,7 +2360,7 @@ Future<T?> _showAppleSheet<T>({
   return showDialog<T>(
     context: context,
     builder: (ctx) => Dialog(
-      backgroundColor: Colors.white,
+      backgroundColor: _cCard(context),
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
@@ -2304,16 +2379,16 @@ class _TableFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      decoration: const BoxDecoration(
-        color: _headBg,
-        border: Border(top: BorderSide(color: _line)),
+      decoration: BoxDecoration(
+        color: _cHead(context),
+        border: Border(top: BorderSide(color: _cLine(context))),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           Text(
             '共 $count 条记录',
-            style: const TextStyle(fontSize: 12, color: _sub),
+            style: TextStyle(fontSize: 12, color: _cSub(context)),
           ),
         ],
       ),
@@ -2355,9 +2430,9 @@ class _Empty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(CupertinoIcons.tray, size: 28, color: _sub),
+            Icon(CupertinoIcons.tray, size: 28, color: _cSub(context)),
             const SizedBox(height: 8),
-            Text(text, style: const TextStyle(fontSize: 13, color: _sub)),
+            Text(text, style: TextStyle(fontSize: 13, color: _cSub(context))),
           ],
         ),
       ),
@@ -2365,32 +2440,32 @@ class _Empty extends StatelessWidget {
   }
 }
 
-Widget _th(String text) => Text(
+Widget _th(BuildContext context, String text) => Text(
   text,
-  style: const TextStyle(
+  style: TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w600,
-    color: _sub,
+    color: _cSub(context),
   ),
 );
 
-Widget _td(String text) => Padding(
+Widget _td(BuildContext context, String text) => Padding(
   padding: const EdgeInsets.only(right: 8),
   child: Text(
     text,
     maxLines: 2,
     overflow: TextOverflow.ellipsis,
-    style: const TextStyle(fontSize: 12.5, color: _ink),
+    style: TextStyle(fontSize: 12.5, color: _cInk(context)),
   ),
 );
 
-InputDecoration _appleInputDeco({String? hint}) {
+InputDecoration _appleInputDeco(BuildContext context, {String? hint}) {
   return InputDecoration(
     isDense: true,
     hintText: hint,
-    hintStyle: const TextStyle(fontSize: 13, color: _sub),
+    hintStyle: TextStyle(fontSize: 13, color: _cSub(context)),
     filled: true,
-    fillColor: _iosBg,
+    fillColor: _cBg(context),
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),

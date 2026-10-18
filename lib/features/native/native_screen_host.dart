@@ -360,6 +360,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// Keep「我的」主页 alive：进审批/会议/画像详情再返回时不 dispose，保留滚动位置与当前 Tab。
   bool _myPageMounted = false;
+
+  /// Keep 饕首页 alive：APP 进入子板块再返回时停在刚才的位置。
+  bool _qianjiHubMounted = false;
+  final GlobalKey _qianjiHubKeepAliveKey = GlobalKey(
+    debugLabel: 'qianji-hub-keep-alive',
+  );
   final GlobalKey _myPageKeepAliveKey = GlobalKey(
     debugLabel: 'my-page-keep-alive',
   );
@@ -3957,6 +3963,61 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
+  /// 饕首页。用固定 key 挂在壳上，进入子板块再返回时不重建，滚动停在原处。
+  Widget _buildQianjiHubPage() {
+    return NativeQianjiHubPage(
+      key: _qianjiHubKeepAliveKey,
+      session: widget.session,
+      onOpenCursorAccount: () => widget.navigation.go('QJC'),
+      onOpenMeetingSupervise: () => widget.navigation.go('QJMM'),
+      onOpenSessionSupervise: () => widget.navigation.go('QJSS'),
+      onOpenKbSupervise: () => widget.navigation.go('QJKB'),
+      onOpenTaskMonitor: () => widget.navigation.go('QJTS'),
+      onOpenDailyReportMonitor: () => widget.navigation.go('QJDR'),
+      onOpenGroupReply: () => widget.navigation.go('QJGR'),
+      onOpenProposalSla: widget.session.proposalSlaLookupAccess
+          ? () => widget.navigation.go('QJSL')
+          : null,
+      onOpenMonthlyOpinion: () => widget.navigation.go('QJMO'),
+      onOpenProposalReview: () => widget.navigation.go('QJPA'),
+      onOpenEfficiencyAnalysis: () => widget.navigation.go('QJEA'),
+      onOpenWorkProfileManagement: () => widget.navigation.go('QJWP'),
+      onOpenEfficiencyBossPreview: () {
+        setState(() {
+          _workSituationMonth = null;
+          _workSituationFilter = 'all';
+        });
+        widget.navigation.go('QJEAB');
+      },
+      onOpenAppUsage: () => widget.navigation.go('QJUH'),
+      onOpenFundSecondment: widget.session.effectiveFundSecondmentAccess
+          ? () => widget.navigation.go('QJFS')
+          : null,
+      onOpenCashFlow: widget.session.effectiveCashFlowAccess
+          ? () => widget.navigation.go('QJCF')
+          : null,
+      onOpenMonthlyBill: widget.session.effectiveMonthlyBillAccess
+          ? () => widget.navigation.go('QJMB')
+          : null,
+      onOpenTravel: () => widget.navigation.go('QJTR'),
+      onOpenRobotHome: () {
+        setState(() {
+          _qjrOpenedFromChat = false;
+          _qjrRobotKey = 'r_lighthouse';
+        });
+        widget.navigation.go('QJR');
+      },
+      onOpenRobot: (role) => unawaited(_openRobotFromCatalog(role)),
+      onOpenDigitalEmployee: (item) {
+        setState(() => _selectedDigitalEmployee = item);
+        final screen = item.screenId.trim();
+        if (screen.isNotEmpty) {
+          widget.navigation.go(screen);
+        }
+      },
+    );
+  }
+
   Widget _buildCurrentScreen(BuildContext context) {
     if (widget.session.isExternalUser &&
         _isRestrictedForExternalUser(widget.navigation.currentScreen)) {
@@ -3971,56 +4032,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     switch (widget.navigation.currentScreen) {
       case 'QJ':
-        return NativeQianjiHubPage(
-          session: widget.session,
-          onOpenCursorAccount: () => widget.navigation.go('QJC'),
-          onOpenMeetingSupervise: () => widget.navigation.go('QJMM'),
-          onOpenSessionSupervise: () => widget.navigation.go('QJSS'),
-          onOpenKbSupervise: () => widget.navigation.go('QJKB'),
-          onOpenTaskMonitor: () => widget.navigation.go('QJTS'),
-          onOpenDailyReportMonitor: () => widget.navigation.go('QJDR'),
-          onOpenGroupReply: () => widget.navigation.go('QJGR'),
-          onOpenProposalSla: widget.session.proposalSlaLookupAccess
-              ? () => widget.navigation.go('QJSL')
-              : null,
-          onOpenMonthlyOpinion: () => widget.navigation.go('QJMO'),
-          onOpenProposalReview: () => widget.navigation.go('QJPA'),
-          onOpenEfficiencyAnalysis: () => widget.navigation.go('QJEA'),
-          onOpenWorkProfileManagement: () => widget.navigation.go('QJWP'),
-          onOpenEfficiencyBossPreview: () {
-            setState(() {
-              _workSituationMonth = null;
-              _workSituationFilter = 'all';
-            });
-            widget.navigation.go('QJEAB');
-          },
-          onOpenAppUsage: () => widget.navigation.go('QJUH'),
-          onOpenFundSecondment: widget.session.effectiveFundSecondmentAccess
-              ? () => widget.navigation.go('QJFS')
-              : null,
-          onOpenCashFlow: widget.session.effectiveCashFlowAccess
-              ? () => widget.navigation.go('QJCF')
-              : null,
-          onOpenMonthlyBill: widget.session.effectiveMonthlyBillAccess
-              ? () => widget.navigation.go('QJMB')
-              : null,
-          onOpenTravel: () => widget.navigation.go('QJTR'),
-          onOpenRobotHome: () {
-            setState(() {
-              _qjrOpenedFromChat = false;
-              _qjrRobotKey = 'r_lighthouse';
-            });
-            widget.navigation.go('QJR');
-          },
-          onOpenRobot: (role) => unawaited(_openRobotFromCatalog(role)),
-          onOpenDigitalEmployee: (item) {
-            setState(() => _selectedDigitalEmployee = item);
-            final screen = item.screenId.trim();
-            if (screen.isNotEmpty) {
-              widget.navigation.go(screen);
-            }
-          },
-        );
+        return _buildQianjiHubPage();
       case 'QJMA':
       case 'QJTO':
       case 'QJAM':
@@ -5581,6 +5593,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (isWorkbench) {
       _workbenchMounted = true;
     }
+    final isQianjiHub =
+        screen == 'QJ' || (isSearch && _searchUnderlayScreen == 'QJ');
+    if (isQianjiHub) _qianjiHubMounted = true;
     final isMyHub = screen == 'B2' || screen == 'B2P';
     final isMyDetail = _isMyRoute(screen) && !isMyHub;
     if (isMyHub || isMyDetail || workbenchAsSlideOver) {
@@ -5597,6 +5612,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         switcherScreenId == 'C3' && !_contactsGroupPickMode;
     final switcherIsMyHub =
         switcherScreenId == 'B2' || switcherScreenId == 'B2P';
+    final switcherIsQianjiHub = switcherScreenId == 'QJ';
     final switcherIsProposal =
         switcherScreenId == 'B2SALES' || switcherScreenId == 'B2PURCHASE';
     final currentScreen = dualNow
@@ -5605,6 +5621,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               switcherIsInbox ||
               switcherIsContacts ||
               switcherIsMyHub ||
+              switcherIsQianjiHub ||
               switcherIsProposal ||
               workbenchAsSlideOver ||
               (isWorkbench && isDesktopCommOnly))
@@ -5747,6 +5764,19 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                       ? 1
                       : 0,
                   child: _buildContactsBrowsePage(useKeepAliveKey: true),
+                ),
+              ),
+            ),
+          ),
+        if (_qianjiHubMounted && !dualNow)
+          Positioned.fill(
+            child: TickerMode(
+              enabled: isQianjiHub,
+              child: IgnorePointer(
+                ignoring: !isQianjiHub,
+                child: Opacity(
+                  opacity: isQianjiHub ? 1 : 0,
+                  child: _buildQianjiHubPage(),
                 ),
               ),
             ),

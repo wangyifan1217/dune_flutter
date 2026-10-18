@@ -2486,6 +2486,44 @@ List<String> _proposalTechnologyItemAliases(String key) {
   return [key];
 }
 
+/// 这一侧还有没改完的单条驳回。负责人已经退回这条，卡住计时不再算在他们头上。
+bool proposalIntakeHasOpenItemReject(
+  Map<String, dynamic> review,
+  String prefix,
+) {
+  final raw = review['itemRejectComments'];
+  if (raw is! Map) return false;
+  for (final entry in raw.entries) {
+    final section = '${entry.key}'.trim();
+    final comment = '${entry.value ?? ''}'.trim();
+    if (!section.startsWith(prefix) || comment.isEmpty) continue;
+    if (_proposalItemRejectCleared(review, section)) continue;
+    return true;
+  }
+  return false;
+}
+
+bool _proposalItemRejectCleared(Map<String, dynamic> review, String section) {
+  final (mapKey, itemKey) = switch (section) {
+    _ when section.startsWith('technologyItem:') => (
+      'technologyItems',
+      section.substring('technologyItem:'.length),
+    ),
+    _ when section.startsWith('financeItem:') => (
+      'financeItems',
+      section.substring('financeItem:'.length),
+    ),
+    _ when section.startsWith('contractItem:') => (
+      'contractItems',
+      section.substring('contractItem:'.length),
+    ),
+    _ => ('', ''),
+  };
+  if (mapKey.isEmpty || itemKey.isEmpty) return false;
+  final items = review[mapKey];
+  return items is Map && items[itemKey] == true;
+}
+
 /// 与后端 proposalIntakeTechnologyItemSatisfied / proposalIntakeSkuProductsReviewed 对齐。
 bool proposalIntakeTechnologyItemReviewed(
   Map<String, dynamic> review,
@@ -3013,6 +3051,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
     String? statusText,
     DateTime? since,
     DateTime? doneAt,
+    bool holdClock = false,
   }) {
     final resolvedName = name.trim().isEmpty ? '未指定' : name.trim();
     final resolvedStatus =
@@ -3039,7 +3078,9 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       state: state,
       since: switch (state) {
         ProposalIntakeProgressState.current => since ?? stageSince,
-        ProposalIntakeProgressState.rejected => rejectedSince,
+        // 单条驳回只说明这条已经退回，不再从阶段起点继续给这个人计「卡了多久」。
+        ProposalIntakeProgressState.rejected =>
+          holdClock ? null : rejectedSince,
         _ => null,
       },
       doneAt: state == ProposalIntakeProgressState.done ? doneAt : null,
@@ -3106,6 +3147,16 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       rejectSection == 'purchaseContractCompleted' ||
       rejectSection == 'salesContractCompleted' ||
       rejectSection.startsWith('contractItem');
+  final techItemHandedBack = proposalIntakeHasOpenItemReject(
+    review,
+    'technologyItem:',
+  );
+  final owner2ItemHandedBack =
+      proposalIntakeHasOpenItemReject(review, 'financeItem:') ||
+      proposalIntakeHasOpenItemReject(review, 'contractItem:');
+  final techSectionRejected =
+      reviewRejected && rejectSection == 'technologyCompleted';
+  final owner2SectionRejected = contractRejected;
 
   final steps = [
     person(
@@ -3172,9 +3223,14 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       role: '科技部负责人',
       name: ownerName('technologyOwner'),
       action: '到各科技字段旁点「点此复核」，再到科技部底部确认本板块',
-      state: reviewerState('technologyCompleted', techRound: true),
+      state: reviewerState(
+        'technologyCompleted',
+        techRound: true,
+        rejected: techItemHandedBack,
+      ),
       time: reviewedAt,
       doneAt: doneOf('technologyCompleted'),
+      holdClock: techItemHandedBack && !techSectionRejected,
     ),
     person(
       id: 'review_contract',
@@ -3185,12 +3241,13 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
           : '到产品「填写结算」的收入/成本旁逐条复核，采购/销售合同也要复核完',
       state: reviewerState(
         'purchaseContractCompleted',
-        rejected: contractRejected,
+        rejected: contractRejected || owner2ItemHandedBack,
         completed: finance2Done,
         active: !finance2Done,
       ),
       time: reviewedAt,
       doneAt: contractDoneAt,
+      holdClock: owner2ItemHandedBack && !owner2SectionRejected,
     ),
     if (!purchase)
       person(

@@ -5104,6 +5104,44 @@ void main() {
     );
   });
 
+  test('open item rejection stops that reviewer clock', () {
+    final row = ProposalIntakeRow.fromJson({
+      'id': 18,
+      'kind': 'sales',
+      'status': 'reviewing',
+      'createdBy': 1,
+      'form': {
+        'createdByName': '王一凡',
+        'marketOwner1': '王一凡',
+        'technologyOwner': '李凡伊',
+        'financeOwner2': '陈彩风',
+        'financeOwner1': '邓艳丽',
+      },
+      'review': {
+        'stage': 'reviewing',
+        'stageEnteredAt': '2026-10-18T00:00:00Z',
+        'marketCompleted': true,
+        'technologyCompleted': false,
+        'itemRejectComments': {
+          'technologyItem:skuProducts': '内容需要填写完整',
+        },
+      },
+    });
+    final steps = proposalIntakeProgressSteps(row: row);
+    final tech = _progressById(steps, 'review_tech');
+    expect(tech.state, ProposalIntakeProgressState.rejected);
+    expect(tech.statusText, '已驳回');
+    expect(tech.waited(DateTime.utc(2026, 10, 18, 12)), isNull);
+    expect(
+      _progressById(steps, 'review_market').state,
+      ProposalIntakeProgressState.done,
+    );
+    expect(
+      _progressById(steps, 'review_contract').state,
+      ProposalIntakeProgressState.current,
+    );
+  });
+
   test('progress headline lists people currently in the step', () {
     final row = ProposalIntakeRow.fromJson({
       'id': 16,

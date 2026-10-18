@@ -315,6 +315,7 @@ LighthouseModelForecast? lighthouseModelForecast({
   required Map<DateTime, double> daily,
   required DateTime today,
   bool signed = false,
+  bool toYearEnd = false,
 }) {
   final d = _observed(daily, today);
   final current = d.keys.where(
@@ -340,6 +341,7 @@ LighthouseModelForecast? lighthouseModelForecast({
     daily: d,
     cutoff: cutoff,
     signed: isSigned,
+    horizonEnd: toYearEnd ? DateTime(today.year, 12, 31) : null,
   );
   if (dm == null) return null;
   final month = DateTime(today.year, today.month, 1);
@@ -411,7 +413,23 @@ LighthouseModelForecast? lighthouseModelForecast({
 LighthousePaceForecast lighthousePaceFromModel(
   LighthouseModelForecast mf, {
   required double shownActual,
+  LighthouseYearEndForecast? yearEnd,
 }) => LighthousePaceForecast(
+  future: yearEnd == null
+      ? const <LighthouseFutureMonth>[]
+      : [
+          for (final m in yearEnd.months)
+            if (!m.current)
+              LighthouseFutureMonth(
+                month: m.month,
+                forecast: m.forecast,
+                lo: m.lo,
+                hi: m.hi,
+              ),
+        ],
+  yearTotal: yearEnd?.total,
+  yearLo: yearEnd?.lo,
+  yearHi: yearEnd?.hi,
   actual: shownActual,
   forecast: mf.forecast,
   elapsedDays: mf.cutoffDay,
@@ -430,6 +448,7 @@ LighthousePaceForecast lighthousePaceFromModel(
 @immutable
 class LighthouseForecastReport {
   const LighthouseForecastReport({
+    this.yearEnd,
     required this.summary,
     required this.pace,
     required this.daily,
@@ -451,6 +470,9 @@ class LighthouseForecastReport {
     required this.prevCum,
   });
   final LighthouseModelForecast summary;
+
+  /// 到年末（没有年初以来的月度数据 / 历史不足时为 null）。
+  final LighthouseYearEndForecast? yearEnd;
   final double? pace,
       daily,
       ensemble,
@@ -470,11 +492,13 @@ LighthouseForecastReport? lighthouseForecastReport({
   required Map<DateTime, double> daily,
   required DateTime today,
   bool signed = false,
+  Map<DateTime, double> monthly = const <DateTime, double>{},
 }) {
   final summary = lighthouseModelForecast(
     daily: daily,
     today: today,
     signed: signed,
+    toYearEnd: true,
   );
   if (summary == null) return null;
   final d = _observed(daily, today);
@@ -521,6 +545,13 @@ LighthouseForecastReport? lighthouseForecastReport({
     ];
   }
   return LighthouseForecastReport(
+    yearEnd: lighthouseYearEndForecast(
+      month: summary,
+      daily: daily,
+      today: today,
+      monthly: monthly,
+      withBacktest: true,
+    ),
     summary: summary,
     pace: now.pace,
     daily: now.daily,
@@ -542,5 +573,235 @@ LighthouseForecastReport? lighthouseForecastReport({
     cumActual: summary.cumulativeMean.take(c).toList(),
     typicalShare: null,
     prevCum: previous,
+  );
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 年末预测：同一个动态日模型从截止日一路逐日走到 12 月 31 日。
+//
+//   全年 = 今年 1 月至上月的实际 + 本月预测 + 之后各月预测。
+//   本月、之后各月、全年的分位都取自同一批模拟路径（第 j 条路径的本月、
+//   11 月、12 月是同一个未来），所以「全年区间」不是各月区间的简单相加。
+//   未含季节性：模型只看近 240 天，不知道双 11 / 年底冲量这类「每年这时候
+//   都会涨」的规律 —— 11、12 月按最近的水平和星期节奏往后推。
+// ═════════════════════════════════════════════════════════════════════════════
+
+@immutable
+class LighthouseYearEndMonth {
+  const LighthouseYearEndMonth({
+    required this.month,
+    required this.forecast,
+    required this.lo,
+    required this.hi,
+    this.current = false,
+  });
+  final DateTime month;
+  final double forecast, lo, hi;
+
+  /// true = 本月（已发生 + 剩余天数），false = 之后整月都是预测。
+  final bool current;
+}
+
+/// 「提前 h 个月」的回测：在目标月之前 h 个月的同一进度截止，预测目标月全月。
+@immutable
+class LighthouseHorizonError {
+  const LighthouseHorizonError({
+    required this.horizon,
+    required this.months,
+    this.dynamic,
+    this.linear,
+  });
+  final int horizon, months;
+
+  /// WAPE：动态日模型 / 按截止时日均外推（对照）。
+  final double? dynamic, linear;
+}
+
+@immutable
+class LighthouseYearEndForecast {
+  const LighthouseYearEndForecast({
+    required this.year,
+    required this.months,
+    required this.ytdBefore,
+    required this.total,
+    required this.lo,
+    required this.hi,
+    this.lastYearTotal,
+    this.beatLastYearProb,
+    this.horizons = const <LighthouseHorizonError>[],
+  });
+  final int year;
+
+  /// 本月 + 之后各月（到 12 月）。
+  final List<LighthouseYearEndMonth> months;
+
+  /// 今年 1 月至上月已完成的实际合计。
+  final double ytdBefore;
+  final double total, lo, hi;
+  final double? lastYearTotal, beatLastYearProb;
+  final List<LighthouseHorizonError> horizons;
+
+  /// 之后还有几个整月要预测。
+  int get remainingMonths => months.where((m) => !m.current).length;
+}
+
+DateTime _monthStart(DateTime t) => DateTime(t.year, t.month, 1);
+
+/// 某个已完成月份的全月合计：优先用月度接口的数，没有就用完整的日数据加总。
+double? _monthTotal(
+  Map<DateTime, double> d,
+  Map<DateTime, double> monthly,
+  int y,
+  int m,
+) {
+  final v = monthly[DateTime(y, m, 1)];
+  if (v != null && v.isFinite) return v;
+  final days = _daysIn(y, m);
+  return _complete(d, y, m, days) ? _sumRange(d, y, m, 1, days) : null;
+}
+
+List<LighthouseHorizonError> _horizonBacktest(
+  Map<DateTime, double> d,
+  DateTime month,
+  int c,
+  int total,
+  bool signed,
+) {
+  final out = <LighthouseHorizonError>[];
+  for (final h in const [1, 2]) {
+    var numD = 0.0, numL = 0.0, den = 0.0;
+    var n = 0;
+    for (var k = 1; k <= 4; k++) {
+      final target = DateTime(month.year, month.month - k, 1);
+      final anchor = DateTime(target.year, target.month - h, 1);
+      final tDays = _daysIn(target.year, target.month);
+      final aDays = _daysIn(anchor.year, anchor.month);
+      if (!_complete(d, target.year, target.month, tDays)) continue;
+      final ck = (c * aDays / total).round().clamp(2, aDays - 1);
+      if (!_complete(d, anchor.year, anchor.month, ck)) continue;
+      final dm = lighthouseDynamicForecast(
+        daily: d,
+        cutoff: DateTime(anchor.year, anchor.month, ck),
+        signed: signed,
+        simulations: 0,
+        horizonEnd: DateTime(target.year, target.month, tDays),
+      );
+      if (dm == null || dm.futureMeans.length < h) continue;
+      final truth = _sumRange(d, target.year, target.month, 1, tDays);
+      final linear = _sumRange(d, anchor.year, anchor.month, 1, ck) / ck * tDays;
+      numD += (dm.futureMeans[h - 1] - truth).abs();
+      numL += (linear - truth).abs();
+      den += truth.abs();
+      n++;
+    }
+    out.add(
+      LighthouseHorizonError(
+        horizon: h,
+        months: n,
+        dynamic: n >= 2 && den > 1e-9 ? numD / den : null,
+        linear: n >= 2 && den > 1e-9 ? numL / den : null,
+      ),
+    );
+  }
+  return out;
+}
+
+/// 年末预测。[month] 必须是 `toYearEnd: true` 算出来的月末预测。
+/// [monthly]：月初 → 该月全月合计（已完成的月），用来拼年初至上月的实际
+/// 和去年全年；缺月且日数据也补不上时返回 null（不拿缺口当 0）。
+LighthouseYearEndForecast? lighthouseYearEndForecast({
+  required LighthouseModelForecast month,
+  required Map<DateTime, double> daily,
+  required DateTime today,
+  Map<DateTime, double> monthly = const <DateTime, double>{},
+  bool withBacktest = false,
+}) {
+  final d = _observed(daily, today);
+  final m = {
+    for (final e in monthly.entries)
+      if (e.value.isFinite) _monthStart(e.key): e.value,
+  };
+  final cur = month.month;
+  final dm = month.dynamic;
+  if (cur.month < 12 && dm.futureMonths.isEmpty) return null;
+  var ytd = 0.0;
+  for (var k = 1; k < cur.month; k++) {
+    final v = _monthTotal(d, m, cur.year, k);
+    if (v == null) return null;
+    ytd += v;
+  }
+  final months = <LighthouseYearEndMonth>[
+    LighthouseYearEndMonth(
+      month: cur,
+      forecast: month.forecast,
+      lo: month.lo,
+      hi: month.hi,
+      current: true,
+    ),
+  ];
+  final sims = dm.futureTotals.length == month.paths.length
+      ? dm.futureTotals
+      : const <List<double>>[];
+  for (var k = 0; k < dm.futureMonths.length; k++) {
+    final draws = [for (final t in sims) t[k]];
+    months.add(
+      LighthouseYearEndMonth(
+        month: dm.futureMonths[k],
+        forecast: dm.futureMeans[k],
+        lo: draws.isEmpty
+            ? dm.futureMeans[k]
+            : lighthouseForecastQuantile(draws, 0.1),
+        hi: draws.isEmpty
+            ? dm.futureMeans[k]
+            : lighthouseForecastQuantile(draws, 0.9),
+      ),
+    );
+  }
+  final total =
+      ytd + month.forecast + dm.futureMeans.fold(0.0, (a, b) => a + b);
+  final yearPaths = [
+    for (var j = 0; j < month.paths.length; j++)
+      ytd +
+          month.paths[j].last +
+          (sims.isEmpty ? 0.0 : sims[j].fold(0.0, (a, b) => a + b)),
+  ];
+  // 只有本月抽样、没有延伸抽样（理论上不会）时，区间退回本月的区间。
+  final lo = yearPaths.isEmpty || (sims.isEmpty && dm.futureMonths.isNotEmpty)
+      ? total - (month.forecast - month.lo)
+      : lighthouseForecastQuantile(yearPaths, 0.1);
+  final hi = yearPaths.isEmpty || (sims.isEmpty && dm.futureMonths.isNotEmpty)
+      ? total + (month.hi - month.forecast)
+      : lighthouseForecastQuantile(yearPaths, 0.9);
+  double? lastYear = 0.0;
+  for (var k = 1; k <= 12; k++) {
+    final v = _monthTotal(d, m, cur.year - 1, k);
+    if (v == null) {
+      lastYear = null;
+      break;
+    }
+    lastYear = lastYear! + v;
+  }
+  final beat = lastYear == null || yearPaths.isEmpty || sims.isEmpty
+      ? null
+      : yearPaths.where((v) => v > lastYear!).length / yearPaths.length;
+  return LighthouseYearEndForecast(
+    year: cur.year,
+    months: months,
+    ytdBefore: ytd,
+    total: total,
+    lo: lo,
+    hi: hi,
+    lastYearTotal: lastYear,
+    beatLastYearProb: beat,
+    horizons: withBacktest
+        ? _horizonBacktest(
+            d,
+            cur,
+            month.cutoffDay,
+            month.totalDays,
+            month.signed,
+          )
+        : const <LighthouseHorizonError>[],
   );
 }

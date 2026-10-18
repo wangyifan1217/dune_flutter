@@ -666,11 +666,16 @@ class LighthouseAssetTrendLoader extends StatefulWidget {
     required this.scope,
     required this.period,
     required this.builder,
+    this.count,
   });
 
   final LighthouseService service;
   final String scope;
   final String period;
+
+  /// 要几格（后端上限：日 / 周 31 格，月 12 格）。null = 后端默认 7 格。
+  /// 主 Hero 的资金与资产要能往前拖，拉满上限。
+  final int? count;
   final Widget Function(BuildContext context, LighthouseAssetTrend data)
   builder;
 
@@ -681,10 +686,14 @@ class LighthouseAssetTrendLoader extends StatefulWidget {
   static final Map<String, Future<LighthouseAssetTrend>> _pending =
       <String, Future<LighthouseAssetTrend>>{};
 
-  static String _cacheKey(String scope, String period) => '$scope|$period';
+  static String _cacheKey(String scope, String period, [int? count]) =>
+      count == null ? '$scope|$period' : '$scope|$period|$count';
 
-  static LighthouseAssetTrend? cached(String scope, String period) =>
-      _cache[_cacheKey(scope, period)];
+  static LighthouseAssetTrend? cached(
+    String scope,
+    String period, {
+    int? count,
+  }) => _cache[_cacheKey(scope, period, count)];
 
   /// 顶部三张资产卡共用这份请求与缓存，切换日期时可同步读取三类资产。
   static Future<LighthouseAssetTrend> prefetch({
@@ -692,8 +701,9 @@ class LighthouseAssetTrendLoader extends StatefulWidget {
     required String scope,
     required String period,
     bool refresh = false,
+    int? count,
   }) {
-    final key = _cacheKey(scope, period);
+    final key = _cacheKey(scope, period, count);
     final cached = _cache[key];
     if (!refresh && cached != null) {
       return Future<LighthouseAssetTrend>.value(cached);
@@ -703,6 +713,7 @@ class LighthouseAssetTrendLoader extends StatefulWidget {
         final raw = await service.fetchFundPoolSeries(
           scope: scope,
           granularity: period,
+          count: count,
         );
         final parsed = LighthouseAssetTrend.parse(raw);
         _cache[key] = parsed;
@@ -723,8 +734,11 @@ class _LighthouseAssetTrendLoaderState
   LighthouseAssetTrend? _data;
   bool _loading = true;
 
-  String get _key =>
-      LighthouseAssetTrendLoader._cacheKey(widget.scope, widget.period);
+  String get _key => LighthouseAssetTrendLoader._cacheKey(
+    widget.scope,
+    widget.period,
+    widget.count,
+  );
 
   @override
   void initState() {
@@ -737,7 +751,9 @@ class _LighthouseAssetTrendLoaderState
   @override
   void didUpdateWidget(covariant LighthouseAssetTrendLoader oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.scope != widget.scope || oldWidget.period != widget.period) {
+    if (oldWidget.scope != widget.scope ||
+        oldWidget.period != widget.period ||
+        oldWidget.count != widget.count) {
       _data = LighthouseAssetTrendLoader._cache[_key];
       _loading = _data == null;
       unawaited(_load());
@@ -753,6 +769,7 @@ class _LighthouseAssetTrendLoaderState
         scope: scope,
         period: period,
         refresh: _data != null,
+        count: widget.count,
       );
       if (!mounted || scope != widget.scope || period != widget.period) return;
       setState(() {

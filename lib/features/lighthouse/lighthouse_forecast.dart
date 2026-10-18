@@ -47,7 +47,21 @@ class LighthousePaceForecast {
     this.modelLabel = '原算法',
     this.backtestMonths = 0,
     this.trial = true,
+    this.future = const <LighthouseFutureMonth>[],
+    this.yearTotal,
+    this.yearLo,
+    this.yearHi,
   });
+
+  /// 年末延伸：当月之后到 12 月的各月预测（同一个动态日模型往后接着走）。
+  /// 空 = 没有年末预测（数据不足 / 12 月 / 线性外推）。
+  final List<LighthouseFutureMonth> future;
+
+  /// 全年合计预测 = 今年 1 月至上月实际 + 本月预测 + 之后各月预测；
+  /// [yearLo] / [yearHi] 是同一批模拟路径的 10 / 90 分位。
+  final double? yearTotal;
+  final double? yearLo;
+  final double? yearHi;
 
   /// v2 模型给的 80% 区间（线性外推没有区间，为 null）。
   final double? lo;
@@ -84,6 +98,27 @@ class LighthousePaceForecast {
   /// 还要补多少才能走到预测值（虚线那一段的长度）。
   double get remaining => forecast - actual;
 }
+
+/// 年末预测里「当月之后」的某一个月。
+@immutable
+class LighthouseFutureMonth {
+  const LighthouseFutureMonth({
+    required this.month,
+    required this.forecast,
+    this.lo,
+    this.hi,
+  });
+
+  /// 该月 1 日。
+  final DateTime month;
+  final double forecast;
+  final double? lo;
+  final double? hi;
+}
+
+/// 主走势图最多往后画几个月：再多就要把已发生的那几个月挤扁。
+/// 9 月起（还剩 ≤ 3 个月）图上画到 12 月；更早只在预测条 / 报告里给数。
+const int lighthouseYearEndChartMaxMonths = 3;
 
 /// 月化规模预测。不满足口径时返回 null —— 调用方据此决定「不画虚线」。
 ///

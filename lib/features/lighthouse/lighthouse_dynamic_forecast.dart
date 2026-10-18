@@ -18,6 +18,9 @@ class LighthouseDynamicForecast {
     required this.paths,
     required this.signed,
     required this.observations,
+    this.futureMonths = const <DateTime>[],
+    this.futureMeans = const <double>[],
+    this.futureTotals = const <List<double>>[],
   });
   final double forecast;
   final double actual;
@@ -31,6 +34,13 @@ class LighthouseDynamicForecast {
   final List<List<double>> paths;
   final bool signed;
   final int observations;
+
+  /// 年末延伸（[lighthouseDynamicForecast] 传了 horizonEnd 才有）：
+  /// 当月之后的各月月初（11-01、12-01…）、各月金额的解析均值，
+  /// 以及每条模拟路径在这几个月的金额（[抽样][月]，和 [paths] 同序同条）。
+  final List<DateTime> futureMonths;
+  final List<double> futureMeans;
+  final List<List<double>> futureTotals;
 }
 
 double lighthouseForecastQuantile(List<double> xs, double q) {
@@ -233,6 +243,7 @@ LighthouseDynamicForecast? lighthouseDynamicForecast({
   required DateTime cutoff,
   bool signed = false,
   int simulations = 1600,
+  DateTime? horizonEnd,
 }) {
   final end = DateTime(cutoff.year, cutoff.month, cutoff.day);
   daily = {
@@ -402,6 +413,49 @@ LighthouseDynamicForecast? lighthouseDynamicForecast({
                   math.exp((mean + variance / 2).clamp(-25.0, 25.0)));
     projected.add(running);
   }
+  // ── 年末延伸：当月之后逐日继续同一个模型（同一条随机游走水平、同一组
+  //   星期 / 月初 / 月底系数），按月加总。水平的不确定性随天数线性累加，
+  //   所以越往后的月份区间越宽 —— 这正是「越远越没把握」。
+  final futureMonths = <DateTime>[];
+  final futureMeans = <double>[];
+  final futureDays = <DateTime>[];
+  final futureMonthOf = <int>[];
+  if (horizonEnd != null) {
+    final last = DateTime(horizonEnd.year, horizonEnd.month, horizonEnd.day);
+    for (
+      var t = DateTime(end.year, end.month + 1, 1);
+      !t.isAfter(last);
+      t = DateTime(t.year, t.month, t.day + 1)
+    ) {
+      final k = (t.year - end.year) * 12 + t.month - end.month - 1;
+      while (futureMonths.length <= k) {
+        futureMonths.add(DateTime(end.year, end.month + 1 + futureMonths.length, 1));
+        futureMeans.add(0);
+      }
+      futureDays.add(t);
+      futureMonthOf.add(k);
+    }
+  }
+  final futureFeatures = [for (final t in futureDays) _features(t)];
+  for (var i = 0; i < futureDays.length; i++) {
+    final xf = futureFeatures[i];
+    final delta = List.generate(parameters, (j) => xf[j] - u[j]);
+    final variance =
+        posterior.lastConditionalVariance +
+        _dot(delta, _solveCholesky(p, delta)) +
+        q * q * (totalDays - end.day + i + 1);
+    final mean = level.last + _dot(xf, beta);
+    futureMeans[futureMonthOf[i]] +=
+        scale *
+        (signed
+            ? mean
+            : positiveProbability *
+                  math.exp((mean + variance / 2).clamp(-25.0, 25.0)));
+  }
+  final futureTotals = <List<double>>[];
+  // 延伸段用另一串随机数：当月那一段的抽样序列和以前逐位相同，
+  // 月末预测（含回测、概率）不因为加了年末而变。
+  final ext = _RandomDraws(9173 + end.year * 400 + end.month * 32 + end.day);
   final paths = <List<double>>[];
   final random = _RandomDraws(719 + end.year * 400 + end.month * 32 + end.day);
   for (var draw = 0; draw < simulations; draw++) {
@@ -440,6 +494,23 @@ LighthouseDynamicForecast? lighthouseDynamicForecast({
       path.add(sum);
     }
     paths.add(path);
+    if (futureDays.isNotEmpty) {
+      final totals = List<double>.filled(futureMonths.length, 0);
+      for (var i = 0; i < futureDays.length; i++) {
+        sampledLevel += q * ext.normal();
+        final eta = sampledLevel + _dot(futureFeatures[i], sampledBeta);
+        final amount = signed
+            ? scale * (eta + noise * ext.normal())
+            : ext.random.nextDouble() > probability
+            ? 0.0
+            : scale *
+                  math.exp(eta.clamp(-25.0, 25.0)) *
+                  ext.gamma(shape) /
+                  shape;
+        totals[futureMonthOf[i]] += amount;
+      }
+      futureTotals.add(totals);
+    }
   }
   final lo = [...cumulative];
   final hi = [...cumulative];
@@ -480,5 +551,8 @@ LighthouseDynamicForecast? lighthouseDynamicForecast({
     paths: paths,
     signed: signed,
     observations: observed.length,
+    futureMonths: futureMonths,
+    futureMeans: futureMeans,
+    futureTotals: futureTotals,
   );
 }

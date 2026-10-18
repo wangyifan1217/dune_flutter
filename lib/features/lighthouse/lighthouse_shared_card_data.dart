@@ -40,6 +40,7 @@ class LighthouseSharedCardData {
   }
 
   static bool _valid(Map<String, dynamic> json) =>
+      (json['version'] == 2 && json['kind'] == 'pk' && _validPk(json)) ||
       json['version'] == 2 &&
       _kinds.contains(json['kind']) &&
       _periods.contains(json['period']) &&
@@ -133,6 +134,42 @@ class LighthouseSharedCardData {
 
   static bool _validSeries(dynamic raw) => _numericSeries(raw);
 
+  /// PK 综合表：参赛方名字、色号、表格行（全是字符串 / 小整数，不带原始金额）。
+  /// 老版本不认识 kind 'pk'，校验不过就只显示 [fallbackText] 那段文字。
+  static bool _validPk(Map<String, dynamic> j) {
+    final names = j['names'];
+    final colors = j['colors'];
+    final rows = j['rows'];
+    if (j['title'] is! String || j['range'] is! String) return false;
+    if (names is! List ||
+        names.isEmpty ||
+        names.length > 60 ||
+        !names.every((e) => e is String)) {
+      return false;
+    }
+    if (colors is! List ||
+        colors.length != names.length ||
+        !colors.every((e) => e is num && e.isFinite)) {
+      return false;
+    }
+    if (rows is! List || rows.length > 600) return false;
+    for (final r in rows) {
+      if (r is! Map) return false;
+      for (final k in const ['h', 'l', 's', 'r']) {
+        if (r[k] != null && r[k] is! String) return false;
+      }
+      final c = r['c'];
+      if (c != null && (c is! List || !c.every((e) => e is String))) {
+        return false;
+      }
+      if (r['w'] != null && (r['w'] is! num || !(r['w'] as num).isFinite)) {
+        return false;
+      }
+      if (r['e'] != null && r['e'] is! bool) return false;
+    }
+    return true;
+  }
+
   Map<String, dynamic> toJson() =>
       Map<String, dynamic>.from(jsonDecode(jsonEncode(_json)) as Map);
   String get kind => _json['kind'] as String;
@@ -167,7 +204,25 @@ class LighthouseSharedCardData {
           (entry.value as num).isFinite)
         entry.key as String: (entry.value as num).toDouble(),
   };
-  String get fallbackText => '灯塔 · $title · $range\n可展开指标、查看趋势与细分';
+  bool get isPk => kind == 'pk';
+  List<String> get pkNames => [
+    for (final e in (_json['names'] as List? ?? const [])) e.toString(),
+  ];
+  List<int> get pkColors => [
+    for (final e in (_json['colors'] as List? ?? const []))
+      if (e is num) e.toInt(),
+  ];
+  List<Map<String, dynamic>> get pkRows => [
+    for (final e in (_json['rows'] as List? ?? const []))
+      if (e is Map) Map<String, dynamic>.from(e),
+  ];
+
+  /// 'now' = 本期对比；'cross' = 日周月季年。
+  String get pkMode => _json['mode']?.toString() ?? 'now';
+
+  String get fallbackText => isPk
+      ? '灯塔 · $title · $range\n${pkNames.join(' vs ')}'
+      : '灯塔 · $title · $range\n可展开指标、查看趋势与细分';
 }
 
 bool _numericSeries(dynamic raw) =>

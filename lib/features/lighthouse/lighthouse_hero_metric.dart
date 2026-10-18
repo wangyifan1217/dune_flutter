@@ -245,9 +245,10 @@ double lighthouseTrendLegendHeightFor({
       (rows - 1) * lighthouseLedgerSummaryRowDividerHeight;
 }
 
-/// 月末预测条（两行：金额 + 概率 + 报告胶囊 / 区间 + 截止日）。
-/// v2 从三行收成两行：76 → 48，省下来的高度给走势图。
-const double lighthouseTrendForecastStripHeight = 48;
+/// 月末预测条（一行：金额 + 概率 + 报告）。
+/// v2 三行 → 两行（76 → 48）；v3 去掉盒子收成一行说明（48 → 20），
+/// 区间改由图上预测点的须线表达。
+const double lighthouseTrendForecastStripHeight = 20;
 
 /// 图例 / 预测条与下一块之间的间距，以及图上方的间距。
 const double lighthouseTrendBlockGap = 7;
@@ -552,6 +553,16 @@ bool lighthouseHeroLastPointIsPeriod(
 bool lighthouseDeltaIsLoud(double pct) =>
     pct.abs() >= lighthouseDeltaLoudThreshold;
 
+/// 主 Hero 的涨跌上色门槛（2026-10 去杂）：默认一律走灰，
+/// 只有越过 ±20% 才上红绿；利润 / 核销是看盘的两个主数，涨跌永远上色。
+const double lighthouseHeroDeltaLoudThreshold = 20;
+const Set<String> lighthouseHeroKeyDeltaMetrics = {'profit', 'verifiedSales'};
+
+bool lighthouseHeroDeltaIsLoud(String key, double pct) =>
+    lighthouseHeroKeyDeltaMetrics.contains(key)
+    ? pct != 0
+    : pct.abs() >= lighthouseHeroDeltaLoudThreshold;
+
 /// 上下文线白名单：主线之外还画哪几条。
 ///
 /// v16 起主 Hero 图不再把上下文线画在主图里（利润下沉到小柱层，见
@@ -696,7 +707,12 @@ const bool lighthouseHeroSectionUsesHeroSurface = true;
 const bool lighthouseHeroMatchesLedgerCard = true;
 
 /// 与账本外框同一条左沿。
-const double lighthouseHeroShellMarginH = 22;
+/// 2026-10 · 22 → 12，跟 PK 页同宽：窄屏上两侧多出 20px 给三栏指标格和走势图。
+const double lighthouseHeroShellMarginH = 12;
+
+/// 一级主页底色：比白卡深一档的淡灰紫（跟 PK 页 #F6F5F9 同族、再沉一点），
+/// 白卡 + 淡紫细边才浮得出来；原来的暖白 bgApp 跟白卡几乎一个色。
+const Color lighthouseMainPageBg = Color(0xFFF3F1F7);
 const double lighthouseHeroShellPaddingH = 12;
 
 /// v23.1 · 面板浅边。灰面板（#F7F6FA）压在白壳上只差一点明度，
@@ -735,6 +751,38 @@ const double lighthouseHeroMetricDeltaFontSize = 8;
 /// 数字仍是 13，格子宽度不变，长数字靠 LhScrollText 兜底。
 const double lighthouseHeroCellLabelFontSize = 10;
 const double lighthouseHeroCellDeltaFontSize = 9;
+
+/// 大数卡底部「预收净增」（本期流量）：浅紫胶囊标签 + 两行。
+///
+///     [预收净增]        ↓562%
+///     −104.4万
+///
+/// 为什么不是一行：Hero 里 KPI 卡只占 3/10 栏，手机上算下来 85~90 宽，
+/// 胶囊 + 值 + 环比一行要 130+，塞不进去。之前那版两行（标签 10.5 / 值 13.5 /
+/// 环比 10）看着「怪」，是因为一块里叠了三档字号、值还比下方按钮重；
+/// 现在标签降成胶囊（10.5 / w700，仍与「资金与资产」同档），值收 12，
+/// 三档压成两档半，卡底只剩数值一个焦点。
+///
+/// **字号不跟卡宽缩放**：这是手机 app，卡宽本来就是定死的，按比例缩只会
+/// 越缩越挤。排不下就拆行，不缩字。
+///
+/// 高度 ≈ 胶囊 15.5 + 2 + 值 12 ≈ 29.5，上面的大数块是
+/// Expanded + FittedBox(scaleDown)，多出来的高度它自己吃掉，不动 trendSectionH。
+const double lighthouseHeroPrepaidLabelFontSize = 10.5;
+const double lighthouseHeroPrepaidValueFontSize = 12;
+const double lighthouseHeroPrepaidDeltaFontSize = 9.5;
+
+/// 胶囊：横向 6 / 纵向 2.5，圆角 6 —— 比「资金与资产」按钮的圆角 9 更紧，
+/// 它是标记，不是可以单独点的控件。
+const double lighthouseHeroPrepaidChipPadH = 6;
+const double lighthouseHeroPrepaidChipPadV = 2.5;
+const double lighthouseHeroPrepaidChipRadius = 6;
+
+/// 胶囊行与数值行之间那 2px：10.5 与 12 两行贴着会糊成一块。
+const double lighthouseHeroPrepaidLineGap = 2;
+
+/// 整块上下留白：两行加起来约 29.5，点击热区再靠这 3px 撑一点。
+const double lighthouseHeroPrepaidRowPadV = 3;
 
 /// 拍平格：金额和环比同一行、挨在一起左对齐，按字母基线对齐。
 ///
@@ -4333,6 +4381,11 @@ List<Map<String, dynamic>> lighthouseNetTABankBalanceCompanies(dynamic list) {
 /// 资金池预览两格各自点开自己的面板：
 /// 总资产金额 → 资金 / 券 / 期末预付款对账 / 资产；票税 · 应开 → 发票。
 const lighthouseFundPoolPanelAssets = 'assets';
+
+/// 供给一级列表上方那块「资产走势」（总资产 / 中石油 / 中石化 + 走势）。
+/// 2026-10 挪进主 Hero：大数卡底部「总资产」点开就地看走势与对账，
+/// 供给页不再重复一块。改回 true 即恢复原位置。
+const bool lighthouseSupplyListShowsAssetOverview = false;
 const lighthouseFundPoolPanelInvoice = 'invoice';
 
 /// 预览格 key → 它点开的面板；不认识的 key 不展开。

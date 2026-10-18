@@ -136,7 +136,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(find.text('截至21日'), findsOneWidget);
+      // v3：截止日 / 区间 / 模型名挪进报告，条上只留金额 + 概率 + 报告。
+      expect(find.textContaining('月末预测'), findsOneWidget);
+      expect(find.text('截至21日'), findsNothing);
       expect(find.textContaining('试行'), findsNothing);
       expect(
         tester.getSize(find.byType(LighthouseForecastStrip)).height,

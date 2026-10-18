@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../auth/auth_session.dart';
 import '../lighthouse/lighthouse_shared_card_data.dart';
 import '../lighthouse/lighthouse_message_card_layout.dart';
+import '../lighthouse/lighthouse_pk_vs.dart';
 import '../lighthouse/native_lighthouse_page.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
 
@@ -58,7 +59,11 @@ class ChatLighthouseCard extends StatelessWidget {
             ],
           ),
         ),
-        LighthouseEmbeddedCard(session: session, data: data),
+        // PK 综合表：静态表格卡；其他灯塔卡片照旧嵌一页灯塔。
+        if (data.isPk)
+          LhPkSharedCardView(data: data)
+        else
+          LighthouseEmbeddedCard(session: session, data: data),
       ],
     ),
   );

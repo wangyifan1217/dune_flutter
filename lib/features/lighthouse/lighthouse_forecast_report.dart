@@ -104,6 +104,13 @@ class LighthouseForecastReportSheet extends StatelessWidget {
           const SizedBox(height: 20),
           _header(ctx),
           _section(ctx, '本月判断', '预测是估计，不是承诺，也不改动已发生金额。', _conclusion(ctx)),
+          if (report.yearEnd case final ye?)
+            _section(
+              ctx,
+              '到年末',
+              '同一个日模型逐日走到 12 月 31 日；越往后区间越宽。',
+              _yearEnd(ctx, ye),
+            ),
           _section(ctx, '累计走势', '实线为已发生；虚线与浅色区间来自逐日模拟。', _cumChart(ctx)),
           _section(ctx, '预测原理', '已发生固定，只对剩余日期建模。', _principles(ctx)),
           _section(ctx, '模型对照', '动态日模型与原算法在相同历史月份比较 WAPE。', _methodTable(ctx)),
@@ -812,6 +819,156 @@ class LighthouseForecastReportSheet extends StatelessWidget {
       ],
     ),
   );
+
+  Widget _yearEnd(BuildContext context, LighthouseYearEndForecast ye) {
+    final ink = DunesColors.resolve(context, LhColors.ink);
+    final cur = ye.months.first.month;
+    final lastYear = ye.lastYearTotal;
+    final vsLast = lastYear == null || lastYear.abs() < 1e-9
+        ? null
+        : (ye.total - lastYear) / lastYear.abs();
+    Widget row(
+      String label,
+      String value,
+      String range, {
+      bool strong = false,
+      bool last = false,
+    }) => Container(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: last
+                ? Colors.transparent
+                : DunesColors.resolve(context, _line, role: DunesColorRole.border),
+            width: 0.7,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 4,
+            child: Text(
+              label,
+              style: _text(
+                context,
+                11,
+                strong ? ink : DunesColors.resolve(context, LhColors.ink2),
+                strong ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: _text(
+                context,
+                strong ? 12.5 : 11,
+                strong ? _ink : ink,
+                strong ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 5,
+            child: Text(
+              range,
+              textAlign: TextAlign.right,
+              style: _text(context, 10, _muted),
+            ),
+          ),
+        ],
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _stat(
+                context,
+                '${ye.year}年全年预测',
+                _money(ye.total),
+                '80% 区间 ${_money(ye.lo)} — ${_money(ye.hi)}',
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _stat(
+                context,
+                '超去年概率',
+                lastYear == null
+                    ? '—'
+                    : lighthouseForecastProbabilityLabel(ye.beatLastYearProb),
+                lastYear == null
+                    ? '去年数据不完整'
+                    : '去年全年 ${_money(lastYear)}'
+                          '${vsLast == null ? '' : ' · 预计${vsLast >= 0 ? '+' : '−'}${_pct(vsLast.abs())}'}',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(flex: 4, child: Text('月份', style: _text(context, 10, _muted))),
+            Expanded(
+              flex: 3,
+              child: Text('金额', textAlign: TextAlign.right, style: _text(context, 10, _muted)),
+            ),
+            Expanded(
+              flex: 5,
+              child: Text('80% 区间', textAlign: TextAlign.right, style: _text(context, 10, _muted)),
+            ),
+          ],
+        ),
+        if (cur.month > 1)
+          row(
+            cur.month == 2 ? '1月 · 实际' : '1–${cur.month - 1}月 · 实际',
+            _money(ye.ytdBefore),
+            '已发生',
+          ),
+        for (final m in ye.months)
+          row(
+            m.current ? '${m.month.month}月 · 本月预测' : '${m.month.month}月 · 预测',
+            _money(m.forecast),
+            '${_money(m.lo)} — ${_money(m.hi)}',
+          ),
+        row(
+          '全年合计',
+          _money(ye.total),
+          '${_money(ye.lo)} — ${_money(ye.hi)}',
+          strong: true,
+          last: true,
+        ),
+        if (ye.horizons.any((h) => h.dynamic != null)) ...[
+          const SizedBox(height: 12),
+          Text('提前几个月预测，历史上差多少（WAPE）', style: _text(context, 11, ink, FontWeight.w600)),
+          const SizedBox(height: 4),
+          for (final h in ye.horizons)
+            if (h.dynamic != null)
+              Text(
+                '提前 ${h.horizon} 个月：动态日模型 ${_pct(h.dynamic)}'
+                '${h.linear == null ? '' : '，按日均外推 ${_pct(h.linear)}'}'
+                '（${h.months} 个月回测）',
+                style: _text(context, 11, _muted),
+              ),
+        ],
+        const SizedBox(height: 10),
+        Text(
+          '未含季节性：模型只看近 240 天，不知道双 11、年底冲量这类「每年这时候都会涨」'
+          '的规律，之后各月按最近的水平和星期节奏往后推。全年区间取自同一批模拟路径，'
+          '不是各月区间直接相加。',
+          style: _text(context, 10.5, _muted),
+        ),
+      ],
+    );
+  }
 
   Widget _footnote(BuildContext context) => Text(
     '计算与数据口径\n'

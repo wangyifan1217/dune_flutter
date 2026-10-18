@@ -3495,8 +3495,13 @@ void main() {
       expect(lighthouseDeltaIsReadable(300, value: 12, isRate: true), isTrue);
     });
 
-    test('拿不到本期金额时不拦 —— 宁可多显示，不可误拦', () {
-      expect(lighthouseDeltaIsReadable(558), isTrue);
+    test('拿不到本期金额时，500% 以内仍显示，超过 500% 不画', () {
+      expect(lighthouseDeltaIsReadable(558), isFalse);
+      expect(lighthouseDeltaIsReadable(500), isTrue);
+      expect(lighthouseDeltaPctShown(500), isTrue);
+      expect(lighthouseDeltaPctShown(500.1), isFalse);
+      expect(lighthouseDeltaPctShown(-6231), isFalse);
+      expect(lighthouseDeltaPctShown(15881, isRate: true), isTrue);
     });
   });
 

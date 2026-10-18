@@ -8646,7 +8646,11 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
     }
 
     // ── 活跃列: hero 两层 (数字 + delta)
-    final delta = e.deltas[m.key];
+    final rawDelta = e.deltas[m.key];
+    final delta =
+        rawDelta != null && lighthouseDeltaPctShown(rawDelta, isRate: m.isRate)
+        ? rawDelta
+        : null;
     final absV = v.abs();
 
     return Container(
@@ -14044,10 +14048,16 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
         (!isSelected || _selectedIndex == data.length - 1);
     if (onPartialPoint) {
       final api = widget.periodDeltaPct;
-      if (api != null) return _deltaVisual(api, widget.isRate ? 'pp' : '%');
+      if (api != null) {
+        if (!widget.isRate && !lighthouseDeltaPctShown(api)) return null;
+        return _deltaVisual(api, widget.isRate ? 'pp' : '%');
+      }
       if (!widget.isRate) return null;
     } else if (!isSelected && widget.periodDeltaPct != null) {
       // 本期已走完：后端值和序列相减同口径，优先用后端的，跟卡片/列表一个数。
+      if (!widget.isRate && !lighthouseDeltaPctShown(widget.periodDeltaPct)) {
+        return null;
+      }
       return _deltaVisual(widget.periodDeltaPct!, widget.isRate ? 'pp' : '%');
     }
 
@@ -14080,6 +14090,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     final absBase = base.abs();
     if (absBase < 1e-9) return null;
     final pct = (displayValue - base) / absBase * 100;
+    if (!lighthouseDeltaPctShown(pct)) return null;
     if (pct.abs() < 0.05) {
       return (
         text: '0.0%',
@@ -21686,7 +21697,11 @@ SafeArea(
     Widget tile(Map<String, dynamic> m) {
       final name = m['name']?.toString() ?? '';
       final v = (m['netTa'] as num?)?.toDouble() ?? 0;
-      final delta = _deltaFromEntityRow(m, 'netTa');
+      final rawDelta = _deltaFromEntityRow(m, 'netTa');
+      final delta =
+          rawDelta != null && lighthouseDeltaPctShown(rawDelta.pct)
+          ? rawDelta
+          : null;
       final share = (delta == null && shareBase > 0 && v.abs() > 0)
           ? v.abs() / shareBase * 100
           : null;
@@ -23764,7 +23779,7 @@ SafeArea(
         : _deltaForMetric('prepaid');
     return (
       value: heroTotals['prepaid'] ?? 0,
-      delta: d == null
+      delta: d == null || !lighthouseDeltaPctShown(d.pct)
           ? '—'
           : '${d.isUp ? '↑' : '↓'}'
                 '${d.pct.abs().toStringAsFixed(d.pct.abs() >= 10 ? 0 : 1)}%',
@@ -26356,6 +26371,9 @@ SafeArea(
     bool isRate = false,
     String? vsLabel,
   }) {
+    if (d != null && !lighthouseDeltaPctShown(d.pct, isRate: isRate)) {
+      d = null;
+    }
     final vs = (vsLabel == null || vsLabel.isEmpty) ? _periodVsLabel : vsLabel;
     final color = d == null
         ? DunesColors.resolve(context, LhColors.mute2)
@@ -28392,7 +28410,8 @@ SafeArea(
       // 净额为负时方向要翻过来：净额更负 = 支出变多 = ↑。
       final costUp = net < 0 ? dir == 'down' : dir == 'up';
       // 本期 ≈ 0（显示 0.00万）还挂「↑100%」自相矛盾 —— 不写环比。
-      if (!(costUp && net.abs() < 50)) {
+      if (!(costUp && net.abs() < 50) &&
+          lighthouseDeltaPctShown(pct.toDouble())) {
         deltaText =
             '${costUp ? '↑' : '↓'}${pct.toStringAsFixed(pct.abs() >= 10 ? 0 : 1)}%';
         // 跟上面几格同一条规矩：越过 ±20% 才上红绿。
@@ -30170,9 +30189,15 @@ SafeArea(
         (lighthouseHeroMetricPlainNumber(keyId, value) != null
             ? value.abs() < 0.5
             : value.abs() < 50);
-    final delta = rawDelta != null && rawDelta.isUp && nearZero
+    final uncapped = rawDelta != null && rawDelta.isUp && nearZero
         ? null
         : rawDelta;
+    // 超过 500% 默认不画环比。基数太小放大出来的几千，跟真涨跌挤在一起。
+    final delta =
+        uncapped != null &&
+            lighthouseDeltaPctShown(uncapped.pct, isRate: isRate)
+        ? uncapped
+        : null;
     // v15 · 和走势图同一条规则：选中一个指标时，其余格子不消失也不换色，
     //   只降到统一的淡化度（lighthouseHeroContextOpacity）。
     //   图上「非焦点 = 中性淡线」，格子上「非焦点 = 同色淡一档」，
@@ -31542,8 +31567,13 @@ SafeArea(
     final unitColor = isRate && valueColor != null
         ? valueColor!
         : DunesColors.resolve(context, LhColors.ink2);
-    final delta = _deltaForMetric(keyId);
+    final rawDelta = _deltaForMetric(keyId);
     final deltaUnit = lighthouseHeroMetricIsRate(keyId) ? 'pp' : '%';
+    final delta =
+        rawDelta != null &&
+            lighthouseDeltaPctShown(rawDelta.pct, isRate: deltaUnit == 'pp')
+        ? rawDelta
+        : null;
     final isExpanded = _expandedTrendKey == keyId;
     final momCompact = delta == null
         ? '—'
@@ -32280,8 +32310,13 @@ SafeArea(
     }
 
     // ── 环比 tag（有后端数据才展示） ─────────────────────────────────────────
-    final d = _deltaForMetric(m.key);
     final deltaUnit = m.isRate ? 'pp' : '%';
+    final rawMom = _deltaForMetric(m.key);
+    final d =
+        rawMom != null &&
+            lighthouseDeltaPctShown(rawMom.pct, isRate: deltaUnit == 'pp')
+        ? rawMom
+        : null;
 
     return SizedBox(
       width: width,
@@ -33630,8 +33665,13 @@ SafeArea(
   /// 单个 tab 的内容（label 上、数字中、环比下——三行左对齐 stacked）
   Widget _metricPageStripTabContent(String key) {
     final label = _metricPageLabel(key);
-    final delta = _deltaForMetric(key);
     final deltaUnit = lighthouseHeroMetricIsRate(key) ? 'pp' : '%';
+    final rawMom = _deltaForMetric(key);
+    final delta =
+        rawMom != null &&
+            lighthouseDeltaPctShown(rawMom.pct, isRate: deltaUnit == 'pp')
+        ? rawMom
+        : null;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -33796,8 +33836,13 @@ SafeArea(
     int rowsCount,
   ) {
     final accent = _metricPageAccent(key);
-    final delta = _deltaForMetric(key);
     final deltaUnit = lighthouseHeroMetricIsRate(key) ? 'pp' : '%';
+    final rawMom = _deltaForMetric(key);
+    final delta =
+        rawMom != null &&
+            lighthouseDeltaPctShown(rawMom.pct, isRate: deltaUnit == 'pp')
+        ? rawMom
+        : null;
     return ListView(
       padding: EdgeInsets.only(bottom: _bottomNavScrollPadding(context)),
       children: [
@@ -41448,7 +41493,12 @@ SafeArea(
       numPart = unit.isEmpty ? s : s.substring(0, s.length - unit.length);
     }
 
-    final delta = missing ? null : _ledgerDelta(r, c.key);
+    final rawLedgerDelta = missing ? null : _ledgerDelta(r, c.key);
+    final delta =
+        rawLedgerDelta != null &&
+            lighthouseDeltaPctShown(rawLedgerDelta, isRate: c.isRate)
+        ? rawLedgerDelta
+        : null;
     final deltaText = delta == null
         ? '·'
         : lighthouseLedgerDeltaText(delta, isRate: c.isRate);
@@ -51176,7 +51226,7 @@ SafeArea(
           ),
         ),
       );
-    } else if (momPct != null) {
+    } else if (momPct != null && lighthouseDeltaPctShown(momPct)) {
       changeLine = Padding(
         padding: const EdgeInsets.only(top: 3),
         child: Text(
@@ -55166,12 +55216,17 @@ SafeArea(
     final unitColor = isRate && valueColor != null
         ? valueColor
         : DunesColors.resolve(context, LhColors.ink2);
-    final momCompact = delta == null
+    final shownDelta =
+        delta != null &&
+            lighthouseDeltaPctShown(delta.pct, isRate: deltaUnit == 'pp')
+        ? delta
+        : null;
+    final momCompact = shownDelta == null
         ? '—'
-        : _fmtSignedMomPct(delta.pct, unit: deltaUnit, digits: 1);
-    final momColor = delta == null
+        : _fmtSignedMomPct(shownDelta.pct, unit: deltaUnit, digits: 1);
+    final momColor = shownDelta == null
         ? DunesColors.resolve(context, LhColors.mute2)
-        : (delta.isUp
+        : (shownDelta.isUp
               ? DunesColors.resolve(context, LhColors.neg)
               : DunesColors.resolve(context, LhColors.pos));
     return Padding(

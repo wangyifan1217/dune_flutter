@@ -103,6 +103,7 @@ _Kind _kindOf(String key) {
 /// 与 lighthouseLedgerDeltaText 同款：`↑12.3%` / `↓5.1%` / `↑3.2pp` / `→`。
 String? _fmtDelta(double? pct, {required bool isRate}) {
   if (pct == null || pct.isNaN || !pct.isFinite) return null;
+  if (!lighthouseDeltaPctShown(pct, isRate: isRate)) return null;
   return lighthouseLedgerDeltaText(pct, isRate: isRate);
 }
 

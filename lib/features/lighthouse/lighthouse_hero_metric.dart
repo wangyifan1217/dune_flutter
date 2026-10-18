@@ -372,6 +372,11 @@ double? lighthouseTrendMomPct({
   bool suppressPointMom = false,
   bool asPercentagePoints = false,
 }) {
+  double? cap(double? pct) {
+    if (pct == null || asPercentagePoints) return pct;
+    return lighthouseDeltaPctShown(pct) ? pct : null;
+  }
+
   if (selectedIndex != null) {
     if (suppressPointMom) return null;
     if (lighthouseHeroPointUsesAlignedPeriodDelta(
@@ -379,7 +384,7 @@ double? lighthouseTrendMomPct({
       selectedIndex: selectedIndex,
       seriesLength: series.length,
     )) {
-      return periodDeltaPct;
+      return cap(periodDeltaPct);
     }
     if (selectedIndex <= 0 || selectedIndex >= series.length) return null;
     final prev = series[selectedIndex - 1];
@@ -390,10 +395,10 @@ double? lighthouseTrendMomPct({
       return pp;
     }
     if (prev.abs() <= 1e-6) return null;
-    return (cur - prev) / prev.abs() * 100;
+    return cap((cur - prev) / prev.abs() * 100);
   }
   // 本期环比只认服务端的同期窗口，不能用走势末两点补数。
-  return periodDeltaPct;
+  return cap(periodDeltaPct);
 }
 
 /// 图例环比文案：箭头表达方向，数字用绝对值，避免「↓ -12%」。
@@ -552,6 +557,18 @@ bool lighthouseHeroLastPointIsPeriod(
 
 bool lighthouseDeltaIsLoud(double pct) =>
     pct.abs() >= lighthouseDeltaLoudThreshold;
+
+/// 环比绝对值超过这个数，默认不画在灯塔上。
+///
+/// 上千的百分比多半是上期基数太小，或两期口径对不齐，跟真涨跌挤在一起
+/// 会把整块读数带偏。500% 仍显示，超过才收起。率的百分点差不走这条。
+const double lighthouseDeltaMaxShownPct = 500;
+
+bool lighthouseDeltaPctShown(double? pct, {bool isRate = false}) {
+  if (pct == null || !pct.isFinite) return false;
+  if (isRate) return true;
+  return pct.abs() <= lighthouseDeltaMaxShownPct;
+}
 
 /// 主 Hero 的涨跌上色门槛（2026-10 去杂）：默认一律走灰，
 /// 只有越过 ±20% 才上红绿；利润 / 核销是看盘的两个主数，涨跌永远上色。
@@ -1393,6 +1410,8 @@ bool lighthouseDeltaIsReadable(
   bool isRate = false,
 }) {
   if (pct == null || pct.abs() < 0.05) return false;
+  // 超过 500% 默认不画，哪怕本期金额取不到。率的百分点差不在此列。
+  if (!lighthouseDeltaPctShown(pct, isRate: isRate)) return false;
   if (isRate) return true;
   if (value == null) return true;
   final factor = 1 + pct / 100;

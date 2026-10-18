@@ -928,9 +928,11 @@ class _LighthouseAssetTrendPanelState extends State<LighthouseAssetTrendPanel> {
       final prev = points[idx - 1].total!;
       if (prev != 0) {
         final pct = (p.total! - prev) / prev.abs() * 100;
-        chg =
-            '${wording.prev} ${pct >= 0 ? '↑' : '↓'}'
-            '${pct.abs().toStringAsFixed(1)}%';
+        if (lighthouseDeltaPctShown(pct)) {
+          chg =
+              '${wording.prev} ${pct >= 0 ? '↑' : '↓'}'
+              '${pct.abs().toStringAsFixed(1)}%';
+        }
       }
     }
     final big = lighthouseFormatFundPoolWanParts(p.total);

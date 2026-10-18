@@ -56,6 +56,8 @@ abstract final class ConversationInboxRealtime {
     }
 
     final conv = items[index];
+    // 离职和群内灰色提示只留在会话里，不改列表预览、排序和未读。
+    if (_isResignNotice(event)) return items;
     // 编辑/删除历史消息不应改写列表预览与排序时间（否则会显示成「不是最后一条」）。
     if (event.type == 'message_updated' &&
         !_isEditingCurrentLatestMessage(event, conv)) {
@@ -283,6 +285,18 @@ abstract final class ConversationInboxRealtime {
     if (current == null) return true;
     // 允许相等（编辑当前最后一条）；更早的消息直接忽略。
     return !msgAt.isBefore(current);
+  }
+
+  static bool _isResignNotice(ConversationRealtimeEventLike event) {
+    final msg = event.message;
+    if (msg == null) return false;
+    switch ((msg['kind'] ?? '').toString().toUpperCase()) {
+      case 'SYSTEM_RESIGN':
+      case 'SYSTEM_HINT':
+        return true;
+      default:
+        return false;
+    }
   }
 
   static bool _isFromPeer(ConversationRealtimeEventLike event, int selfUserId) {

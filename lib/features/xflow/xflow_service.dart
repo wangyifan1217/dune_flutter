@@ -254,8 +254,8 @@ class XflowService {
     ]);
     final rows = <dynamic>[...results[0], ...results[1]];
     final out = _mapInboxApprovalRows(rows);
-    final deduped = _dedupeB1Todos(out);
-    return Future.wait(deduped.map(_enrichB1Item));
+    // 收件箱已经带上标题、发起人、整单状态和单据类型。列表不再逐条拉详情和审批轨迹。
+    return _dedupeB1Todos(out);
   }
 
   Future<List<XflowProposalItem>> fetchB13Todos({
@@ -519,13 +519,7 @@ class XflowService {
         final bt = b.createdAt?.millisecondsSinceEpoch ?? 0;
         return bt.compareTo(at);
       });
-    return Future.wait(
-      items.map(
-        (item) => item.businessType.toUpperCase() == 'PROPOSAL'
-            ? _enrichB14Item(item)
-            : _enrichB14SubmissionItem(item),
-      ),
-    );
+    return items;
   }
 
   String _itemKey(XflowProposalItem item) =>
@@ -574,10 +568,9 @@ class XflowService {
     final rows = await _requestList(
       _templateFilteredPath('/xflow/proposals/cc', templateKey),
     );
-    final items = _dedupeById(
+    return _dedupeById(
       rows.whereType<Map<String, dynamic>>().map(_mapProposalItem).toList(),
     );
-    return Future.wait(items.map(_enrichP1Item));
   }
 
   String _templateFilteredPath(String path, String templateKey) {
@@ -1465,6 +1458,11 @@ class XflowService {
         source.title.trim().isNotEmpty) {
       values['title'] = source.title.trim();
     }
+    // 原标题已是「发起人 - 模板名」。草稿再提交时服务端会重拼一次，先去掉前缀。
+    stripCopiedApprovalTitle(values, [
+      source.createdByName,
+      session.displayName ?? '',
+    ]);
     final raw = await submitDraft(formValues: values, templateKey: templateKey);
     final newId = _int(raw['proposalId'] ?? raw['businessId'] ?? raw['id']);
     if (newId <= 0) {
@@ -2061,328 +2059,6 @@ class XflowService {
     return out;
   }
 
-  Future<XflowProposalItem> _enrichB1Item(XflowProposalItem item) async {
-    final bt = item.businessType.toUpperCase();
-    if (bt == 'PROPOSAL') {
-      try {
-        final detail = await fetchProposalDetail(item.id);
-        final trail = await fetchProposalTrail(item.id);
-        final status = _resolveB1ListStatus(
-          item,
-          trail,
-          detailStatus: detail.status,
-        );
-        final initiator = detail.ownerName.isNotEmpty
-            ? detail.ownerName
-            : (detail.raw['createdBy'] ??
-                      detail.raw['initiator'] ??
-                      item.createdByName)
-                  .toString();
-        return item.copyWith(
-          code: detail.code,
-          title: detail.title,
-          status: status,
-          createdByName: initiator,
-          createdAt: detail.raw['createdAt'] != null
-              ? DateTime.tryParse(detail.raw['createdAt'].toString()) ??
-                    item.createdAt
-              : item.createdAt,
-          tag1: (detail.raw['tag1'] ?? '').toString().isEmpty
-              ? null
-              : detail.raw['tag1'].toString(),
-          txType: (detail.raw['txType'] ?? '').toString().isEmpty
-              ? null
-              : detail.raw['txType'].toString(),
-          proposalType:
-              (detail.raw['proposalType'] ?? detail.raw['txType'] ?? '')
-                  .toString()
-                  .isEmpty
-              ? null
-              : (detail.raw['proposalType'] ?? detail.raw['txType']).toString(),
-          documentKind: (detail.raw['documentKind'] ?? '').toString().isEmpty
-              ? null
-              : detail.raw['documentKind'].toString(),
-          templateKey: (detail.raw['templateKey'] ?? '').toString().isNotEmpty
-              ? detail.raw['templateKey'].toString()
-              : item.templateKey,
-          scaleWan: _scaleWanFromDetail(detail),
-          currentStep: trail?.raw['currentStep'] is num
-              ? (trail!.raw['currentStep'] as num).toInt()
-              : (trail?.steps.isNotEmpty == true ? 1 : 0),
-          totalSteps: trail?.steps.length ?? 0,
-        );
-      } catch (_) {
-        return _fallbackB1ItemStatus(item);
-      }
-    }
-
-    try {
-      final detail = await fetchSubmissionDetail(
-        businessType: item.businessType,
-        businessId: item.id,
-      );
-      final trail = await fetchSubmissionTrail(
-        businessType: item.businessType,
-        businessId: item.id,
-      );
-      return item.copyWith(
-        title: detail.title.isNotEmpty ? detail.title : item.title,
-        code: detail.businessId > 0 ? '#${detail.businessId}' : item.code,
-        status: _resolveB1ListStatus(item, trail, detailStatus: detail.status),
-        createdByName: detail.createdByName.isNotEmpty
-            ? detail.createdByName
-            : item.createdByName,
-        createdAt: detail.createdAt ?? item.createdAt,
-        templateKey: detail.templateKey.isNotEmpty
-            ? detail.templateKey
-            : item.templateKey,
-        proposalType: detail.proposalType.isNotEmpty
-            ? detail.proposalType
-            : item.proposalType,
-        documentKind: detail.documentKind.isNotEmpty
-            ? detail.documentKind
-            : item.documentKind,
-        currentStep: trail?.currentStep ?? item.currentStep,
-        totalSteps: trail?.steps.length ?? item.totalSteps,
-      );
-    } catch (_) {
-      try {
-        final trail = await fetchSubmissionTrail(
-          businessType: item.businessType,
-          businessId: item.id,
-        );
-        var createdByName = item.createdByName;
-        if (trail != null) {
-          final fromTrail = (trail.raw['initiatorName'] ?? '')
-              .toString()
-              .trim();
-          if (fromTrail.isNotEmpty) {
-            createdByName = fromTrail;
-          } else if (trail.initiatorId > 0) {
-            final names = await fetchUserDisplayNames([trail.initiatorId]);
-            createdByName = names[trail.initiatorId]?.trim().isNotEmpty == true
-                ? names[trail.initiatorId]!.trim()
-                : createdByName;
-          }
-        }
-        return item.copyWith(
-          status: _resolveB1ListStatus(item, trail),
-          createdByName: createdByName,
-          currentStep: trail?.currentStep ?? item.currentStep,
-          totalSteps: trail?.steps.length ?? item.totalSteps,
-        );
-      } catch (_) {
-        return _fallbackB1ItemStatus(item);
-      }
-    }
-  }
-
-  XflowProposalItem _fallbackB1ItemStatus(XflowProposalItem item) {
-    // 详情或审批流请求失败时，保留 inbox 的整单状态，不能把个人已办
-    // 记录默认显示为“已通过”。
-    return item.copyWith(status: item.status.isEmpty ? 'PENDING' : item.status);
-  }
-
-  Future<XflowProposalItem> _enrichB14Item(XflowProposalItem item) async {
-    try {
-      final detail = await fetchProposalDetail(item.id);
-      final trail = await fetchProposalTrail(item.id);
-      var st = (detail.status.isNotEmpty ? detail.status : item.status)
-          .toLowerCase();
-      var status = st == 'pending' ? 'PENDING' : st.toUpperCase();
-      if (st == 'superseded') status = 'SUPERSEDED';
-      if (st == 'voided') status = 'VOIDED';
-      final trailStatus = trail?.status.toUpperCase() ?? '';
-      if (trailStatus.isNotEmpty && status == 'PENDING') {
-        status = trailStatus;
-      }
-      final proposalType =
-          (detail.formValues['proposalType'] ??
-                  detail.raw['proposalType'] ??
-                  item.proposalType)
-              ?.toString();
-      final templateKey = (detail.raw['templateKey'] ?? item.templateKey)
-          ?.toString();
-      // 与 B1 一致：销售提案列表标题依赖 createdByName 拼「人名 - 销售提案」。
-      var initiator = detail.ownerName.trim();
-      if (initiator.isEmpty) {
-        initiator =
-            (detail.raw['createdByName'] ??
-                    detail.raw['createdBy'] ??
-                    detail.raw['initiatorName'] ??
-                    detail.raw['initiator'] ??
-                    item.createdByName)
-                .toString()
-                .trim();
-      }
-      if (initiator.isEmpty && trail != null) {
-        initiator = (trail.raw['initiatorName'] ?? '').toString().trim();
-        if (initiator.isEmpty && trail.initiatorId > 0) {
-          final names = await fetchUserDisplayNames([trail.initiatorId]);
-          initiator = names[trail.initiatorId]?.trim() ?? '';
-        }
-      }
-      return item.copyWith(
-        title: detail.title,
-        code: detail.code,
-        status: status,
-        createdByName: initiator.isNotEmpty ? initiator : item.createdByName,
-        canRefedit: st == 'rejected',
-        tag1: (detail.raw['tag1'] ?? item.tag1)?.toString(),
-        txType: (detail.raw['txType'] ?? item.txType)?.toString(),
-        proposalType: proposalType,
-        templateKey: templateKey,
-        scaleWan: _scaleWanFromDetail(detail) ?? item.scaleWan,
-        currentStep: trail?.raw['currentStep'] is num
-            ? (trail!.raw['currentStep'] as num).toInt()
-            : item.currentStep,
-        totalSteps: trail?.steps.length ?? item.totalSteps,
-      );
-    } catch (_) {
-      return item;
-    }
-  }
-
-  Future<XflowProposalItem> _enrichP1Item(XflowProposalItem item) async {
-    try {
-      final detail = await fetchProposalDetail(item.id);
-      final trail = await fetchProposalTrail(item.id);
-      return item.copyWith(
-        title: detail.title,
-        code: detail.code,
-        status: detail.status.isNotEmpty ? detail.status : item.status,
-        tag1: (detail.raw['tag1'] ?? item.tag1)?.toString(),
-        txType: (detail.raw['txType'] ?? item.txType)?.toString(),
-        proposalType:
-            (detail.raw['proposalType'] ??
-                    detail.raw['txType'] ??
-                    item.proposalType)
-                ?.toString(),
-        documentKind: (detail.raw['documentKind'] ?? item.documentKind)
-            ?.toString(),
-        templateKey: (detail.raw['templateKey'] ?? '').toString().isNotEmpty
-            ? detail.raw['templateKey'].toString()
-            : item.templateKey,
-        scaleWan: _scaleWanFromDetail(detail) ?? item.scaleWan,
-        currentStep: trail?.raw['currentStep'] is num
-            ? (trail!.raw['currentStep'] as num).toInt()
-            : item.currentStep,
-        totalSteps: trail?.steps.length ?? item.totalSteps,
-      );
-    } catch (_) {
-      return item;
-    }
-  }
-
-  String _resolveB1ListStatus(
-    XflowProposalItem item,
-    XflowApprovalTrail? trail, {
-    String detailStatus = '',
-  }) {
-    if (item.todoHint?.status.toUpperCase() == 'OPEN') return 'PENDING';
-    // “我审批的”展示业务审批流的整体状态，不能用当前用户节点的处理结果
-    // 覆盖尚未结束或最终被其他节点驳回的流程。
-    final fromTrail = _terminalStatusFromTrail(trail);
-    if (fromTrail != null) return fromTrail;
-    final st = detailStatus.toUpperCase();
-    if (st.isNotEmpty) return st;
-    return 'PENDING';
-  }
-
-  /// 审批轨迹终态优先于卡住的 submission/PENDING。
-  String? _terminalStatusFromTrail(XflowApprovalTrail? trail) {
-    if (trail == null) return null;
-    final trailStatus = trail.status.toUpperCase();
-    if (trailStatus == 'APPROVED' ||
-        trailStatus == 'REJECTED' ||
-        trailStatus == 'CANCELLED' ||
-        trailStatus == 'VOIDED') {
-      return trailStatus;
-    }
-    if (trail.steps.isEmpty) return null;
-    var anyRejected = false;
-    var allDecided = true;
-    for (final step in trail.steps) {
-      final d = step.decision.trim().toUpperCase();
-      if (d.isEmpty) {
-        allDecided = false;
-        continue;
-      }
-      if (d == 'REJECTED') anyRejected = true;
-    }
-    if (!allDecided) return null;
-    return anyRejected ? 'REJECTED' : 'APPROVED';
-  }
-
-  Future<XflowProposalItem> _enrichB14SubmissionItem(
-    XflowProposalItem item,
-  ) async {
-    try {
-      final detail = await fetchSubmissionDetail(
-        businessType: item.businessType,
-        businessId: item.id,
-      );
-      final trail = await fetchSubmissionTrail(
-        businessType: item.businessType,
-        businessId: item.id,
-      );
-      var status = (detail.status.isNotEmpty ? detail.status : item.status)
-          .toUpperCase();
-      final fromTrail = _terminalStatusFromTrail(trail);
-      if (fromTrail != null &&
-          (status == 'PENDING' || status == 'OPEN' || status.isEmpty)) {
-        status = fromTrail;
-      }
-      return item.copyWith(
-        title: detail.title.isNotEmpty ? detail.title : item.title,
-        code: detail.businessId > 0 ? '#${detail.businessId}' : item.code,
-        status: status,
-        createdByName: detail.createdByName.isNotEmpty
-            ? detail.createdByName
-            : item.createdByName,
-        createdAt: detail.createdAt ?? item.createdAt,
-        templateKey: detail.templateKey.isNotEmpty
-            ? detail.templateKey
-            : item.templateKey,
-        currentStep: trail?.currentStep ?? item.currentStep,
-        totalSteps: trail?.steps.length ?? item.totalSteps,
-      );
-    } catch (_) {
-      try {
-        final trail = await fetchSubmissionTrail(
-          businessType: item.businessType,
-          businessId: item.id,
-        );
-        final fromTrail = _terminalStatusFromTrail(trail);
-        if (fromTrail == null) return item;
-        final st = item.status.toUpperCase();
-        if (st == 'PENDING' || st == 'OPEN' || st.isEmpty) {
-          return item.copyWith(
-            status: fromTrail,
-            currentStep: trail?.currentStep ?? item.currentStep,
-            totalSteps: trail?.steps.length ?? item.totalSteps,
-          );
-        }
-        return item;
-      } catch (_) {
-        return item;
-      }
-    }
-  }
-
-  String? _scaleWanFromDetail(XflowProposalDetail detail) {
-    final fv = detail.formValues;
-    final fin = detail.raw['finance'];
-    String pick(dynamic v) => v?.toString().trim() ?? '';
-    final fromFv = pick(fv['targetMonthlyScaleWan']);
-    if (fromFv.isNotEmpty) return fromFv;
-    if (fin is Map) {
-      final fromFin = pick(fin['targetMonthlyScaleWan']);
-      if (fromFin.isNotEmpty) return fromFin;
-    }
-    final fromRaw = pick(detail.raw['scaleWan']);
-    return fromRaw.isEmpty ? null : fromRaw;
-  }
 
   XflowProposalItem _mapProposalItem(Map<String, dynamic> json) {
     final idText = _businessIdText(json['id'] ?? json['businessId']);
@@ -2398,6 +2074,13 @@ class XflowService {
       createdAt: DateTime.tryParse(
         (json['createdAt'] ?? json['updatedAt'] ?? '').toString(),
       ),
+      templateKey: _trimmedOrNull(json['templateKey']),
+      documentKind: _trimmedOrNull(json['documentKind']),
+      proposalType: _trimmedOrNull(
+        json['proposalType'] ?? json['documentType'] ?? json['txType'],
+      ),
+      txType: _trimmedOrNull(json['txType']),
+      scaleWan: _trimmedOrNull(json['scaleWan']),
     );
   }
 

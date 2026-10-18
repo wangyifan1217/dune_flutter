@@ -25,6 +25,34 @@ void main() {
     expect(copied['amount'], '1200');
   });
 
+  test('stripInitiatorTitlePrefix drops the name the server will add again', () {
+    expect(
+      stripInitiatorTitlePrefix('冯静 - 资质使用', ['冯静']),
+      '资质使用',
+    );
+    expect(
+      stripInitiatorTitlePrefix('冯静 - 冯静 - 资质使用', ['冯静']),
+      '资质使用',
+    );
+    expect(
+      stripInitiatorTitlePrefix('资质使用', ['冯静']),
+      '资质使用',
+    );
+    expect(
+      normalizeDuplicatedInitiatorTitle('冯静 - 冯静 - 资质使用'),
+      '冯静 - 资质使用',
+    );
+    expect(
+      normalizeDuplicatedInitiatorTitle('冯静 - 资质使用'),
+      '冯静 - 资质使用',
+    );
+
+    final values = <String, dynamic>{'title': '冯静 - 资质使用', 'amount': '1'};
+    stripCopiedApprovalTitle(values, ['冯静']);
+    expect(values['title'], '资质使用');
+    expect(values['amount'], '1');
+  });
+
   test('copyableApprovalFormValues strips task todo completion fields', () {
     final copied = copyableApprovalFormValues({
       'title': '王奕凡 - 业务采购申请单',

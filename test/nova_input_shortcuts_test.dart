@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:dunes_app/features/nova/nova_personal_query.dart';
 import 'package:dunes_app/features/nova/nova_widgets.dart';
 
 void main() {
@@ -159,5 +160,78 @@ void main() {
     expect(find.text('新对话'), findsOneWidget);
     expect(find.text('历史'), findsOneWidget);
     expect(find.text('GPT'), findsOneWidget);
+  });
+
+  test('desktop enter sends and shift-enter keeps the line break', () {
+    expect(
+      novaStripDesktopEnter(
+        '你好\n',
+        enterDown: true,
+        shiftDown: false,
+        composing: false,
+      ),
+      '你好',
+    );
+    expect(
+      novaStripDesktopEnter(
+        '你好\n',
+        enterDown: true,
+        shiftDown: true,
+        composing: false,
+      ),
+      isNull,
+    );
+    expect(
+      novaStripDesktopEnter(
+        '你好\n',
+        enterDown: true,
+        shiftDown: false,
+        composing: true,
+      ),
+      isNull,
+    );
+  });
+
+  testWidgets('capability switch opens an in-field menu', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    NovaPersonalCapability? picked = NovaPersonalCapability.tasks;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NovaC4InputBar(
+            controller: TextEditingController(),
+            focusNode: FocusNode(),
+            voiceMode: false,
+            sending: false,
+            enabled: true,
+            hintText: '问小饕...',
+            modelLabel: 'GPT',
+            quickActionsOpen: false,
+            capability: null,
+            onCapabilityChanged: (mode) => picked = mode,
+            onToggleVoice: () {},
+            onSend: () {},
+            onPickModel: () {},
+            onInputFocused: () {},
+            onToggleQuickActions: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('通用'), findsOneWidget);
+    expect(find.text('任务'), findsNothing);
+    await tester.tap(find.text('通用'));
+    await tester.pumpAndSettle();
+    expect(find.text('任务'), findsOneWidget);
+    expect(find.text('灯塔'), findsOneWidget);
+    await tester.tap(find.text('任务'));
+    await tester.pumpAndSettle();
+    expect(picked, NovaPersonalCapability.tasks);
   });
 }

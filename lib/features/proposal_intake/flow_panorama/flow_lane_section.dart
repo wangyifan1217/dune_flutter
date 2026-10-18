@@ -76,7 +76,17 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
     return text;
   }
 
-  String _nodeName(NodeDef? def) {
+  String _nodeRole(NodeDef? def, String id, FlowKind kind) {
+    if (kind == FlowKind.fund && id == 'hub' && _ctx.fundPartiesSplit) {
+      return '我方 · 收付';
+    }
+    return def?.role ?? id;
+  }
+
+  String _nodeName(NodeDef? def, {FlowKind? kind, String id = ''}) {
+    if (kind == FlowKind.fund && id == 'hub' && _ctx.fundPartiesSplit) {
+      return '收款 ${_ctx.fundReceiveParty}';
+    }
     if (def == null) return '—';
     final name = _tidy(def.name?.call(_ctx) ?? '');
     if (name.isNotEmpty) return name;
@@ -84,7 +94,10 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
     return fallback.isEmpty ? '—' : fallback;
   }
 
-  String _nodeMeta(NodeDef? def) {
+  String _nodeMeta(NodeDef? def, {FlowKind? kind, String id = ''}) {
+    if (kind == FlowKind.fund && id == 'hub' && _ctx.fundPartiesSplit) {
+      return '付款 ${_ctx.payer.trim()}';
+    }
     if (def == null) return '';
     final rows = def.rows?.call(_ctx);
     if (rows != null && rows.isNotEmpty) {
@@ -518,7 +531,7 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
           border: Border.all(color: style.color),
         ),
         child: Text(
-          _nodeName(def),
+          _nodeName(def, kind: kind, id: id),
           style: TextStyle(
             fontSize: 12,
             height: 1.3,
@@ -575,7 +588,7 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
   Widget _nodeCard(LaneNode pos, FlowKind kind) {
     final def = kNodeById[pos.id];
     final style = kKind[kind]!;
-    final meta = _nodeMeta(def);
+    final meta = _nodeMeta(def, kind: kind, id: pos.id);
     return Positioned(
       left: pos.x,
       top: pos.y,
@@ -607,7 +620,7 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  def?.role ?? pos.id,
+                  _nodeRole(def, pos.id, kind),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -618,7 +631,7 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  _nodeName(def),
+                  _nodeName(def, kind: kind, id: pos.id),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

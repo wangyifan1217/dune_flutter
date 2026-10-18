@@ -88,6 +88,45 @@ void main() {
     expect(afterUpdated.single.preview, '测试.jpg');
   });
 
+  test('离职消息不改列表预览、排序和未读', () {
+    final at = DateTime.utc(2026, 8, 27, 2, 21);
+    final after = ConversationInboxRealtime.applyEvent(
+      items: [conv(preview: '上次发言', updatedAt: at, kind: 'WORKGROUP', unreadCount: 2)],
+      event: const ConversationRealtimeEventLike(
+        type: 'message',
+        conversationId: 299,
+        raw: {},
+        message: {
+          'kind': 'SYSTEM_RESIGN',
+          'bodyText': '李同池已离职',
+          'createdAt': '2026-08-27T02:23:00.000Z',
+        },
+      ),
+      selfUserId: 1,
+    );
+    expect(after.single.preview, '上次发言');
+    expect(after.single.updatedAt, at);
+    expect(after.single.unreadCount, 2);
+
+    final afterHint = ConversationInboxRealtime.applyEvent(
+      items: [conv(preview: '上次发言', updatedAt: at, kind: 'WORKGROUP', unreadCount: 2)],
+      event: const ConversationRealtimeEventLike(
+        type: 'message',
+        conversationId: 299,
+        raw: {},
+        message: {
+          'kind': 'SYSTEM_HINT',
+          'bodyText': '李同池 加入了群聊',
+          'createdAt': '2026-08-27T02:23:00.000Z',
+        },
+      ),
+      selfUserId: 1,
+    );
+    expect(afterHint.single.preview, '上次发言');
+    expect(afterHint.single.updatedAt, at);
+    expect(afterHint.single.unreadCount, 2);
+  });
+
   test('静默刷新时保留本地原文预览，不被服务端误压的图片摘要覆盖', () {
     final at = DateTime.utc(2026, 8, 27, 2, 23);
     final merged = mergeInboxConversations(

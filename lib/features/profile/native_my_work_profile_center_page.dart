@@ -2898,7 +2898,7 @@ class _NativeMyWorkProfileCenterPageState
     );
   }
 
-  /// 审批中心 Bento Grid 四宫格 (极简轻奢行政仪表盘，去处突兀大方块图标)
+  /// 审批流转中心。宽屏一行四格，窄屏（App）两列，卡片本身都按紧凑高度排。
   Widget _buildApprovalBentoQuadrant(_CenterAffairsStats stats) {
     Widget quadrantCell({
       required String title,
@@ -2910,51 +2910,45 @@ class _NativeMyWorkProfileCenterPageState
       required VoidCallback onTap,
       int badge = 0,
     }) {
-      return Expanded(
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(10, 7, 8, 7),
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
               color: DunesColors.resolve(
                 context,
-                Colors.white,
-                role: DunesColorRole.surface,
+                const Color(0xFFECE4F3),
+                role: DunesColorRole.border,
               ),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  const Color(0xFFECE4F3),
-                  role: DunesColorRole.border,
-                ),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF552D8E).withValues(alpha: .03),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 顶部行：微型精致线条图标 + 标题 + 状态小徽标
-                Row(
-                  children: [
-                    Icon(
-                      icon,
-                      color: DunesColors.resolveNullable(context, iconColor),
-                      size: 15,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    icon,
+                    color: DunesColors.resolveNullable(context, iconColor),
+                    size: 13,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
                       title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: DunesColors.resolveNullable(
                           context,
@@ -2962,66 +2956,67 @@ class _NativeMyWorkProfileCenterPageState
                         ),
                       ),
                     ),
-                    const Spacer(),
-                    if (badge > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 1.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.coral,
-                            role: DunesColorRole.surface,
-                          ),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: Text(
-                          '$badge',
-                          style: TextStyle(
-                            color: DunesColors.resolve(context, Colors.white),
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      )
-                    else
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 15,
-                        color: DunesColors.resolveNullable(
+                  ),
+                  if (badge > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: DunesColors.resolve(
                           context,
-                          Color(0xFFC4B8D1),
+                          DunesColors.coral,
+                          role: DunesColorRole.surface,
+                        ),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text(
+                        '$badge',
+                        style: TextStyle(
+                          color: DunesColors.resolve(context, Colors.white),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // 主数值行：大号高定数字 + 微缩单位
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      '$count',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: DunesColors.resolveNullable(
-                          context,
-                          Color(0xFF261838),
-                        ),
-                        letterSpacing: -0.5,
-                        height: 1.0,
+                    )
+                  else
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 14,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFFC4B8D1),
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
+                ],
+              ),
+              const SizedBox(height: 2),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    '$count',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: DunesColors.resolveNullable(
+                        context,
+                        Color(0xFF261838),
+                      ),
+                      letterSpacing: -0.4,
+                      height: 1.0,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Flexible(
+                    child: Text(
                       countUnit,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: DunesColors.resolveNullable(
                           context,
@@ -3029,83 +3024,96 @@ class _NativeMyWorkProfileCenterPageState
                         ),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-
-                // 辅助说明行
-                Text(
-                  secondaryText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: DunesColors.resolveNullable(
-                      context,
-                      Color(0xFF9E92AB),
-                    ),
+                  ),
+                ],
+              ),
+              Text(
+                secondaryText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  height: 1.2,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Color(0xFF9E92AB),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );
     }
 
-    return Column(
-      children: [
-        Row(
-          children: [
-            quadrantCell(
-              title: '我审批的',
-              count: stats.pendingForMe,
-              countUnit: '待我审',
-              secondaryText: '${stats.handledThisMonth} 已审核 · 效率良好',
-              icon: Icons.verified_user_outlined,
-              iconColor: DunesColors.resolve(context, const Color(0xFF7C5CE6)),
-              badge: stats.pendingForMe,
-              onTap: () => widget.navigation.go('B1'),
-            ),
-            const SizedBox(width: 10),
-            quadrantCell(
-              title: '审批待办',
-              count: stats.pendingTodoForMe,
-              countUnit: '待办理',
-              secondaryText: '${stats.handledTodoThisMonth} 本月已办',
-              icon: Icons.task_alt_rounded,
-              iconColor: DunesColors.resolve(context, const Color(0xFF2E86DE)),
-              badge: stats.pendingTodoForMe,
-              onTap: () => widget.navigation.go('B13'),
-            ),
+    final cells = <Widget>[
+      quadrantCell(
+        title: '我审批的',
+        count: stats.pendingForMe,
+        countUnit: '待我审',
+        secondaryText: '${stats.handledThisMonth} 已审核',
+        icon: Icons.verified_user_outlined,
+        iconColor: DunesColors.resolve(context, const Color(0xFF7C5CE6)),
+        badge: stats.pendingForMe,
+        onTap: () => widget.navigation.go('B1'),
+      ),
+      quadrantCell(
+        title: '审批待办',
+        count: stats.pendingTodoForMe,
+        countUnit: '待办理',
+        secondaryText: '${stats.handledTodoThisMonth} 本月已办',
+        icon: Icons.task_alt_rounded,
+        iconColor: DunesColors.resolve(context, const Color(0xFF2E86DE)),
+        badge: stats.pendingTodoForMe,
+        onTap: () => widget.navigation.go('B13'),
+      ),
+      quadrantCell(
+        title: '我发起的',
+        count: stats.approvalPending,
+        countUnit: '审批中',
+        secondaryText: '共 ${stats.initiatedTotal} 条',
+        icon: Icons.send_outlined,
+        iconColor: DunesColors.resolve(context, const Color(0xFF10AC84)),
+        badge: stats.approvalPending,
+        onTap: () => widget.onOpenB14(),
+      ),
+      quadrantCell(
+        title: '抄送我的',
+        count: stats.ccProposalCount,
+        countUnit: '份抄送',
+        secondaryText: '${stats.ccProposalPending} 条进行中',
+        icon: Icons.mark_email_read_outlined,
+        iconColor: DunesColors.resolve(context, const Color(0xFFEE5253)),
+        onTap: () => widget.navigation.go('P1'),
+      ),
+    ];
+
+    Widget rowOf(List<Widget> items) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(child: items[i]),
           ],
-        ),
-        const SizedBox(height: 10),
-        Row(
+        ],
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 宽屏一行四格，少占下方办公入口；手机宽度仍两列，避免标题挤掉。
+        if (constraints.maxWidth >= 720) {
+          return rowOf(cells);
+        }
+        return Column(
           children: [
-            quadrantCell(
-              title: '我发起的',
-              count: stats.approvalPending,
-              countUnit: '审批中',
-              secondaryText: '共 ${stats.initiatedTotal} 条全周期流程',
-              icon: Icons.send_outlined,
-              iconColor: DunesColors.resolve(context, const Color(0xFF10AC84)),
-              badge: stats.approvalPending,
-              onTap: () => widget.onOpenB14(),
-            ),
-            const SizedBox(width: 10),
-            quadrantCell(
-              title: '抄送我的',
-              count: stats.ccProposalCount,
-              countUnit: '份抄送',
-              secondaryText: '${stats.ccProposalPending} 条进行中',
-              icon: Icons.mark_email_read_outlined,
-              iconColor: DunesColors.resolve(context, const Color(0xFFEE5253)),
-              onTap: () => widget.navigation.go('P1'),
-            ),
+            rowOf(cells.sublist(0, 2)),
+            const SizedBox(height: 8),
+            rowOf(cells.sublist(2)),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 

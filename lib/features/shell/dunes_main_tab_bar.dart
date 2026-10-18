@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../nova/presence/nova_presence_host.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/platform/desktop_features.dart';
@@ -249,7 +250,9 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                   customBorder: const CircleBorder(),
                   onTap: () {
                     FocusManager.instance.primaryFocus?.unfocus();
-                    final openAi = widget.onOpenAi;
+                    final openAi =
+                        widget.onOpenAi ??
+                        NovaPresenceScope.maybeOf(context)?.open;
                     if (openAi != null) {
                       openAi();
                     } else {
@@ -321,6 +324,8 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                 if (!_hideWorkbenchTabs) ...['QJ', 'LH', 'QJA'],
               ];
               final index = screens.indexOf(widget.activeScreen);
+              final showRailNova = !widget.chatOnlyMode;
+              final novaSlot = showRailNova ? 64.0 : 0.0;
               final double? top = index >= 0
                   ? 12.0 + index * 64 + 5
                   : widget.activeScreen == 'B2'
@@ -363,7 +368,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                     Positioned(
                       left: 16,
                       right: 16,
-                      bottom: 10 + 64.0 + (settingsTap == null ? 0 : 64),
+                      bottom: 10 + 64.0 + (settingsTap == null ? 0 : 64) + novaSlot,
                       child: IgnorePointer(
                         child: Divider(height: 1, color: palette.borderSubtle),
                       ),
@@ -373,6 +378,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                       const SizedBox(height: 12),
                       ...tabs,
                       const Spacer(),
+                      if (showRailNova) _novaRailButton(),
                       _myTab,
                       if (settingsTap != null) ...[
                         _tab(
@@ -388,6 +394,55 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                 ],
               );
             },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _novaRailButton() {
+    return Tooltip(
+      message: '打开小饕',
+      child: GestureDetector(
+        onSecondaryTapDown: (details) {
+          showNovaPresenceFloatMenu(context, details.globalPosition);
+        },
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            final openAi = widget.onOpenAi;
+            if (openAi != null) {
+              openAi();
+            } else {
+              widget.navigation.go('C4');
+            }
+          },
+          child: SizedBox(
+            width: kDunesMainSideRailWidth,
+            height: 64,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ClipOval(
+                  child: Image.asset(
+                    'assets/images/ai_tab_avatar.png',
+                    width: 28,
+                    height: 28,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '小饕',
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

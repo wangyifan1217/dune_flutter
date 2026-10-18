@@ -197,7 +197,7 @@ final List<EdgeDef> kEdges = [
     d: const [125, 125],
     t: 0.42,
     label: (c) => c.channelMode,
-    sub: (c) => c.channelCycle,
+    sub: (c) => c.fundCollectSub,
     note: (c) =>
         '${c.salesTheirs} → ${c.salesOurs} 回款 · ${c.channelMode} / ${c.channelCycle}（${c.payeeAccount}）',
     st: (c) => c.hasMargin && c.margin < 4.5
@@ -211,10 +211,10 @@ final List<EdgeDef> kEdges = [
     a: const Anchor('hub', 'L', 20),
     b: const Anchor('supplier', 'R', 30),
     d: const [85, 85],
-    label: (c) => '${c.supplyMode} · ${c.supplyCycle}',
-    sub: (c) => c.payerAccount,
+    label: (c) => c.fundPayLabel,
+    sub: (c) => c.fundPaySub,
     note: (c) =>
-        '${c.purchaseOurs} 按 ${c.supplyMode}/${c.supplyCycle} 向 ${c.purchaseTheirs} 付款（${c.payerAccount}）',
+        '${c.payer} 按 ${c.fundPayLabel} 向 ${c.purchaseTheirs} 付款（${c.payerAccount}）',
     st: (c) => RegExp(r'待|未').hasMatch(c.payerAccount)
         ? const FlowStatus(FlowLevel.warn, '付款账户未锁定，无法发起付款')
         : null,

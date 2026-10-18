@@ -150,6 +150,22 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
     _controller.text = _selected?.label ?? '';
   }
 
+  /// 字段已经在视野里就别再滚。否则点开下拉会把整页拉到顶。
+  bool _fieldAlreadyVisible() {
+    final box = context.findRenderObject();
+    final viewport = Scrollable.maybeOf(context)?.context.findRenderObject();
+    if (box is! RenderBox || viewport is! RenderBox) return false;
+    if (!box.hasSize ||
+        !viewport.hasSize ||
+        !box.attached ||
+        !viewport.attached) {
+      return false;
+    }
+    final top = box.localToGlobal(Offset.zero, ancestor: viewport).dy;
+    final bottom = top + box.size.height;
+    return top >= 8 && bottom <= viewport.size.height - 8;
+  }
+
   void _onFocus() {
     if (_focus.hasFocus && _enabled) {
       if (widget.requireKeyword) {
@@ -163,12 +179,12 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
       if (_canSearch) {
         _ensureVisibleTimer?.cancel();
         _ensureVisibleTimer = Timer(const Duration(milliseconds: 180), () {
-          if (!mounted || !_focus.hasFocus) return;
+          if (!mounted || !_focus.hasFocus || _fieldAlreadyVisible()) return;
           Scrollable.ensureVisible(
             context,
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
-            alignment: 0.22,
+            alignment: 0.5,
           );
           _rebuildOverlay();
         });

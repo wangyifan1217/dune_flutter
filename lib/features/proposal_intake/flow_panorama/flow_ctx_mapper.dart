@@ -10,6 +10,7 @@ abstract final class FlowCtxMapper {
     required List<ProposalFinanceInterface> financeInterfaces,
   }) {
     final salesOurs = _orDash(_text(form, 'salesOurParty'), '我方主体');
+    final purchaseOurs = _orDash(_text(form, 'purchaseOurParty'), '我方采购主体');
     final billing = _text(form, 'billingName');
     final interfaces = form['financeInterfaces'] is Map
         ? Map<String, dynamic>.from(form['financeInterfaces'] as Map)
@@ -41,7 +42,7 @@ abstract final class FlowCtxMapper {
       purchaseProducts: _listOr(form, 'purchaseProducts', '未选择采购产品'),
       purchaseName: _text(form, 'purchaseName'),
       purchaseNo: _text(form, 'purchaseNo'),
-      purchaseOurs: _orDash(_text(form, 'purchaseOurParty'), '我方采购主体'),
+      purchaseOurs: purchaseOurs,
       purchaseTheirs: _orDash(_text(form, 'purchaseCounterparty'), '供给方'),
       purchaseTerms: _text(form, 'purchaseCoreTerms'),
       salesName: _text(form, 'salesName'),
@@ -69,7 +70,7 @@ abstract final class FlowCtxMapper {
       hasMargin: _hasNumber(form, 'margin'),
       supplyMode: _orDash(_text(form, 'supplySettleMode'), '待设置结算模式'),
       supplyCycle: _orDash(_text(form, 'supplySettleCycle'), '待设置结算周期'),
-      payer: _orDash(_text(form, 'supplyPayer'), salesOurs),
+      payer: _orDash(_text(form, 'supplyPayer'), purchaseOurs),
       payerAccount: _orDash(_text(form, 'supplyPayAccount'), '—'),
       channelMode: _orDash(_text(form, 'channelSettleMode'), '待设置回款模式'),
       channelCycle: _orDash(_text(form, 'channelSettleCycle'), '待设置回款周期'),

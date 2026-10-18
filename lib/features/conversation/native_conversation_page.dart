@@ -1415,7 +1415,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           draft: draft,
           streamInFlight: streamInFlight,
         );
-    final generating = (ai?.assistantGenerating ?? false) || localGenerating;
+    final preview = (ai?.preview ?? '').trim();
+    final serverGenerating = (ai?.assistantGenerating ?? false) && preview.isEmpty;
+    final generating = streamInFlight || serverGenerating || localGenerating;
     final apiStatus = (ai?.assistantGeneratingStatus ?? '').trim();
     final status = apiStatus.isNotEmpty ? apiStatus : (local?.status ?? '');
     return (generating: generating, status: status);
@@ -2177,7 +2179,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 ChatInboxHeader(
                   onOpenContacts: widget.onOpenContacts,
                   onNewChat: widget.onOpenNewChat,
-                  showNovaLeading: isDesktopCommOnly,
+                  showNovaLeading: false,
                   onQuickMeeting:
                       isDesktopCommOnly || widget.session.isExternalUser
                       ? null

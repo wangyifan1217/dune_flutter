@@ -12,6 +12,10 @@ Map<String, dynamic> _map(Object? value) => value is Map ? Map<String, dynamic>.
   final margin = row.form['businessCostRedacted'] == true ? null : main['margin'] as num?;
   return (scale: scale == null ? '' : '$scale', margin: margin == null ? '' : '$margin');
 }
+
+/// 列表上的任务评级。后端按测算合计收入算好后放在 financeEstimate.rating。
+String proposalRemoteTaskRating(ProposalIntakeRow row) =>
+    '${row.financeEstimate['rating'] ?? ''}'.trim();
 double _number(Object? value) {
   if (value is! num || !value.isFinite) throw const FormatException('后端测算结果格式错误');
   return value.toDouble();
@@ -45,6 +49,8 @@ ProposalFinanceEvaluation _evaluation(Map<String, dynamic> json) {
     }),
     profit: _number(json['profit']), margin: (json['margin'] as num?)?.toDouble(),
     computedCostTotal: (_map(json['summary'])['costTotal'] as num?)?.toDouble(),
+    rating: '${json['rating'] ?? ''}'.trim(),
+    ratingRule: '${json['ratingRule'] ?? ''}'.trim(),
     profitSubstitution: '${json['profitSubstitution'] ?? ''}',
     marginSubstitution: '${json['marginSubstitution'] ?? ''}',
     products: _list(json['products']).map((raw) {
@@ -139,7 +145,8 @@ class ProposalRemoteFinanceController extends ChangeNotifier {
     final key = jsonEncode(input);
     if (key == _key) return;
     _key = key; _input = input; _generation++;
-    loading = true; error = null; result = null;
+    // 新结果回来前留着上一份，避免测算图先抽掉、页面被拉回顶部。
+    loading = true; error = null;
     _timer?.cancel();
     _timer = Timer(const Duration(milliseconds: 300), () {
       unawaited(_run().then<void>((_) {}, onError: (Object _) {}));

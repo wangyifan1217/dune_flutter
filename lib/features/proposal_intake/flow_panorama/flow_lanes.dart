@@ -175,6 +175,8 @@ const Map<String, FlowFieldJump> kFlowFieldJumps = {
   ]),
   'f5': FlowFieldJump(ProposalIntakeNavSection.finance, [
     'supplySettleMode',
+    'supplySettleCycle',
+    'supplyPayer',
     'supplyPayAccount',
   ]),
   'i1': FlowFieldJump(ProposalIntakeNavSection.market, [

@@ -133,7 +133,9 @@ class _AppSoftwareUpdatePageState extends State<AppSoftwareUpdatePage> {
         _busy = false;
         _opening = false;
         _error = _inApp
-            ? (_isMac ? '应用内更新失败，可重试或改用浏览器下载安装包。' : '应用内更新失败，可重试或改用浏览器下载。')
+            ? (_isMac
+                  ? _macUpdateFailure(e)
+                  : '应用内更新失败，可重试或改用浏览器下载。')
             : '更新失败，请稍后重试';
       });
     }
@@ -178,6 +180,17 @@ class _AppSoftwareUpdatePageState extends State<AppSoftwareUpdatePage> {
 
   bool get _canOpenBrowser =>
       _inApp && _error != null && widget.result.downloadUrl.trim().isNotEmpty;
+
+  String _macUpdateFailure(Object error) {
+    var detail = error is StateError ? error.message.trim() : '';
+    if (detail.isEmpty) {
+      return '应用内更新失败，可重试或改用浏览器下载安装包。';
+    }
+    if (detail.endsWith('。')) {
+      detail = detail.substring(0, detail.length - 1);
+    }
+    return '$detail。可改用浏览器下载安装包。';
+  }
 
   String? get _secondaryLabel {
     if (_canOpenBrowser) return '浏览器下载';

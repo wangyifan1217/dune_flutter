@@ -3119,20 +3119,31 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.descendant(of: dialog, matching: find.text('按面值')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: dialog, matching: find.text('推广商')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: dialog, matching: find.text('结算单价')),
+      findsNothing,
+    );
+    await _tapVisible(
+      tester,
+      find.descendant(of: dialog, matching: find.text('按面值')),
+    );
+    expect(
       find.descendant(of: dialog, matching: find.text('结算单价')),
       findsOneWidget,
     );
-    final inputs = find.descendant(
-      of: dialog,
-      matching: find.byType(TextFormField),
-    );
-    expect(inputs, findsNWidgets(2));
-    final ratioBox = tester.getRect(inputs.at(0));
-    final priceBox = tester.getRect(inputs.at(1));
     expect(
-      (ratioBox.bottom - priceBox.bottom).abs(),
-      lessThan(1),
-      reason: '固定比例时结算比例和结算单价的下划线要齐',
+      find.descendant(
+        of: dialog,
+        matching: find.text('年测算 = 年化规模 ÷ 面值 × 单价'),
+      ),
+      findsOneWidget,
     );
     await _tapVisible(
       tester,

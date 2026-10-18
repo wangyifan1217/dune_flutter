@@ -47,6 +47,7 @@ import 'settlement_catalog.dart';
 enum _ProposalPage { list, form }
 
 /// 「我的」里的销售/采购提案。列表返回「我的」；填写中的返回先回到列表。
+/// [active] 为 false 时页面仍留着（切去别的页再回来还在填写页），但不拦截返回键。
 class ProposalIntakeMyEntryPage extends StatefulWidget {
   const ProposalIntakeMyEntryPage({
     super.key,
@@ -54,12 +55,14 @@ class ProposalIntakeMyEntryPage extends StatefulWidget {
     required this.navigation,
     required this.kind,
     required this.title,
+    this.active = true,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final String kind;
   final String title;
+  final bool active;
 
   @override
   State<ProposalIntakeMyEntryPage> createState() =>
@@ -68,6 +71,12 @@ class ProposalIntakeMyEntryPage extends StatefulWidget {
 
 class _ProposalIntakeMyEntryPageState extends State<ProposalIntakeMyEntryPage> {
   TaskShellChrome _chrome = const TaskShellChrome();
+
+  @override
+  void didUpdateWidget(covariant ProposalIntakeMyEntryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active != oldWidget.active) _syncFormBack(_chrome);
+  }
 
   @override
   void dispose() {
@@ -86,7 +95,7 @@ class _ProposalIntakeMyEntryPageState extends State<ProposalIntakeMyEntryPage> {
 
   void _syncFormBack(TaskShellChrome chrome) {
     final nav = widget.navigation;
-    if (chrome.onBack != null) {
+    if (widget.active && chrome.onBack != null) {
       nav.backInterceptor = _consumeFormBack;
     } else if (nav.backInterceptor == _consumeFormBack) {
       nav.backInterceptor = null;
@@ -2321,10 +2330,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     final sector = proposalIntakeSectorName(row);
     final type = '${form['proposalType'] ?? ''}'.trim();
     final project = '${form['projectName'] ?? ''}'.trim();
-    final mainScale = proposalIntakeMainProductScale(form);
-    final rating = mainScale == null
-        ? ''
-        : (_options?.ratingFor(mainScale) ?? '');
+    final rating = proposalRemoteTaskRating(row);
     final figures = proposalRemoteListFigures(row);
     final scale = figures.scale.isEmpty
         ? '—'
@@ -2545,10 +2551,10 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           );
         }
         final row = entry.row!;
-        final mainScale = proposalIntakeMainProductScale(row.form);
+        final rating = proposalRemoteTaskRating(row);
         return _ProposalListTile(
           row: row,
-          rating: mainScale == null ? null : _options?.ratingFor(mainScale),
+          rating: rating.isEmpty ? null : rating,
           people: _people,
           initiatorName: row.initiatorDisplayName(_people),
           canDelete: row.canDeleteBy(widget.session.userId),
@@ -2615,7 +2621,7 @@ class _ProposalListTile extends StatelessWidget {
 
   final ProposalIntakeRow row;
 
-  /// 任务评级 S/A/B/C；没有年化规模或选项未加载时为空。
+  /// 任务评级 S/A/B/C；后端还没按收入算出时为空。
   final String? rating;
   final List<ProposalPerson> people;
   final String initiatorName;
@@ -3039,7 +3045,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   void _remoteFinanceChanged() {
     if (!mounted) return;
     _productEvaluationForm = null;
-    setState(() {});
+    _commitKeepingPlace(() => setState(() {}));
     _estimateTick.value++;
   }
 
@@ -3851,7 +3857,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       form: form,
       review: review,
     );
-    if ((rebuild || estimated) && mounted) setState(() {});
+    if ((rebuild || estimated) && mounted) {
+      _commitKeepingPlace(() => setState(() {}));
+    }
     _emitChanged(_row);
   }
 
@@ -5442,16 +5450,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         : (faces.first == faces.last
               ? '面值 ${proposalFormatWan(faces.first)} 元'
               : '面值 ${proposalFormatWan(faces.first)}–${proposalFormatWan(faces.last)} 元');
-    final rating = _rating;
-    final o = widget.options;
-    String wan(double v) => proposalEstimateGrouped(proposalFormatWan(v));
-    final ratingRule = switch (rating) {
-      'S' => '≥ ${wan(o.ratingS)}万',
-      'A' => '${wan(o.ratingA)}–${wan(o.ratingS)}万',
-      'B' => '${wan(o.ratingB)}–${wan(o.ratingA)}万',
-      'C' => '< ${wan(o.ratingB)}万',
-      _ => '',
-    };
+    final remoteRating = _remoteFinance.result?.total;
+    final rating = remoteRating == null || remoteRating.rating.isEmpty
+        ? '—'
+        : remoteRating.rating;
+    final ratingRule = remoteRating?.ratingRule ?? '';
     return ProposalEstimateSummaryData(
       remoteSummary: _remoteFinance.result!.summary,
       rating: rating,
@@ -5703,7 +5706,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               if (rating != null) ...[
                 SizedBox(width: phone ? 6 : 10),
                 Tooltip(
-                  message: '任务评级 $rating，按年化规模自动',
+                  message: '任务评级 $rating，按收入自动',
                   child: Container(
                     key: const ValueKey('proposal-top-rating'),
                     padding: const EdgeInsets.symmetric(
@@ -7990,9 +7993,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   String get _rating {
-    final scale = proposalIntakeMainProductScale(_form);
-    if (scale == null) return '—';
-    return widget.options.ratingFor(scale);
+    final rating = _remoteFinance.result?.total.rating ?? '';
+    if (rating.isEmpty) return '—';
+    return rating;
   }
 
   /// 标题旁只放 S/A/B/C，没有年化规模时不占位。
@@ -8017,7 +8020,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   Widget _ratingChip(String rating) {
     if (kProposalPrototypeStyleEnabled) {
       return Tooltip(
-        message: '任务评级 $rating，按年化规模自动',
+        message: '任务评级 $rating，按收入自动',
         child: KeyedSubtree(
           key: const ValueKey('proposal-top-rating'),
           child: ProposalRatingBadge(rating: rating),
@@ -8043,7 +8046,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
     };
     return Tooltip(
-      message: '任务评级 $rating，按年化规模自动',
+      message: '任务评级 $rating，按收入自动',
       child: Container(
         key: const ValueKey('proposal-top-rating'),
         height: 20,
@@ -8158,6 +8161,24 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     controller.dispose();
     if (value == null || value.isEmpty) return;
     _set(key, value, resetReview: resetReview);
+  }
+
+  /// 改结算一类字段会整页重建。若滚动被拉回顶部，再把原来的位置放回去。
+  void _commitKeepingPlace(VoidCallback change) {
+    final before = _scroll.hasClients ? _scroll.offset : null;
+    change();
+    if (before == null || before < 48) return;
+    void restore() {
+      if (!mounted || !_scroll.hasClients) return;
+      if (_scroll.offset + 24 >= before) return;
+      final max = _scroll.position.maxScrollExtent;
+      _scroll.jumpTo(before > max ? max : before);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      restore();
+      WidgetsBinding.instance.addPostFrameCallback((_) => restore());
+    });
   }
 
   void _scrollToTop() {
@@ -11816,7 +11837,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _kpiTile(
         label: '年化规模',
         value: scale > 0 ? proposalFormatWan(scale) : '—',
-        sub: _rating.isEmpty || _rating == '—' ? '市场部填写' : '评级 $_rating',
+        sub: '市场部填写',
         colors: const [Color(0xFF3D6FD8), Color(0xFF6FA8F0)],
         icon: Icons.trending_up_rounded,
         onTap: () =>
@@ -13975,7 +13996,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           lines: _productSettleLines(
             sku,
             cost: cost,
-            base: proposalIntakeSkuScaleTotal(sku),
+            base: proposalSkuFaceShareScale(sku, form: _form),
           ),
           cost: cost,
           emptyText: cost ? '产品结算里没有项目成本' : '产品结算里还没填收入',
@@ -15663,7 +15684,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final review = _reviewAfterProductEdit(resetReview);
     _markFormDirty();
     _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
-    if (rebuild && mounted) setState(() {});
+    if (rebuild && mounted) _commitKeepingPlace(() => setState(() {}));
     _emitChanged(_row);
   }
 
@@ -15733,7 +15754,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final review = _reviewAfterProductEdit(resetReview);
     _markFormDirty();
     _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
-    if (rebuild && mounted) setState(() {});
+    if (rebuild && mounted) _commitKeepingPlace(() => setState(() {}));
     _emitChanged(_row);
   }
 
@@ -16729,7 +16750,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ..['financeCompleted'] = false;
     _markFormDirty();
     _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
-    if (mounted) setState(() {});
+    if (mounted) _commitKeepingPlace(() => setState(() {}));
     _emitChanged(_row);
   }
 
@@ -17400,29 +17421,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ? '满额'
       : '面值';
 
-  /// 产品卡每条结算的悬停说明：怎么乘出来的。乘的是年化规模，不是面值。
-  String _settleLineNote(
-    ProposalFinanceSettleTerms t, {
-    required double base,
-    required double share,
-    required double face,
-    String faceWord = '面值',
-  }) {
-    if (share <= 0) return '';
-    final byUnit =
-        t.displayRatio.trim().isEmpty && t.displayUnitPrice.trim().isNotEmpty;
-    final lines = <String>[
-      if (face > 0)
-        byUnit
-            ? '每张$faceWord ${proposalFormatWan(face)} 元的券结 ${t.displayUnitPrice.trim()} 元'
-            : '每张$faceWord ${proposalFormatWan(face)} 元的券结 ${proposalFormatWan(face * share)} 元',
-      base > 0
-          ? '年测算：年化规模 ${proposalFormatWan(base)} 万 × ${proposalFormatSharePct(share)} = ${proposalFormatWan(base * share)} 万'
-          : '年化规模未填，算不出年测算',
-    ];
-    return lines.join('\n');
-  }
-
   /// 统计口径简称：资管公式名里带「核销 / 销售 / 下发」就取它。
   String _settleBasisShort(String formula) => proposalSettleBasisShort(formula);
 
@@ -17469,48 +17467,29 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               name = '收入${name.substring(2)}';
             }
             if (coupon) name = '用券成本';
-            // 按单价结的：比例列空着，单价写在「每张」列。
-            final ratio = t.displayRatio.trim();
-            final unitPrice = t.displayUnitPrice.trim();
-            final remote = _isPurchase ? <String, dynamic>{
-              'share': proposalIntakeSettleShare(t, face: faceValue),
-              'amount': base * proposalIntakeSettleShare(t, face: faceValue),
-              'perUnit': faceValue * proposalIntakeSettleShare(t, face: faceValue),
-            } : _remoteFinance.result?.settlement(product.id, ordered[i].id);
-            final share = (remote?['share'] as num?)?.toDouble() ?? 0;
-            final amount = (remote?['amount'] as num?)?.toDouble();
-            final perUnit = ratio.isEmpty && unitPrice.isNotEmpty
-                ? (unitPrice.endsWith('元') ? unitPrice : '$unitPrice 元')
-                : (faceValue > 0 && share > 0
-                      ? '${proposalFormatWan((remote?['perUnit'] as num?)?.toDouble() ?? 0)} 元'
-                      : '');
+            // 按当前结算方式当场算。切换方式后不再显示上一种方式留下的数。
+            final line = proposalSettleLineView(t, scale: base, face: faceValue);
             final formula = t.displayFormula.trim();
-            // 比例、单价都没填：年化测算没法算，显示「—」，不显示一个假的 0。
-            final unfilled = ratio.isEmpty &&
-                unitPrice.isEmpty &&
-                !t.settleByTier;
             return ProposalProductCardLine(
               name: prefix.isEmpty
                   ? name
                   : '$prefix · ${cost ? '项目成本' : '收入'} $name',
               tag: coupon ? '用券成本' : '',
               minus: coupon,
-              ratio: ratio.isEmpty && t.settleByTier ? '按阶梯' : ratio,
-              amount: amount == null || unfilled
-                  ? '—'
-                  : '${proposalFormatWan(amount)} 万',
+              ratio: line.ratioText,
+              amount: line.unfilled ? '—' : '${proposalFormatWan(line.amount)} 万',
               basis: _settleBasisShort(formula),
-              perUnit: perUnit,
+              perUnit: line.perUnit,
               // 第二行灰字：计算公式 · 发票类型 · 税率。
               detail: [
                 if (formula.isNotEmpty) formula,
                 if (t.invoiceType.trim().isNotEmpty) t.invoiceType.trim(),
                 if (t.taxRate.trim().isNotEmpty) t.taxRate.trim(),
               ].join(' · '),
-              // 悬停提示：资管公式原文 + 怎么乘出来的。
+              // 悬停提示：资管公式原文 + 当前方式怎么乘出来的。
               note: [
                 if (formula.isNotEmpty) '资管公式：$formula',
-                '${remote?['substitution'] ?? '等待测算结果'}',
+                line.substitution,
               ].where((item) => item.isNotEmpty).join('\n'),
             );
           }(),
@@ -17526,7 +17505,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool showRelated = true,
   }) {
     String wan(double v) => '${proposalFormatWan(v)} 万';
-    final scale = proposalIntakeSkuScaleTotal(sku);
+    // 产品自己没填规模时，用提案年化规模分给它的那一份，和测算合计同一口径。
+    final scale = proposalSkuFaceShareScale(sku, form: _form);
     final children = proposalIntakeChildProducts(
       _form,
     ).where((child) => child.parentSkuId == sku.id).toList(growable: false);
@@ -17578,9 +17558,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           if (showRelated)
           for (final child in children)
             () {
-              final childScale = proposalIntakeSkuScaleTotal(child) > 0
-                  ? proposalIntakeSkuScaleTotal(child)
-                  : scale;
+              final childScale = proposalSkuFaceShareScale(child, form: _form);
               final childFace = child.faceValue.trim();
               return ProposalRelatedProductEntry(
                 title: child.displayName.isEmpty
@@ -17649,7 +17627,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           : text;
     }
 
-    final scale = proposalIntakeSkuScaleTotal(sku);
+    final ownScale = proposalIntakeSkuScaleTotal(sku);
+    final scale = ownScale > 0
+        ? ownScale
+        : proposalSkuFaceShareScale(sku, form: _form);
     return [
       ('面值', value('face')),
       ('业务平台', value('platform')),
@@ -20547,7 +20528,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           settlePrice: '',
         );
       } else if (next == _settleWayTier) {
-        updated = terms.copyWith(priceMode: kProposalSettlePriceModeTier);
+        updated = terms.copyWith(
+          priceMode: kProposalSettlePriceModeTier,
+          settleRatio: '',
+          settleUnitPrice: '',
+          settlePrice: '',
+        );
         if (proposalSettleTierPlans(updated).isEmpty) {
           updated = updated.copyWith(
             tierPlans: [
@@ -22037,31 +22023,78 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
     );
 
+    final costName = terms.billType.trim().isEmpty
+        ? '成本'
+        : terms.billType.trim();
+    final isPromotionCost = costName == '推广费';
+    // 只填了单价、比例空着：这就是按面值，即使旧数据还标着固定比例。
+    final faceMode =
+        !terms.settleByTier &&
+        (terms.settleByUnit ||
+            (terms.displayRatio.trim().isEmpty &&
+                terms.displayUnitPrice.trim().isNotEmpty));
     void pickPriceMode(String next) {
       if (!enabled) return;
-      final value = terms.priceMode == next
-          ? kProposalSettlePriceModeDirect
-          : next;
-      var updated = terms.copyWith(priceMode: value);
-      if (value == kProposalSettlePriceModeTier &&
-          proposalSettleTierPlans(updated).isEmpty) {
+      // 换方式时清掉另外两种留下的数，测算和公式只认最后一次选择。
+      var updated = terms.copyWith(priceMode: next);
+      if (next == kProposalSettlePriceModeUnit) {
+        updated = updated.copyWith(settleRatio: '', settlePrice: '');
+      } else if (next == kProposalSettlePriceModeDirect) {
+        updated = updated.copyWith(settleUnitPrice: '', settlePrice: '');
+      } else if (next == kProposalSettlePriceModeTier) {
         updated = updated.copyWith(
-          tierPlans: [
-            ProposalPromotionTierPlan(
-              id: proposalPromotionPlanNextId(const []),
-              segments: ProposalPromotionTierPlan.monthSeqSegments,
-            ),
-          ],
+          settleRatio: '',
+          settleUnitPrice: '',
+          settlePrice: '',
         );
+        if (proposalSettleTierPlans(updated).isEmpty) {
+          updated = updated.copyWith(
+            tierPlans: [
+              ProposalPromotionTierPlan(
+                id: proposalPromotionPlanNextId(const []),
+                promoter: terms.promoter,
+                segments: ProposalPromotionTierPlan.monthSeqSegments,
+              ),
+            ],
+          );
+        }
+      }
+      for (final label in ['结算比例', '结算单价']) {
+        final stampKey = '$keyPrefix-$label';
+        _settleXorStamp[stampKey] = (_settleXorStamp[stampKey] ?? 0) + 1;
       }
       onChanged(updated);
     }
 
+    final promoterNames = <String>[
+      for (final name in _setOf('purchasePromoters'))
+        if (name.trim().isNotEmpty) name.trim(),
+      for (final name in _promoterNames)
+        if (name.trim().isNotEmpty &&
+            !_setOf('purchasePromoters').contains(name.trim()))
+          name.trim(),
+      if (terms.promoter.trim().isNotEmpty &&
+          !_setOf('purchasePromoters').contains(terms.promoter.trim()) &&
+          !_promoterNames.contains(terms.promoter.trim()))
+        terms.promoter.trim(),
+    ];
+    Widget caption(String text) => Padding(
+      padding: const EdgeInsets.only(left: 2, bottom: 2),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: DunesColors.resolve(context, ProposalPalette.text3),
+          fontSize: 11,
+          height: 1.2,
+          letterSpacing: .2,
+        ),
+      ),
+    );
     final priceModeBlock = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ProposalField(
-          label: '结算比例',
+          label: '结算方式',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -22071,10 +22104,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 children: [
                   ProposalChoiceChip(
                     label: '固定比例',
-                    selected: !terms.settleByTier,
+                    selected: !terms.settleByTier && !faceMode,
                     enabled: enabled,
                     onSelected: enabled
                         ? (_) => pickPriceMode(kProposalSettlePriceModeDirect)
+                        : null,
+                  ),
+                  ProposalChoiceChip(
+                    label: '按面值',
+                    selected: faceMode,
+                    enabled: enabled,
+                    onSelected: enabled
+                        ? (_) => pickPriceMode(kProposalSettlePriceModeUnit)
                         : null,
                   ),
                   ProposalChoiceChip(
@@ -22090,9 +22131,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               if (terms.settleByTier) ...[
                 const SizedBox(height: 8),
                 ProposalPromotionPlanField(
-                  costName: terms.billType.trim().isEmpty
-                      ? '成本'
-                      : terms.billType.trim(),
+                  costName: costName,
                   promoterOptions: _setOf('purchasePromoters').toList(),
                   plans: proposalSettleTierPlans(terms),
                   onChanged: enabled
@@ -22101,83 +22140,86 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
               ] else ...[
                 const SizedBox(height: 8),
-                // 比例框本身不再套标题（上面已有「结算比例」）。单价标题在自己的框上方，
-                // 两框底边对齐，避免单价标题把下划线顶下去。
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: field(
-                        '结算比例',
-                        terms.displayRatio,
-                        (value) {
-                          final next = proposalIntakeApplySettleXor(
-                            terms,
-                            settleRatio: value,
-                          );
-                          if (terms.displayUnitPrice.isNotEmpty &&
-                              next.displayUnitPrice.isEmpty) {
-                            final key = '$keyPrefix-结算单价';
-                            _settleXorStamp[key] =
-                                (_settleXorStamp[key] ?? 0) + 1;
-                          }
-                          return next;
-                        },
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: const [ProposalSettleRatioFormatter()],
-                        hint: hasPrice && !hasRatio
-                            ? '填写后将清空结算单价'
-                            : '填小数，如 0.08，不能填%',
+                if (faceMode)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      caption('结算单价'),
+                      field(
+                        '结算单价',
+                        terms.displayUnitPrice,
+                        (value) => proposalIntakeApplySettleXor(
+                          terms,
+                          settleUnitPrice: value,
+                        ).copyWith(priceMode: kProposalSettlePriceModeUnit),
+                        hint: '每张面值结多少元',
                         bare: true,
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(left: 2, bottom: 2),
-                            child: Text(
-                              '结算单价',
-                              style: TextStyle(
-                                color: DunesColors.resolve(
-                                  context,
-                                  ProposalPalette.text3,
-                                ),
-                                fontSize: 11,
-                                height: 1.2,
-                                letterSpacing: .2,
-                              ),
-                            ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '年测算 = 年化规模 ÷ 面值 × 单价',
+                        style: TextStyle(
+                          color: DunesColors.resolve(
+                            context,
+                            ProposalPalette.text3,
                           ),
-                          field(
-                            '结算单价',
-                            terms.displayUnitPrice,
-                            (value) {
-                              final next = proposalIntakeApplySettleXor(
-                                terms,
-                                settleUnitPrice: value,
-                              );
-                              if (terms.displayRatio.isNotEmpty &&
-                                  next.displayRatio.isEmpty) {
-                                final key = '$keyPrefix-结算比例';
-                                _settleXorStamp[key] =
-                                    (_settleXorStamp[key] ?? 0) + 1;
-                              }
-                              return next;
-                            },
-                            hint: hasRatio && !hasPrice ? '填写后将清空结算比例' : null,
-                            bare: true,
-                          ),
-                        ],
+                          fontSize: 11,
+                        ),
                       ),
+                    ],
+                  )
+                else
+                  field(
+                    '结算比例',
+                    terms.displayRatio,
+                    (value) => proposalIntakeApplySettleXor(
+                      terms,
+                      settleRatio: value,
+                    ).copyWith(priceMode: kProposalSettlePriceModeDirect),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
                     ),
+                    inputFormatters: const [ProposalSettleRatioFormatter()],
+                    hint: '填小数，如 0.08，不能填%',
+                  ),
+              ],
+              if (isPromotionCost && !terms.settleByTier) ...[
+                const SizedBox(height: 8),
+                caption('推广商'),
+                ProposalSelectField<String>(
+                  key: ValueKey('settle-$keyPrefix-promoter'),
+                  value: terms.promoter.trim().isEmpty
+                      ? null
+                      : terms.promoter.trim(),
+                  title: '推广商',
+                  hint: promoterNames.isEmpty
+                      ? '先在采购合同里选择推广商'
+                      : '选择推广商',
+                  searchable: true,
+                  options: [
+                    for (final name in promoterNames)
+                      ProposalSelectOption(value: name, label: name),
                   ],
+                  onSelected: enabled
+                      ? (value) => onChanged(
+                          terms.copyWith(promoter: value ?? ''),
+                        )
+                      : null,
                 ),
+                if (terms.promoter.trim().isEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '推广费必须选择推广商',
+                    style: TextStyle(
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.coral,
+                      ),
+                      fontSize: 11,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
               ],
             ],
           ),

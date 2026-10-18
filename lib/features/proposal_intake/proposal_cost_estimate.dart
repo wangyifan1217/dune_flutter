@@ -56,7 +56,7 @@ const _kEstimatedFinanceOutputKeys = {
   'businessCostItemAmounts',
 };
 
-/// 任务评级只看主产品年化规模，子产品规模不计入。
+/// 主产品年化规模。任务评级不再用它，评级看测算合计收入，由后端给出。
 double? proposalIntakeMainProductScale(Map<String, dynamic> form) {
   return proposalProductScaleRollup(
     proposalIntakeProductFinanceScope(form, owner: kProposalProductFinanceMain),
@@ -230,16 +230,112 @@ double proposalParseSettleRatio(Object? raw) {
   return proposalParseTaxRate(text);
 }
 
-/// 一条结算对规模的乘数：填了比例用比例，填了单价用 单价÷面值。
+/// 一条结算对规模的乘数。以当前结算方式为准：
+/// 固定比例只用比例，按面值只用单价÷面值，按阶梯不走这条。
 double proposalIntakeSettleShare(
   ProposalFinanceSettleTerms terms, {
   required double face,
 }) {
+  if (terms.settleByTier) return 0;
+  if (terms.settleByUnit) {
+    final price = proposalIntakeParseFaceNumber(terms.displayUnitPrice);
+    if (price > 0 && face > 0) return price / face;
+    return 0;
+  }
+  if (terms.priceMode == kProposalSettlePriceModeDirect) {
+    final ratioText = terms.displayRatio.trim();
+    if (ratioText.isEmpty) return 0;
+    return proposalParseSettleRatio(ratioText);
+  }
   final ratioText = terms.displayRatio.trim();
   if (ratioText.isNotEmpty) return proposalParseSettleRatio(ratioText);
   final price = proposalIntakeParseFaceNumber(terms.displayUnitPrice);
   if (price > 0 && face > 0) return price / face;
   return 0;
+}
+
+/// 产品卡上这一条结算的展示。只按当前结算方式算，切换后不再沿用上一种方式的数。
+class ProposalSettleLineView {
+  const ProposalSettleLineView({
+    required this.share,
+    required this.amount,
+    required this.substitution,
+    required this.ratioText,
+    required this.perUnit,
+    required this.unfilled,
+  });
+
+  final double share;
+  final double amount;
+  final String substitution;
+  final String ratioText;
+  final String perUnit;
+  final bool unfilled;
+}
+
+ProposalSettleLineView proposalSettleLineView(
+  ProposalFinanceSettleTerms terms, {
+  required double scale,
+  required double face,
+}) {
+  if (terms.settleByTier) {
+    final plans = proposalSettleTierPlans(terms);
+    final results = [for (final plan in plans) plan.evaluate(scale)];
+    final amount = proposalRoundWan(
+      results.fold<double>(0, (sum, item) => sum + item.amount),
+    );
+    return ProposalSettleLineView(
+      share: scale > 0 ? amount / scale : 0,
+      amount: amount,
+      substitution: plans.isEmpty
+          ? '按阶梯方案计算'
+          : results.map((item) => item.substitution).join('\n'),
+      ratioText: '按阶梯',
+      perUnit: '',
+      unfilled: plans.isEmpty,
+    );
+  }
+  final byUnit =
+      terms.settleByUnit ||
+      (terms.priceMode != kProposalSettlePriceModeDirect &&
+          terms.displayRatio.trim().isEmpty &&
+          terms.displayUnitPrice.trim().isNotEmpty);
+  if (byUnit) {
+    final priceText = terms.displayUnitPrice.trim();
+    final price = proposalIntakeParseFaceNumber(priceText);
+    final share = price > 0 && face > 0 ? price / face : 0.0;
+    final amount = proposalRoundWan(scale * share);
+    final substitution = priceText.isEmpty
+        ? '按面值：还没填结算单价'
+        : face <= 0
+        ? '按面值：面值未填，算不出年测算'
+        : '按面值：${proposalFormatWan(scale)} ÷ ${proposalFormatWan(face)} × $priceText = ${proposalFormatWan(amount)} 万元/年';
+    return ProposalSettleLineView(
+      share: share,
+      amount: amount,
+      substitution: substitution,
+      ratioText: '',
+      perUnit: priceText.isEmpty
+          ? ''
+          : (priceText.endsWith('元') ? priceText : '$priceText 元'),
+      unfilled: priceText.isEmpty,
+    );
+  }
+  final ratioText = terms.displayRatio.trim();
+  final share = ratioText.isEmpty ? 0.0 : proposalParseSettleRatio(ratioText);
+  final amount = proposalRoundWan(scale * share);
+  return ProposalSettleLineView(
+    share: share,
+    amount: amount,
+    substitution: ratioText.isEmpty
+        ? '固定比例：还没填结算比例'
+        : '${proposalFormatWan(scale)} × $share = ${proposalFormatWan(amount)} 万元/年',
+    ratioText: ratioText,
+    perUnit: face > 0 && share > 0
+        ? '${proposalFormatWan(face * share)} 元'
+        : '',
+    unfilled: ratioText.isEmpty,
+  );
 }
 
 class ProposalSkuSettleMoney {
@@ -295,14 +391,13 @@ ProposalSkuSettleMoney proposalSkuSettleMoney(
     }
   }
   final scale = proposalSkuFaceShareScale(sku, form: form);
-  final scaleIsRevenue = proposalSectorScaleIsRevenue(form) && scale > 0;
   return ProposalSkuSettleMoney(
-    income: proposalRoundWan(scaleIsRevenue ? scale : scale * incomeShare),
+    income: proposalRoundWan(scale * incomeShare),
     cost: proposalRoundWan(scale * costShare),
-    incomeShare: scaleIsRevenue ? 1 : incomeShare,
+    incomeShare: incomeShare,
     costShare: costShare,
     scale: scale,
-    hasIncome: scaleIsRevenue || hasIncome,
+    hasIncome: hasIncome,
     hasCost: hasCost,
   );
 }
@@ -413,10 +508,6 @@ ProposalProductScaleRollup? proposalProductScaleRollup(
   final hydrated = proposalIntakeHydrateMarketSalesScale(form);
   final scale = proposalFinanceAmount(hydrated, kProposalSalesScaleKey);
   if (scale <= 0) return null;
-  if (proposalSectorScaleIsRevenue(hydrated)) {
-    final rounded = proposalRoundWan(scale);
-    return ProposalProductScaleRollup(salesScale: rounded, revenue: rounded);
-  }
   var ownedRevenue = 0.0;
   var anyOwned = false;
   var anyUnowned = false;
@@ -846,15 +937,6 @@ Map<String, dynamic> proposalMarkCostAmountManual(
   if (manualKey == null || id.trim().isEmpty) return form;
   final ids = proposalCostManualIdSet(form[manualKey])..add(id.trim());
   return Map<String, dynamic>.from(form)..[manualKey] = ids.toList();
-}
-
-/// 运营商的规模按收入填写，不再把规模当成面值销售额去乘单价或比例。
-bool proposalSectorScaleIsRevenue(Map<String, dynamic> form) {
-  final sector = [
-    '${form['sector'] ?? ''}',
-    proposalIntakeFormRef(form, 'sectorRef')?.name ?? '',
-  ].join(' ');
-  return sector.contains('运营商');
 }
 
 /// 增值税税种按业务板块判定：运营商 / 公共出行走「运营商+公共出行」，其余走「能源」。

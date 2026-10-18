@@ -49,26 +49,20 @@ class AppUpdateInstaller {
       return const ApplyUpdateOutcome();
     }
 
-    // macOS：优先 Sparkle（Appcast 验签 + 自动替换）；失败再回退浏览器下载。
+    // macOS：Sparkle 能启动就只走应用内安装。检查失败留在弹窗里，不静默退出。
+    // Sparkle 根本没嵌进包时，才打开浏览器下载。
     if (Platform.isMacOS) {
       onLaunching?.call();
-      try {
-        final ok = await MacosSparkleUpdater.instance.probeSupported();
-        if (ok) {
-          await MacosSparkleUpdater.instance.checkForUpdates();
-          return const ApplyUpdateOutcome(usedSparkle: true);
+      final ok = await MacosSparkleUpdater.instance.probeSupported();
+      if (!ok) {
+        if (url.isEmpty) {
+          throw StateError('应用内更新不可用，且下载地址为空');
         }
-      } catch (e) {
-        // Sparkle 不可用时若有 downloadUrl，仍允许浏览器兜底。
-        if (url.isEmpty) rethrow;
         await _openExternalAndQuitMac(url);
         return const ApplyUpdateOutcome();
       }
-      if (url.isEmpty) {
-        throw StateError('Sparkle 不可用且下载地址为空');
-      }
-      await _openExternalAndQuitMac(url);
-      return const ApplyUpdateOutcome();
+      await MacosSparkleUpdater.instance.checkForUpdates();
+      return const ApplyUpdateOutcome(usedSparkle: true);
     }
 
     final file = await downloadInstaller(url, onProgress: onProgress);

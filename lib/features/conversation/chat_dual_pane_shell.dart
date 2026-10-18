@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -44,6 +45,7 @@ class _ChatDualPaneShellState extends State<ChatDualPaneShell> {
   bool _changed = false;
   bool _hovered = false;
   bool _dragging = false;
+  double? _measuredWidth;
   Future<void> _writes = Future<void>.value();
 
   @override
@@ -104,14 +106,25 @@ class _ChatDualPaneShellState extends State<ChatDualPaneShell> {
     super.dispose();
   }
 
+  void _applyMeasuredWidth(double width) {
+    if (!mounted || !width.isFinite || width <= 0) return;
+    if (_measuredWidth == width) return;
+    setState(() => _measuredWidth = width);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
+    final measured = _measuredWidth;
+    return _ReportBoxWidth(
+      onWidth: _applyMeasuredWidth,
+      child: measured == null
+          ? const SizedBox.expand()
+          : _buildPane(context, measured),
+    );
+  }
+
+  Widget _buildPane(BuildContext context, double available) {
         final desktop = isDesktopCommOnly;
-        final available = constraints.maxWidth.isFinite
-            ? constraints.maxWidth
-            : 1024.0;
         final maxWidth = math.min(
           _maxListWidth,
           math.max(
@@ -254,8 +267,54 @@ class _ChatDualPaneShellState extends State<ChatDualPaneShell> {
             ],
           ),
         );
-      },
-    );
+  }
+}
+
+/// 只上报父级给到的宽度，子树在普通 build 里组装。
+/// 避免在 LayoutBuilder 的布局回调里重建会话窗和浮层。
+class _ReportBoxWidth extends SingleChildRenderObjectWidget {
+  const _ReportBoxWidth({required this.onWidth, required super.child});
+
+  final ValueChanged<double> onWidth;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderReportBoxWidth(onWidth: onWidth);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderReportBoxWidth renderObject,
+  ) {
+    renderObject.onWidth = onWidth;
+  }
+}
+
+class _RenderReportBoxWidth extends RenderProxyBox {
+  _RenderReportBoxWidth({required this.onWidth});
+
+  ValueChanged<double> onWidth;
+  double? _reported;
+
+  @override
+  void performLayout() {
+    final width = constraints.maxWidth;
+    if (width.isFinite && width > 0 && width != _reported) {
+      final next = width;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!attached || _reported == next) return;
+        _reported = next;
+        onWidth(next);
+      });
+    }
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+    child.layout(constraints, parentUsesSize: true);
+    size = constraints.constrain(child.size);
   }
 }
 

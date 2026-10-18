@@ -118,7 +118,7 @@ class ProposalEstimateSummaryData {
   /// 渠道（标签三）：市场部渠道，没有时取各产品的渠道分类 / 渠道名。
   final String channel;
 
-  /// 任务评级 S/A/B/C，没有年化规模时为「—」。
+  /// 任务评级 S/A/B/C，由后端按测算合计收入给出；收入还没算出来时为「—」。
   final String rating;
 
   /// 评级规则说明，如「≥ 5,000万」。
@@ -233,6 +233,13 @@ String proposalEstimateWan(double? value) {
 String _pct(double? value) => value == null || value.isNaN || value.isInfinite
     ? '—'
     : '${value.toStringAsFixed(1)}%';
+
+/// 测算合计「收入」行右侧：等级按这份收入来，没有等级时仍显示扣券或占比。
+String _incomeTag(ProposalEstimateSummaryData d) {
+  if (d.rating.isNotEmpty && d.rating != '—') return '${d.rating} 级';
+  if (d.couponCost != null) return '已扣券';
+  return _pct(d.pctOfScale(d.revenue));
+}
 
 /// 提案详情顶部，照原型（Main 详情页）：
 /// 左边「年化利润 · 测算」大数字卡，右边「测算合计」小格 + 收入→成本→利润瀑布图，
@@ -445,7 +452,7 @@ class ProposalEstimateSummary extends StatelessWidget {
               context,
               kProposalFinanceShowProfit
                   ? '= 收入 ${proposalEstimateWan(data.revenue)} − 成本合计 ${proposalEstimateWan(data.costTotal)}  明细 ›'
-                  : '月均 ${proposalEstimateWan(data.monthlyScale)} 万${data.rating == '—' ? '' : ' · 评级 ${data.rating}'}  来自 市场部 ›',
+                  : '月均 ${proposalEstimateWan(data.monthlyScale)} 万  来自 市场部 ›',
               size: 11,
               color: _C.text2,
               maxLines: 2,
@@ -460,7 +467,7 @@ class ProposalEstimateSummary extends StatelessWidget {
         '年化规模',
         proposalEstimateWan(data.scale),
         '万',
-        data.rating == '—' ? '来自 市场部' : '评级 ${data.rating} · 来自 市场部',
+        '来自 市场部',
         '',
       ),
       if (showAmounts) ...[
@@ -468,9 +475,12 @@ class ProposalEstimateSummary extends StatelessWidget {
           '收入',
           proposalEstimateWan(data.revenue),
           '万',
-          data.couponCost != null
-              ? '已扣用券成本 ${proposalEstimateWan(data.couponCost)} · 来自 财务测算'
-              : '来自 财务测算',
+          [
+            if (data.rating != '—') '评级 ${data.rating}',
+            if (data.couponCost != null)
+              '已扣用券成本 ${proposalEstimateWan(data.couponCost)}',
+            '来自 财务测算',
+          ].join(' · '),
           '',
         ),
         _Cell('项目成本', proposalEstimateWan(data.projectCost), '万', '来自 财务部', ''),
@@ -1684,7 +1694,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
               tail: [
                 TextSpan(
                   text: d.ratingRule.isEmpty
-                      ? '  任务评级 · 按年化规模自动'
+                      ? '  任务评级 · 按收入自动'
                       : '  任务评级 · ${d.ratingRule}',
                   style: _st(size: 10, color: _C.grey),
                 ),
@@ -1704,14 +1714,14 @@ class _CompactEstimateState extends State<_CompactEstimate> {
       (
         '年化规模',
         proposalEstimateWan(d.scale),
-        d.rating == '—' ? '' : '${d.rating} 级',
+        '',
         _C.purple,
       ),
       if (kProposalFinanceShowEstimates) ...[
         (
           '收入',
           proposalEstimateWan(d.revenue),
-          d.couponCost != null ? '已扣券' : _pct(d.pctOfScale(d.revenue)),
+          _incomeTag(d),
           _C.purple,
         ),
         (
@@ -1739,33 +1749,27 @@ class _CompactEstimateState extends State<_CompactEstimate> {
   /// 月均规模看每月；周转资金看「月均规模 ÷ 周转次数」。
   (List<_Bar>, String) _barsFor(String metric) {
     final d = _d;
-    final spread = d.spread;
     final profit = d.profit;
     switch (metric) {
       case '收入':
-        if (d.couponCost != null) {
-          return (
-            [
-              _Bar('结算收入', d.grossRevenue, _C.purpleLight),
-              _Bar(
-                '用券成本',
-                d.couponCost,
-                _C.purpleLight,
-                minus: true,
-                lift: (d.revenue ?? 0) > 0 ? d.revenue! : 0.0,
-              ),
-              _Bar('收入', d.revenue, _C.purple),
-            ],
-            '收入 = 结算收入 − 用券成本 · 年化',
-          );
-        }
+        // 运营商、能源用同一套组成：结算收入 − 用券成本 = 收入。
+        // 没有用券时用券成本为 0，柱子仍留着，避免两套图来回变。
+        final coupon = d.procurement ?? 0;
         return (
           [
+            _Bar('结算收入', d.grossRevenue, _C.purpleLight),
+            _Bar(
+              '用券成本',
+              coupon,
+              _C.purpleLight,
+              minus: true,
+              lift: d.couponCost != null && (d.revenue ?? 0) > 0
+                  ? d.revenue!
+                  : 0.0,
+            ),
             _Bar('收入', d.revenue, _C.purple),
-            _Bar('成本合计', d.costTotal, _C.purpleLight),
-            _Bar('利差', spread, _C.purpleLight),
           ],
-          '收入按产品结算测算 · 利差 = 收入 − 项目 / 业务 / 税务成本',
+          '收入 = 结算收入 − 用券成本 · 年化',
         );
       case '年化规模':
         if (!kProposalFinanceShowEstimates) {
@@ -2423,7 +2427,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
         '年化规模',
         proposalEstimateWan(d.scale),
         '万',
-        d.rating == '—' ? '' : '${d.rating} 级',
+        '',
       ),
       _cell('月均规模', proposalEstimateWan(d.monthlyScale), '万', '÷12'),
       if (showAmounts)
@@ -2503,9 +2507,11 @@ class _CompactEstimateState extends State<_CompactEstimate> {
         '收入',
         proposalEstimateWan(d.revenue),
         '万',
-        d.pctOfScale(d.revenue) == null
-            ? ''
-            : '规模 × ${_pct(d.pctOfScale(d.revenue))}',
+        [
+          if (d.rating != '—' && d.rating.isNotEmpty) '${d.rating} 级',
+          if (d.pctOfScale(d.revenue) != null)
+            '规模 × ${_pct(d.pctOfScale(d.revenue))}',
+        ].join(' · '),
       ),
       _cell('税务成本', proposalEstimateWan(d.taxCost), '万', ''),
       if (kProposalFinanceShowProfit)

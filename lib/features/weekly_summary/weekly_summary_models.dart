@@ -40,10 +40,13 @@ class WeeklySummaryShare {
   bool get hasLatest => latestLabel.trim().isNotEmpty;
 
   String get previewText {
+    final travel = travelDays > 0 ? '出差 $travelDays 天' : '';
     if (sessionCount <= 0 && minutes <= 0 && messageCount <= 0) {
+      if (travel.isNotEmpty) return travel;
       return rangeLabel.isEmpty ? '一周小结' : '一周小结 $rangeLabel';
     }
-    return '处理了$sessionCount次工作会话';
+    final sessions = '处理了$sessionCount次工作会话';
+    return travel.isEmpty ? sessions : '$travel · $sessions';
   }
 
   Map<String, dynamic> toPayload() {

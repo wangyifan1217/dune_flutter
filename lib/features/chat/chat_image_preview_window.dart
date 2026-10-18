@@ -38,8 +38,11 @@ bool _isPreviewWindowArgument(String arguments) {
 /// 兼容旧入口签名；0.3.0 改用 [WindowController.fromCurrentEngine]。
 bool isDesktopImagePreviewWindowArgs(List<String> args) {
   if (!isDesktopCommOnly) return false;
-  // 旧版 0.2.x：args = ['multi_window', windowId, json]
-  if (args.isNotEmpty && args.first == 'multi_window') return true;
+  // desktop_multi_window：args = ['multi_window', windowId, json]
+  // 不能把所有子窗口都当成图片预览，否则小饕桌面窗会进黑色错误页。
+  if (args.length >= 3 && args.first == 'multi_window') {
+    return _isPreviewWindowArgument(args[2]);
+  }
   return false;
 }
 

@@ -12,6 +12,8 @@ import 'core/theme/dunes_theme.dart';
 import 'core/widgets/app_watermark.dart';
 import 'features/chat/chat_image_preview_window_stub.dart'
     if (dart.library.io) 'features/chat/chat_image_preview_window.dart';
+import 'features/nova/presence/nova_presence_desktop_window_stub.dart'
+    if (dart.library.io) 'features/nova/presence/nova_presence_desktop_window.dart';
 import 'features/chat/im_celebration.dart';
 import 'features/desktop/desktop_esc_minimize.dart';
 import 'features/desktop/windows_desktop_tray.dart';
@@ -138,6 +140,10 @@ Future<void> main(List<String> args) async {
   if (isDesktopImagePreviewWindowArgs(args) ||
       await isDesktopImagePreviewEngine()) {
     await runDesktopImagePreviewWindow(args);
+    return;
+  }
+  if (await isNovaPresenceDesktopEngine()) {
+    await runNovaPresenceDesktopWindow();
     return;
   }
 

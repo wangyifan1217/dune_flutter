@@ -335,20 +335,23 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
           templateKey: _templateFilter == 'ALL' ? '' : _templateFilter,
         ),
       };
-      final templateTitles = await templateTitlesFuture;
       if (!mounted || seq != _loadSeq) return;
       setState(() {
         _all = rows;
-        _templateTitles = templateTitles;
-        if (_templateFilter != 'ALL' &&
-            !_templateOptions.contains(_templateFilter)) {
-          _templateFilter = 'ALL';
-        }
         _loading = false;
         _refreshing = false;
       });
       _persistListSnapshot();
       if (silent) _scheduleScrollRestore();
+      final templateTitles = await templateTitlesFuture;
+      if (!mounted || seq != _loadSeq) return;
+      setState(() {
+        _templateTitles = templateTitles;
+        if (_templateFilter != 'ALL' &&
+            !_templateOptions.contains(_templateFilter)) {
+          _templateFilter = 'ALL';
+        }
+      });
     } catch (e) {
       if (!mounted || seq != _loadSeq) return;
       if (silent) {

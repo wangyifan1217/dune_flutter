@@ -113,6 +113,7 @@ import '../qianji/digital_auto/native_digital_auto_chat_page.dart';
 import '../qianji/native_qianji_meeting_supervise_page.dart';
 import '../qianji/native_qianji_record_supervise_page.dart';
 import '../qianji/native_qianji_daily_report_supervise_page.dart';
+import '../qianji/native_qianji_proposal_sla_page.dart';
 import '../qianji/native_qianji_task_people_page.dart';
 import '../qianji/qianji_record_supervise_service.dart';
 import '../qianji/native_qianji_my_perf_page.dart';
@@ -361,6 +362,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   bool _myPageMounted = false;
   final GlobalKey _myPageKeepAliveKey = GlobalKey(
     debugLabel: 'my-page-keep-alive',
+  );
+
+  /// 销售/采购提案填写页：离开再回来仍停在填写页，返回列表时才能自动保存。
+  bool _salesProposalMounted = false;
+  bool _purchaseProposalMounted = false;
+  final GlobalKey _salesProposalKey = GlobalKey(
+    debugLabel: 'sales-proposal-keep-alive',
+  );
+  final GlobalKey _purchaseProposalKey = GlobalKey(
+    debugLabel: 'purchase-proposal-keep-alive',
   );
 
   /// 允许在已读回执或重新拿到服务端快照后把桌面角标同步为 0。
@@ -3817,12 +3828,44 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   Widget _buildMyProposalIntakePage({
     required String kind,
     required String title,
+    bool active = true,
   }) {
     return ProposalIntakeMyEntryPage(
       session: widget.session,
       navigation: widget.navigation,
       kind: kind,
       title: title,
+      active: active,
+    );
+  }
+
+  /// 提案页藏起来时仍按全尺寸布局，滚动和填写中的表单才不会丢。
+  Widget _proposalIntakeKeepAlive({
+    required bool sales,
+    required String screen,
+    required bool searchOpen,
+    required String searchUnderlay,
+  }) {
+    final id = sales ? 'B2SALES' : 'B2PURCHASE';
+    final showing = screen == id || (searchOpen && searchUnderlay == id);
+    return Positioned.fill(
+      child: TickerMode(
+        enabled: showing,
+        child: IgnorePointer(
+          ignoring: screen != id,
+          child: Opacity(
+            opacity: showing ? 1 : 0,
+            child: KeyedSubtree(
+              key: sales ? _salesProposalKey : _purchaseProposalKey,
+              child: _buildMyProposalIntakePage(
+                kind: sales ? 'sales' : 'purchase',
+                title: sales ? '销售提案' : '采购提案',
+                active: screen == id,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -3937,6 +3980,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenTaskMonitor: () => widget.navigation.go('QJTS'),
           onOpenDailyReportMonitor: () => widget.navigation.go('QJDR'),
           onOpenGroupReply: () => widget.navigation.go('QJGR'),
+          onOpenProposalSla: widget.session.proposalSlaLookupAccess
+              ? () => widget.navigation.go('QJSL')
+              : null,
           onOpenMonthlyOpinion: () => widget.navigation.go('QJMO'),
           onOpenProposalReview: () => widget.navigation.go('QJPA'),
           onOpenEfficiencyAnalysis: () => widget.navigation.go('QJEA'),
@@ -4172,6 +4218,24 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeQianjiRecordSupervisePage(
           session: widget.session,
           kind: QianjiRecordSuperviseKind.groupReply,
+          onBack: widget.navigation.back,
+        );
+      case 'QJSL':
+        if (!widget.session.proposalSlaLookupAccess) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJ');
+          });
+          return Scaffold(
+            backgroundColor: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeQianjiProposalSlaPage(
+          session: widget.session,
           onBack: widget.navigation.back,
         );
       case 'QJMO':
@@ -5421,6 +5485,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (dualNow || searchOverDual) {
       _commDualMounted = true;
     }
+    if (screen == 'B2SALES' ||
+        (isSearch && _searchUnderlayScreen == 'B2SALES')) {
+      _salesProposalMounted = true;
+    }
+    if (screen == 'B2PURCHASE' ||
+        (isSearch && _searchUnderlayScreen == 'B2PURCHASE')) {
+      _purchaseProposalMounted = true;
+    }
     // 双栏内部切会话：仍走统一 Stack，保留灯塔/双栏 keep-alive，避免 dispose。
     if (dualNow && dualPrev) {
       _lastScreen = screen;
@@ -5445,6 +5517,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ),
             ),
           if (_workbenchMounted) _buildWorkbenchKeepAlive(active: false),
+          if (_salesProposalMounted)
+            _proposalIntakeKeepAlive(
+              sales: true,
+              screen: screen,
+              searchOpen: isSearch,
+              searchUnderlay: _searchUnderlayScreen,
+            ),
+          if (_purchaseProposalMounted)
+            _proposalIntakeKeepAlive(
+              sales: false,
+              screen: screen,
+              searchOpen: isSearch,
+              searchUnderlay: _searchUnderlayScreen,
+            ),
           if (_myPageMounted)
             Positioned.fill(
               child: TickerMode(
@@ -5511,12 +5597,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         switcherScreenId == 'C3' && !_contactsGroupPickMode;
     final switcherIsMyHub =
         switcherScreenId == 'B2' || switcherScreenId == 'B2P';
+    final switcherIsProposal =
+        switcherScreenId == 'B2SALES' || switcherScreenId == 'B2PURCHASE';
     final currentScreen = dualNow
         ? const SizedBox.shrink()
         : (isLighthouse ||
               switcherIsInbox ||
               switcherIsContacts ||
               switcherIsMyHub ||
+              switcherIsProposal ||
               workbenchAsSlideOver ||
               (isWorkbench && isDesktopCommOnly))
         ? const SizedBox.shrink()
@@ -5677,6 +5766,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           ),
         if (!isLighthouse && !dualNow && !(isWorkbench && isDesktopCommOnly))
           animatedContent,
+        if (_salesProposalMounted)
+          _proposalIntakeKeepAlive(
+            sales: true,
+            screen: screen,
+            searchOpen: isSearch,
+            searchUnderlay: _searchUnderlayScreen,
+          ),
+        if (_purchaseProposalMounted)
+          _proposalIntakeKeepAlive(
+            sales: false,
+            screen: screen,
+            searchOpen: isSearch,
+            searchUnderlay: _searchUnderlayScreen,
+          ),
         // 须叠在「我的」之上，否则 APP 侧滑展开后仍被 B2 挡住、看起来像点不动。
         if (_workbenchMounted) _buildWorkbenchKeepAlive(active: isWorkbench),
       ],
@@ -5795,6 +5898,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJTS',
       'QJDR',
       'QJGR',
+      'QJSL',
       'QJMO',
       'QJPA',
       'QJEA',
@@ -5913,6 +6017,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJTS' ||
         screen == 'QJDR' ||
         screen == 'QJGR' ||
+        screen == 'QJSL' ||
         screen == 'QJMO' ||
         screen == 'QJPA' ||
         screen == 'QJEA' ||
@@ -6032,6 +6137,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJTS',
       'QJDR',
       'QJGR',
+      'QJSL',
       'QJMO',
       'QJPA',
       'QJEA',
@@ -6093,6 +6199,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJTS' => const ['QJ', 'QJTS'],
       'QJDR' => const ['QJ', 'QJDR'],
       'QJGR' => const ['QJ', 'QJGR'],
+      'QJSL' => const ['QJ', 'QJSL'],
       'QJMO' => const ['QJ', 'QJMO'],
       'QJPA' => const ['QJ', 'QJPA'],
       'QJEA' => const ['QJ', 'QJEA'],

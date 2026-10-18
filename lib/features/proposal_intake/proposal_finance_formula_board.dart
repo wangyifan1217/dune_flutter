@@ -1638,7 +1638,7 @@ Widget proposalFinanceRevenueRow(
   );
 }
 
-/// 收入公式：可改时是下拉（按产品业务平台筛过的渠道侧公式），只读时写公式名和编码。
+/// 收入公式：可改时是下拉，只读时只写公式名。
 class _RevenueFormulaPicker extends StatelessWidget {
   const _RevenueFormulaPicker({
     required this.config,
@@ -1657,17 +1657,9 @@ class _RevenueFormulaPicker extends StatelessWidget {
     final group = evaluation.revenueGroup;
     final groups = evaluation.revenueGroups;
     final show = config.showEstimates;
-    final caption = [
-      group == null ? '产品还没选业务平台，列出全部渠道侧公式' : '渠道侧公式 · ${group.name}',
-      config.catalog.isFallback ? '资管快照' : '资管实时',
-    ].join(' · ');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 2),
-          child: Text(caption, style: _sans(context, size: 11, color: _K.grey)),
-        ),
         if (onRevenueFormula != null)
           ProposalSelectField<String>(
             value: formula == null || group == null
@@ -1685,7 +1677,6 @@ class _RevenueFormulaPicker extends StatelessWidget {
                     label: f.name,
                     meta: [
                       if (groups.length > 1) g.name,
-                      '编码 ${f.code}',
                       if (f.settleMethodName.isNotEmpty) f.settleMethodName,
                       if (f.detail.isNotEmpty) f.detail,
                     ].join(' · '),
@@ -1702,7 +1693,7 @@ class _RevenueFormulaPicker extends StatelessWidget {
           )
         else
           Text(
-            formula == null ? '未选择收入公式' : '${formula.name}（编码 ${formula.code}）',
+            formula == null ? '未选择收入公式' : formula.name,
             style: _sans(context, size: 12.5, weight: FontWeight.w600),
           ),
         if (show) ...[
@@ -2298,6 +2289,14 @@ class _PromotionPlanEditor extends StatelessWidget {
                     onPressed: onRemove!,
                   ),
               ],
+            ),
+          if (showPromoter && plan.promoter.trim().isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '推广费必须选择推广商',
+                style: _sans(context, size: 11, color: _K.red),
+              ),
             ),
           const SizedBox(height: 6),
           _promotionChoices(

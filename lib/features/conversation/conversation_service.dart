@@ -3221,6 +3221,8 @@ class ConversationService {
     return kind == 'SYSTEM' ||
         kind == 'SYSTEM_JOIN' ||
         kind == 'SYSTEM_LEAVE' ||
+        kind == 'SYSTEM_RESIGN' ||
+        kind == 'SYSTEM_HINT' ||
         kind == 'SYSTEM_REMOVE' ||
         kind == 'SYSTEM_FLOW';
   }

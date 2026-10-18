@@ -1230,6 +1230,8 @@ class ProposalFinanceEvaluation {
     this.products = const [],
     this.procurement = const ProposalFinanceLine(name: '采购成本', amount: 0),
     this.computedCostTotal,
+    this.rating = '',
+    this.ratingRule = '',
   });
 
   final double salesScale;
@@ -1253,6 +1255,12 @@ class ProposalFinanceEvaluation {
   final double? margin;
   final double? computedCostTotal;
   final String marginSubstitution;
+
+  /// 后端按测算合计收入给出的任务评级 S/A/B/C。空表示收入还没算出来。
+  final String rating;
+
+  /// 后端附带的档位说明，如「< 500万」。
+  final String ratingRule;
 
   ProposalFinanceBucket? bucket(String key) => buckets[key];
 
@@ -2450,13 +2458,28 @@ ProposalFinanceLine _evaluateProjectLine(
     );
   }
   if (item.tiered) {
-    // 推广费：每个产品一个推广商；没配但产品结算里有应付行，按产品结算；都没有按 0 计。
+    // 推广费：选了固定比例或按面值，就按产品结算算。
+    // 没选结算方式时，配了推广商阶梯用阶梯；没配但结算行有比例或单价，也按产品结算。
+    final payable = proposalPayableProjectCostHits(
+      form,
+      costNames: costNames,
+    ).where((hit) => hit.costName == name && !hit.terms.settleByTier);
+    final explicit = payable.any(
+      (hit) =>
+          hit.terms.settleByUnit ||
+          hit.terms.priceMode == kProposalSettlePriceModeDirect,
+    );
+    final filled = payable.any(
+      (hit) =>
+          hit.terms.displayRatio.trim().isNotEmpty ||
+          hit.terms.displayUnitPrice.trim().isNotEmpty,
+    );
     final allPlans = proposalPromotionPlansOf(form);
     final plans = [
       for (final plan in allPlans)
         if (!plan.isEmpty) plan,
     ].take(1).toList();
-    if (plans.isNotEmpty || !settled) {
+    if (!explicit && !(filled && plans.isEmpty) && (plans.isNotEmpty || !settled)) {
       final scale = proposalEffectiveSalesScale(form);
       final results = [for (final plan in plans) plan.evaluate(scale)];
       final amount = proposalRoundWan(

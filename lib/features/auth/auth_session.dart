@@ -37,6 +37,7 @@ class AuthSession {
     this.taskLookupAccess = false,
     this.dailyReportLookupAccess = false,
     this.groupReplyLookupAccess = false,
+    this.proposalSlaLookupAccess = false,
     this.contractViewAccess = false,
     this.contractConfigAccess = false,
     this.contractKbSyncAccess = false,
@@ -101,6 +102,9 @@ class AuthSession {
 
   /// 业务查阅「群响应」。
   final bool groupReplyLookupAccess;
+
+  /// 业务查阅「提案时效」。关闭后入口隐藏，对应接口拒绝访问。
+  final bool proposalSlaLookupAccess;
 
   /// 合同归集查看权限。
   final bool contractViewAccess;
@@ -331,6 +335,7 @@ class AuthSession {
     bool? taskLookupAccess,
     bool? dailyReportLookupAccess,
     bool? groupReplyLookupAccess,
+    bool? proposalSlaLookupAccess,
     bool? contractViewAccess,
     bool? contractConfigAccess,
     bool? contractKbSyncAccess,
@@ -384,6 +389,8 @@ class AuthSession {
           dailyReportLookupAccess ?? this.dailyReportLookupAccess,
       groupReplyLookupAccess:
           groupReplyLookupAccess ?? this.groupReplyLookupAccess,
+      proposalSlaLookupAccess:
+          proposalSlaLookupAccess ?? this.proposalSlaLookupAccess,
       contractViewAccess: contractViewAccess ?? this.contractViewAccess,
       contractConfigAccess: contractConfigAccess ?? this.contractConfigAccess,
       contractKbSyncAccess: contractKbSyncAccess ?? this.contractKbSyncAccess,
@@ -472,6 +479,7 @@ class AuthSession {
       taskLookupAccess: data['taskLookupAccess'] == true,
       dailyReportLookupAccess: data['dailyReportLookupAccess'] == true,
       groupReplyLookupAccess: data['groupReplyLookupAccess'] == true,
+      proposalSlaLookupAccess: data['proposalSlaLookupAccess'] == true,
       contractViewAccess: data['contractViewAccess'] == true,
       contractConfigAccess: data['contractConfigAccess'] == true,
       contractKbSyncAccess: data['contractKbSyncAccess'] == true,
@@ -534,6 +542,7 @@ class AuthSession {
       taskLookupAccess: claims['taskLookupAccess'] == true,
       dailyReportLookupAccess: claims['dailyReportLookupAccess'] == true,
       groupReplyLookupAccess: claims['groupReplyLookupAccess'] == true,
+      proposalSlaLookupAccess: claims['proposalSlaLookupAccess'] == true,
       contractViewAccess: claims['contractViewAccess'] == true,
       contractConfigAccess: claims['contractConfigAccess'] == true,
       contractKbSyncAccess: claims['contractKbSyncAccess'] == true,
@@ -602,6 +611,7 @@ class AuthSession {
       'taskLookupAccess': taskLookupAccess,
       'dailyReportLookupAccess': dailyReportLookupAccess,
       'groupReplyLookupAccess': groupReplyLookupAccess,
+      'proposalSlaLookupAccess': proposalSlaLookupAccess,
       'contractViewAccess': contractViewAccess,
       'contractConfigAccess': contractConfigAccess,
       'contractKbSyncAccess': contractKbSyncAccess,
@@ -659,6 +669,7 @@ class AuthSession {
       taskLookupAccess: json['taskLookupAccess'] == true,
       dailyReportLookupAccess: json['dailyReportLookupAccess'] == true,
       groupReplyLookupAccess: json['groupReplyLookupAccess'] == true,
+      proposalSlaLookupAccess: json['proposalSlaLookupAccess'] == true,
       contractViewAccess: json['contractViewAccess'] == true,
       contractConfigAccess: json['contractConfigAccess'] == true,
       contractKbSyncAccess: json['contractKbSyncAccess'] == true,

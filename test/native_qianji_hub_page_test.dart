@@ -63,6 +63,7 @@ void main() {
     expect(find.text('任务'), findsOneWidget);
     expect(find.text('日报'), findsOneWidget);
     expect(find.text('群响应'), findsOneWidget);
+    expect(find.text('提案时效'), findsNothing);
     expect(find.text('月结意见'), findsNothing);
     expect(find.text('提案审核'), findsNothing);
     expect(find.text('任务 · 日报 · 群响应'), findsOneWidget);
@@ -128,6 +129,7 @@ void main() {
     expect(find.text('任务'), findsNothing);
     expect(find.text('日报'), findsNothing);
     expect(find.text('群响应'), findsNothing);
+    expect(find.text('提案时效'), findsNothing);
   });
 }
 

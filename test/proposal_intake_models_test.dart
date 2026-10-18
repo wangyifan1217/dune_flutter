@@ -2606,6 +2606,39 @@ void main() {
     expect(priced.displayUnitPrice, '12');
     expect(priced.displayRatio, isEmpty);
 
+    final unitKeepsPrice = priced.copyWith(
+      priceMode: kProposalSettlePriceModeUnit,
+      settleRatio: '0.8',
+    );
+    expect(unitKeepsPrice.displayRatio, isEmpty);
+    expect(
+      proposalIntakeSettleShare(unitKeepsPrice, face: 100),
+      closeTo(0.12, 0.0001),
+    );
+    expect(
+      proposalSettleLineView(unitKeepsPrice, scale: 1200, face: 100).substitution,
+      '按面值：1200 ÷ 100 × 12 = 144 万元/年',
+    );
+
+    final directKeepsRatio = ProposalFinanceSettleTerms(
+      priceMode: kProposalSettlePriceModeDirect,
+      settleRatio: '0.08',
+      settleUnitPrice: '6',
+    );
+    expect(directKeepsRatio.displayUnitPrice, isEmpty);
+    expect(proposalIntakeSettleShare(directKeepsRatio, face: 100), 0.08);
+
+    final promo = ProposalFinanceSettleTerms(
+      billType: '推广费',
+      priceMode: kProposalSettlePriceModeUnit,
+      settleUnitPrice: '6',
+      formula: '按销售统计结算单价',
+      taxRate: '6%',
+    );
+    expect(promo.promotionPromoterReady, isFalse);
+    expect(promo.isSkuComplete, isFalse);
+    expect(promo.copyWith(promoter: '吉林推广').promotionPromoterReady, isTrue);
+
     final ratio = proposalIntakeApplySettleXor(priced, settleRatio: '0.08');
     expect(ratio.displayRatio, '0.08');
     expect(ratio.displayUnitPrice, isEmpty);
@@ -2665,7 +2698,7 @@ void main() {
     ]);
   });
 
-  test('operator sector uses scale itself as revenue', () {
+  test('operator sector revenue follows settlement share', () {
     final sku = {
       'id': 'sku-1',
       'faceValue': '100',
@@ -2683,19 +2716,10 @@ void main() {
       ProposalSkuDetailRow.fromJson(sku),
       form: form,
     );
-    expect(money.income, 1200);
+    expect(money.income, 146.4);
     expect(money.cost, 840);
-    expect(money.profit, 360);
-    expect(proposalProductScaleRollup(form)?.revenue, 1200);
-
-    final energy = {...form, 'sector': '能源'};
-    expect(
-      proposalSkuSettleMoney(
-        ProposalSkuDetailRow.fromJson(sku),
-        form: energy,
-      ).income,
-      146.4,
-    );
+    expect(money.profit, -693.6);
+    expect(proposalProductScaleRollup(form)?.revenue, 146.4);
   });
 
   test('unit price revenue uses scale times unit price over face', () {

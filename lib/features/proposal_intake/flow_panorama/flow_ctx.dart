@@ -258,6 +258,69 @@ class FlowCtx {
   String get marginText => hasMargin ? '${n(margin)}%' : '—';
   String get hubScaleMarginText => '$scaleWanText · $marginText';
 
+  /// 资金流上实际收款的公司：填了收款主体用收款主体，否则用销售签约主体。
+  String get fundReceiveParty {
+    final named = payee.trim();
+    if (!_fundPartyUnset(named)) return named;
+    return salesOurs.trim();
+  }
+
+  /// 收款、付款不是同一家公司时，资金流不能把销售主体当成付款人。
+  bool get fundPartiesSplit {
+    final paying = payer.trim();
+    final receiving = fundReceiveParty;
+    if (_fundPartyUnset(paying) || _fundPartyUnset(receiving)) return false;
+    return paying != receiving;
+  }
+
+  /// 模式和周期写成同一个词时只留一次，避免「后结算 · 后结算」。
+  String get fundPayLabel => _fundModeCycle(supplyMode, supplyCycle);
+
+  /// 付款线副标题：付款公司（与收款方不同时）和付款账户。
+  String get fundPaySub {
+    final parts = <String>[
+      if (fundPartiesSplit) payer.trim(),
+      if (_fundAccountSet(payerAccount)) payerAccount.trim(),
+    ];
+    return parts.join(' · ');
+  }
+
+  /// 回款线副标题：周期和模式不同才单列；相同则改显示收款账户。
+  String get fundCollectSub {
+    final cycle = channelCycle.trim();
+    final mode = channelMode.trim();
+    if (cycle.isNotEmpty &&
+        cycle != '—' &&
+        cycle != mode &&
+        !cycle.startsWith('待设置')) {
+      return cycle;
+    }
+    if (_fundAccountSet(payeeAccount)) return payeeAccount.trim();
+    return '';
+  }
+
+  static bool _fundPartyUnset(String value) {
+    if (value.isEmpty || value == '—' || value == '-') return true;
+    const placeholders = {'我方主体', '我方采购主体', '供给方', '渠道主体'};
+    return placeholders.contains(value) || value.startsWith('待');
+  }
+
+  static bool _fundAccountSet(String value) {
+    final text = value.trim();
+    return text.isNotEmpty && text != '—' && text != '-' && !text.startsWith('待');
+  }
+
+  static String _fundModeCycle(String mode, String cycle) {
+    final m = mode.trim();
+    final c = cycle.trim();
+    final modeSet = m.isNotEmpty && m != '—' && !m.startsWith('待设置');
+    final cycleSet = c.isNotEmpty && c != '—' && !c.startsWith('待设置') && c != m;
+    if (modeSet && cycleSet) return '$m · $c';
+    if (modeSet) return m;
+    if (cycleSet) return c;
+    return m.isEmpty ? c : m;
+  }
+
   String get financeSourceTitle {
     final parts = <String>[
       if (hasScale) '年规模 ${n(scale)} 万',

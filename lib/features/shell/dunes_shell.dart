@@ -12,6 +12,7 @@ import '../auth/auth_session.dart';
 import '../chat/im_celebration.dart';
 import '../chat/app_theme_guide.dart';
 import '../native/native_screen_host.dart';
+import '../nova/presence/nova_presence_host.dart';
 import '../update/app_update_top_banner.dart';
 
 /// App 主壳：全部页面由 Flutter 原生承载。
@@ -33,6 +34,7 @@ class DunesShell extends StatefulWidget {
 
 class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
   late final DunesNavigationController _navigation;
+  final _presence = NovaPresenceHandle();
 
   // 记录从左边缘开始的横向拖动累计位移，用于实现 iOS 左滑返回。
   double _edgeDragDx = 0;
@@ -130,6 +132,7 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
             canPop: false,
             onPopInvokedWithResult: (didPop, _) async {
               if (didPop) return;
+              if (_presence.closeIfOpen?.call() ?? false) return;
               if (!_navigation.handleBack()) {
                 SystemNavigator.pop();
               }
@@ -141,36 +144,42 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
                   // PC：有新版本时顶部常驻提示，点「稍后」后仍可见。
                   if (isDesktopCommOnly) const AppUpdateTopBanner(),
                   Expanded(
-                    child: Stack(
-                      children: [
-                        NativeScreenHost(
-                          session: widget.session,
-                          navigation: _navigation,
-                          onLogout: widget.onLogout,
-                        ),
-                        // iOS：从屏幕左边缘向右滑动当作返回（应用为自定义导航栈，需手动实现）。
-                        if (_enableEdgeBack && _navigation.canHandleBack)
-                          Positioned(
-                            left: 0,
-                            top: 0,
-                            bottom: 0,
-                            width: 24,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.translucent,
-                              onHorizontalDragStart: (_) => _edgeDragDx = 0,
-                              onHorizontalDragUpdate: (d) =>
-                                  _edgeDragDx += d.delta.dx,
-                              onHorizontalDragEnd: (d) {
-                                final v = d.primaryVelocity ?? 0;
-                                if (_navigation.canHandleBack &&
-                                    (_edgeDragDx > 40 || v > 300)) {
-                                  _navigation.handleBack();
-                                }
-                                _edgeDragDx = 0;
-                              },
-                            ),
+                    child: NovaPresenceHost(
+                      key: ObjectKey(widget.session),
+                      session: widget.session,
+                      handle: _presence,
+                      navigation: _navigation,
+                      child: Stack(
+                        children: [
+                          NativeScreenHost(
+                            session: widget.session,
+                            navigation: _navigation,
+                            onLogout: widget.onLogout,
                           ),
-                      ],
+                          // iOS：从屏幕左边缘向右滑动当作返回（应用为自定义导航栈，需手动实现）。
+                          if (_enableEdgeBack && _navigation.canHandleBack)
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: 24,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onHorizontalDragStart: (_) => _edgeDragDx = 0,
+                                onHorizontalDragUpdate: (d) =>
+                                    _edgeDragDx += d.delta.dx,
+                                onHorizontalDragEnd: (d) {
+                                  final v = d.primaryVelocity ?? 0;
+                                  if (_navigation.canHandleBack &&
+                                      (_edgeDragDx > 40 || v > 300)) {
+                                    _navigation.handleBack();
+                                  }
+                                  _edgeDragDx = 0;
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

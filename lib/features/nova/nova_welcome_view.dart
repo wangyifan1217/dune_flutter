@@ -4,18 +4,22 @@ import 'package:flutter/services.dart';
 import '../../core/theme/dunes_theme.dart';
 import 'nova_feedback_dialog.dart';
 import 'nova_icon.dart';
+import 'nova_personal_query.dart';
 
 /// 小饕迎宾视图：拟人形象、反馈与投诉、沙丘业务推荐卡与现有能力入口。
 class NovaAiPartnerWelcomeView extends StatefulWidget {
   const NovaAiPartnerWelcomeView({
     super.key,
     required this.onSelectPrompt,
+    this.onSelectCapability,
     this.onSubmitFeedback,
     this.name = '小饕',
     this.subtitle = '你在沙丘上的AI全能伙伴',
   });
 
   final ValueChanged<String> onSelectPrompt;
+  final void Function(NovaPersonalCapability capability, String prompt)?
+      onSelectCapability;
   final Future<void> Function(String kind, String content)? onSubmitFeedback;
   final String name;
   final String subtitle;
@@ -53,6 +57,24 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
       icon: Icons.groups_2_rounded,
       iconColor: Color(0xFF00B087),
       iconBg: Color(0xFFE6F8F3),
+    ),
+    _WelcomePromptItem(
+      title: '管理我的任务',
+      subtitle: '查看本人负责、协同、参与和创建的任务',
+      prompt: '帮我看看和我相关的任务',
+      capability: NovaPersonalCapability.tasks,
+      icon: Icons.task_alt_rounded,
+      iconColor: Color(0xFF7965B2),
+      iconBg: Color(0xFFF3F0FA),
+    ),
+    _WelcomePromptItem(
+      title: '查询灯塔数据',
+      subtitle: '看今天的经营总览，只读',
+      prompt: '今天灯塔整体怎么样？',
+      capability: NovaPersonalCapability.lighthouse,
+      icon: Icons.insights_outlined,
+      iconColor: Color(0xFFC47B2D),
+      iconBg: Color(0xFFFFF4E8),
     ),
   ];
 
@@ -278,7 +300,15 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
                 padding: const EdgeInsets.only(bottom: 11),
                 child: _PromptCard(
                   item: item,
-                  onTap: () => widget.onSelectPrompt(item.prompt),
+                  onTap: () {
+                    final capability = item.capability;
+                    if (capability != null &&
+                        widget.onSelectCapability != null) {
+                      widget.onSelectCapability!(capability, item.prompt);
+                      return;
+                    }
+                    widget.onSelectPrompt(item.prompt);
+                  },
                 ),
               ),
             );
@@ -314,6 +344,7 @@ class _WelcomePromptItem {
     required this.title,
     required this.subtitle,
     required this.prompt,
+    this.capability,
     required this.icon,
     required this.iconColor,
     required this.iconBg,
@@ -322,6 +353,7 @@ class _WelcomePromptItem {
   final String title;
   final String subtitle;
   final String prompt;
+  final NovaPersonalCapability? capability;
   final IconData icon;
   final Color iconColor;
   final Color iconBg;

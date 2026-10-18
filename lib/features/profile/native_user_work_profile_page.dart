@@ -300,6 +300,16 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
   final performancePeriod = performanceModules.isEmpty
       ? ''
       : '${performanceModules.first['period'] ?? ''}'.trim();
+  final portraitAligned = meta?['portraitAligned'] == true;
+  final portraitStats = meta?['stats'] is Map
+      ? Map<String, dynamic>.from(meta!['stats'] as Map)
+      : const <String, dynamic>{};
+  int? alignedCount(String key) {
+    if (!portraitAligned) return null;
+    final value = portraitStats[key];
+    if (value is num) return value.toInt();
+    return null;
+  }
 
   final modules = <UserWorkProfileModule>[];
   if (tasks == null) {
@@ -311,7 +321,9 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
     final pending = tasks
         .where((item) => item.status == 'pending_approval')
         .length;
-    final completed = tasks.where((item) => item.status == 'completed').length;
+    final completed =
+        alignedCount('taskCompleted') ??
+        tasks.where((item) => item.status == 'completed').length;
     final overdue = tasks.where((item) => item.overdue).length;
     const type = UserWorkProfileModuleType.workRhythm;
     const status = UserWorkProfileModuleStatus.ready;
@@ -333,18 +345,21 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
   }
 
   int? monthlyMeetingCount;
-  if (meetings == null) {
+  if (meetings == null && alignedCount('meetings') == null) {
     modules.add(
       _unavailableWorkProfileModule(UserWorkProfileModuleType.collaboration),
     );
   } else {
-    final monthlyMeetings = meetings
+    final monthlyMeetings = (meetings ?? const <NativeMeetingSummary>[])
         .where((item) => _meetingInWorkProfileMonth(item, month))
         .toList();
-    monthlyMeetingCount = monthlyMeetings.length;
-    final minutes = monthlyMeetings
-        .where((item) => (item.summary ?? '').trim().isNotEmpty)
-        .length;
+    monthlyMeetingCount =
+        alignedCount('meetings') ?? monthlyMeetings.length;
+    final minutes =
+        alignedCount('minutesGenerated') ??
+        monthlyMeetings
+            .where((item) => (item.summary ?? '').trim().isNotEmpty)
+            .length;
     final linked = monthlyMeetings
         .where((item) => (item.kbDocumentId ?? 0) > 0)
         .length;
@@ -354,21 +369,23 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
         type: type,
         status: UserWorkProfileModuleStatus.ready,
         summary:
-            '$monthLabel 会议 ${monthlyMeetings.length} 场 · 已形成纪要 $minutes · 关联知识文档 $linked',
+            '$monthLabel 会议 $monthlyMeetingCount 场 · 已形成纪要 $minutes · 关联知识文档 $linked',
         source: '会议记录与纪要',
         period: monthLabel,
       ),
     );
   }
 
-  if (kb == null) {
+  if (kb == null && alignedCount('knowledgeDocuments') == null) {
     modules.add(
       _unavailableWorkProfileModule(UserWorkProfileModuleType.knowledge),
     );
   } else {
+    final documentCount =
+        alignedCount('knowledgeDocuments') ?? kb?.documentCount ?? 0;
     final facts = <String>[
-      if (kb != null) '当前累计：文档 ${kb.documentCount} 篇',
-      if (kb != null) '分类 ${kb.categoryCount} 个',
+      '当前累计：文档 $documentCount 篇',
+      if (!portraitAligned && kb != null) '分类 ${kb.categoryCount} 个',
     ];
     const type = UserWorkProfileModuleType.knowledge;
     const status = UserWorkProfileModuleStatus.ready;
@@ -401,6 +418,8 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
         .where((item) => item.businessType.toUpperCase() != 'PROPOSAL')
         .length;
   }
+  proposalCount = alignedCount('proposalTotal') ?? proposalCount;
+  approvalCount = alignedCount('approvalTotal') ?? approvalCount;
   if (score == null && proposalCount == null) {
     modules.add(
       _unavailableWorkProfileModule(UserWorkProfileModuleType.business),
@@ -442,7 +461,9 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
     dimensions: [
       UserWorkProfileDimension(
         label: '完成任务',
-        value: tasks?.where((item) => item.status == 'completed').length,
+        value:
+            alignedCount('taskCompleted') ??
+            tasks?.where((item) => item.status == 'completed').length,
         cap: 8,
         unit: '项',
         period: monthLabel,
@@ -456,7 +477,7 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
       ),
       UserWorkProfileDimension(
         label: '知识沉淀',
-        value: kb?.documentCount,
+        value: alignedCount('knowledgeDocuments') ?? kb?.documentCount,
         cap: 20,
         unit: '篇',
         period: '当前累计',

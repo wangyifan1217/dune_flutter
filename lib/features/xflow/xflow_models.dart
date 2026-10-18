@@ -1044,6 +1044,57 @@ const kApprovalTaskTodoFormKeys = {
   'merchantName',
 };
 
+/// 列表展示时收掉连续重复的发起人前缀。
+/// 「冯静 - 冯静 - 资质使用」→「冯静 - 资质使用」。
+String normalizeDuplicatedInitiatorTitle(String title) {
+  var value = title.trim();
+  while (true) {
+    final parts = value
+        .split(' - ')
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (parts.length < 3 || parts[0] != parts[1]) return value;
+    value = parts.skip(1).join(' - ');
+  }
+}
+
+/// 复制或再次提交前去掉「发起人 - 」前缀。
+/// 服务端落标题时会再拼一次发起人，原样提交就会变成「冯静 - 冯静 - 资质使用」。
+String stripInitiatorTitlePrefix(String title, Iterable<String> initiatorNames) {
+  var value = title.trim();
+  final names = <String>{
+    for (final name in initiatorNames)
+      if (name.trim().isNotEmpty) name.trim(),
+  };
+  while (value.isNotEmpty) {
+    final parts = value.split(' - ');
+    if (parts.length < 2) break;
+    final head = parts.first.trim();
+    if (head.isEmpty) break;
+    final matchesInitiator = names.contains(head);
+    final duplicated = parts.length >= 3 && head == parts[1].trim();
+    if (!matchesInitiator && !duplicated) break;
+    value = parts.skip(1).map((part) => part.trim()).join(' - ').trim();
+    if (!matchesInitiator) break;
+  }
+  return value;
+}
+
+void stripCopiedApprovalTitle(
+  Map<String, dynamic> values,
+  Iterable<String> initiatorNames,
+) {
+  final raw = (values['title'] ?? '').toString();
+  if (raw.trim().isEmpty) return;
+  final stripped = stripInitiatorTitlePrefix(raw, initiatorNames);
+  if (stripped.isEmpty) {
+    values.remove('title');
+  } else {
+    values['title'] = stripped;
+  }
+}
+
 /// 复制审批时去掉身份/流程字段、待办办理结果和申请附件。
 Map<String, dynamic> copyableApprovalFormValues(Map<String, dynamic> source) {
   const strip = {

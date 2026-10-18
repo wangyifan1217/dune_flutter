@@ -152,4 +152,74 @@ void main() {
     );
     expect(ctx.billingName, '广州宇天供应链科技有限公司');
   });
+
+  test('fund flow uses the purchase party as payer and does not repeat the mode', () {
+    final ctx = FlowCtxMapper.fromForm(
+      form: {
+        'purchaseOurParty': '广州壹仑科技有限公司',
+        'purchaseCounterparty': '深圳正指向科技有限公司',
+        'salesOurParty': '深圳星和动力科技有限公司',
+        'supplySettleMode': '后结算',
+        'supplySettleCycle': '后结算',
+        'supplyPayAccount': '120925380810000',
+        'channelSettleMode': '后结算',
+        'channelSettleCycle': '项目完结',
+      },
+      review: const {},
+      proposalTitle: '提案',
+      financeReviewKeys: const [],
+      financeInterfaces: const [],
+    );
+
+    expect(ctx.payer, '广州壹仑科技有限公司');
+    expect(ctx.fundPartiesSplit, isTrue);
+    expect(ctx.fundReceiveParty, '深圳星和动力科技有限公司');
+    expect(ctx.fundPayLabel, '后结算');
+    expect(ctx.fundPaySub, '广州壹仑科技有限公司 · 120925380810000');
+    expect(ctx.fundCollectSub, '项目完结');
+
+    final pay = kEdgeById['f5']!;
+    expect(pay.label(ctx), '后结算');
+    expect(pay.sub!(ctx), '广州壹仑科技有限公司 · 120925380810000');
+    expect(pay.note!(ctx), contains('广州壹仑科技有限公司'));
+    expect(pay.note!(ctx), contains('按 后结算 向'));
+    expect(kEdgeById['f4']!.sub!(ctx), '项目完结');
+  });
+
+  test('same payer and payee keeps the cycle and the account on the pay edge', () {
+    final ctx = FlowCtxMapper.fromForm(
+      form: {
+        'purchaseOurParty': '广州宇天',
+        'salesOurParty': '广州宇天',
+        'supplySettleMode': '后结算',
+        'supplySettleCycle': 'T+7',
+        'supplyPayAccount': '62220001',
+      },
+      review: const {},
+      proposalTitle: '提案',
+      financeReviewKeys: const [],
+      financeInterfaces: const [],
+    );
+
+    expect(ctx.fundPartiesSplit, isFalse);
+    expect(ctx.fundPayLabel, '后结算 · T+7');
+    expect(ctx.fundPaySub, '62220001');
+  });
+
+  test('an explicit supply payer overrides the purchase party', () {
+    final ctx = FlowCtxMapper.fromForm(
+      form: {
+        'purchaseOurParty': '广州壹仑科技有限公司',
+        'salesOurParty': '深圳星和动力科技有限公司',
+        'supplyPayer': '深圳星和动力科技有限公司',
+      },
+      review: const {},
+      proposalTitle: '提案',
+      financeReviewKeys: const [],
+      financeInterfaces: const [],
+    );
+
+    expect(ctx.payer, '深圳星和动力科技有限公司');
+    expect(ctx.fundPartiesSplit, isFalse);
+  });
 }

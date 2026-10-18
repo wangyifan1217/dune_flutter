@@ -108,6 +108,7 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'QJTS',
     'QJDR',
     'QJGR',
+    'QJSL',
     'QJMO',
     'QJPA',
     'QJEA',

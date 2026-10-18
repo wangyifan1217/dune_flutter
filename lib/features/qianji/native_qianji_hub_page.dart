@@ -31,6 +31,7 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenTaskMonitor,
     this.onOpenDailyReportMonitor,
     this.onOpenGroupReply,
+    this.onOpenProposalSla,
     this.onOpenMonthlyOpinion,
     this.onOpenProposalReview,
     this.onOpenEfficiencyAnalysis,
@@ -54,6 +55,7 @@ class NativeQianjiHubPage extends StatefulWidget {
   final VoidCallback? onOpenTaskMonitor;
   final VoidCallback? onOpenDailyReportMonitor;
   final VoidCallback? onOpenGroupReply;
+  final VoidCallback? onOpenProposalSla;
   final VoidCallback? onOpenMonthlyOpinion;
   final VoidCallback? onOpenProposalReview;
   final VoidCallback? onOpenEfficiencyAnalysis;
@@ -453,6 +455,17 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
         ],
         onTap: widget.onOpenGroupReply,
       ),
+      if (widget.onOpenProposalSla != null)
+        _SuperviseItemData(
+          title: '提案时效',
+          subtitle: '',
+          icon: Icons.timer_outlined,
+          gradientColors: [
+            DunesColors.resolve(context, Color(0xFFC45B7A)),
+            DunesColors.resolve(context, Color(0xFF9E3E5C)),
+          ],
+          onTap: widget.onOpenProposalSla,
+        ),
       _SuperviseItemData(
         title: '研发账号',
         subtitle: '',
@@ -464,7 +477,9 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
         onTap: widget.onOpenCursorAccount,
       ),
     ];
-    const lookupSubtitle = '任务 · 日报 · 群响应';
+    final lookupSubtitle = widget.onOpenProposalSla == null
+        ? '任务 · 日报 · 群响应'
+        : '任务 · 日报 · 群响应 · 提案时效';
 
     return ColoredBox(
       color: DunesColors.resolve(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -11,6 +13,7 @@ import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import '../nova/nova_icon.dart';
+import '../nova/presence/nova_presence_host.dart';
 import 'im_user_status.dart';
 import 'inbox_format.dart';
 import '../desktop/desktop_popover_dismissals.dart';
@@ -2518,9 +2521,13 @@ class _NovaEyesButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: '小饕',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+      child: GestureDetector(
+        onSecondaryTapDown: (details) => unawaited(
+          showNovaPresenceFloatMenu(context, details.globalPosition),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
@@ -2589,7 +2596,8 @@ class _NovaEyesButton extends StatelessWidget {
             ),
           ),
         ),
-      ),
+          ),
+        ),
     );
   }
 }

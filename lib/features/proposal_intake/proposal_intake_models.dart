@@ -1053,6 +1053,9 @@ List<String> proposalIntakeNamedCostSettleIssues(
     if (rows.isEmpty || rows.any((row) => !row.isProjectCostComplete)) {
       issues.add('$label「$name」请填写结算比例或单价');
     }
+    if (rows.any((row) => row.isPromotionFee && !row.promotionPromoterReady)) {
+      issues.add('$label「$name」请选择推广商');
+    }
   }
   return issues;
 }
@@ -1223,6 +1226,7 @@ class ProposalIntakeOptions {
     );
   }
 
+  /// 档位比较已改由后端按测算收入计算。这里只保留同一套边界，供配置解析测试使用。
   String ratingFor(double scale) {
     if (scale >= ratingS) return 'S';
     if (scale >= ratingA) return 'A';
@@ -4744,6 +4748,7 @@ class ProposalFinanceSettleTerms {
     this.settleRatio = '',
     this.settleUnitPrice = '',
     this.priceMode = '',
+    this.promoter = '',
     this.settleTiers = const [],
     this.tierPlans = const [],
     this.scale = '',
@@ -4769,9 +4774,12 @@ class ProposalFinanceSettleTerms {
   final String settleRatio;
   final String settleUnitPrice;
 
-  /// 空：跟以前一样直接填比例和单价。direct：明确改回直接填写。
-  /// unit：只填结算单价。tier：下面展开阶梯规则。
+  /// 空：跟以前一样直接填比例和单价。direct：固定比例。
+  /// unit：按面值，只填结算单价。tier：下面展开阶梯规则。
   final String priceMode;
+
+  /// 推广费要落到哪个推广商。按阶梯时以方案上的推广商为准。
+  final String promoter;
   final List<ProposalSettleTier> settleTiers;
   final List<ProposalPromotionTierPlan> tierPlans;
 
@@ -4802,7 +4810,9 @@ class ProposalFinanceSettleTerms {
   final String counterparty;
   final String ourParty;
 
+  /// 当前结算方式用得上的比例。按面值、按阶梯不把上次的比例算进来。
   String get displayRatio {
+    if (settleByTier || settleByUnit) return '';
     if (settleRatio.isNotEmpty) {
       return proposalIntakeNormalizeSettleRatio(settleRatio);
     }
@@ -4813,7 +4823,9 @@ class ProposalFinanceSettleTerms {
     return '';
   }
 
+  /// 当前结算方式用得上的单价。固定比例、按阶梯不把上次的单价算进来。
   String get displayUnitPrice {
+    if (settleByTier || priceMode == kProposalSettlePriceModeDirect) return '';
     if (settleUnitPrice.isNotEmpty) return settleUnitPrice;
     if (settleRatio.isEmpty &&
         settlePrice.isNotEmpty &&
@@ -4822,6 +4834,26 @@ class ProposalFinanceSettleTerms {
       return settlePrice;
     }
     return '';
+  }
+
+  bool get isPromotionFee {
+    bool hit(String text) {
+      final leaf = text.trim().split('/').last.trim();
+      return leaf == '推广费';
+    }
+
+    return hit(billType) || hit(billTypeRef?.name ?? '');
+  }
+
+  /// 推广费必须落到推广商。按阶梯看每个方案，固定比例和按面值看这一条。
+  bool get promotionPromoterReady {
+    if (!isPromotionFee) return true;
+    if (settleByTier) {
+      final plans = proposalSettleTierPlans(this);
+      if (plans.isEmpty) return promoter.trim().isNotEmpty;
+      return plans.every((plan) => plan.promoter.trim().isNotEmpty);
+    }
+    return promoter.trim().isNotEmpty;
   }
 
   String get displayFormula {
@@ -4858,6 +4890,7 @@ class ProposalFinanceSettleTerms {
       settleRatio.isEmpty &&
       settleUnitPrice.isEmpty &&
       priceMode.isEmpty &&
+      promoter.isEmpty &&
       settleTiers.every((item) => item.isEmpty) &&
       scale.isEmpty &&
       scalePeriod.isEmpty &&
@@ -4889,7 +4922,8 @@ class ProposalFinanceSettleTerms {
           : displayRatio.trim().isNotEmpty ||
                 displayUnitPrice.trim().isNotEmpty);
 
-  bool get isSkuComplete {
+  /// 比例、单价、公式、税率齐了。推广商另看 [promotionPromoterReady]。
+  bool get isSettleAmountComplete {
     if (taxRate.isEmpty || resolvedRule.isEmpty) return false;
     if (proposalIntakeSettleIsTier(this) || settleByTier) return true;
     if (settleByUnit) return displayUnitPrice.isNotEmpty;
@@ -4898,6 +4932,8 @@ class ProposalFinanceSettleTerms {
         resolvedPrice.isNotEmpty;
   }
 
+  bool get isSkuComplete => promotionPromoterReady && isSettleAmountComplete;
+
   String get fingerprint => [
     billTypeRef?.identity ?? billType,
     channelRef?.identity ?? '',
@@ -4905,6 +4941,7 @@ class ProposalFinanceSettleTerms {
     displayRatio,
     displayUnitPrice,
     priceMode,
+    promoter,
     settleTiers.map((item) => '${item.from}:${item.rate}').join(','),
     jsonEncode(tierPlans.map((plan) => plan.toJson()).toList()),
     scale,
@@ -4928,6 +4965,7 @@ class ProposalFinanceSettleTerms {
     String? settleRatio,
     String? settleUnitPrice,
     String? priceMode,
+    String? promoter,
     List<ProposalSettleTier>? settleTiers,
     List<ProposalPromotionTierPlan>? tierPlans,
     String? scale,
@@ -4960,6 +4998,7 @@ class ProposalFinanceSettleTerms {
         : proposalIntakeNormalizeSettleRatio(settleRatio),
     settleUnitPrice: settleUnitPrice ?? this.settleUnitPrice,
     priceMode: priceMode ?? this.priceMode,
+    promoter: promoter ?? this.promoter,
     settleTiers: settleTiers ?? this.settleTiers,
     tierPlans: tierPlans ?? this.tierPlans,
     scale: scale ?? this.scale,
@@ -5000,6 +5039,7 @@ class ProposalFinanceSettleTerms {
     'settleRatio': proposalIntakeNormalizeSettleRatio(settleRatio),
     'settleUnitPrice': settleUnitPrice,
     if (priceMode.isNotEmpty) 'priceMode': priceMode,
+    if (promoter.isNotEmpty) 'promoter': promoter,
     if (settleTiers.isNotEmpty)
       'settleTiers': [for (final item in settleTiers) item.toJson()],
     if (tierPlans.isNotEmpty)
@@ -5030,6 +5070,7 @@ class ProposalFinanceSettleTerms {
       settleModeRef: catalogRefOrNull(raw['settleModeRef']),
       settleRatio: proposalIntakeNormalizeSettleRatio(read('settleRatio')),
       settleUnitPrice: read('settleUnitPrice'),
+      promoter: read('promoter'),
       priceMode: switch (read('priceMode')) {
         kProposalSettlePriceModeDirect ||
         kProposalSettlePriceModeUnit ||
@@ -6264,8 +6305,11 @@ List<String> proposalIntakeSkuSettleIssues(
       if (group.skuIds.isEmpty) {
         issues.add('共用结算请勾选适用的渠道产品');
       }
-      if (!group.terms.isSkuComplete) {
+      if (!group.terms.isSettleAmountComplete) {
         issues.add('共用结算未填完结算方式对应金额、计算公式、税率');
+      }
+      if (group.terms.isPromotionFee && !group.terms.promotionPromoterReady) {
+        issues.add('共用结算请选择推广商');
       }
     }
   }
@@ -6309,10 +6353,16 @@ List<String> _proposalIntakeSkuGroupIssues({
     final name = rowLabel(i, sku);
     final settlements = proposalIntakeSkuSettlements(sku);
     for (var j = 0; j < settlements.length; j++) {
-      if (!settlements[j].terms.isSkuComplete) {
-        issues.add(
-          '$name${proposalIntakeSettleLabel(j, kind: settlements[j].isCost ? '成本' : '收入')}未填完结算比例或单价、计算公式、税率',
-        );
+      final label = proposalIntakeSettleLabel(
+        j,
+        kind: settlements[j].isCost ? '成本' : '收入',
+      );
+      final terms = settlements[j].terms;
+      if (!terms.isSettleAmountComplete) {
+        issues.add('$name$label未填完结算比例或单价、计算公式、税率');
+      }
+      if (terms.isPromotionFee && !terms.promotionPromoterReady) {
+        issues.add('$name$label请选择推广商');
       }
     }
   }

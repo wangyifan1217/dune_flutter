@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -15,6 +17,7 @@ import 'nova_markdown_preview.dart';
 import 'nova_media.dart';
 import 'nova_file_utils.dart';
 import 'nova_models_service.dart';
+import 'nova_personal_query.dart';
 
 const kNovaName = '小饕';
 const kNovaIdentityReply = '我是小饕';
@@ -2426,6 +2429,364 @@ class NovaC4QuickActions extends StatelessWidget {
   }
 }
 
+/// 桌面回车发送：Enter 会先变成换行，这里在按键仍按住时把末尾换行收回并发送。
+/// Shift+Enter 保留换行。输入法组字过程中不发送。
+String? novaStripDesktopEnter(
+  String text, {
+  required bool enterDown,
+  required bool shiftDown,
+  required bool composing,
+}) {
+  if (!enterDown || shiftDown || composing) return null;
+  if (!text.endsWith('\n')) return null;
+  return text.substring(0, text.length - 1);
+}
+
+String novaCapabilityLabel(NovaPersonalCapability? capability) {
+  switch (capability) {
+    case NovaPersonalCapability.tasks:
+      return '任务';
+    case NovaPersonalCapability.lighthouse:
+      return '灯塔';
+    case null:
+      return '通用';
+  }
+}
+
+class _CapabilityPick {
+  const _CapabilityPick(this.value);
+  final NovaPersonalCapability? value;
+}
+
+class _NovaCapabilitySwitch extends StatelessWidget {
+  const _NovaCapabilitySwitch({required this.capability, required this.onChanged});
+
+  final NovaPersonalCapability? capability;
+  final ValueChanged<NovaPersonalCapability?>? onChanged;
+
+  Future<void> _open(BuildContext context) async {
+    final box = context.findRenderObject();
+    final overlay = Navigator.of(context).overlay?.context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || overlay is! RenderBox) return;
+    final origin = box.localToGlobal(Offset.zero, ancestor: overlay);
+    final picked = await showGeneralDialog<_CapabilityPick>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '关闭功能菜单',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 160),
+      pageBuilder: (dialogContext, _, _) {
+        return _NovaCapabilityMenu(
+          anchor: origin,
+          anchorSize: box.size,
+          overlaySize: overlay.size,
+          current: capability,
+        );
+      },
+      transitionBuilder: (context, animation, _, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+            alignment: Alignment.bottomLeft,
+            child: child,
+          ),
+        );
+      },
+    );
+    if (picked == null) return;
+    onChanged?.call(picked.value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = capability != null;
+    final color = active
+        ? const Color(0xFF6E5AA8)
+        : DunesColors.resolve(context, const Color(0xFF4E5969));
+    return Tooltip(
+      message: '切换功能',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onChanged == null ? null : () => _open(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  novaCapabilityLabel(capability),
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                    context: context,
+                  ),
+                ),
+                Icon(Icons.expand_more_rounded, size: 16, color: color),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NovaCapabilityMenu extends StatelessWidget {
+  const _NovaCapabilityMenu({
+    required this.anchor,
+    required this.anchorSize,
+    required this.overlaySize,
+    required this.current,
+  });
+
+  final Offset anchor;
+  final Size anchorSize;
+  final Size overlaySize;
+  final NovaPersonalCapability? current;
+
+  @override
+  Widget build(BuildContext context) {
+    const width = 176.0;
+    const height = 132.0;
+    var left = anchor.dx;
+    var top = anchor.dy - height - 8;
+    if (left + width > overlaySize.width - 12) {
+      left = overlaySize.width - width - 12;
+    }
+    if (left < 12) left = 12;
+    if (top < 12) top = anchor.dy + anchorSize.height + 8;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final fill = dark ? const Color(0xE62C2C2E) : const Color(0xF2F7F7F8);
+    final ink = dark ? Colors.white : const Color(0xFF1C1C1E);
+    final line = dark ? const Color(0x22FFFFFF) : const Color(0x14000000);
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).pop(),
+          ),
+        ),
+        Positioned(
+          left: left,
+          top: top,
+          width: width,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x24000000),
+                  blurRadius: 28,
+                  offset: Offset(0, 12),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: fill,
+                    border: Border.all(color: line),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _row(context, null, '通用', ink, line),
+                      _row(context, NovaPersonalCapability.tasks, '任务', ink, line),
+                      _row(
+                        context,
+                        NovaPersonalCapability.lighthouse,
+                        '灯塔',
+                        ink,
+                        line,
+                        last: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _row(
+    BuildContext context,
+    NovaPersonalCapability? value,
+    String label,
+    Color ink,
+    Color line, {
+    bool last = false,
+  }) {
+    final selected = current == value;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => Navigator.of(context).pop(_CapabilityPick(value)),
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            border: last
+                ? null
+                : Border(bottom: BorderSide(color: line, width: 0.6)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: DunesTypography.sans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: ink,
+                    context: context,
+                  ),
+                ),
+              ),
+              if (selected)
+                Icon(Icons.check_rounded, size: 18, color: ink),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NovaComposerField extends StatefulWidget {
+  const _NovaComposerField({
+    required this.controller,
+    required this.focusNode,
+    required this.enabled,
+    required this.locked,
+    required this.hintText,
+    required this.onInputFocused,
+    required this.onSend,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool enabled;
+  final bool locked;
+  final String hintText;
+  final VoidCallback onInputFocused;
+  final VoidCallback onSend;
+
+  @override
+  State<_NovaComposerField> createState() => _NovaComposerFieldState();
+}
+
+class _NovaComposerFieldState extends State<_NovaComposerField> {
+  DateTime? _sentAt;
+  var _rewriting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onText);
+  }
+
+  @override
+  void didUpdateWidget(covariant _NovaComposerField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_onText);
+    widget.controller.addListener(_onText);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onText);
+    super.dispose();
+  }
+
+  void _onText() {
+    if (_rewriting || widget.locked || !isDesktopCommOnly) return;
+    if (!widget.focusNode.hasFocus) return;
+    final value = widget.controller.value;
+    final composing = value.composing.isValid && !value.composing.isCollapsed;
+    final next = novaStripDesktopEnter(
+      value.text,
+      enterDown: HardwareKeyboard.instance.logicalKeysPressed.contains(
+        LogicalKeyboardKey.enter,
+      ),
+      shiftDown: HardwareKeyboard.instance.isShiftPressed,
+      composing: composing,
+    );
+    if (next == null) return;
+    _rewriting = true;
+    widget.controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: next.length),
+    );
+    _rewriting = false;
+    _send();
+  }
+
+  void _send() {
+    final now = DateTime.now();
+    if (_sentAt != null &&
+        now.difference(_sentAt!) < const Duration(milliseconds: 400)) {
+      return;
+    }
+    _sentAt = now;
+    widget.onSend();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      focusNode: widget.focusNode,
+      enabled: widget.enabled,
+      minLines: 1,
+      maxLines: 4,
+      textInputAction: isDesktopCommOnly
+          ? TextInputAction.send
+          : TextInputAction.newline,
+      onTap: widget.onInputFocused,
+      onSubmitted: widget.locked ? null : (_) => _send(),
+      style: DunesTypography.sans(
+        fontSize: 14.5,
+        color: DunesColors.resolve(context, const Color(0xFF1D2129)),
+        context: context,
+      ),
+      decoration: InputDecoration(
+        isDense: true,
+        filled: false,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
+        errorBorder: InputBorder.none,
+        focusedErrorBorder: InputBorder.none,
+        hintText: widget.hintText,
+        hintStyle: DunesTypography.sans(
+          fontSize: 14,
+          color: DunesColors.resolve(context, const Color(0xFF86909C)),
+          context: context,
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+      ),
+    );
+  }
+}
+
 /// NOVA 专用输入栏。布局与 AI 助手的双层输入面板一致，交互仍由页面传入。
 class NovaC4InputBar extends StatelessWidget {
   const NovaC4InputBar({
@@ -2461,6 +2822,8 @@ class NovaC4InputBar extends StatelessWidget {
     this.onVoiceHoldMove,
     this.onVoiceHoldEnd,
     this.onVoiceHoldCancel,
+    this.capability,
+    this.onCapabilityChanged,
   });
 
   final TextEditingController controller;
@@ -2494,6 +2857,8 @@ class NovaC4InputBar extends StatelessWidget {
   final GestureLongPressMoveUpdateCallback? onVoiceHoldMove;
   final GestureLongPressEndCallback? onVoiceHoldEnd;
   final VoidCallback? onVoiceHoldCancel;
+  final NovaPersonalCapability? capability;
+  final ValueChanged<NovaPersonalCapability?>? onCapabilityChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -2549,6 +2914,11 @@ class NovaC4InputBar extends StatelessWidget {
                           onTap: locked ? null : onToggleQuickActions,
                         ),
                       const SizedBox(width: 6),
+                      _NovaCapabilitySwitch(
+                        capability: capability,
+                        onChanged: locked ? null : onCapabilityChanged,
+                      ),
+                      _capabilityDivider(context),
                       Expanded(
                         child: _NovaVoiceHoldField(
                           locked: locked,
@@ -2580,50 +2950,22 @@ class NovaC4InputBar extends StatelessWidget {
                           onTap: locked ? null : onToggleQuickActions,
                         ),
                       const SizedBox(width: 6),
+                      _NovaCapabilitySwitch(
+                        capability: capability,
+                        onChanged: locked ? null : onCapabilityChanged,
+                      ),
+                      _capabilityDivider(context),
 
                       // 中间：输入框
                       Expanded(
-                        child: TextField(
+                        child: _NovaComposerField(
                           controller: controller,
                           focusNode: focusNode,
                           enabled: enabled && !showStop,
-                          minLines: 1,
-                          maxLines: 4,
-                          onTap: onInputFocused,
-                          onSubmitted: locked ? null : (_) => onSend(),
-                          style: DunesTypography.sans(
-                            fontSize: 14.5,
-                            color: DunesColors.resolve(
-                              context,
-                              const Color(0xFF1D2129),
-                            ),
-                            context: context,
-                          ),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            // The outer pill owns the background and border in
-                            // both themes; the editor itself stays transparent.
-                            filled: false,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            disabledBorder: InputBorder.none,
-                            errorBorder: InputBorder.none,
-                            focusedErrorBorder: InputBorder.none,
-                            hintText: hintText,
-                            hintStyle: DunesTypography.sans(
-                              fontSize: 14,
-                              color: DunesColors.resolve(
-                                context,
-                                const Color(0xFF86909C),
-                              ),
-                              context: context,
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 7,
-                            ),
-                          ),
+                          locked: locked,
+                          hintText: hintText,
+                          onInputFocused: onInputFocused,
+                          onSend: onSend,
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -2680,6 +3022,23 @@ class NovaC4InputBar extends StatelessWidget {
                 : const SizedBox.shrink(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _capabilityDivider(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: SizedBox(
+        width: 1,
+        height: 16,
+        child: ColoredBox(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE4E6EE),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
     );
   }

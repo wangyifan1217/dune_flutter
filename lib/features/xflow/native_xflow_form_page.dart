@@ -451,6 +451,13 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       } catch (_) {}
       // 初次渲染前先重算计算字段（如印花税），避免编辑/草稿预填时显示为空。
       await _applySubmitterDefaults(template);
+      if (_isEditing) {
+        stripCopiedApprovalTitle(_values, [
+          widget.session.displayName ?? '',
+          _editingSubmission?.createdByName ?? '',
+          detail?.ownerName ?? '',
+        ]);
+      }
       if (!mounted) return;
       setState(() {
         _template = template;
@@ -534,6 +541,14 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     return merged;
   }
 
+  void _stripCopiedApprovalTitle() {
+    stripCopiedApprovalTitle(_values, [
+      widget.session.displayName ?? '',
+      _editingSubmission?.createdByName ?? '',
+      _editingDetail?.ownerName ?? '',
+    ]);
+  }
+
   void _mergeProposalToForm(XflowProposalDetail detail) {
     _values
       ..addAll(detail.formValues)
@@ -584,6 +599,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     }
     _autosaveTimer?.cancel();
     _autosaveSeq++;
+    if (_isEditing) _stripCopiedApprovalTitle();
     setState(() => _submitting = true);
     try {
       Map<String, dynamic> res;

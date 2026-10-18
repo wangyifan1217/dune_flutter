@@ -305,7 +305,8 @@ class NovaMarkdownBody extends StatelessWidget {
     Set<String> shownUrls,
   ) {
     if (RegExp(r'^\s*#{1,3}\s', multiLine: true).hasMatch(raw) ||
-        RegExp(r'^\s*(?:[-*•]|\d+[.)])\s', multiLine: true).hasMatch(raw)) {
+        RegExp(r'^\s*(?:[-*•]|\d+[.)])\s', multiLine: true).hasMatch(raw) ||
+        _containsMarkdownTable(raw)) {
       return [
         _NovaMarkdownBlock(
           text: raw,
@@ -625,10 +626,29 @@ class _NovaMarkdownBlock extends StatelessWidget {
       listItems = [];
     }
 
-    for (final line in lines) {
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
       final trimmed = line.trim();
       if (trimmed.isEmpty) {
         flushList();
+        continue;
+      }
+      if (_isMarkdownTableLine(trimmed) &&
+          i + 1 < lines.length &&
+          _isMarkdownTableSeparator(lines[i + 1].trim())) {
+        flushList();
+        final tableRows = <List<String>>[_splitMarkdownTableRow(trimmed)];
+        i++;
+        while (i + 1 < lines.length &&
+            _isMarkdownTableLine(lines[i + 1].trim())) {
+          tableRows.add(_splitMarkdownTableRow(lines[++i].trim()));
+        }
+        children.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: _NovaMarkdownTable(rows: tableRows),
+          ),
+        );
         continue;
       }
       // Skip lone "#" / "##" lines (empty heading markers).
@@ -724,6 +744,100 @@ class _NovaMarkdownBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: children,
+    );
+  }
+}
+
+bool _containsMarkdownTable(String raw) {
+  final lines = raw.split('\n');
+  for (var i = 0; i + 1 < lines.length; i++) {
+    if (_isMarkdownTableLine(lines[i].trim()) &&
+        _isMarkdownTableSeparator(lines[i + 1].trim())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _isMarkdownTableLine(String line) =>
+    line.startsWith('|') && line.contains('|', 1);
+
+bool _isMarkdownTableSeparator(String line) {
+  if (!_isMarkdownTableLine(line)) return false;
+  final cells = _splitMarkdownTableRow(line);
+  return cells.isNotEmpty &&
+      cells.every((cell) => RegExp(r'^:?-{3,}:?$').hasMatch(cell.trim()));
+}
+
+List<String> _splitMarkdownTableRow(String line) {
+  var value = line.trim();
+  if (value.startsWith('|')) value = value.substring(1);
+  if (value.endsWith('|')) value = value.substring(0, value.length - 1);
+  return value.split('|').map((cell) => cell.trim()).toList(growable: false);
+}
+
+class _NovaMarkdownTable extends StatelessWidget {
+  const _NovaMarkdownTable({required this.rows});
+
+  final List<List<String>> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final columnCount = rows.fold<int>(
+      0,
+      (count, row) => row.length > count ? row.length : count,
+    );
+    if (columnCount == 0) return const SizedBox.shrink();
+    final borderColor = DunesColors.resolve(
+      context,
+      DunesColors.border.withValues(alpha: 0.72),
+    );
+    final headerColor = DunesColors.resolve(context, DunesColors.bgCard);
+    final bodyColor = DunesColors.resolve(context, DunesColors.bgApp);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Table(
+          defaultColumnWidth: const IntrinsicColumnWidth(),
+          border: TableBorder.all(color: borderColor, width: 0.7),
+          children: [
+            for (var rowIndex = 0; rowIndex < rows.length; rowIndex++)
+              TableRow(
+                decoration: BoxDecoration(
+                  color: rowIndex == 0 ? headerColor : bodyColor,
+                ),
+                children: [
+                  for (
+                    var columnIndex = 0;
+                    columnIndex < columnCount;
+                    columnIndex++
+                  )
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minWidth: 54,
+                        maxWidth: 260,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 7,
+                        ),
+                        child: _NovaMarkdownInline(
+                          text: columnIndex < rows[rowIndex].length
+                              ? rows[rowIndex][columnIndex]
+                              : '',
+                          documentPreview: false,
+                          onImage: (_) => const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -871,17 +985,18 @@ class _NovaMarkdownInline extends StatelessWidget {
         out.add(
           TextSpan(
             text: token.substring(1, token.length - 1),
-            style: DunesTypography.mono(
-              fontSize: 12,
-              color: DunesColors.resolve(context, DunesColors.accentDeep),
-              context: context,
-            ).copyWith(
-              backgroundColor: DunesColors.resolve(
-                context,
-                const Color(0x142F5D62),
-                role: DunesColorRole.surface,
-              ),
-            ),
+            style:
+                DunesTypography.mono(
+                  fontSize: 12,
+                  color: DunesColors.resolve(context, DunesColors.accentDeep),
+                  context: context,
+                ).copyWith(
+                  backgroundColor: DunesColors.resolve(
+                    context,
+                    const Color(0x142F5D62),
+                    role: DunesColorRole.surface,
+                  ),
+                ),
           ),
         );
       } else if (token.startsWith('![')) {

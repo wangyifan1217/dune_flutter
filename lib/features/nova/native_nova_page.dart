@@ -125,6 +125,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   String _busyHint = '';
   int _conversationId = 0;
   NovaPersonalCapability? _personalMode;
+  bool _resendPreparing = false;
   NovaTaskPreview? _taskPreview;
   int? _previewMessageId;
   int _loadToken = 0;
@@ -1687,9 +1688,11 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     });
   }
 
-  Future<void> _ensureConversationId() async {
+  Future<void> _ensureConversationId({int? requestToken}) async {
     if (_conversationId > 0) return;
-    _conversationId = await _service.ensureConversation();
+    final conversationId = await _service.ensureConversation();
+    if (requestToken != null && requestToken != _loadToken) return;
+    _conversationId = conversationId;
   }
 
   Future<bool> _tryRecoverAssistantAfterSendFailure({
@@ -1921,15 +1924,24 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   Future<void> _handlePersonalCapability(
     NovaPersonalCapability capability,
     String prompt,
-  ) async {
+  ) async => _runPersonalCapability(capability, prompt);
+
+  Future<void> _runPersonalCapability(
+    NovaPersonalCapability capability,
+    String prompt, {
+    NovaTaskPreview? pendingPreview,
+  }) async {
     if (!_novaReady || _sending) return;
     HapticFeedback.selectionClick();
     final history = _personalContextHistory();
+    final requestToken = _loadToken;
     final userMsgId = DateTime.now().millisecondsSinceEpoch;
     final assistantMsgId = userMsgId + 1;
+    final previousPreviewMessageId = _previewMessageId;
     final status = capability == NovaPersonalCapability.tasks
         ? '正在查询你的任务'
         : '正在读取灯塔数据';
+    _inputController.clear();
     setState(() {
       _sending = true;
       _busyHint = status;
@@ -1940,6 +1952,12 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           role: 'user',
           text: prompt,
           createdAt: DateTime.now(),
+          payload: <String, dynamic>{
+            'nova_personal_capability':
+                capability == NovaPersonalCapability.tasks
+                ? 'tasks'
+                : 'lighthouse',
+          },
         ),
         NativeNovaMessage(
           id: assistantMsgId,
@@ -1951,7 +1969,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         ),
       ];
     });
+    _scrollBottom();
     NovaPersonalReply result;
+    var requestFailed = false;
     try {
       result = await _service.askPersonalCapability(
         capability: capability == NovaPersonalCapability.tasks
@@ -1959,35 +1979,68 @@ class _NativeNovaPageState extends State<NativeNovaPage>
             : 'lighthouse',
         text: prompt,
         history: novaPersonalContextTurns(history),
+        pendingPreview: pendingPreview,
       );
     } catch (error) {
+      requestFailed = true;
       result = NovaPersonalReply(friendlyErrorText(error));
     }
-    if (!mounted) return;
+    if (!mounted || requestToken != _loadToken) return;
+    if (pendingPreview != null && result.preview == null) {
+      result = NovaPersonalReply(
+        '${result.text}\n待确认的任务草稿仍保留；要修改它，请直接说要改的字段，或说“取消”。',
+      );
+    }
     setState(() {
       _sending = false;
       _busyHint = '';
       _personalMode = capability;
-      _taskPreview = result.preview;
-      _previewMessageId = result.preview == null ? null : assistantMsgId;
+      _taskPreview = result.preview ?? pendingPreview;
+      _previewMessageId = result.preview != null
+          ? assistantMsgId
+          : (pendingPreview != null ? previousPreviewMessageId : null);
       final index = _messages.indexWhere((m) => m.id == assistantMsgId);
+      final userIndex = _messages.indexWhere((m) => m.id == userMsgId);
+      if (requestFailed && userIndex >= 0) {
+        final copy = [..._messages];
+        copy[userIndex] = copy[userIndex].copyWith(
+          payload: <String, dynamic>{
+            ...?copy[userIndex].payload,
+            'nova_retryable': true,
+          },
+        );
+        _messages = copy;
+      }
       if (index >= 0) {
         final copy = [..._messages];
         copy[index] = copy[index].copyWith(
           text: result.text,
           streaming: false,
           thinkStatus: '',
+          payload: requestFailed
+              ? const <String, dynamic>{'nova_retryable': true}
+              : null,
         );
         _messages = copy;
       }
     });
+    _scrollBottom();
     try {
-      await _ensureConversationId();
+      await _ensureConversationId(requestToken: requestToken);
+      if (!mounted || requestToken != _loadToken || _conversationId <= 0) {
+        return;
+      }
       await _service.persistAssistantTurn(
         conversationId: _conversationId,
         messageId: userMsgId,
         userMessage: prompt,
         assistantMessage: result.text,
+        userPayload: <String, dynamic>{
+          'nova_personal_capability': capability == NovaPersonalCapability.tasks
+              ? 'tasks'
+              : 'lighthouse',
+          if (requestFailed) 'nova_retryable': true,
+        },
         existingMessages: _messages,
       );
     } catch (_) {}
@@ -2096,40 +2149,12 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         _cancelTaskPreview();
         return;
       }
-      setState(() {
-        _sending = true;
-        _busyHint = _taskPreview != null ? '正在处理' : '正在理解';
-      });
-      if (_taskPreview != null) {
-        final follow = await _replyFromPersonalPlan(
-          NovaPersonalCapability.tasks,
-          userText,
-          pendingPreview: _taskPreview,
-        );
-        if (!mounted) return;
-        setState(() {
-          _sending = false;
-          _busyHint = '';
-        });
-        HapticFeedback.lightImpact();
-        _inputController.clear();
-        final reply = follow.preview == null
-            ? NovaPersonalReply(
-                '${follow.text}\n待确认的任务草稿仍保留；要修改它，请直接说要改的字段，或说“取消”。',
-              )
-            : follow;
-        await _appendPersonalTurn(userText, reply);
-        return;
-      }
-      final planned = await _replyFromPersonalPlan(pinned!, userText);
-      if (!mounted) return;
-      setState(() {
-        _sending = false;
-        _busyHint = '';
-      });
-      HapticFeedback.lightImpact();
-      _inputController.clear();
-      await _appendPersonalTurn(userText, planned);
+      final pending = _taskPreview;
+      await _runPersonalCapability(
+        pending != null ? NovaPersonalCapability.tasks : pinned!,
+        userText,
+        pendingPreview: pending,
+      );
       return;
     }
 
@@ -2154,25 +2179,6 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   }
 
   /// 选中任务或灯塔后，把原话交给后端。前端不决定查哪张表。
-  Future<NovaPersonalReply> _replyFromPersonalPlan(
-    NovaPersonalCapability capability,
-    String userText, {
-    NovaTaskPreview? pendingPreview,
-  }) async {
-    try {
-      return await _service.askPersonalCapability(
-        capability: capability == NovaPersonalCapability.tasks
-            ? 'tasks'
-            : 'lighthouse',
-        text: userText,
-        history: novaPersonalContextTurns(_personalContextHistory()),
-        pendingPreview: pendingPreview,
-      );
-    } catch (error) {
-      return NovaPersonalReply(friendlyErrorText(error));
-    }
-  }
-
   List<({String role, String text})> _personalContextHistory() => _messages
       .where(
         (message) =>
@@ -2195,20 +2201,42 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   }
 
   Future<void> _resendUserMessage(NativeNovaMessage message) async {
-    if (_sending || !_novaReady || message.role != 'user') return;
-    final drafts = await _draftsFromMessage(message);
-    if (!_ensureVisionModelForDrafts(drafts)) return;
-    final text = message.text.trim();
-    final prompt = text.isNotEmpty
-        ? text
-        : (drafts.isNotEmpty ? novaDraftPrompt('', drafts) : '');
-    if (prompt.isEmpty && drafts.isEmpty) {
-      _toast('无法重新发送：缺少消息内容');
+    if (_sending || _resendPreparing || !_novaReady || message.role != 'user') {
       return;
     }
+    _resendPreparing = true;
+    final requestToken = _loadToken;
+    try {
+      final drafts = await _draftsFromMessage(message);
+      if (!mounted || requestToken != _loadToken) return;
+      if (!_ensureVisionModelForDrafts(drafts)) return;
+      final text = message.text.trim();
+      final prompt = text.isNotEmpty
+          ? text
+          : (drafts.isNotEmpty ? novaDraftPrompt('', drafts) : '');
+      if (prompt.isEmpty && drafts.isEmpty) {
+        _toast('无法重新发送：缺少消息内容');
+        return;
+      }
 
-    // 重新发送 = 在会话末尾追加一轮新提问，不改写原用户气泡/原回复。
-    await _sendMessage(text: prompt, drafts: drafts);
+      // 能力模式属于原消息，不能依赖当前输入框的模式选择来推断。
+      final capabilityName = message.payload?['nova_personal_capability']
+          ?.toString();
+      final capability = switch (capabilityName) {
+        'tasks' => NovaPersonalCapability.tasks,
+        'lighthouse' => NovaPersonalCapability.lighthouse,
+        _ => _personalMode,
+      };
+      if (capability != null && drafts.isEmpty) {
+        await _runPersonalCapability(capability, prompt);
+        return;
+      }
+
+      // 重新发送 = 在会话末尾追加一轮新提问，不改写原用户气泡/原回复。
+      await _sendMessage(text: prompt, drafts: drafts);
+    } finally {
+      _resendPreparing = false;
+    }
   }
 
   Future<List<NovaDraftAttachment>> _draftsFromMessage(
@@ -4562,7 +4590,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   bool _canResendUserMessage(NativeNovaMessage m) {
     if (m.role != 'user') return false;
-    if (_sending || _serverGenerating || _hasActiveAssistantStream()) {
+    if (_sending ||
+        _resendPreparing ||
+        _serverGenerating ||
+        _hasActiveAssistantStream()) {
       return false;
     }
     final idx = _messages.indexWhere((x) => x.id == m.id);
@@ -4577,7 +4608,11 @@ class _NativeNovaPageState extends State<NativeNovaPage>
             n.thinkText.trim().isNotEmpty ||
             n.streaming ||
             n.attachments.isNotEmpty;
-        if (hasBody) return false;
+        if (hasBody &&
+            n.payload?['nova_retryable'] != true &&
+            m.payload?['nova_retryable'] != true) {
+          return false;
+        }
       }
     }
     return true;
@@ -4615,7 +4650,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       await _avatarService.sendText(
         conversationId,
         value,
-        payload: const <String, dynamic>{'forwardedFromNova': true},
+        payload: const <String, dynamic>{
+          'forwardedFromNova': true,
+          'robotMarkdown': true,
+        },
       );
       if (mounted) showDunesToast(context, '已转发到会话');
     } catch (e) {

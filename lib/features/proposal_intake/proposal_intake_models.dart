@@ -4811,6 +4811,7 @@ class ProposalFinanceSettleTerms {
     this.settleModeRef,
     this.settleRatio = '',
     this.settleUnitPrice = '',
+    this.expectedRedemptionRate = '',
     this.priceMode = '',
     this.promoter = '',
     this.settleTiers = const [],
@@ -4837,6 +4838,9 @@ class ProposalFinanceSettleTerms {
   final CatalogRef? settleModeRef;
   final String settleRatio;
   final String settleUnitPrice;
+
+  /// 用券成本的预计核销率。空表示不折算；填了以后年测算再乘这一档。
+  final String expectedRedemptionRate;
 
   /// 空：跟以前一样直接填比例和单价。direct：固定比例。
   /// unit：按面值，只填结算单价。tier：下面展开阶梯规则。
@@ -5004,6 +5008,7 @@ class ProposalFinanceSettleTerms {
     settleModeRef?.identity ?? settleMode,
     displayRatio,
     displayUnitPrice,
+    expectedRedemptionRate,
     priceMode,
     promoter,
     settleTiers.map((item) => '${item.from}:${item.rate}').join(','),
@@ -5028,6 +5033,7 @@ class ProposalFinanceSettleTerms {
     Object? settleModeRef = _catalogUnset,
     String? settleRatio,
     String? settleUnitPrice,
+    String? expectedRedemptionRate,
     String? priceMode,
     String? promoter,
     List<ProposalSettleTier>? settleTiers,
@@ -5061,6 +5067,8 @@ class ProposalFinanceSettleTerms {
         ? this.settleRatio
         : proposalIntakeNormalizeSettleRatio(settleRatio),
     settleUnitPrice: settleUnitPrice ?? this.settleUnitPrice,
+    expectedRedemptionRate:
+        expectedRedemptionRate ?? this.expectedRedemptionRate,
     priceMode: priceMode ?? this.priceMode,
     promoter: promoter ?? this.promoter,
     settleTiers: settleTiers ?? this.settleTiers,
@@ -5102,6 +5110,8 @@ class ProposalFinanceSettleTerms {
     'settleModeRef': catalogRefToJson(settleModeRef),
     'settleRatio': proposalIntakeNormalizeSettleRatio(settleRatio),
     'settleUnitPrice': settleUnitPrice,
+    if (expectedRedemptionRate.trim().isNotEmpty)
+      'expectedRedemptionRate': expectedRedemptionRate.trim(),
     if (priceMode.isNotEmpty) 'priceMode': priceMode,
     if (promoter.isNotEmpty) 'promoter': promoter,
     if (settleTiers.isNotEmpty)
@@ -5134,6 +5144,7 @@ class ProposalFinanceSettleTerms {
       settleModeRef: catalogRefOrNull(raw['settleModeRef']),
       settleRatio: proposalIntakeNormalizeSettleRatio(read('settleRatio')),
       settleUnitPrice: read('settleUnitPrice'),
+      expectedRedemptionRate: read('expectedRedemptionRate'),
       promoter: read('promoter'),
       priceMode: switch (read('priceMode')) {
         kProposalSettlePriceModeDirect ||
@@ -5209,6 +5220,8 @@ const kProposalProductFinanceChildren = 'children';
 
 const _kProposalProductFinanceFields = <String>[
   'businessFormulaCodes',
+  'businessSettleRatio',
+  'businessFaceValue',
   'salesScale',
   'revenue',
   'revenueManual',
@@ -5267,6 +5280,8 @@ bool proposalIntakeIsProductFinanceField(String key) =>
 /// 用户手填的财务字段。估算和接口回包都不能用空值盖掉。
 const kProposalUserOwnedFinanceKeys = <String>{
   'businessFormulaCodes',
+  'businessSettleRatio',
+  'businessFaceValue',
   'turnoverTimes',
   'supplySettleMode',
   'supplySettleCycle',
@@ -6391,6 +6406,13 @@ List<String> _proposalIntakeSkuGroupIssues({
   final issues = <String>[];
   if (kProposalExistingBuiltEnabled && existingBuilt && rows.isEmpty) {
     issues.add(emptyExistingLabel);
+  }
+  for (var i = 0; i < rows.length; i++) {
+    final sku = rows[i];
+    if (!proposalIntakeSkuStarted(sku)) continue;
+    if (sku.supplierCodes.trim().isEmpty) {
+      issues.add('${rowLabel(i, sku)}请填写供应商编码');
+    }
   }
   for (var i = 0; i < rows.length; i++) {
     final sku = rows[i];

@@ -316,87 +316,93 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
               ),
             ),
           ),
-          child: LayoutBuilder(
+          child: _sideRailBody(palette: palette, settingsTap: settingsTap),
+        ),
+      ),
+    );
+  }
+
+  /// 选中底色仍按栏高定位；按钮和提示不放进 LayoutBuilder，避免布局过程中插入浮层。
+  Widget _sideRailBody({
+    required DunesPalette palette,
+    required VoidCallback? settingsTap,
+  }) {
+    final tabs = _tabs;
+    final screens = ['C1', if (!_hideWorkbenchTabs) ...['QJ', 'LH', 'QJA']];
+    final index = screens.indexOf(widget.activeScreen);
+    final showRailNova = !widget.chatOnlyMode;
+    final novaSlot = showRailNova ? 64.0 : 0.0;
+    final settingsSlot = settingsTap == null ? 0.0 : 64.0;
+    return Stack(
+      children: [
+        if (isDesktopCommOnly)
+          LayoutBuilder(
             builder: (context, constraints) {
-              final tabs = _tabs;
-              final screens = [
-                'C1',
-                if (!_hideWorkbenchTabs) ...['QJ', 'LH', 'QJA'],
-              ];
-              final index = screens.indexOf(widget.activeScreen);
-              final showRailNova = !widget.chatOnlyMode;
-              final novaSlot = showRailNova ? 64.0 : 0.0;
               final double? top = index >= 0
                   ? 12.0 + index * 64 + 5
                   : widget.activeScreen == 'B2'
-                  ? constraints.maxHeight -
-                        10 -
-                        64 -
-                        (settingsTap == null ? 0 : 64) +
-                        5
+                  ? constraints.maxHeight - 10 - 64 - settingsSlot + 5
                   : null;
+              if (top == null || !top.isFinite) return const SizedBox.shrink();
               return Stack(
                 children: [
-                  if (isDesktopCommOnly && top != null)
-                    AnimatedPositioned(
-                      duration: MediaQuery.disableAnimationsOf(context)
-                          ? Duration.zero
-                          : const Duration(milliseconds: 180),
-                      curve: Curves.easeOutCubic,
-                      left: 8,
-                      right: 8,
-                      top: top,
-                      height: 54,
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: palette.surface,
-                            border: Border.all(color: palette.borderSubtle),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x08000000),
-                                blurRadius: 5,
-                                offset: Offset(0, 2),
-                              ),
-                            ],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                  AnimatedPositioned(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    left: 8,
+                    right: 8,
+                    top: top,
+                    height: 54,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: palette.surface,
+                          border: Border.all(color: palette.borderSubtle),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x08000000),
+                              blurRadius: 5,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                     ),
-                  if (isDesktopCommOnly)
-                    Positioned(
-                      left: 16,
-                      right: 16,
-                      bottom: 10 + 64.0 + (settingsTap == null ? 0 : 64) + novaSlot,
-                      child: IgnorePointer(
-                        child: Divider(height: 1, color: palette.borderSubtle),
-                      ),
-                    ),
-                  Column(
-                    children: [
-                      const SizedBox(height: 12),
-                      ...tabs,
-                      const Spacer(),
-                      if (showRailNova) _novaRailButton(),
-                      _myTab,
-                      if (settingsTap != null) ...[
-                        _tab(
-                          icon: Icons.settings_outlined,
-                          screen: '__desktop_settings__',
-                          label: '设置',
-                          onTap: settingsTap,
-                        ),
-                      ],
-                      const SizedBox(height: 10),
-                    ],
                   ),
                 ],
               );
             },
           ),
+        if (isDesktopCommOnly)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 10 + 64.0 + settingsSlot + novaSlot,
+            child: IgnorePointer(
+              child: Divider(height: 1, color: palette.borderSubtle),
+            ),
+          ),
+        Column(
+          children: [
+            const SizedBox(height: 12),
+            ...tabs,
+            const Spacer(),
+            if (showRailNova) _novaRailButton(),
+            _myTab,
+            if (settingsTap != null)
+              _tab(
+                icon: Icons.settings_outlined,
+                screen: '__desktop_settings__',
+                label: '设置',
+                onTap: settingsTap,
+              ),
+            const SizedBox(height: 10),
+          ],
         ),
-      ),
+      ],
     );
   }
 

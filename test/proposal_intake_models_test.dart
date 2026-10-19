@@ -1905,6 +1905,7 @@ void main() {
         {
           'id': 'sku-1',
           'productName': '现金券100',
+          'supplierCodes': 'SUP-1',
           'settlements': [
             {'id': 'st-1'},
           ],
@@ -4078,7 +4079,7 @@ void main() {
           {'id': 'sku-1', 'productName': '中石油100元'},
         ],
       }),
-      isEmpty,
+      contains('渠道产品「中石油100元」请填写供应商编码'),
     );
     expect(
       proposalIntakeSkuSettleIssues({
@@ -4100,6 +4101,7 @@ void main() {
           {
             'id': 'sku-1',
             'productName': '中石油100元',
+            'supplierCodes': 'SUP-1',
             'settlements': [
               {
                 'id': 'st-1',

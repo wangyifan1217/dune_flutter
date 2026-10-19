@@ -94,12 +94,16 @@ void main() {
     expect(got['proposalName'], '已复核名称');
     final rows = got['skuDetails'] as List;
     final sku = rows.single as Map;
-    expect(sku['productName'], '江苏中石油400元电子券');
+    expect(sku['productName'], '被改掉的品名');
     final settlements = sku['settlements'] as List;
     expect(settlements[0]['settleRatio'], '90');
     expect(settlements[1]['settleRatio'], '88');
     expect(
       proposalIntakeFormKeyLocked('skuDetails', baseline, review),
+      isFalse,
+    );
+    expect(
+      proposalIntakeFormKeyLocked('benefitProduct', baseline, review),
       isFalse,
     );
   });
@@ -147,7 +151,7 @@ void main() {
       );
       final rows = got['childProducts'] as List;
       final child = rows.single as Map;
-      expect(child['productName'], '加油100');
+      expect(child['productName'], '被改掉的子产品');
       final settlements = child['settlements'] as List;
       expect(settlements[0]['settleRatio'], '90');
       expect(settlements[1]['settleRatio'], '88');

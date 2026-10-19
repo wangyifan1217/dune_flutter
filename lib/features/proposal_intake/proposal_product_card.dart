@@ -19,6 +19,7 @@ class ProposalProductCardLine {
   const ProposalProductCardLine({
     required this.name,
     this.ratio = '',
+    this.redemptionRate = '',
     this.amount = '',
     this.note = '',
     this.basis = '',
@@ -36,6 +37,9 @@ class ProposalProductCardLine {
   /// 从收入里扣的一条（用券成本）：金额前面加「−」，标签用成本色。
   final bool minus;
   final String ratio;
+
+  /// 用券成本的预计核销率。有值时显示在比例旁边。
+  final String redemptionRate;
   final String amount;
 
   /// 统计口径简称：核销 / 销售 / 下发。
@@ -468,9 +472,14 @@ class ProposalProductCard extends StatefulWidget {
                             ),
                           ),
                           if (relatedProducts[i].subtitle.isNotEmpty)
-                            Text(
-                              relatedProducts[i].subtitle,
-                              style: text(12, color: ProposalPalette.text2),
+                            Flexible(
+                              child: Text(
+                                relatedProducts[i].subtitle,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.right,
+                                style: text(12, color: ProposalPalette.text2),
+                              ),
                             ),
                           if (relatedProducts[i].action != null) ...[
                             const SizedBox(width: 6),
@@ -691,11 +700,17 @@ class ProposalSettleLineTile extends StatelessWidget {
     final ratioText = ratio.isEmpty || ratio.endsWith('%') || parsedRatio == null
         ? ratio
         : '${parsedRatio <= 1 && parsedRatio != 0 ? _trimNumber(parsedRatio * 100) : _trimNumber(parsedRatio)}%';
-    final value = ratioText.isNotEmpty
+    final rateRaw = line.redemptionRate.trim();
+    final parsedRate = double.tryParse(rateRaw);
+    final rateText = rateRaw.isEmpty || rateRaw.endsWith('%') || parsedRate == null
+        ? rateRaw
+        : '${parsedRate <= 1 && parsedRate != 0 ? _trimNumber(parsedRate * 100) : _trimNumber(parsedRate)}%';
+    final valueBase = ratioText.isNotEmpty
         ? '比例 $ratioText'
         : (line.perUnit.trim().isNotEmpty
               ? '单价 ${line.perUnit.trim().replaceAll(' 元', '').replaceAll('元', '')}'
               : '比例未填');
+    final value = rateText.isEmpty ? valueBase : '$valueBase · 预计核销率 $rateText';
     final minusSide = cost || line.minus;
     final tag = line.tag.isNotEmpty ? line.tag : (cost ? '项目成本' : '收入');
     final amount = line.amount.trim();

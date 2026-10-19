@@ -2086,7 +2086,7 @@ ProposalFinanceEvaluation _aggregateFinance({
   if (proposalForm != null) {
     final business = dict.category(kProposalCostCategoryBusiness);
     if (business != null) {
-      final ratio = _effectiveSettleRatio(proposalForm, scale, revenueAmount);
+      final measure = _businessMeasure(proposalForm, scale);
       final redacted = proposalForm['businessCostRedacted'] == true;
       final codes = [
         for (final item in _listOf(proposalForm['businessFormulaCodes']))
@@ -2100,7 +2100,7 @@ ProposalFinanceEvaluation _aggregateFinance({
               _proposalBusinessFormulaLine(
                 formula,
                 scale: scale,
-                ratio: ratio,
+                measure: measure,
                 redacted: redacted,
               ),
         ],
@@ -2170,10 +2170,47 @@ ProposalFinanceEvaluation _aggregateFinance({
   );
 }
 
+class _BusinessMeasure {
+  const _BusinessMeasure({
+    required this.base,
+    required this.ratio,
+    required this.ready,
+    required this.byFace,
+  });
+
+  final double base;
+  final double ratio;
+  final bool ready;
+  final bool byFace;
+}
+
+/// 比例、面值二选一。填比例时数量用年化规模；填面值时数量用这个面值，结算比例按 1。
+_BusinessMeasure _businessMeasure(Map<String, dynamic> form, double scale) {
+  final ratioText = _str(form['businessSettleRatio']);
+  if (ratioText.isNotEmpty) {
+    return _BusinessMeasure(
+      base: scale,
+      ratio: proposalParseSettleRatio(ratioText),
+      ready: true,
+      byFace: false,
+    );
+  }
+  final faceText = _str(form['businessFaceValue']);
+  if (faceText.isNotEmpty) {
+    return _BusinessMeasure(
+      base: proposalIntakeParseFaceNumber(faceText),
+      ratio: 1,
+      ready: true,
+      byFace: true,
+    );
+  }
+  return const _BusinessMeasure(base: 0, ratio: 0, ready: false, byFace: false);
+}
+
 ProposalFinanceLine _proposalBusinessFormulaLine(
   ProposalFinanceFormula formula, {
   required double scale,
-  required double ratio,
+  required _BusinessMeasure measure,
   required bool redacted,
 }) {
   if (redacted) {
@@ -2185,35 +2222,37 @@ ProposalFinanceLine _proposalBusinessFormulaLine(
       substitution: '业务成本仅财务部负责人一和最终审批人可查看',
     );
   }
-  if (_isUnitPriceFormula(formula)) {
-    final amount = proposalRoundWan(scale * ratio);
+  if (!measure.ready) {
     return ProposalFinanceLine(
       name: formula.name,
       formula: formula,
-      amount: amount,
-      substitution: scale > 0
-          ? '年化规模 ${_wan(scale)} × 单价 ÷ 面值（折合 ${_pct(ratio)}）= ${_wan(amount)} 万元'
-          : '',
-      missing: scale > 0 ? const [] : const ['销售规模'],
+      amount: 0,
+      pending: true,
+      missing: const ['比例或面值'],
+      substitution: '请填写比例或面值',
     );
   }
   final eval = _evaluateRevenueExpression(
     formula.expression.isEmpty ? formula.name : formula.expression,
-    base: scale,
-    ratio: ratio,
+    base: measure.base,
+    ratio: measure.ratio,
     costOf: (_) => null,
   );
-  final amount = eval.ok ? eval.amount : proposalRoundWan(scale * ratio);
+  final amount = eval.ok
+      ? eval.amount
+      : proposalRoundWan(measure.base * measure.ratio);
   return ProposalFinanceLine(
     name: formula.name,
     formula: formula,
     amount: amount,
+    pending: !eval.ok,
     substitution: eval.ok
         ? '${eval.display} = ${_wan(amount)} 万元'
-        : '公式无法自动代入，按 年化规模 × 结算比例：${_wan(scale)} × ${_pct(ratio)} = ${_wan(amount)} 万元',
+        : measure.byFace
+        ? '公式无法自动代入，按面值 ${_wan(measure.base)} 万元'
+        : '公式无法自动代入，按 年化规模 × 比例：${_wan(scale)} × ${_pct(measure.ratio)} = ${_wan(amount)} 万元',
     missing: [
-      if (scale <= 0) '销售规模',
-      if (ratio <= 0) '结算比例',
+      if (!measure.byFace && scale <= 0) '销售规模',
       ...eval.missing,
     ],
   );

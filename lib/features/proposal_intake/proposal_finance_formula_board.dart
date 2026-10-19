@@ -42,6 +42,9 @@ class ProposalFinanceBoardConfig {
     this.onCostItemsChanged,
     this.onCostFormula,
     this.onBusinessFormulas,
+    this.businessSettleRatio = '',
+    this.businessFaceValue = '',
+    this.onBusinessMeasure,
     this.operatingItems = const [],
     this.onOperatingItems,
     this.anchor,
@@ -122,6 +125,11 @@ class ProposalFinanceBoardConfig {
 
   /// 业务成本公式（整份提案多选，和收入、项目成本同一套计算公式）。
   final ValueChanged<List<String>>? onBusinessFormulas;
+
+  /// 业务成本测算用的比例、面值，二选一。
+  final String businessSettleRatio;
+  final String businessFaceValue;
+  final void Function(String ratio, String face)? onBusinessMeasure;
 
   /// 经营成本类型（整单一份，只选类型）。
   final List<String> operatingItems;
@@ -819,7 +827,7 @@ class ProposalFinanceCostPanel extends StatelessWidget {
       return ProposalFinanceRow(
         key: const ValueKey('finance-proposal-business'),
         title: category.name,
-        initiallyOpen: waiting,
+        initiallyOpen: bucket.names.isEmpty,
         forceOpen: config.focusKeys.contains('businessCost'),
         summary: bucket.names.isEmpty
             ? (editable ? '点开多选计算公式' : config.businessWaitingText)
@@ -846,6 +854,9 @@ class ProposalFinanceCostPanel extends StatelessWidget {
               showEstimates: config.showEstimates,
               waitingText: config.businessWaitingText,
               onChanged: editable ? config.onBusinessFormulas : null,
+              ratio: config.businessSettleRatio,
+              face: config.businessFaceValue,
+              onMeasure: editable ? config.onBusinessMeasure : null,
             ),
           ],
         ),
@@ -1029,6 +1040,9 @@ class _ProposalBusinessFormulas extends StatelessWidget {
     required this.showEstimates,
     required this.waitingText,
     this.onChanged,
+    this.ratio = '',
+    this.face = '',
+    this.onMeasure,
   });
 
   final List<ProposalFinanceFormula> formulas;
@@ -1038,6 +1052,9 @@ class _ProposalBusinessFormulas extends StatelessWidget {
   final bool showEstimates;
   final String waitingText;
   final ValueChanged<List<String>>? onChanged;
+  final String ratio;
+  final String face;
+  final void Function(String ratio, String face)? onMeasure;
 
   @override
   Widget build(BuildContext context) {
@@ -1053,7 +1070,7 @@ class _ProposalBusinessFormulas extends StatelessWidget {
           padding: const EdgeInsets.only(top: 4),
           child: Text(
             editable
-                ? '整份提案选一次，不跟产品走。可多选。'
+                ? '整份提案选一次，可多选。选完后填写比例或面值，二选一。'
                 : lines.isEmpty
                 ? waitingText
                 : '整份提案统一测算，不跟产品走。',
@@ -1106,6 +1123,16 @@ class _ProposalBusinessFormulas extends StatelessWidget {
               ],
             ),
           ),
+        if (lines.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _BusinessMeasureFields(
+              ratio: ratio,
+              face: face,
+              editable: onMeasure != null,
+              onChanged: onMeasure,
+            ),
+          ),
         if (onChanged != null && remaining.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -1132,6 +1159,98 @@ class _ProposalBusinessFormulas extends StatelessWidget {
                 onChanged!([...selectedCodes, code]);
               },
             ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BusinessMeasureFields extends StatefulWidget {
+  const _BusinessMeasureFields({
+    required this.ratio,
+    required this.face,
+    required this.editable,
+    this.onChanged,
+  });
+
+  final String ratio;
+  final String face;
+  final bool editable;
+  final void Function(String ratio, String face)? onChanged;
+
+  @override
+  State<_BusinessMeasureFields> createState() => _BusinessMeasureFieldsState();
+}
+
+class _BusinessMeasureFieldsState extends State<_BusinessMeasureFields> {
+  late final TextEditingController _ratio;
+  late final TextEditingController _face;
+
+  @override
+  void initState() {
+    super.initState();
+    _ratio = TextEditingController(text: widget.ratio);
+    _face = TextEditingController(text: widget.face);
+  }
+
+  @override
+  void didUpdateWidget(covariant _BusinessMeasureFields oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.ratio != _ratio.text) _ratio.text = widget.ratio;
+    if (widget.face != _face.text) _face.text = widget.face;
+  }
+
+  @override
+  void dispose() {
+    _ratio.dispose();
+    _face.dispose();
+    super.dispose();
+  }
+
+  Widget _input(
+    String label,
+    TextEditingController controller,
+    String hint,
+    void Function(String value) write,
+  ) {
+    return ProposalField(
+      label: label,
+      child: TextFormField(
+        controller: controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: const [ProposalSettleRatioFormatter()],
+        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+        onChanged: write,
+        decoration: proposalInputDecoration(context: context, hint: hint),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.editable) {
+      final ratio = widget.ratio.trim();
+      final face = widget.face.trim();
+      final text = ratio.isNotEmpty
+          ? '比例 $ratio'
+          : face.isNotEmpty
+          ? '面值 $face'
+          : '未填比例或面值';
+      return Text(text, style: _sans(context, size: 12, color: _K.grey));
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _input('比例', _ratio, '如 0.08，1 表示 100%', (value) {
+            widget.onChanged?.call(value.trim(), '');
+          }),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _input('面值', _face, '填数字，按这个面值测算', (value) {
+            widget.onChanged?.call('', value.trim());
+          }),
         ),
       ],
     );

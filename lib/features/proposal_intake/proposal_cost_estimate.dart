@@ -273,6 +273,23 @@ class ProposalSettleLineView {
   final bool unfilled;
 }
 
+ProposalSettleLineView _withExpectedRedemption(
+  ProposalFinanceSettleTerms terms,
+  ProposalSettleLineView view,
+) {
+  final raw = terms.expectedRedemptionRate.trim();
+  if (raw.isEmpty) return view;
+  final rate = proposalParseSettleRatio(raw);
+  return ProposalSettleLineView(
+    share: view.share * rate,
+    amount: proposalRoundWan(view.amount * rate),
+    substitution: '${view.substitution} × 预计核销率 $raw',
+    ratioText: view.ratioText,
+    perUnit: view.perUnit,
+    unfilled: view.unfilled,
+  );
+}
+
 ProposalSettleLineView proposalSettleLineView(
   ProposalFinanceSettleTerms terms, {
   required double scale,
@@ -284,15 +301,18 @@ ProposalSettleLineView proposalSettleLineView(
     final amount = proposalRoundWan(
       results.fold<double>(0, (sum, item) => sum + item.amount),
     );
-    return ProposalSettleLineView(
-      share: scale > 0 ? amount / scale : 0,
-      amount: amount,
-      substitution: plans.isEmpty
-          ? '按阶梯方案计算'
-          : results.map((item) => item.substitution).join('\n'),
-      ratioText: '按阶梯',
-      perUnit: '',
-      unfilled: plans.isEmpty,
+    return _withExpectedRedemption(
+      terms,
+      ProposalSettleLineView(
+        share: scale > 0 ? amount / scale : 0,
+        amount: amount,
+        substitution: plans.isEmpty
+            ? '按阶梯方案计算'
+            : results.map((item) => item.substitution).join('\n'),
+        ratioText: '按阶梯',
+        perUnit: '',
+        unfilled: plans.isEmpty,
+      ),
     );
   }
   final byUnit =
@@ -310,31 +330,37 @@ ProposalSettleLineView proposalSettleLineView(
         : face <= 0
         ? '按面值：面值未填，算不出年测算'
         : '按面值：${proposalFormatWan(scale)} ÷ ${proposalFormatWan(face)} × $priceText = ${proposalFormatWan(amount)} 万元/年';
-    return ProposalSettleLineView(
-      share: share,
-      amount: amount,
-      substitution: substitution,
-      ratioText: '',
-      perUnit: priceText.isEmpty
-          ? ''
-          : (priceText.endsWith('元') ? priceText : '$priceText 元'),
-      unfilled: priceText.isEmpty,
+    return _withExpectedRedemption(
+      terms,
+      ProposalSettleLineView(
+        share: share,
+        amount: amount,
+        substitution: substitution,
+        ratioText: '',
+        perUnit: priceText.isEmpty
+            ? ''
+            : (priceText.endsWith('元') ? priceText : '$priceText 元'),
+        unfilled: priceText.isEmpty,
+      ),
     );
   }
   final ratioText = terms.displayRatio.trim();
   final share = ratioText.isEmpty ? 0.0 : proposalParseSettleRatio(ratioText);
   final amount = proposalRoundWan(scale * share);
-  return ProposalSettleLineView(
-    share: share,
-    amount: amount,
-    substitution: ratioText.isEmpty
-        ? '固定比例：还没填结算比例'
-        : '${proposalFormatWan(scale)} × $share = ${proposalFormatWan(amount)} 万元/年',
-    ratioText: ratioText,
-    perUnit: face > 0 && share > 0
-        ? '${proposalFormatWan(face * share)} 元'
-        : '',
-    unfilled: ratioText.isEmpty,
+  return _withExpectedRedemption(
+    terms,
+    ProposalSettleLineView(
+      share: share,
+      amount: amount,
+      substitution: ratioText.isEmpty
+          ? '固定比例：还没填结算比例'
+          : '${proposalFormatWan(scale)} × $share = ${proposalFormatWan(amount)} 万元/年',
+      ratioText: ratioText,
+      perUnit: face > 0 && share > 0
+          ? '${proposalFormatWan(face * share)} 元'
+          : '',
+      unfilled: ratioText.isEmpty,
+    ),
   );
 }
 
@@ -1422,8 +1448,11 @@ double proposalCouponPurchaseAmount(Map<String, dynamic> form) {
   )) {
     final amount = proposalPayableCostLineAmount(form, hit.terms, hit.skuIds);
     if (amount <= 0) continue;
+    final raw = hit.terms.expectedRedemptionRate.trim();
+    final rated = raw.isEmpty ? amount : amount * proposalParseSettleRatio(raw);
+    if (rated <= 0) continue;
     any = true;
-    sum += amount;
+    sum += rated;
   }
   if (!any) return 0;
   return proposalRoundWan(sum);

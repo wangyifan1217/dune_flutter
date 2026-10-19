@@ -243,6 +243,24 @@ class ProposalIntakeService {
     };
   }
 
+  Future<ProposalIntakeRow> saveMeetingMinutes(
+    int id,
+    int version,
+    List<Map<String, dynamic>> minutes,
+  ) async {
+    final data = _unwrap(
+      await http.patch(
+        _uri('/proposal-intakes/$id/meeting-minutes'),
+        headers: _headers,
+        body: jsonEncode({
+          'version': version,
+          'meetingMinutes': minutes,
+        }),
+      ),
+    );
+    return ProposalIntakeRow.fromJson(_asMap(data));
+  }
+
   Future<ProposalIntakeRow> save(ProposalIntakeRow row) async {
     final data = _unwrap(
       await http.patch(

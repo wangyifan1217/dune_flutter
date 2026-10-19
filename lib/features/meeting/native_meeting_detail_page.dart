@@ -111,11 +111,13 @@ class _RenameTitleDialogState extends State<_RenameTitleDialog> {
 }
 
 /// PC 上以对话框打开；移动端全屏推页。
+/// [asDialog] 为 true 时手机也用弹框，例如销售提案里点开已绑定的会议纪要。
 Future<void> showNativeMeetingDetail({
   required BuildContext context,
   required AuthSession session,
   required int meetingId,
   bool summaryOnly = false,
+  bool asDialog = false,
 }) {
   Widget pageFor(VoidCallback onBack) => NativeMeetingDetailPage(
     session: session,
@@ -124,24 +126,25 @@ Future<void> showNativeMeetingDetail({
     onBack: onBack,
   );
 
-  if (isDesktopCommOnly) {
+  if (isDesktopCommOnly || asDialog) {
     return showDialog<void>(
       context: context,
       barrierDismissible: true,
       builder: (ctx) {
         final size = MediaQuery.sizeOf(ctx);
+        final narrow = size.width < 560;
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 40,
-            vertical: 28,
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: narrow ? 12 : 40,
+            vertical: narrow ? 16 : 28,
           ),
           backgroundColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: 720,
               maxHeight: size.height * 0.88,
-              minWidth: 480,
-              minHeight: 420,
+              minWidth: narrow ? 0 : 480,
+              minHeight: narrow ? 0 : 420,
             ),
             child: Material(
               color: DunesColors.resolve(

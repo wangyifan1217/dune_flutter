@@ -40,6 +40,7 @@ import 'proposal_intake_unreviewed.dart';
 import 'proposal_intake_select.dart';
 import 'proposal_intake_service.dart';
 import 'proposal_intake_ui.dart';
+import 'proposal_meeting_minutes.dart';
 import 'proposal_list_card.dart';
 import 'proposal_sla_widgets.dart';
 import 'settlement_catalog.dart';
@@ -5889,7 +5890,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool _commentsTab = false;
 
   Widget _simpleContentBox(Widget panes) {
-    if (!_protoForm) return panes;
+    if (!_protoForm) return _withMeetingMinutesFooter(panes);
     final open = _contentOpen;
     final frozen = _isContentFrozen;
     final showComments = widget.enableComments && _row.id > 0;
@@ -5964,6 +5965,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ] else
               // 收起时仍保留各板块（不显示），定位、四流跳转等逻辑不受影响。
               Offstage(child: TickerMode(enabled: false, child: scoped)),
+            if (!_isPurchase) ...[
+              const SizedBox(height: 10),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF3F0F8),
+                  role: DunesColorRole.border,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _meetingMinutesBind(),
+            ],
           ],
         ),
       ),
@@ -6797,7 +6812,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           TextSpan(text: ' 面值 ${children[i].faceValue.trim()}', style: muted),
         TextSpan(
           text:
-              ' ×${proposalIntakeChildProductQuantity(_form, children[i].id)}',
+              ' ${_relatedProductStockText(children[i])} · 数量 ${proposalIntakeChildProductQuantity(_form, children[i].id)}',
           style: TextStyle(
             fontFamily: kProposalProtoMono,
             fontFamilyFallback: kProposalProtoMonoFallback,
@@ -7185,7 +7200,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       );
     }
 
-    /// 关联产品一张小卡：头部「① 名称 …… 面值 50 · 数量 2」，下面是它自己的结算。
+    /// 关联产品一张小卡：头部「① 名称 …… 面值 50 · 库存 1000 · 数量 2」，下面是它自己的结算。
     Widget relatedCard(int index, ProposalSkuDetailRow child) {
       final name = child.displayName.trim().isEmpty
           ? '未命名关联产品'
@@ -7195,6 +7210,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       final hasSettle = proposalIntakeSkuSettlements(child).isNotEmpty;
       final meta = [
         if (face.isNotEmpty && face != name) '面值 $face',
+        _relatedProductStockText(child),
         '数量 $qty',
         hasSettle
             ? '${proposalIntakeSkuSettlements(child).length} 条结算'
@@ -7249,11 +7265,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    meta,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: c(hasSettle ? 0xFF8A8499 : 0xFF9A4A0C),
+                  Flexible(
+                    child: Text(
+                      meta,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: c(hasSettle ? 0xFF8A8499 : 0xFF9A4A0C),
+                      ),
                     ),
                   ),
                 ],
@@ -11373,6 +11394,71 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  /// 通知最终人之前都可以绑定、解除。完整提交（待最终确认 / 已完成）后只读。
+  bool get _canBindMeetingMinutes =>
+      _row.status != 'pending_president' && _row.status != 'done';
+
+  Widget _withMeetingMinutesFooter(Widget child) {
+    if (_isPurchase) return child;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        child,
+        const SizedBox(height: 12),
+        _meetingMinutesBind(),
+      ],
+    );
+  }
+
+  Widget _meetingMinutesBind() {
+    return ProposalMeetingMinutesBind(
+      session: widget.session,
+      minutes: proposalMeetingMinutesOf(_form),
+      canEdit: _canBindMeetingMinutes,
+      onChanged: (next) {
+        _set(
+          kProposalMeetingMinutesKey,
+          proposalMeetingMinutesToJson(next),
+        );
+        if (_row.id <= 0 ||
+            proposalIntakeCanPatchDraft(
+              _row,
+              userId: _me,
+              viewAll: widget.session.proposalIntakeViewAll,
+            )) {
+          return;
+        }
+        unawaited(_persistMeetingMinutes(next));
+      },
+    );
+  }
+
+  Future<void> _persistMeetingMinutes(List<ProposalMeetingMinute> minutes) async {
+    if (_row.id <= 0) return;
+    try {
+      final saved = await ProposalIntakeService(session: widget.session)
+          .saveMeetingMinutes(
+            _row.id,
+            _row.version,
+            proposalMeetingMinutesToJson(minutes),
+          );
+      if (!mounted) return;
+      setState(() {
+        _row = _row.copyWith(version: saved.version);
+        _serverForm[kProposalMeetingMinutesKey] =
+            proposalMeetingMinutesToJson(proposalMeetingMinutesOf(saved.form));
+      });
+      _emitChanged(_row);
+    } catch (error) {
+      if (!mounted) return;
+      showProposalCenterToast(
+        context,
+        friendlyErrorText(error, fallback: '会议纪要绑定失败'),
+        error: true,
+      );
+    }
+  }
+
   Widget _salesMarketSheet(bool wide) {
     return ProposalCard(
       padding: EdgeInsets.zero,
@@ -13847,7 +13933,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       revenueEditable: editable,
       categoryEditable: {
         kProposalCostCategoryProject: editable,
-        kProposalCostCategoryBusiness: editable && _canEditBusinessCost,
+        // 复核默认是只读简单行。业务成本仍要让财务部负责人一在这里多选公式。
+        kProposalCostCategoryBusiness: !readOnly && _canEditBusinessCost,
         kProposalCostCategoryOperating:
             editable &&
             _financeFormulaEditable(
@@ -13970,6 +14057,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         (form) =>
             Map<String, dynamic>.from(form)..['businessFormulaCodes'] = codes,
       ),
+      businessSettleRatio: '${_form['businessSettleRatio'] ?? ''}'.trim(),
+      businessFaceValue: '${_form['businessFaceValue'] ?? ''}'.trim(),
+      onBusinessMeasure: (ratio, face) => _writeFinanceFormula(
+        kProposalProductFinanceMain,
+        (form) => Map<String, dynamic>.from(form)
+          ..['businessSettleRatio'] = ratio
+          ..['businessFaceValue'] = face,
+      ),
       operatingItems: proposalCostSelectedNames(
         _form,
         kProposalOperatingCostItemsKey,
@@ -14024,8 +14119,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         return [
           if (face.isNotEmpty) '面值 $face',
           if (scale > 0) '规模 ${proposalFormatWan(scale)} 万',
-          if (proposalIntakeChildProducts(_form).any((c) => c.id == skuId))
+          if (proposalIntakeChildProducts(_form).any((c) => c.id == skuId)) ...[
+            _relatedProductStockText(sku),
             '数量 ${proposalIntakeChildProductQuantity(_form, skuId)}',
+          ],
         ].join('   ');
       },
       turnoverTimes: times > 0 ? times : null,
@@ -17340,7 +17437,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       if (row.resolvedCouponKind.isNotEmpty && row.resolvedCouponKind != name)
         row.resolvedCouponKind,
       if (row.faceValue.trim().isNotEmpty) '面值 ${row.faceValue.trim()}',
-      if (row.inventoryQty.trim().isNotEmpty) '库存 ${row.inventoryQty.trim()}',
+      _relatedProductStockText(row),
       if (row.syncZhongyouHaoke.trim().isNotEmpty) row.syncZhongyouHaoke.trim(),
       proposalIntakeSkuRollbackValue(row, form: _form),
       '数量 ${proposalIntakeChildProductQuantity(_form, row.id)}',
@@ -17478,6 +17575,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               tag: coupon ? '用券成本' : '',
               minus: coupon,
               ratio: line.ratioText,
+              redemptionRate: coupon ? t.expectedRedemptionRate : '',
               amount: line.unfilled ? '—' : '${proposalFormatWan(line.amount)} 万',
               basis: _settleBasisShort(formula),
               perUnit: line.perUnit,
@@ -17535,7 +17633,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         related: [
           if (showRelated)
             for (final child in children)
-              '${child.displayName.isEmpty ? '未命名关联产品' : child.displayName} × ${proposalIntakeChildProductQuantity(_form, child.id)}',
+              '${child.displayName.isEmpty ? '未命名关联产品' : child.displayName} ${_relatedProductStockText(child)} · 数量 ${proposalIntakeChildProductQuantity(_form, child.id)}',
         ],
         techAction: techAction,
         techExtra: techExtra,
@@ -17567,6 +17665,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     : child.displayName,
                 subtitle: [
                   if (childFace.isNotEmpty) '面值 $childFace',
+                  _relatedProductStockText(child),
                   '数量 ${proposalIntakeChildProductQuantity(_form, child.id)}',
                   '${proposalIntakeSkuSettlements(child).length} 条结算',
                 ].join(' · '),
@@ -17636,6 +17735,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ('面值', value('face')),
       ('业务平台', value('platform')),
       ('年化规模', scale > 0 ? '${proposalFormatWan(scale)} 万' : ''),
+      ('供应商编码', value('supplier').isEmpty ? '未填' : value('supplier')),
       for (final key in const [
         'coupon',
         'productCategory',
@@ -17645,7 +17745,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         'valid',
         'stock',
         'sync',
-        'supplier',
         'rollback',
         'existing',
         'remark',
@@ -17702,13 +17801,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  /// 关联产品库存。没填时明确写出，避免和包内数量混在一起。
+  String _relatedProductStockText(ProposalSkuDetailRow child) {
+    final stock = child.inventoryQty.trim();
+    return '库存 ${stock.isEmpty ? '未填' : stock}';
+  }
+
   /// 「含 中石油50元现金券 ×2、满200减20 ×1」：权益包里的关联产品，一句话。
   String _relatedProductsText(ProposalSkuDetailRow sku) {
     final children = proposalIntakeChildProducts(
       _form,
     ).where((child) => child.parentSkuId == sku.id).toList(growable: false);
     if (children.isEmpty) return '';
-    return '含 ${[for (final child in children) '${child.displayName.isEmpty ? '未命名关联产品' : child.displayName} ×${proposalIntakeChildProductQuantity(_form, child.id)}'].join('、')}';
+    return '含 ${[for (final child in children) '${child.displayName.isEmpty ? '未命名关联产品' : child.displayName} ${_relatedProductStockText(child)} · 数量 ${proposalIntakeChildProductQuantity(_form, child.id)}'].join('、')}';
   }
 
   /// 财务部产品结算的一行（填写 / 复核 / 查看同一版式）：
@@ -18847,6 +18952,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 fieldKey: 'suppliers',
                 hint: '多个用 | 分隔，越前面的排名越高，例如 A|B|C',
                 locked: locked,
+                required: true,
                 onChanged: (value) => patch(
                   row.id,
                   (current) => current.copyWith(supplierCodes: value),
@@ -21409,6 +21515,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     includeSchedule: false,
                     includeCostType: false,
                     choosePriceMode: true,
+                    includeRedemptionRate: true,
                     syncSource: syncSource,
                     productSource: productSource,
                     onChanged: (terms) => onPatch(coupon.id, terms),
@@ -21781,6 +21888,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool requireSchedule = false,
     bool includeCostType = false,
     bool choosePriceMode = false,
+    bool includeRedemptionRate = false,
   }) {
     if (syncSource.trim().isNotEmpty) {
       _prefetchSettle(syncSource, productSource);
@@ -22008,6 +22116,26 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       }
       return next;
     }, hint: hasRatio && !hasPrice ? '填写后将清空结算比例' : null);
+    final redemptionField = field(
+      '预计核销率',
+      terms.expectedRedemptionRate,
+      (value) => terms.copyWith(expectedRedemptionRate: value),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: const [ProposalSettleRatioFormatter()],
+      hint: '选填，如 0.8 表示按 80% 核销测算',
+    );
+    Widget besideRatio(Widget ratio) {
+      if (!includeRedemptionRate) return ratio;
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: ratio),
+          const SizedBox(width: 12),
+          Expanded(child: redemptionField),
+        ],
+      );
+    }
+
     final costTypeField = _settleStringSelectField(
       label: '成本类型',
       value: terms.billType,
@@ -22170,19 +22298,25 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ],
                   )
                 else
-                  field(
-                    '结算比例',
-                    terms.displayRatio,
-                    (value) => proposalIntakeApplySettleXor(
-                      terms,
-                      settleRatio: value,
-                    ).copyWith(priceMode: kProposalSettlePriceModeDirect),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+                  besideRatio(
+                    field(
+                      '结算比例',
+                      terms.displayRatio,
+                      (value) => proposalIntakeApplySettleXor(
+                        terms,
+                        settleRatio: value,
+                      ).copyWith(priceMode: kProposalSettlePriceModeDirect),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: const [ProposalSettleRatioFormatter()],
+                      hint: '填小数，如 0.08，不能填%',
                     ),
-                    inputFormatters: const [ProposalSettleRatioFormatter()],
-                    hint: '填小数，如 0.08，不能填%',
                   ),
+              ],
+              if (includeRedemptionRate && (terms.settleByTier || faceMode)) ...[
+                const SizedBox(height: 8),
+                redemptionField,
               ],
               if (isPromotionCost && !terms.settleByTier) ...[
                 const SizedBox(height: 8),
@@ -26429,6 +26563,19 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     if (_couponKind.trim().isEmpty) return;
     if (!widget.childProduct && _name.text.trim().isEmpty) return;
     if (widget.childProduct && _parentSkuId.trim().isEmpty) return;
+    if (_suppliers.text.trim().isEmpty) {
+      showProposalCenterToast(context, '请填写供应商编码', error: true);
+      return;
+    }
+    for (final item in _linked) {
+      if (item.row.supplierCodes.trim().isEmpty) {
+        final name = item.row.displayName.trim().isEmpty
+            ? '关联产品'
+            : item.row.displayName.trim();
+        showProposalCenterToast(context, '$name请填写供应商编码', error: true);
+        return;
+      }
+    }
     final quantity = int.tryParse(_quantity.text.trim()) ?? 1;
     final couponKind = proposalIntakeNormalizeCouponKind(_couponKind);
     final faceValue = couponKind == kProposalCouponKindDiscount
@@ -26807,6 +26954,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                   label: '供应商编码',
                   controller: _suppliers,
                   hint: '多个用 | 分隔，越前面的排名越高，例如 A|B|C',
+                  required: true,
                 ),
               ),
               const SizedBox(height: 10),

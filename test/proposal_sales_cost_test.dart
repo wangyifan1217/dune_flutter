@@ -118,6 +118,34 @@ void main() {
     expect(lines.map((line) => line.name), isNot(contains('渠道侧N')));
     expect(selected.total('business'), closeTo(lines[0].amount + lines[1].amount, 0.01));
   });
+  test('business cost uses the filled ratio or face, not the income ratio', () {
+    final form = {
+      'salesScale': '1000',
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'faceValue': '100',
+          'settlements': [
+            {'id': 'in', 'kind': 'income', 'settleRatio': '1', 'scale': '1000'},
+          ],
+        },
+      ],
+      'businessFormulaCodes': ['3'],
+    };
+    final bare = proposalEvaluateFinance(form);
+    expect(bare.total('business'), 0);
+    expect(bare.bucket('business')!.lines.single.missing, contains('比例或面值'));
+    final byRatio = proposalEvaluateFinance({
+      ...form,
+      'businessSettleRatio': '0.2',
+    });
+    expect(byRatio.total('business'), closeTo(200, 0.01));
+    final byFace = proposalEvaluateFinance({
+      ...form,
+      'businessFaceValue': '80',
+    });
+    expect(byFace.total('business'), closeTo(80, 0.01));
+  });
   test('proposal tax overrides old product selections and is assessed once', () {
     final form = sample();
     final first = Map<String, dynamic>.from((form['skuDetails'] as List).single);

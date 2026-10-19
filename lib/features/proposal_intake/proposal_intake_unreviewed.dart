@@ -2,6 +2,8 @@ import 'dart:convert';
 
 const _kBusinessCostFormKeys = {
   'businessFormulaCodes',
+  'businessSettleRatio',
+  'businessFaceValue',
   'businessCostItems',
   'businessCostItemCodes',
   'businessCostItemAmounts',
@@ -129,7 +131,7 @@ bool proposalIntakeFormKeyLocked(
   Map<String, dynamic> review,
 ) {
   key = key.trim();
-  if (key.isEmpty) return false;
+  if (key.isEmpty || key == 'meetingMinutes') return false;
   if (_kBusinessCostFormKeys.contains(key)) {
     return _reviewFlag(review, 'financeCompleted');
   }
@@ -182,6 +184,7 @@ bool proposalIntakeFormKeyLocked(
     // 市场已复核或个别结算已复核时不能整表锁死，需按行合并。
     return _reviewFlag(review, 'financeCompleted');
   }
+  if (key == 'benefitProduct') return _skuProductContentLocked(review);
   for (final prefix in const ['purchase', 'sales']) {
     for (final field in _kContractReviewFields) {
       if (key == '$prefix$field') {
@@ -339,7 +342,11 @@ List<Map<String, dynamic>> _mergeSharedSettlements({
   return out;
 }
 
-/// 市场已复核时保住产品字段；财务整板块未完成时按行改被驳回/未复核的结算。
+bool _skuProductContentLocked(Map<String, dynamic> review) =>
+    _reviewFlag(review, 'technologyCompleted') ||
+    _itemReviewed(review, 'technologyItems', 'skuProducts');
+
+/// 科技部产品未复核时采用新的产品内容；已复核的结算行仍保留原值。
 Object? proposalIntakeMergeSkuCatalog({
   required Object? existing,
   required Object? incoming,
@@ -348,13 +355,13 @@ Object? proposalIntakeMergeSkuCatalog({
 }) {
   final existingRows = _objectRowList(existing);
   final incomingRows = _objectRowList(incoming);
-  final marketLocked = _reviewFlag(review, 'marketCompleted');
+  final productLocked = _skuProductContentLocked(review);
 
   Map<String, dynamic> mergeRow(
     Map<String, dynamic> base,
     Map<String, dynamic> next,
   ) {
-    final out = Map<String, dynamic>.from(marketLocked ? base : next);
+    final out = Map<String, dynamic>.from(productLocked ? base : next);
     final skuId = _objectRowId(base).isNotEmpty
         ? _objectRowId(base)
         : _objectRowId(next);
@@ -368,7 +375,7 @@ Object? proposalIntakeMergeSkuCatalog({
     return out;
   }
 
-  if (marketLocked) {
+  if (productLocked) {
     final incomingById = {
       for (final row in incomingRows) _objectRowId(row): row,
     };

@@ -15,6 +15,7 @@ import 'tag3_daily_preview.dart';
 import 'tag3_daily_table.dart';
 import 'recon_daily_progress.dart';
 import 'recon_report_summary.dart';
+import 'reconciliation_share_card.dart';
 
 enum _ReconLevel { dates, table }
 
@@ -639,6 +640,18 @@ class _NativeDailyReconciliationPageState
                     ),
               icon: const Icon(Icons.chevron_right),
             ),
+            if (_tag3Daily != null)
+              ReconciliationShareAction(
+                session: widget.session,
+                snapshot: _tag3Daily!,
+                asOfDate: _asOfDate,
+              ),
+            if (_tag2 != null)
+              ReconciliationShareAction(
+                session: widget.session,
+                tag2Snapshot: _tag2!,
+                asOfDate: _asOfDate,
+              ),
           ],
         ),
       ],
@@ -860,14 +873,17 @@ class _NativeDailyReconciliationPageState
         if (MediaQuery.sizeOf(context).width >= 600)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
-            child: Text(
-              '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG3_DAILY')}',
-              style: DunesTypography.sans(
-                context: context,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: DunesColors.resolve(context, DunesColors.text),
-              ),
+            child: Row(
+              children: [
+                Expanded(child: Text(
+                  '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG3_DAILY')}',
+                  style: DunesTypography.sans(context: context, fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolve(context, DunesColors.text)),
+                )),
+                if (snap != null) ReconciliationShareAction(
+                  session: widget.session, snapshot: snap, asOfDate: _asOfDate),
+              ],
             ),
           ),
         if (snap != null)
@@ -980,14 +996,17 @@ class _NativeDailyReconciliationPageState
         if (MediaQuery.sizeOf(context).width >= 600)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
-            child: Text(
-              '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG2_ENTITY')}',
-              style: DunesTypography.sans(
-                context: context,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: DunesColors.resolve(context, DunesColors.text),
-              ),
+            child: Row(
+              children: [
+                Expanded(child: Text(
+                  '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG2_ENTITY')}',
+                  style: DunesTypography.sans(context: context, fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolve(context, DunesColors.text)),
+                )),
+                if (snap != null) ReconciliationShareAction(
+                  session: widget.session, tag2Snapshot: snap, asOfDate: _asOfDate),
+              ],
             ),
           ),
         if (snap != null)

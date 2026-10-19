@@ -78,6 +78,7 @@ import 'chat_file_preview_page.dart';
 import 'chat_file_type_icon.dart';
 import 'chat_file_upload_coordinator.dart';
 import 'chat_lighthouse_card.dart';
+import '../reconciliation/reconciliation_share_card.dart';
 import '../lighthouse/lighthouse_shared_card_data.dart';
 import 'chat_markdown_preview.dart';
 import 'chat_pdf_preview.dart';
@@ -8922,6 +8923,18 @@ class _NativeChatViewState extends State<NativeChatView>
     final kind = m.kind.toUpperCase();
     if (_isSystemKind(kind)) {
       return ChatSystemPill(text: m.bodyText.isEmpty ? '[系统消息]' : m.bodyText);
+    }
+    final reconciliation = m.payload?['reconciliationCard'];
+    if (reconciliation is Map && reconciliation['version'] == 1) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: FractionallySizedBox(
+          widthFactor: 0.8,
+          child: ChatReconciliationShareCard(
+            data: Map<String, dynamic>.from(reconciliation),
+          ),
+        ),
+      );
     }
     final forward = _forwardBundleFromPayload(m.payload);
     if (forward != null) {

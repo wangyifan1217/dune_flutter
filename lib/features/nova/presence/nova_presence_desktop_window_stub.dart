@@ -39,6 +39,8 @@ class NovaPresenceDesktopBridge {
   static Future<void> hide() async {}
 }
 
+bool isNovaPresenceDesktopWindowArgs(List<String> args) => false;
+
 Future<bool> isNovaPresenceDesktopEngine() async => false;
 
 Future<void> runNovaPresenceDesktopWindow() async {}

@@ -3793,6 +3793,13 @@ String proposalIntakeStatusChipLabel(ProposalIntakeRow row) {
   return proposalIntakeStatusLabel(row.status);
 }
 
+/// 已完成提案的通过时间。取最终确认时刻，之后的保存不再改它。
+String proposalIntakeCompletedAtText(ProposalIntakeRow row) {
+  final decided = '${row.review['presidentDecidedAt'] ?? ''}'.trim();
+  if (decided.isEmpty) return '';
+  return formatProposalIntakeDateTime(decided);
+}
+
 /// 把后端 UTC 时间转成本地时间，去掉 `Z` / 毫秒，列表展示用。
 String formatProposalIntakeDateTime(String raw) {
   final text = raw.trim();

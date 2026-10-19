@@ -132,17 +132,31 @@ Widget _initialHome() {
   return const AppBootGate();
 }
 
+Future<void> _initializeDesktopRuntime() async {
+  try {
+    await initWindowsDesktopTray();
+  } catch (error, stackTrace) {
+    // 托盘属于可选桌面能力；失败不能阻止主窗口进入应用。
+    debugPrint('Desktop tray initialization failed: $error\n$stackTrace');
+  }
+  try {
+    // 全局截图热键依赖 hotkey_manager 初始化。
+    await hotKeyManager.unregisterAll();
+  } catch (error, stackTrace) {
+    debugPrint('Desktop hotkey cleanup failed: $error\n$stackTrace');
+  }
+}
+
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   enableAndroidPhotoPicker();
 
   // 桌面图片预览：desktop_multi_window 0.3 以独立 Engine 再进 main。
-  if (isDesktopImagePreviewWindowArgs(args) ||
-      await isDesktopImagePreviewEngine()) {
+  if (isDesktopImagePreviewWindowArgs(args)) {
     await runDesktopImagePreviewWindow(args);
     return;
   }
-  if (await isNovaPresenceDesktopEngine()) {
+  if (isNovaPresenceDesktopWindowArgs(args)) {
     await runNovaPresenceDesktopWindow();
     return;
   }
@@ -153,13 +167,6 @@ Future<void> main(List<String> args) async {
       (defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.android)) {
     await AppEggThemeController.instance.load();
-  }
-  if (isDesktopCommOnly) {
-    await initWindowsDesktopTray();
-    // 全局截图热键依赖 hotkey_manager 初始化。
-    try {
-      await hotKeyManager.unregisterAll();
-    } catch (_) {}
   }
   if (!kIsWeb) {
     final night =
@@ -187,4 +194,10 @@ Future<void> main(List<String> args) async {
     unawaited(XflowService.hydrateTemplateCache());
   }
   runApp(const DunesApp());
+  if (isDesktopCommOnly) {
+    // 托盘/窗口管理是可选能力，等首帧后再初始化，避免插件异常让启动白屏。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_initializeDesktopRuntime());
+    });
+  }
 }

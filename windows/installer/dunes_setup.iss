@@ -1,7 +1,7 @@
 ; 与 dist/windows/dunes-setup.iss 保持同一 AppId / 权限，否则升级找不到旧目录。
 #define MyAppName "沙丘"
-#define MyAppVersion "1.8.7"
-#define MyAppBuild "187"
+#define MyAppVersion "1.8.8"
+#define MyAppBuild "188"
 #define MyAppPublisher "沙丘"
 #define MyAppExeName "dunes_app.exe"
 
@@ -33,6 +33,8 @@ MinVersion=10.0
 ; 更新时静默强制关闭占用文件的 dunes_app，不再弹出 Files in Use 确认页。
 CloseApplications=force
 RestartApplications=no
+; 与 windows/runner/main.cpp 的单实例互斥量同名。进程没退出前不要开始覆盖文件。
+AppMutex=Local\DunesDesktop.B5A14F5D-32E5-484D-BCB1-0156D5F7F5E5
 
 [Messages]
 WindowsVersionNotSupported=沙丘 PC 端需要 64 位 Windows 10 或更高版本。%n%n当前系统过旧（如 Windows 7），无法运行。请升级系统或换一台 Win10/Win11 电脑安装。

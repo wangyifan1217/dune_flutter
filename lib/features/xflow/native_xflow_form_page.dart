@@ -86,6 +86,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   /// 保存进行中又有新编辑时置位，finally 里补一次 schedule，避免 silent drop。
   bool _needsAutosave = false;
   Map<int, String> _stageUserNames = const {};
+  Map<int, Map<String, dynamic>> _applicantProfiles = const {};
 
   /// 仅渲染 preview-approval 返回的 stages；失败不回退模板全量列表。
   List<Map<String, dynamic>>? _previewStages;
@@ -411,7 +412,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     });
     final ccFuture = _service.fetchCcRulesList(templateKey: widget.templateKey);
     try {
-      final template = applyElectronicReimbursementTemplate(
+      var template = applyElectronicReimbursementTemplate(
         await _service.fetchTemplateDetail(templateKey: widget.templateKey),
       );
       // 先挂上模板，便于 _localDraftBusinessType 取到真实业务类型。
@@ -450,7 +451,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         );
       } catch (_) {}
       // 初次渲染前先重算计算字段（如印花税），避免编辑/草稿预填时显示为空。
-      await _applySubmitterDefaults(template);
+      template = await _applySubmitterDefaults(template);
       if (_isEditing) {
         stripCopiedApprovalTitle(_values, [
           widget.session.displayName ?? '',
@@ -498,24 +499,109 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     XflowLinkage.recompute(template.fields, template.layout, _values);
   }
 
-  Future<void> _applySubmitterDefaults(XflowTemplateDetail template) async {
+  Future<XflowTemplateDetail> _applySubmitterDefaults(
+    XflowTemplateDetail template,
+  ) async {
+    final actorId = widget.session.userId;
+    final actorName = (widget.session.displayName ?? '').trim().isNotEmpty
+        ? widget.session.displayName!.trim()
+        : widget.session.phone;
+    var submitterId = actorId;
+    var submitterName = actorName;
+    var fields = template.fields;
+    _applicantProfiles = const {};
+    if (widget.session.userType.toUpperCase() == 'ORG' &&
+        widget.templateKey == kElectronicReimbursementTemplateKey &&
+        actorName == '朱虹旭') {
+      try {
+        final matches = await _service.searchOrgUsers('郑咏熹');
+        final target = matches.where((row) {
+          final name = (row['displayName'] ?? row['name'] ?? '').toString().trim();
+          return name == '郑咏熹';
+        }).toList(growable: false);
+        if (target.length == 1) {
+          final delegatedId = _int(
+            target.single['userId'] ?? target.single['id'],
+          );
+          if (delegatedId > 0) {
+            final ownProfile = await _service.fetchOrgUserProfile(
+              userId: actorId,
+              displayName: actorName,
+            );
+            final delegatedProfile = await _service.fetchOrgUserProfile(
+              userId: delegatedId,
+              displayName: '郑咏熹',
+            );
+            _applicantProfiles = {
+              actorId: _submitterProfile(ownProfile),
+              delegatedId: delegatedProfile ?? <String, dynamic>{},
+            };
+            fields = [
+              for (final field in template.fields)
+                if (field.key == 'applicant')
+                  XflowField.fromJson({
+                    ...field.raw,
+                    'type': 'select',
+                    'readonly': false,
+                    'readOnly': false,
+                    'defaultFrom': null,
+                    'dataSource': null,
+                    'placeholder': '请选择申请人',
+                    'options': [
+                      {'label': actorName, 'value': '$actorId'},
+                      {'label': '郑咏熹', 'value': '$delegatedId'},
+                    ],
+                  })
+                else
+                  field,
+            ];
+            final existing = _values['applicant'];
+            final existingId = existing is Map
+                ? _int(existing['userId'] ?? existing['id'])
+                : _int(existing);
+            submitterId = existingId == delegatedId ? delegatedId : actorId;
+            submitterName = submitterId == delegatedId ? '郑咏熹' : actorName;
+            _values['applicant'] = '$submitterId';
+            _applyApplicantProfile(_applicantProfiles[submitterId]);
+          }
+        }
+      } catch (_) {}
+    }
     Map<String, dynamic>? profile;
     try {
       profile = await _service.fetchOrgUserProfile(
-        userId: widget.session.userId,
-        displayName: widget.session.displayName ?? '',
+        userId: submitterId,
+        displayName: submitterName,
       );
     } catch (_) {}
     applySubmitterDefaults(
-      fields: template.fields,
+      fields: fields,
       values: _values,
-      userId: widget.session.userId,
-      displayName: (widget.session.displayName ?? '').trim().isNotEmpty
-          ? widget.session.displayName!.trim()
-          : widget.session.phone,
-      profile: _submitterProfile(profile),
+      userId: submitterId,
+      displayName: submitterName,
+      profile: submitterId == actorId
+          ? _submitterProfile(profile)
+          : profile,
     );
-    XflowLinkage.recompute(template.fields, template.layout, _values);
+    XflowLinkage.recompute(fields, template.layout, _values);
+    return XflowTemplateDetail(
+      templateKey: template.templateKey,
+      title: template.title,
+      fields: fields,
+      stages: template.stages,
+      layout: template.layout,
+      raw: template.raw,
+    );
+  }
+
+  void _applyApplicantProfile(Map<String, dynamic>? profile) {
+    if (profile == null) return;
+    final department = orgDepartmentText(profile);
+    final position = orgPositionText(profile);
+    final rank = orgRankText(profile);
+    if (department.isNotEmpty) _values['applicantDepartment'] = department;
+    if (position.isNotEmpty) _values['applicantPosition'] = position;
+    if (rank.isNotEmpty) _values['applicantRank'] = rank;
   }
 
   Map<String, dynamic> _submitterProfile(Map<String, dynamic>? profile) {
@@ -1158,6 +1244,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                               onChanged: (key, value) {
                                 setState(() {
                                   _values[key] = value;
+                                  if (key == 'applicant' && value != null) {
+                                    _applyApplicantProfile(
+                                      _applicantProfiles[_int(value)],
+                                    );
+                                  }
                                   _recompute();
                                 });
                                 _scheduleAutosave();

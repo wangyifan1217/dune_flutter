@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>标签二 · 老板 IM 名片静态稿</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #202632;
+      --muted: #788292;
+      --line: #e8ebf0;
+      --surface: #fff;
+      --canvas: #f3f5f8;
+      --blue: #3b6fe0;
+      --blue-soft: #eef3ff;
+      --green: #21845b;
+      --green-soft: #eaf6f0;
+      --amber: #a56a12;
+      --amber-soft: #fff5e5;
+      font-family: Inter, "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 36px 18px;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 440px at 82% -8%, rgba(77, 117, 214, .09), transparent 65%),
+        var(--canvas);
+    }
+    .page { width: min(100%, 660px); margin: 0 auto; }
+    .eyebrow {
+      margin: 0 0 12px 2px;
+      color: #7d8796;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .12em;
+    }
+    .chat-row { display: flex; align-items: flex-start; gap: 12px; }
+    .avatar {
+      width: 38px; height: 38px; flex: 0 0 38px;
+      display: grid; place-items: center;
+      border-radius: 13px;
+      color: #fff;
+      font-size: 14px; font-weight: 700;
+      background: linear-gradient(145deg, #5878c8, #475a9d);
+      box-shadow: 0 5px 14px rgba(54, 77, 132, .18);
+    }
+    .message { width: min(100%, 560px); }
+    .sender { margin: 0 0 7px 3px; color: #7f8998; font-size: 12px; }
+    .bubble {
+      padding: 8px;
+      border: 1px solid rgba(224, 228, 235, .95);
+      border-radius: 18px;
+      background: rgba(255,255,255,.88);
+      box-shadow: 0 12px 34px rgba(27, 42, 71, .08);
+    }
+    .card {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .card-head { padding: 17px 18px 13px; }
+    .head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .title-wrap { min-width: 0; }
+    .title { margin: 0; font-size: 17px; line-height: 1.35; font-weight: 750; letter-spacing: -.02em; }
+    .date { margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .sample {
+      flex: 0 0 auto; padding: 5px 8px; border-radius: 999px;
+      color: #697487; background: #f3f5f8; font-size: 10px; font-weight: 650;
+    }
+    .health {
+      display: flex; align-items: center; gap: 7px;
+      margin-top: 14px; padding: 9px 11px;
+      border-radius: 10px; color: var(--amber); background: var(--amber-soft);
+      font-size: 12px; font-weight: 650;
+    }
+    .dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: currentColor; }
+    .metrics {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      padding: 0 18px 15px; gap: 8px;
+    }
+    .metric { padding: 11px 12px; border: 1px solid #edf0f4; border-radius: 11px; background: #fbfcfd; }
+    .metric-label { color: var(--muted); font-size: 11px; }
+    .metric-value { margin-top: 5px; font-size: 20px; line-height: 1; font-weight: 760; letter-spacing: -.035em; }
+    .metric-value small { margin-left: 3px; color: #8b94a2; font-size: 11px; font-weight: 500; letter-spacing: 0; }
+    .section { border-top: 1px solid #eff1f4; padding: 14px 18px 5px; }
+    .section-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 7px; }
+    .section-title { font-size: 12px; font-weight: 720; }
+    .section-hint { color: #8a93a1; font-size: 10px; }
+    .operator {
+      display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center;
+      gap: 9px; min-height: 48px; border-bottom: 1px solid #f0f2f5;
+    }
+    .operator:last-child { border-bottom: 0; }
+    .op-main { min-width: 0; display: flex; align-items: center; gap: 9px; }
+    .op-avatar {
+      display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px;
+      border-radius: 9px; background: #f0f3f8; color: #5f6c81; font-size: 11px; font-weight: 700;
+    }
+    .op-name { overflow: hidden; color: #303947; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .op-scope { overflow: hidden; margin-top: 3px; color: #929aa6; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .op-status { color: var(--green); font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .op-status.pending { color: var(--amber); }
+    .op-status b { font-size: 13px; }
+    .footnote { padding: 10px 18px 13px; color: #8a93a1; font-size: 10px; line-height: 1.5; }
+    .actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: 1px solid #eff1f4; }
+    .updated { color: #929aa6; font-size: 10px; }
+    .button {
+      display: inline-flex; align-items: center; gap: 6px; padding: 8px 11px;
+      border-radius: 9px; color: #315fc2; background: var(--blue-soft);
+      font-size: 11px; font-weight: 700; white-space: nowrap;
+    }
+    .button span { font-size: 15px; line-height: 10px; }
+    .read { margin: 7px 5px 0; color: #9aa2ae; font-size: 10px; text-align: right; }
+    @media (max-width: 480px) {
+      body { padding: 22px 10px; }
+      .chat-row { gap: 8px; }
+      .avatar { width: 32px; height: 32px; flex-basis: 32px; border-radius: 11px; }
+      .bubble { padding: 6px; }
+      .card-head { padding: 14px 13px 11px; }
+      .metrics { padding: 0 13px 12px; gap: 6px; }
+      .metric { padding: 10px 8px; }
+      .metric-value { font-size: 18px; }
+      .section { padding: 12px 13px 4px; }
+      .footnote { padding: 8px 13px 11px; }
+      .actions { padding: 10px 13px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <p class="eyebrow">IM MESSAGE PREVIEW · TAG 2</p>
+    <div class="chat-row">
+      <div class="avatar" aria-hidden="true">对</div>
+      <section class="message" aria-label="标签二运营简报消息预览">
+        <div class="sender">对账助手</div>
+        <div class="bubble">
+          <article class="card">
+            <header class="card-head">
+              <div class="head-row">
+                <div class="title-wrap">
+                  <h1 class="title">标签二 · 运营核对简报</h1>
+                  <div class="date">10月18日 · 全部运营范围</div>
+                </div>
+                <span class="sample">静态示例</span>
+              </div>
+              <div class="health"><span class="dot"></span>整体进度正常，仍有 3 项待运营处理</div>
+            </header>
+
+            <section class="metrics" aria-label="运营汇总">
+              <div class="metric"><div class="metric-label">运营负责人</div><div class="metric-value">4<small>人</small></div></div>
+              <div class="metric"><div class="metric-label">已完成核对</div><div class="metric-value">21<small>/ 24 项</small></div></div>
+              <div class="metric"><div class="metric-label">待运营处理</div><div class="metric-value" style="color:var(--amber)">3<small>项</small></div></div>
+            </section>
+
+            <section class="section" aria-label="各运营负责人状态">
+              <div class="section-head">
+                <span class="section-title">运营负责人进度</span>
+                <span class="section-hint">覆盖 4 / 4 人</span>
+              </div>
+              <div class="operator">
+                <div class="op-main"><span class="op-avatar">陈</span><div><div class="op-name">陈嘉 · 华东</div><div class="op-scope">负责 7 项核对</div></div></div>
+                <div class="op-status pending"><b>6 / 7</b> 完成 · 1 待处理</div>
+              </div>
+              <div class="operator">
+                <div class="op-main"><span class="op-avatar">李</span><div><div class="op-name">李恺 · 华南</div><div class="op-scope">负责 5 项核对</div></div></div>
+                <div class="op-status"><b>5 / 5</b> 完成</div>
+              </div>
+              <div class="operator">
+                <div class="op-main"><span class="op-avatar">周</span><div><div class="op-name">周然 · 华北</div><div class="op-scope">负责 6 项核对</div></div></div>
+                <div class="op-status pending"><b>5 / 6</b> 完成 · 1 待处理</div>
+              </div>
+              <div class="operator">
+                <div class="op-main"><span class="op-avatar">赵</span><div><div class="op-name">赵宁 · 西南</div><div class="op-scope">负责 6 项核对</div></div></div>
+                <div class="op-status pending"><b>5 / 6</b> 完成 · 1 待处理</div>
+              </div>
+            </section>
+
+            <div class="footnote">按运营负责人汇总标签二核对状态；老板视图只读。未生成或未回传的数据会标记为待更新，不按 0 处理。</div>
+            <footer class="actions">
+              <span class="updated">数据截至 10月19日 09:30</span>
+              <span class="button">查看标签二明细 <span>›</span></span>
+            </footer>
+          </article>
+        </div>
+        <div class="read">已送达</div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

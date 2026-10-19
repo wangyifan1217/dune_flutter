@@ -64,6 +64,17 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // 安装器 / 关机走 Restart Manager，会发 ENDSESSION 而不是用户点关闭。
+  // 关窗进托盘不能吃掉这次请求，否则旧进程继续锁住 dll，覆盖安装后启动白屏崩溃。
+  // TerminateProcess 跳过插件卸载回调，避免停在“半退出”里占着互斥量。
+  if (message == WM_QUERYENDSESSION) {
+    return TRUE;
+  }
+  if (message == WM_ENDSESSION && wparam) {
+    TerminateProcess(GetCurrentProcess(), 0);
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

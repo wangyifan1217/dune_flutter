@@ -2403,6 +2403,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           step.label,
     ];
     final done = row.status == 'done';
+    final completedAt = done ? proposalIntakeCompletedAtText(row) : '';
     final who = proposalReviewNowText(progress);
     final waited = proposalReviewWaited(progress);
     return ProposalListCardData(
@@ -2458,7 +2459,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       ],
       steps: steps,
       nowText: done
-          ? '已完成 · ${formatProposalIntakeDateTime(row.updatedAt)}'
+          ? (completedAt.isEmpty ? '已完成' : '已完成 · $completedAt')
           : [
               if (nowDepts.isNotEmpty) nowDepts.join('、'),
               if (who.isNotEmpty) who,

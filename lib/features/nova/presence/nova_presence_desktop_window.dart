@@ -15,6 +15,18 @@ const _channel = WindowMethodChannel(
   mode: ChannelMode.bidirectional,
 );
 
+/// Identify the detached companion window from desktop_multi_window's entry args.
+/// This avoids a platform-channel round trip before the main app's first frame.
+bool isNovaPresenceDesktopWindowArgs(List<String> args) {
+  if (args.length < 3 || args.first != 'multi_window') return false;
+  try {
+    final map = jsonDecode(args[2]);
+    return map is Map && map['type'] == _kType;
+  } catch (_) {
+    return false;
+  }
+}
+
 class NovaPresenceDesktopHooks {
   const NovaPresenceDesktopHooks({
     required this.onSend,

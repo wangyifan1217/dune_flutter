@@ -179,23 +179,40 @@ class WindowsDesktopTray with WindowListener, TrayListener {
 
     // 窗口就绪后再拦截关闭，避免插件尚未挂上 HWND 时点 X 直接退出。
     // 标题只设一次：macOS 26 把 title 再写一遍会叠出副标题，标题栏出现两个「沙丘」。
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setPreventClose(true);
-      try {
-        // WindowOptions 的 minimumSize 在部分系统上不可靠，显式再设一次。
-        await windowManager.setMinimumSize(kDesktopWindowMinSize);
-        if (await windowManager.isFullScreen()) {
-          await windowManager.setFullScreen(false);
-        }
-        if (await windowManager.isMaximized()) {
-          await windowManager.unmaximize();
-        }
-        await windowManager.setSize(kDesktopWindowDefaultSize);
-        await windowManager.center();
-      } catch (_) {}
-      await windowManager.show();
-      await windowManager.focus();
-    });
+    // Windows 不传 size / center：原生窗口已按默认尺寸显示，再改尺寸会拆掉渲染表面。
+    // 仍要走 waitUntilReadyToShow，否则任务栏对象是空的，点关闭进托盘或最小化会把进程打崩。
+    if (Platform.isWindows) {
+      await windowManager.waitUntilReadyToShow(
+        const WindowOptions(
+          minimumSize: kDesktopWindowMinSize,
+          skipTaskbar: false,
+          title: '沙丘',
+        ),
+        () async {
+          await windowManager.setPreventClose(true);
+          await windowManager.show();
+          await windowManager.focus();
+        },
+      );
+    } else {
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.setPreventClose(true);
+        try {
+          // WindowOptions 的 minimumSize 在部分系统上不可靠，显式再设一次。
+          await windowManager.setMinimumSize(kDesktopWindowMinSize);
+          if (await windowManager.isFullScreen()) {
+            await windowManager.setFullScreen(false);
+          }
+          if (await windowManager.isMaximized()) {
+            await windowManager.unmaximize();
+          }
+          await windowManager.setSize(kDesktopWindowDefaultSize);
+          await windowManager.center();
+        } catch (_) {}
+        await windowManager.show();
+        await windowManager.focus();
+      });
+    }
 
     await windowManager.setPreventClose(true);
 

@@ -189,30 +189,12 @@ class _ReconciliationShareActionState extends State<ReconciliationShareAction> {
         ),
       );
       if (ok != true || !mounted) return;
-      final service = ConversationService(session: widget.session);
-      try {
-        final ids = await showConversationMultiPickerSheet(
-          context: context,
-          service: service,
-          title: '选择群聊并转发',
-          maxCount: 10,
-        );
-        if (ids == null || ids.isEmpty) return;
-        for (final id in ids) {
-          await service.sendText(
-            id,
-            '日清月结情况汇报｜${widget.asOfDate}',
-            payload: payload,
-          );
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('卡片已转发')));
-        }
-      } finally {
-        service.close();
-      }
+      await sendReconciliationCard(
+        context,
+        session: widget.session,
+        payload: payload,
+        summary: '日清月结情况汇报｜${widget.asOfDate}',
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -236,6 +218,126 @@ class _ReconciliationShareActionState extends State<ReconciliationShareAction> {
           )
         : const Icon(Icons.ios_share_rounded),
   );
+}
+
+Future<void> sendReconciliationCard(
+  BuildContext context, {
+  required AuthSession session,
+  required Map<String, dynamic> payload,
+  required String summary,
+}) async {
+  final service = ConversationService(session: session);
+  try {
+    final ids = await showConversationMultiPickerSheet(
+      context: context,
+      service: service,
+      title: '选择群聊并转发',
+      maxCount: 10,
+    );
+    if (ids == null || ids.isEmpty || !context.mounted) return;
+    for (final id in ids) {
+      await service.sendText(id, summary, payload: payload);
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('卡片已转发')));
+    }
+  } finally {
+    service.close();
+  }
+}
+
+/// 聊天里的日清卡片：贴着转发人，整体是原来的 85%，下面有转发图标。
+class ChatReconciliationMessage extends StatefulWidget {
+  const ChatReconciliationMessage({
+    super.key,
+    required this.mine,
+    required this.session,
+    required this.data,
+  });
+
+  final bool mine;
+  final AuthSession session;
+  final Map<String, dynamic> data;
+
+  @override
+  State<ChatReconciliationMessage> createState() =>
+      _ChatReconciliationMessageState();
+}
+
+class _ChatReconciliationMessageState extends State<ChatReconciliationMessage> {
+  bool _busy = false;
+
+  Future<void> _forward() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final date = '${widget.data['date'] ?? ''}'.trim();
+      await sendReconciliationCard(
+        context,
+        session: widget.session,
+        payload: {'reconciliationCard': widget.data},
+        summary: date.isEmpty ? '日清月结情况汇报' : '日清月结情况汇报｜$date',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('转发失败：${friendlyErrorText(e)}')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final side = widget.mine ? Alignment.centerRight : Alignment.centerLeft;
+    return Align(
+      alignment: side,
+      child: FractionallySizedBox(
+        widthFactor: 0.68,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: widget.mine
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return FittedBox(
+                  fit: BoxFit.fitWidth,
+                  alignment: Alignment.topLeft,
+                  child: SizedBox(
+                    width: constraints.maxWidth / 0.85,
+                    child: ChatReconciliationShareCard(data: widget.data),
+                  ),
+                );
+              },
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                tooltip: '转发',
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                onPressed: _busy ? null : _forward,
+                icon: _busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.shortcut_rounded, size: 18),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class ReconciliationSharePreview extends StatelessWidget {

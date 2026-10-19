@@ -8926,14 +8926,10 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     final reconciliation = m.payload?['reconciliationCard'];
     if (reconciliation is Map && reconciliation['version'] == 1) {
-      return Align(
-        alignment: Alignment.centerRight,
-        child: FractionallySizedBox(
-          widthFactor: 0.8,
-          child: ChatReconciliationShareCard(
-            data: Map<String, dynamic>.from(reconciliation),
-          ),
-        ),
+      return ChatReconciliationMessage(
+        mine: mine,
+        session: widget.session,
+        data: Map<String, dynamic>.from(reconciliation),
       );
     }
     final forward = _forwardBundleFromPayload(m.payload);

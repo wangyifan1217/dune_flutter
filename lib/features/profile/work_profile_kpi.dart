@@ -37,6 +37,26 @@ KpiGrade kpiGradeOf(double score) {
   return const KpiGrade(code: '辅', label: '辅（专项改进）', coefficient: 0.6);
 }
 
+double kpiWeightedContribution(double taskTotal, double weightPct) {
+  return taskTotal * weightPct / 100;
+}
+
+double kpiPreviewTaskTotal({
+  required double taskTotal,
+  required double scoreAdj,
+  double? autoTaskTotal,
+  required double adj,
+}) {
+  final base = autoTaskTotal ?? (taskTotal - scoreAdj);
+  return base + adj;
+}
+
+double? kpiParseAdjustNum(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty || text == '+' || text == '-') return null;
+  return double.tryParse(text);
+}
+
 String formatKpiCoefficient(double v) {
   if (v == v.roundToDouble()) return v.toInt().toString();
   return v.toStringAsFixed(1);

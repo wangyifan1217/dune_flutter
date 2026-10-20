@@ -286,6 +286,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       );
       if (!mounted) return;
       setState(() => _detailScore = score);
+      unawaited(_load());
       showDunesToast(context, '已保存权重调整');
     } catch (e) {
       if (mounted) {

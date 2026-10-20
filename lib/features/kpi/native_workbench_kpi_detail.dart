@@ -11,6 +11,53 @@ import 'workbench_kpi_service.dart';
 
 const _accent = DunesColors.brandPurple;
 
+double kpiPreviewCategoryScore({
+  required WorkProfileKpiCategory category,
+  required Map<int, TextEditingController> weightCtrls,
+  required Map<int, TextEditingController> adjCtrls,
+}) {
+  var score = 0.0;
+  for (final task in category.tasks) {
+    final weight =
+        kpiParseAdjustNum(weightCtrls[task.taskId]?.text ?? '') ??
+        task.weightPct;
+    final adj =
+        kpiParseAdjustNum(adjCtrls[task.taskId]?.text ?? '') ?? task.scoreAdj;
+    score += kpiWeightedContribution(
+      kpiPreviewTaskTotal(
+        taskTotal: task.taskTotal,
+        scoreAdj: task.scoreAdj,
+        autoTaskTotal: task.autoTaskTotal,
+        adj: adj,
+      ),
+      weight,
+    );
+  }
+  return score;
+}
+
+double kpiPreviewMainScore({
+  required WorkProfileKpiPerson person,
+  required Map<int, TextEditingController> weightCtrls,
+  required Map<int, TextEditingController> adjCtrls,
+}) {
+  var telecom = 0.0;
+  var energy = 0.0;
+  for (final cat in person.categories) {
+    final score = kpiPreviewCategoryScore(
+      category: cat,
+      weightCtrls: weightCtrls,
+      adjCtrls: adjCtrls,
+    );
+    if (cat.category == 'energy') {
+      energy = score;
+    } else {
+      telecom = score;
+    }
+  }
+  return telecom * person.telecomWeight + energy * person.energyWeight;
+}
+
 class WorkbenchKpiDetailPane extends StatefulWidget {
   const WorkbenchKpiDetailPane({
     super.key,
@@ -53,6 +100,7 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
   final Map<int, TextEditingController> _remarkCtrls = {};
   final Map<int, TextEditingController> _pointCtrls = {};
   String? _rubricError;
+  bool _syncingCtrls = false;
 
   WorkProfileKpiPerson? get _person =>
       widget.score.people.isEmpty ? null : widget.score.people.first;
@@ -74,12 +122,15 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
   @override
   void dispose() {
     for (final c in _weightCtrls.values) {
+      c.removeListener(_onPreviewTick);
       c.dispose();
     }
     for (final c in _adjCtrls.values) {
+      c.removeListener(_onPreviewTick);
       c.dispose();
     }
     for (final c in _remarkCtrls.values) {
+      c.removeListener(_onPreviewTick);
       c.dispose();
     }
     for (final c in _pointCtrls.values) {
@@ -88,21 +139,31 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
     super.dispose();
   }
 
+  void _onPreviewTick() {
+    if (_syncingCtrls || !mounted) return;
+    setState(() {});
+  }
+
+  TextEditingController _ctrl(
+    Map<int, TextEditingController> map,
+    int id,
+  ) {
+    return map.putIfAbsent(id, () {
+      final ctrl = TextEditingController();
+      ctrl.addListener(_onPreviewTick);
+      return ctrl;
+    });
+  }
+
   void _syncControllers() {
+    _syncingCtrls = true;
     final seen = <int>{};
     for (final task in _allTasks()) {
       seen.add(task.taskId);
-      _weightCtrls
-          .putIfAbsent(task.taskId, () => TextEditingController())
-          .text = task.weightPct.toStringAsFixed(
-        2,
-      );
-      _adjCtrls.putIfAbsent(task.taskId, () => TextEditingController()).text =
+      _ctrl(_weightCtrls, task.taskId).text = task.weightPct.toStringAsFixed(2);
+      _ctrl(_adjCtrls, task.taskId).text =
           task.scoreAdj == 0 ? '0' : formatKpiAdj(task.scoreAdj);
-      _remarkCtrls
-              .putIfAbsent(task.taskId, () => TextEditingController())
-              .text =
-          task.remark;
+      _ctrl(_remarkCtrls, task.taskId).text = task.remark;
       final scoreMetric = task.metrics.isEmpty ? null : task.metrics.first;
       final pts =
           scoreMetric?.points ?? (task.isRubric ? null : task.taskTotal);
@@ -116,16 +177,19 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
     }
     _weightCtrls.removeWhere((id, ctrl) {
       if (seen.contains(id)) return false;
+      ctrl.removeListener(_onPreviewTick);
       ctrl.dispose();
       return true;
     });
     _adjCtrls.removeWhere((id, ctrl) {
       if (seen.contains(id)) return false;
+      ctrl.removeListener(_onPreviewTick);
       ctrl.dispose();
       return true;
     });
     _remarkCtrls.removeWhere((id, ctrl) {
       if (seen.contains(id)) return false;
+      ctrl.removeListener(_onPreviewTick);
       ctrl.dispose();
       return true;
     });
@@ -134,6 +198,7 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
       ctrl.dispose();
       return true;
     });
+    _syncingCtrls = false;
   }
 
   List<WorkProfileKpiTask> _allTasks() {
@@ -142,18 +207,7 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
     return [for (final cat in person.categories) ...cat.tasks];
   }
 
-  Map<int, int> _categorySize() {
-    final sizes = <int, int>{};
-    for (final cat in _person?.categories ?? const <WorkProfileKpiCategory>[]) {
-      for (final task in cat.tasks) {
-        sizes[task.taskId] = cat.tasks.length;
-      }
-    }
-    return sizes;
-  }
-
   List<WorkbenchKpiOverrideItem> _collectItems() {
-    final sizes = _categorySize();
     final items = <WorkbenchKpiOverrideItem>[];
     for (final task in _allTasks()) {
       final rawWeight = _weightCtrls[task.taskId]?.text.trim() ?? '';
@@ -164,9 +218,7 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
           ? 0.0
           : double.tryParse(rawAdj);
       final auto = task.autoWeightPct ?? task.weightPct;
-      final canAdjustWeight = (sizes[task.taskId] ?? 0) >= 2;
-      final weightChanged =
-          canAdjustWeight && parsed != null && (parsed - auto).abs() > 0.05;
+      final weightChanged = parsed != null && (parsed - auto).abs() > 0.05;
       final adjChanged =
           parsedAdj != null && (parsedAdj - task.scoreAdj).abs() > 0.05;
       final keepAdj = parsedAdj != null && parsedAdj.abs() > 0.05;
@@ -303,7 +355,16 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
             ),
           ],
           const SizedBox(height: 8),
-          _ScoreHeader(person: person),
+          _ScoreHeader(
+            person: person,
+            previewMainScore: person.isRubric
+                ? null
+                : kpiPreviewMainScore(
+                    person: person,
+                    weightCtrls: _weightCtrls,
+                    adjCtrls: _adjCtrls,
+                  ),
+          ),
           if (widget.canEdit && widget.onSkip != null) ...[
             const SizedBox(height: 10),
             _KpiSkipBar(
@@ -431,7 +492,11 @@ class _CategoryEditor extends StatelessWidget {
                 ),
               ),
               Text(
-                category.score.toStringAsFixed(2),
+                kpiPreviewCategoryScore(
+                  category: category,
+                  weightCtrls: weightCtrls,
+                  adjCtrls: adjCtrls,
+                ).toStringAsFixed(2),
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -443,19 +508,21 @@ class _CategoryEditor extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             category.tasks.length >= 2
-                ? '板块分 = 各任务分 × 当月营收占比，合计 ${category.score.toStringAsFixed(2)}'
-                : '本板块只有一条任务，板块分就是它的任务分',
+                ? '板块分 = 各任务分 × 当月营收占比，合计 ${kpiPreviewCategoryScore(category: category, weightCtrls: weightCtrls, adjCtrls: adjCtrls).toStringAsFixed(2)}'
+                : '本板块只有一条任务，权重可改；剩下的比例不计入板块分',
             style: TextStyle(
               fontSize: 12,
               color: DunesColors.resolve(context, DunesColors.text3),
             ),
           ),
           const SizedBox(height: 10),
-          if (canEdit && category.tasks.length >= 2)
+          if (canEdit)
             Padding(
               padding: EdgeInsets.only(bottom: 8),
               child: Text(
-                '未改的任务会按自动权重分摊剩余比例；全部手改时合计须为 100%。',
+                category.tasks.length >= 2
+                    ? '未改的任务会按自动权重分摊剩余比例；全部手改时合计须为 100%。'
+                    : '改权重后按「任务分 × 权重」计入板块分。',
                 style: TextStyle(
                   fontSize: 12,
                   color: DunesColors.resolve(context, DunesColors.text3),
@@ -466,7 +533,6 @@ class _CategoryEditor extends StatelessWidget {
             _TaskEditor(
               task: task,
               canEdit: canEdit,
-              lockWeight: category.tasks.length < 2,
               weightCtrl: weightCtrls[task.taskId]!,
               adjCtrl: adjCtrls[task.taskId]!,
               remarkCtrl: remarkCtrls[task.taskId]!,
@@ -484,7 +550,6 @@ class _TaskEditor extends StatefulWidget {
   const _TaskEditor({
     required this.task,
     required this.canEdit,
-    required this.lockWeight,
     required this.weightCtrl,
     required this.adjCtrl,
     required this.remarkCtrl,
@@ -492,7 +557,6 @@ class _TaskEditor extends StatefulWidget {
 
   final WorkProfileKpiTask task;
   final bool canEdit;
-  final bool lockWeight;
   final TextEditingController weightCtrl;
   final TextEditingController adjCtrl;
   final TextEditingController remarkCtrl;
@@ -508,9 +572,22 @@ class _TaskEditorState extends State<_TaskEditor> {
   Widget build(BuildContext context) {
     final task = widget.task;
     final auto = task.autoWeightPct ?? task.weightPct;
-    final touched = task.weightOverridden || task.scoreAdjusted;
-    final share = (task.weightPct / 100).clamp(0.0, 1.0);
-    final contribution = task.taskTotal * task.weightPct / 100;
+    final weight =
+        kpiParseAdjustNum(widget.weightCtrl.text) ?? task.weightPct;
+    final adj = kpiParseAdjustNum(widget.adjCtrl.text) ?? task.scoreAdj;
+    final previewTotal = kpiPreviewTaskTotal(
+      taskTotal: task.taskTotal,
+      scoreAdj: task.scoreAdj,
+      autoTaskTotal: task.autoTaskTotal,
+      adj: adj,
+    );
+    final touched =
+        task.weightOverridden ||
+        task.scoreAdjusted ||
+        (weight - auto).abs() > 0.05 ||
+        (adj - task.scoreAdj).abs() > 0.05;
+    final share = (weight / 100).clamp(0.0, 1.0);
+    final contribution = kpiWeightedContribution(previewTotal, weight);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -601,7 +678,7 @@ class _TaskEditorState extends State<_TaskEditor> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    task.taskTotal.toStringAsFixed(1),
+                    previewTotal.toStringAsFixed(1),
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
@@ -643,7 +720,7 @@ class _TaskEditorState extends State<_TaskEditor> {
               ),
               const SizedBox(width: 10),
               Text(
-                '权重 ${task.weightPct.toStringAsFixed(2)}% · 贡献 ${contribution.toStringAsFixed(1)} 分',
+                '权重 ${weight.toStringAsFixed(2)}% · 贡献 ${contribution.toStringAsFixed(1)} 分',
                 style: TextStyle(
                   fontSize: 12,
                   color: DunesColors.resolve(context, DunesColors.text2),
@@ -737,7 +814,6 @@ class _TaskEditorState extends State<_TaskEditor> {
               _KpiAdjustPanel(
                 taskId: task.taskId,
                 autoWeight: auto,
-                lockWeight: widget.lockWeight,
                 weightCtrl: widget.weightCtrl,
                 adjCtrl: widget.adjCtrl,
                 remarkCtrl: widget.remarkCtrl,
@@ -798,7 +874,6 @@ class _KpiAdjustPanel extends StatelessWidget {
   const _KpiAdjustPanel({
     required this.taskId,
     required this.autoWeight,
-    required this.lockWeight,
     required this.weightCtrl,
     required this.adjCtrl,
     required this.remarkCtrl,
@@ -806,7 +881,6 @@ class _KpiAdjustPanel extends StatelessWidget {
 
   final int taskId;
   final double autoWeight;
-  final bool lockWeight;
   final TextEditingController weightCtrl;
   final TextEditingController adjCtrl;
   final TextEditingController remarkCtrl;
@@ -840,13 +914,10 @@ class _KpiAdjustPanel extends StatelessWidget {
               Expanded(
                 child: _KpiAdjustField(
                   label: '权重',
-                  hint: lockWeight
-                      ? '该板块仅一项，无法改比例'
-                      : '自动 ${autoWeight.toStringAsFixed(2)}%',
+                  hint: '自动 ${autoWeight.toStringAsFixed(2)}%',
                   suffix: '%',
                   controller: weightCtrl,
                   fieldKey: Key('kpi-weight-$taskId'),
-                  enabled: !lockWeight,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
@@ -1035,13 +1106,17 @@ class _KpiSkipBar extends StatelessWidget {
 /// 顶部：主营分、等级系数，以及运营商/能源两个板块各占多少权重。
 /// 没有某个板块的任务时不再显示「运营商 0.0」这种看着像出错的数。
 class _ScoreHeader extends StatelessWidget {
-  const _ScoreHeader({required this.person});
+  const _ScoreHeader({required this.person, this.previewMainScore});
 
   final WorkProfileKpiPerson person;
+  final double? previewMainScore;
 
   @override
   Widget build(BuildContext context) {
-    final grade = person.resolvedGrade;
+    final shown = previewMainScore ?? person.mainScore;
+    final grade = previewMainScore == null
+        ? person.resolvedGrade
+        : kpiGradeOf(previewMainScore!);
     final hasTelecom = person.categories.any((c) => c.category == 'telecom');
     final hasEnergy = person.categories.any((c) => c.category == 'energy');
     return Container(
@@ -1072,7 +1147,7 @@ class _ScoreHeader extends StatelessWidget {
                     ? person.skipLabel
                     : person.isPending
                     ? '未评分'
-                    : person.mainScore.toStringAsFixed(2),
+                    : shown.toStringAsFixed(2),
                 style: TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.w800,

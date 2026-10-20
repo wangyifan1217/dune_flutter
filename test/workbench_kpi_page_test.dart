@@ -248,6 +248,114 @@ class _FakeKpiService extends WorkbenchKpiService {
   }
 }
 
+class _SingleTaskKpiService extends _FakeKpiService {
+  @override
+  Future<WorkProfileKpiScore> saveOverrides({
+    required String month,
+    required int userId,
+    required List<WorkbenchKpiOverrideItem> items,
+  }) async {
+    saveCount++;
+    lastItems = items;
+    final weight = items.isEmpty ? 100.0 : (items.single.weightPct ?? 100.0);
+    final adj = items.isEmpty ? 0.0 : (items.single.scoreAdj ?? 0.0);
+    final taskTotal = 25.1 + adj;
+    final score = kpiWeightedContribution(taskTotal, weight);
+    return WorkProfileKpiScore(
+      month: month,
+      prevMonth: '2026-07',
+      people: [
+        WorkProfileKpiPerson(
+          userId: 9,
+          userName: '李四',
+          departmentName: '运营商板块',
+          mainScore: score,
+          bonus: adj,
+          telecomWeight: 1,
+          energyWeight: 0,
+          telecomScore: score,
+          energyScore: 0,
+          canWrite: true,
+          categories: [
+            WorkProfileKpiCategory(
+              category: 'operator',
+              categoryLabel: '运营商',
+              categoryWeight: 1,
+              score: score,
+              tasks: [
+                WorkProfileKpiTask(
+                  taskId: 1,
+                  taskName: '会员套餐订阅，加油会员',
+                  province: '广东省',
+                  productName: '会员套餐订阅，加油会员',
+                  bucketLabel: '运营商板块',
+                  weightPct: weight,
+                  autoWeightPct: 100,
+                  weightOverridden: (weight - 100).abs() > 0.05,
+                  taskTotal: taskTotal,
+                  autoTaskTotal: 25.1,
+                  scoreAdj: adj,
+                  scoreAdjusted: adj.abs() > 0.05,
+                  curRevenue: 43000,
+                  prevRevenue: 111000,
+                  curProfit: 22900,
+                  prevProfit: 57300,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  @override
+  WorkProfileKpiScore _personScore(String month) {
+    return WorkProfileKpiScore(
+      month: month,
+      prevMonth: '2026-07',
+      people: const [
+        WorkProfileKpiPerson(
+          userId: 9,
+          userName: '李四',
+          departmentName: '运营商板块',
+          mainScore: 25.1,
+          bonus: 0,
+          telecomWeight: 1,
+          energyWeight: 0,
+          telecomScore: 25.1,
+          energyScore: 0,
+          canWrite: true,
+          categories: [
+            WorkProfileKpiCategory(
+              category: 'operator',
+              categoryLabel: '运营商',
+              categoryWeight: 1,
+              score: 25.1,
+              tasks: [
+                WorkProfileKpiTask(
+                  taskId: 1,
+                  taskName: '会员套餐订阅，加油会员',
+                  province: '广东省',
+                  productName: '会员套餐订阅，加油会员',
+                  bucketLabel: '运营商板块',
+                  weightPct: 100,
+                  autoWeightPct: 100,
+                  taskTotal: 25.1,
+                  curRevenue: 43000,
+                  prevRevenue: 111000,
+                  curProfit: 22900,
+                  prevProfit: 57300,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _LockedMarketKpiService extends _FakeKpiService {
   @override
   WorkProfileKpiScore _personScore(String month) {
@@ -277,6 +385,10 @@ class _LockedMarketKpiService extends _FakeKpiService {
 }
 
 void main() {
+  test('weight preview scales board score', () {
+    expect(kpiWeightedContribution(25.1, 60), closeTo(15.06, 0.0001));
+  });
+
   testWidgets(
     'opens person detail from the roster table without listing rules below',
     (tester) async {
@@ -448,6 +560,52 @@ void main() {
     expect(service.lastItems!.single.weightPct, 80);
     expect(service.lastItems!.single.scoreAdj, 5);
     expect(service.lastItems!.single.remark, '下调中石油占比');
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('single-task board can change weight', (tester) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _SingleTaskKpiService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeWorkbenchKpiPage(
+            session: _session,
+            service: service,
+            now: DateTime(2026, 9, 3),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('kpi-person-9')));
+    await tester.pumpAndSettle();
+    expect(find.text('该板块仅一项，无法改比例'), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('kpi-edit-1')));
+    await tester.tap(find.byKey(const Key('kpi-edit-1')));
+    await tester.pumpAndSettle();
+    final field = tester.widget<TextField>(find.byKey(const Key('kpi-weight-1')));
+    expect(field.enabled, isTrue);
+
+    await tester.enterText(find.byKey(const Key('kpi-weight-1')), '60');
+    await tester.pump();
+    expect(find.text('15.06'), findsWidgets);
+    expect(find.textContaining('贡献 15.1 分'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('kpi-detail-save')));
+    await tester.tap(find.byKey(const Key('kpi-detail-save')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('100.00% → 60.00%'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('kpi-confirm-ok')));
+    await tester.pumpAndSettle();
+    expect(service.saveCount, 1);
+    expect(service.lastItems!.single.taskId, 1);
+    expect(service.lastItems!.single.weightPct, 60);
+    expect(find.text('15.06'), findsWidgets);
+    expect(find.textContaining('贡献 15.1 分'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
   });
 

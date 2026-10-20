@@ -40,6 +40,7 @@ class KpiScoreSummaryRow {
     this.coefficient = 0,
     this.pending = false,
     this.skipped = false,
+    this.unscored = false,
     this.skipLabel = '',
     this.projectScore,
   });
@@ -55,6 +56,7 @@ class KpiScoreSummaryRow {
   final double coefficient;
   final bool pending;
   final bool skipped;
+  final bool unscored;
   final String skipLabel;
   final double? projectScore;
 
@@ -72,6 +74,7 @@ class KpiScoreSummaryRow {
     'coefficient': coefficient,
     if (pending) 'pending': true,
     if (skipped) 'skipped': true,
+    if (unscored) 'unscored': true,
     if (skipLabel.isNotEmpty) 'skipLabel': skipLabel,
     if (projectScore != null) 'projectScore': projectScore,
   };
@@ -92,6 +95,7 @@ class KpiScoreSummaryRow {
       coefficient: (json['coefficient'] as num?)?.toDouble() ?? 0,
       pending: json['pending'] == true,
       skipped: json['skipped'] == true,
+      unscored: json['unscored'] == true,
       skipLabel: '${json['skipLabel'] ?? ''}'.trim(),
       projectScore: _positiveSummaryNum(json['projectScore']),
     );
@@ -117,7 +121,7 @@ class KpiScoreSummaryData {
 
   List<KpiScoreSummaryRow> get scoredRows => [
     for (final r in rows)
-      if (!r.pending && !r.skipped) r,
+      if (!r.pending && !r.skipped && !r.unscored) r,
   ];
 
   int get pendingCount => rows.where((r) => r.pending && !r.skipped).length;
@@ -274,16 +278,20 @@ class KpiScoreSummaryData {
       final name = (m?.group(2) ?? rawName).trim();
       if (name.isEmpty) continue;
       final gradeLabel = at('绩效等级');
+      final scoreText = at('绩效得分');
+      final pending = gradeLabel == '待录入';
       rows.add(
         KpiScoreSummaryRow(
           rank: int.tryParse(m?.group(1) ?? '') ?? rows.length + 1,
           name: name,
           department: at('部门'),
           position: at('岗位'),
-          score: double.tryParse(at('绩效得分')) ?? 0,
+          score: double.tryParse(scoreText) ?? 0,
           gradeCode: kpiGradeCodeFromLabel(gradeLabel),
           gradeLabel: gradeLabel,
           coefficient: double.tryParse(at('绩效系数')) ?? 0,
+          pending: pending,
+          unscored: !pending && scoreText.isEmpty && gradeLabel.isEmpty,
         ),
       );
     }
@@ -340,6 +348,7 @@ KpiScoreSummaryData kpiScoreSummaryData(
           coefficient: list[i].resolvedGrade.coefficient,
           pending: list[i].isPending,
           skipped: list[i].isSkipped,
+          unscored: list[i].isUnscored,
           skipLabel: list[i].isSkipped ? list[i].skipLabel : '',
           projectScore: kpiSummaryProjectTeamOf(
             score,
@@ -361,7 +370,7 @@ WorkProfileKpiTeam? kpiSummaryProjectTeamOf(
   var missing = false;
   var found = false;
   for (final person in list) {
-    if (person.isSkipped) continue;
+    if (person.isSkipped || person.isUnscored) continue;
     final team = kpiSummaryProjectTeamForPerson(score, person);
     if (team == null) {
       missing = true;
@@ -943,7 +952,7 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
   }) {
     final scored = [
       for (final r in rows)
-        if (!r.pending && !r.skipped) r,
+        if (!r.pending && !r.skipped && !r.unscored) r,
     ];
     final avg = scored.isEmpty
         ? null
@@ -1027,7 +1036,8 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
 
   Widget _personRow(KpiScoreSummaryRow r, {required bool last}) {
     final (gradeFg, gradeBg) = kpiSummaryGradeColors(r.gradeCode);
-    final topThree = r.rank <= 3 && !r.pending && !r.skipped && r.score > 0;
+    final topThree =
+        r.rank <= 3 && !r.pending && !r.skipped && !r.unscored && r.score > 0;
     final open = widget.onOpenPerson;
     final tappable =
         open != null && (r.canOpenDetail || widget.data.month.isNotEmpty);
@@ -1135,6 +1145,17 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                     color: DunesColors.resolve(context, DunesColors.text2),
+                    height: 1.0,
+                    context: context,
+                  ),
+                )
+              else if (r.unscored)
+                Text(
+                  '—',
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                     height: 1.0,
                     context: context,
                   ),

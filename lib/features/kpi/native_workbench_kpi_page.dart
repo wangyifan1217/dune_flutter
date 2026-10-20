@@ -720,11 +720,15 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
           ].join(' · ');
     final scored = [
       for (final p in people)
-        if (!p.isPending && !p.isSkipped) p,
+        if (!p.omitsScore) p,
     ];
     final pending = [
       for (final p in people)
         if (p.isPending && !p.isSkipped) p,
+    ].length;
+    final unscored = [
+      for (final p in people)
+        if (p.isUnscored) p,
     ].length;
     final skipped = [
       for (final p in people)
@@ -744,6 +748,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       if (project != null)
         '项目绩效系数 ${formatKpiProjectCoefficient(project.projectCoefficient)}',
       if (pending > 0) '待录入 $pending',
+      if (unscored > 0) '无绩效 $unscored',
       if (skipped > 0) '不考核 $skipped',
       if (unpublished > 0) '未发布 $unpublished',
       if (toAck > 0) '待确认 $toAck',
@@ -2213,7 +2218,10 @@ class _KpiPersonTile extends StatelessWidget {
                 child: _KpiRank(
                   rank: rank,
                   highlight:
-                      rank <= 3 && !person.isPending && !person.isSkipped,
+                      rank <= 3 &&
+                      !person.isPending &&
+                      !person.isSkipped &&
+                      !person.isUnscored,
                 ),
               ),
               Expanded(
@@ -2261,6 +2269,12 @@ class _KpiPersonTile extends StatelessWidget {
                   label: '待录入',
                   color: DunesColors.resolve(context, DunesColors.amber),
                   fill: DunesColors.resolve(context, DunesColors.amberSoft),
+                )
+              else if (person.isUnscored)
+                _KpiBadge(
+                  label: '无绩效',
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  fill: DunesColors.resolve(context, DunesColors.bgSoft),
                 )
               else
                 Column(
@@ -2422,7 +2436,10 @@ class _KpiTableRow extends StatelessWidget {
                 child: _KpiRank(
                   rank: rank,
                   highlight:
-                      rank <= 3 && !person.isPending && !person.isSkipped,
+                      rank <= 3 &&
+                      !person.isPending &&
+                      !person.isSkipped &&
+                      !person.isUnscored,
                 ),
               ),
               Expanded(
@@ -2463,7 +2480,7 @@ class _KpiTableRow extends StatelessWidget {
               Expanded(
                 flex: 9,
                 child: Text(
-                  person.isPending || person.isSkipped
+                  person.omitsScore
                       ? '—'
                       : person.mainScore.toStringAsFixed(2),
                   textAlign: TextAlign.right,
@@ -2504,6 +2521,16 @@ class _KpiTableRow extends StatelessWidget {
                             DunesColors.amberSoft,
                           ),
                         )
+                      : person.isUnscored
+                      ? Text(
+                          '—',
+                          style: _cell.copyWith(
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _cell.color,
+                            ),
+                          ),
+                        )
                       : _KpiBadge(
                           label: grade.label,
                           color: _kpiGradeColor(grade.code),
@@ -2513,7 +2540,7 @@ class _KpiTableRow extends StatelessWidget {
               Expanded(
                 flex: 6,
                 child: Text(
-                  person.isPending || person.isSkipped
+                  person.omitsScore
                       ? '—'
                       : formatKpiCoefficient(grade.coefficient),
                   textAlign: TextAlign.right,

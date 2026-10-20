@@ -2466,11 +2466,22 @@ ProposalFinanceLine _evaluateProjectLine(
   ).where((hit) => hit.costName == name && hit.terms.settleByTier).toList();
   if (tierHits.isNotEmpty) {
     final scale = proposalEffectiveSalesScale(form);
-    final results = [
+    final volumes = [
       for (final hit in tierHits)
-        for (final plan in proposalSettleTierPlans(hit.terms))
-          plan.evaluate(scale),
+        proposalSettleTierUsesSettlement(hit.terms)
+            ? proposalPromotionVolume(form, hit.skuIds)
+            : null,
     ];
+    final results = [
+      for (var i = 0; i < tierHits.length; i++)
+        for (final plan in proposalSettleTierPlans(tierHits[i].terms))
+          plan.evaluate(volumes[i]?.volume ?? scale),
+    ];
+    final volumeNotes = [
+      for (final v in volumes)
+        if (v != null) v.detail,
+    ];
+    final missingPrice = volumes.any((v) => v?.missing ?? false);
     final amount = proposalRoundWan(
       results.fold<double>(0, (sum, result) => sum + result.amount),
     );
@@ -2484,7 +2495,7 @@ ProposalFinanceLine _evaluateProjectLine(
       ),
       amount: amount,
       locked: true,
-      pending: results.isEmpty,
+      pending: results.isEmpty || missingPrice,
       source: [
         for (final hit in tierHits)
           for (final plan in proposalSettleTierPlans(hit.terms))
@@ -2492,8 +2503,11 @@ ProposalFinanceLine _evaluateProjectLine(
       ].join('；'),
       substitution: results.isEmpty
           ? '尚未配置阶梯规则'
-          : results.map((r) => r.substitution).join('\n'),
-      missing: results.isEmpty ? const ['阶梯规则'] : const [],
+          : [...volumeNotes, ...results.map((r) => r.substitution)].join('\n'),
+      missing: [
+        if (results.isEmpty) '阶梯规则',
+        if (missingPrice) '主产品结算价',
+      ],
     );
   }
   if (item.tiered) {
@@ -2519,7 +2533,14 @@ ProposalFinanceLine _evaluateProjectLine(
         if (!plan.isEmpty) plan,
     ].take(1).toList();
     if (!explicit && !(filled && plans.isEmpty) && (plans.isNotEmpty || !settled)) {
-      final scale = proposalEffectiveSalesScale(form);
+      final base = name == '推广费'
+          ? proposalPromotionVolume(form, const [])
+          : (
+              volume: proposalEffectiveSalesScale(form),
+              detail: '',
+              missing: false,
+            );
+      final scale = base.volume;
       final results = [for (final plan in plans) plan.evaluate(scale)];
       final amount = proposalRoundWan(
         results.fold<double>(0, (sum, r) => sum + r.amount),
@@ -2528,15 +2549,19 @@ ProposalFinanceLine _evaluateProjectLine(
         name: name,
         formula: item.defaultFormulaRef,
         amount: amount,
-        pending: plans.isEmpty,
+        pending: plans.isEmpty || base.missing,
+        missing: [if (plans.isNotEmpty && base.missing) '主产品结算价'],
         substitution: plans.isEmpty
             ? '还没配置推广商方案，按 0 计'
-            : plans.length == 1
-            ? results.single.substitution
             : [
-                for (var i = 0; i < plans.length; i++)
-                  '${plans[i].label}：${results[i].substitution}',
-                '合计 ${_wan(amount)} 万元',
+                if (base.detail.isNotEmpty) base.detail,
+                if (plans.length == 1)
+                  results.single.substitution
+                else ...[
+                  for (var i = 0; i < plans.length; i++)
+                    '${plans[i].label}：${results[i].substitution}',
+                  '合计 ${_wan(amount)} 万元',
+                ],
               ].join('\n'),
         source: plans.isEmpty
             ? ''

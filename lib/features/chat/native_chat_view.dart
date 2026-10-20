@@ -163,14 +163,276 @@ class _ChatScrollMetrics {
 class _ChatListEntry {
   const _ChatListEntry.divider(this.dividerLabel)
     : message = null,
-      showSenderMeta = false;
+      showSenderMeta = false,
+      imageGroup = const [];
 
-  const _ChatListEntry.message(this.message, {this.showSenderMeta = false})
-    : dividerLabel = null;
+  const _ChatListEntry.message(
+    this.message, {
+    this.showSenderMeta = false,
+    this.imageGroup = const [],
+  }) : dividerLabel = null;
 
   final String? dividerLabel;
   final NativeChatMessage? message;
   final bool showSenderMeta;
+  final List<NativeChatMessage> imageGroup;
+}
+
+class _ChatImageGroupContent extends StatefulWidget {
+  const _ChatImageGroupContent({
+    required this.messages,
+    required this.service,
+    required this.mine,
+    required this.conversationId,
+    required this.onOpenImage,
+    required this.onLongPressStart,
+  });
+
+  final List<NativeChatMessage> messages;
+  final ConversationService service;
+  final bool mine;
+  final int? conversationId;
+  final ValueChanged<NativeChatMessage> onOpenImage;
+  final GestureLongPressStartCallback? onLongPressStart;
+
+  @override
+  State<_ChatImageGroupContent> createState() => _ChatImageGroupContentState();
+}
+
+class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
+  bool _expanded = false;
+  bool _hovered = false;
+
+  Widget _image(NativeChatMessage message, {required VoidCallback onTap}) =>
+      ChatAuthImageBubble(
+        service: widget.service,
+        payload: message.payload,
+        mine: widget.mine,
+        conversationId: widget.conversationId,
+        onTap: onTap,
+        onLongPressStart: widget.onLongPressStart,
+      );
+
+  Widget _photoCard(
+    NativeChatMessage message, {
+    required double width,
+    required double height,
+    required VoidCallback onTap,
+    bool fillCard = false,
+  }) {
+    final payload = message.payload ?? const <String, dynamic>{};
+    final rawWidth = payload['width'] ?? payload['image_width'];
+    final rawHeight = payload['height'] ?? payload['image_height'];
+    final imageWidth = rawWidth is num ? rawWidth.toDouble() : null;
+    final imageHeight = rawHeight is num ? rawHeight.toDouble() : null;
+    final imageAspect = imageWidth != null && imageHeight != null && imageHeight > 0
+        ? imageWidth / imageHeight
+        : null;
+    Widget image = _image(message, onTap: onTap);
+    return SizedBox(
+      width: width,
+      height: height,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x1A172235),
+              blurRadius: 12,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: FittedBox(
+            fit: !fillCard && imageAspect != null && imageAspect < 0.9
+                ? BoxFit.contain
+                : BoxFit.cover,
+            clipBehavior: Clip.hardEdge,
+            child: image,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final images = widget.messages;
+    final front = images.first;
+    final back = images.length > 2 ? images[2] : images.last;
+    final middle = images.length > 2 ? images[1] : null;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final frontPayload = front.payload ?? const <String, dynamic>{};
+    final rawWidth = frontPayload['width'] ?? frontPayload['image_width'];
+    final rawHeight = frontPayload['height'] ?? frontPayload['image_height'];
+    final sourceWidth = rawWidth is num ? rawWidth.toDouble() : 0.0;
+    final sourceHeight = rawHeight is num ? rawHeight.toDouble() : 0.0;
+    final sourceAspect = sourceWidth > 0 && sourceHeight > 0
+        ? sourceWidth / sourceHeight
+        : 1.18;
+    final maxCardWidth = screenWidth < 600 ? 180.0 : 220.0;
+    final maxCardHeight = screenWidth < 600 ? 176.0 : 190.0;
+    final cardWidth = math.min(maxCardWidth, maxCardHeight * sourceAspect);
+    final cardHeight = cardWidth / sourceAspect;
+    final photoHeight = cardHeight;
+    return Column(
+      crossAxisAlignment: widget.mine
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (!_expanded)
+          MouseRegion(
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: SizedBox(
+              width: cardWidth,
+              height: cardHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                if (images.length > 2)
+                  Positioned(
+                    top: 4,
+                    left: 7,
+                    right: 7,
+                    bottom: 4,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 240),
+                      curve: Curves.easeOut,
+                      transform: Matrix4.translationValues(
+                        _hovered ? 10 : 7,
+                        _hovered ? -7 : -4,
+                        0,
+                      ),
+                      child: IgnorePointer(
+                        child: AnimatedRotation(
+                          turns: (_hovered ? 1.2 : 0.7) / 360,
+                          duration: const Duration(milliseconds: 240),
+                          child: _photoCard(
+                            back,
+                            width: cardWidth - 14,
+                            height: cardHeight - 8,
+                            onTap: () {},
+                            fillCard: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  top: 4,
+                  left: 7,
+                  right: 7,
+                  bottom: 4,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOut,
+                    transform: Matrix4.translationValues(
+                      _hovered ? 5 : 3,
+                      _hovered ? -4 : -2,
+                      0,
+                    ),
+                    child: IgnorePointer(
+                      child: AnimatedRotation(
+                        turns: (_hovered ? 0.6 : 0.35) / 360,
+                        duration: const Duration(milliseconds: 240),
+                        child: _photoCard(
+                          middle ?? back,
+                            width: cardWidth - 14,
+                          height: cardHeight - 8,
+                          onTap: () {},
+                            fillCard: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 4,
+                  left: 7,
+                  right: 7,
+                  bottom: 4,
+                  child: AnimatedScale(
+                    scale: _hovered ? 1.015 : 1,
+                    duration: const Duration(milliseconds: 200),
+                    child: _photoCard(
+                      front,
+                      width: cardWidth - 14,
+                      height: cardHeight - 8,
+                      onTap: () => widget.onOpenImage(front),
+                      fillCard: true,
+                    ),
+                  ),
+                ),
+                ],
+              ),
+            ),
+          ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeInOut,
+          alignment: Alignment.topCenter,
+          child: _expanded
+              ? Padding(
+                  padding: EdgeInsets.only(
+                    top: 10,
+                    left: widget.mine ? 0 : 54,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: widget.mine
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
+                    children: [
+                      for (final message in images)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _photoCard(
+                            message,
+                            width: cardWidth,
+                            height: photoHeight,
+                            onTap: () => widget.onOpenImage(message),
+                          ),
+                        ),
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        Align(
+          alignment: widget.mine ? Alignment.centerRight : Alignment.centerLeft,
+          child: SizedBox(
+            width: cardWidth,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Align(
+                alignment: Alignment.center,
+                child: IconButton(
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  tooltip: _expanded ? '收起图片' : '展开 ${images.length} 张图片',
+                  iconSize: 19,
+                  padding: const EdgeInsets.all(3),
+                  constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                  splashRadius: 17,
+                  style: IconButton.styleFrom(
+                    foregroundColor: DunesColors.text2,
+                    backgroundColor: DunesColors.bgSoft,
+                  shape: const CircleBorder(),
+                  side: BorderSide(color: DunesColors.borderSoft),
+                  ),
+                  icon: Icon(
+                    _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _MessageQuickAction {
@@ -334,6 +596,7 @@ class _NativeChatViewState extends State<NativeChatView>
   List<NativeChatMessage>? _cachedListEntriesSource;
   int _cachedListEntriesLen = 0;
   int _cachedListEntriesLastId = 0;
+  bool _cachedListEntriesMultiSelect = false;
 
   /// 媒体/文件上传中（不阻塞文本继续发送）。
   bool _uploading = false;
@@ -2148,7 +2411,8 @@ class _NativeChatViewState extends State<NativeChatView>
 
   int? _listIndexForMessageId(int messageId, List<_ChatListEntry> entries) {
     for (var i = 0; i < entries.length; i++) {
-      if (entries[i].message?.id == messageId) {
+      if (entries[i].message?.id == messageId ||
+          entries[i].imageGroup.any((m) => m.id == messageId)) {
         return _listFooterCount + (entries.length - 1 - i);
       }
     }
@@ -2350,25 +2614,65 @@ class _NativeChatViewState extends State<NativeChatView>
     if (identical(_cachedListEntriesSource, _messages) &&
         _cachedListEntries != null &&
         _cachedListEntriesLen == _messages.length &&
-        _cachedListEntriesLastId == lastId) {
+        _cachedListEntriesLastId == lastId &&
+        _cachedListEntriesMultiSelect == _messageMultiSelectMode) {
       return _cachedListEntries!;
     }
     final entries = <_ChatListEntry>[];
     String? lastDivider;
-    for (final m in _messages) {
+    for (var messageIndex = 0; messageIndex < _messages.length;) {
+      final m = _messages[messageIndex];
       final label = InboxFormat.dayDividerLabel(m.createdAt);
       if (label != null && label != lastDivider) {
         entries.add(_ChatListEntry.divider(label));
         lastDivider = label;
       }
+      final groupedImages = <NativeChatMessage>[m];
+      final isImage = m.kind.toUpperCase() == 'IMAGE' && m.payload != null;
+      final mediaGroupId = (m.payload?['mediaGroupId'] ?? '').toString().trim();
+      if (isImage && !_messageMultiSelectMode && m.createdAt != null) {
+        var nextIndex = messageIndex + 1;
+        var previousAt = m.createdAt!;
+        while (nextIndex < _messages.length) {
+          final next = _messages[nextIndex];
+          final nextAt = next.createdAt;
+          final nextMediaGroupId = (next.payload?['mediaGroupId'] ?? '')
+              .toString()
+              .trim();
+          if (next.kind.toUpperCase() != 'IMAGE' ||
+              next.payload == null ||
+              next.senderUserId != m.senderUserId ||
+              (mediaGroupId.isNotEmpty
+                  ? nextMediaGroupId != mediaGroupId
+                  : nextMediaGroupId.isNotEmpty) ||
+              nextAt == null ||
+              nextAt.difference(previousAt).isNegative ||
+              (mediaGroupId.isEmpty &&
+                  nextAt.difference(previousAt) > const Duration(seconds: 5)) ||
+              nextAt.year != m.createdAt!.year ||
+              nextAt.month != m.createdAt!.month ||
+              nextAt.day != m.createdAt!.day) {
+            break;
+          }
+          groupedImages.add(next);
+          previousAt = nextAt;
+          nextIndex++;
+        }
+      }
       entries.add(
-        _ChatListEntry.message(m, showSenderMeta: !_isSystemKind(m.kind)),
+        _ChatListEntry.message(
+          m,
+          showSenderMeta: !_isSystemKind(m.kind),
+          imageGroup: groupedImages.length > 1 ? groupedImages : const [],
+        ),
       );
+      messageIndex += groupedImages.length > 1 ? groupedImages.length : 1;
     }
     _cachedListEntries = entries;
     _cachedListEntriesSource = _messages;
     _cachedListEntriesLen = _messages.length;
     _cachedListEntriesLastId = lastId;
+    _cachedListEntriesMultiSelect = _messageMultiSelectMode;
     return entries;
   }
 
@@ -3792,6 +4096,12 @@ class _NativeChatViewState extends State<NativeChatView>
       await _guardSend(
         () async {
           final conversationId = _requireReadyConversationId();
+          final imageAttachmentCount = _desktopComposerAttachments
+              .where((attachment) => attachment.isImage)
+              .length;
+          final mediaGroupId = imageAttachmentCount > 1
+              ? 'img-$conversationId-${DateTime.now().microsecondsSinceEpoch}'
+              : null;
           // 文本先发，保证所有端都能以既有 TEXT/IMAGE/FILE 消息展示本次内容。
           if (text.isNotEmpty) {
             await _service.sendText(
@@ -3830,6 +4140,9 @@ class _NativeChatViewState extends State<NativeChatView>
                 fileName: attachment.fileName,
                 mimeType: attachment.mimeType,
                 sourceLabel: attachment.sourceLabel,
+                extraPayload: mediaGroupId == null
+                    ? null
+                    : <String, dynamic>{'mediaGroupId': mediaGroupId},
                 preparePreview: () => _prepareChatImagePreview(
                   attachment.bytes,
                   attachment.fileName,
@@ -4004,6 +4317,10 @@ class _NativeChatViewState extends State<NativeChatView>
     final cancel = ChatUploadCancelToken();
     await _guardSend(() async {
       final total = drafts.length;
+      final conversationId = _requireReadyConversationId();
+      final mediaGroupId = total > 1
+          ? 'img-$conversationId-${DateTime.now().microsecondsSinceEpoch}'
+          : null;
       var done = 0;
       for (final draft in drafts) {
         cancel.throwIfCancelled();
@@ -4028,11 +4345,14 @@ class _NativeChatViewState extends State<NativeChatView>
           fileName: fileName,
         );
         await _service.sendImage(
-          conversationId: _requireReadyConversationId(),
+          conversationId: conversationId,
           bytes: bytes,
           fileName: fileName,
           mimeType: mimeType,
           sourceLabel: sourceLabel,
+          extraPayload: mediaGroupId == null
+              ? null
+              : <String, dynamic>{'mediaGroupId': mediaGroupId},
           preparePreview: () => _prepareChatImagePreview(bytes, fileName),
           onProgress: (p) => _setUploadProgress(
             (baseDone + p) / total,
@@ -8639,10 +8959,13 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   /// PC/手机：打开会话图片图集预览，可左右切换同会话其他图片。
-  Future<void> _openChatImageGallery(NativeChatMessage current) async {
+  Future<void> _openChatImageGallery(
+    NativeChatMessage current, {
+    List<NativeChatMessage>? groupMessages,
+  }) async {
     final items = <ChatImagePreviewItem>[];
     var initialIndex = 0;
-    for (final m in _messages) {
+    for (final m in groupMessages ?? _messages) {
       if (m.kind.toUpperCase() != 'IMAGE' || m.payload == null) continue;
       if (m.id == current.id) initialIndex = items.length;
       items.add(
@@ -10806,10 +11129,43 @@ class _NativeChatViewState extends State<NativeChatView>
                                                   content: _withReplySla(
                                                     m,
                                                     mine,
-                                                    _buildMessageWidget(
-                                                      m,
-                                                      mine,
-                                                    ),
+                                                    entry.imageGroup.length > 1
+                                                        ? _ChatImageGroupContent(
+                                                            messages: entry
+                                                                .imageGroup,
+                                                            service: _service,
+                                                            mine: mine,
+                                                            conversationId:
+                                                                _chatConversationId,
+                                                            onOpenImage:
+                                                                (
+                                                                  image,
+                                                                ) => unawaited(
+                                                                  _openChatImageGallery(
+                                                                    image,
+                                                                    groupMessages:
+                                                                        entry
+                                                                            .imageGroup,
+                                                                  ),
+                                                                ),
+                                                            onLongPressStart:
+                                                                _messageMultiSelectMode
+                                                                ? null
+                                                                : (
+                                                                    details,
+                                                                  ) => unawaited(
+                                                                    _onMessageActions(
+                                                                      m,
+                                                                      mine,
+                                                                      anchor: details
+                                                                          .globalPosition,
+                                                                    ),
+                                                                  ),
+                                                          )
+                                                        : _buildMessageWidget(
+                                                            m,
+                                                            mine,
+                                                          ),
                                                   ),
                                                 );
                                               }

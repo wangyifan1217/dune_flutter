@@ -386,9 +386,17 @@ class WorkProfileKpiPerson {
   final List<WorkProfileKpiCategory> categories;
 
   bool get isRubric => scoreSource == 'rubric';
-  bool get isPending => scoreStatus == 'pending';
+
+  /// 挂在通信板块 / 能源板块，但本月没有个人绩效。名单里仍占一行。
+  /// 服务端用 pending 且没有任务，这样旧版本显示「待录入」而不是 0 分。
+  bool get isUnscored =>
+      scoreStatus == 'none' ||
+      (scoreStatus == 'pending' && !isRubric && categories.isEmpty);
+  bool get isPending => scoreStatus == 'pending' && !isUnscored;
   bool get isSkipped =>
       scoreStatus == 'skipped' || skipReason.trim().isNotEmpty;
+
+  bool get omitsScore => isPending || isSkipped || isUnscored;
   bool get isAcked => ackedAt.trim().isNotEmpty;
   bool get isUnpublished =>
       isRubric && !isPending && !isSkipped && needsPublish;
@@ -396,6 +404,9 @@ class WorkProfileKpiPerson {
   String get skipLabel => kpiSkipLabel(skipReason, skipNote);
 
   KpiGrade get resolvedGrade {
+    if (isUnscored) {
+      return const KpiGrade(code: '', label: '', coefficient: 0);
+    }
     if (isSkipped) {
       return KpiGrade(code: '', label: skipLabel, coefficient: 0);
     }
@@ -655,8 +666,14 @@ List<WorkProfileKpiPerson> kpiPeopleByScoreDesc(
 }
 
 int kpiPersonScoreCompare(WorkProfileKpiPerson a, WorkProfileKpiPerson b) {
-  if (a.isSkipped != b.isSkipped) return a.isSkipped ? 1 : -1;
-  if (a.isPending != b.isPending) return a.isPending ? 1 : -1;
+  int rank(WorkProfileKpiPerson person) {
+    if (person.isSkipped) return 2;
+    if (person.isPending || person.isUnscored) return 1;
+    return 0;
+  }
+
+  final byRank = rank(a).compareTo(rank(b));
+  if (byRank != 0) return byRank;
   final byScore = b.mainScore.compareTo(a.mainScore);
   if (byScore != 0) return byScore;
   return a.userName.compareTo(b.userName);
@@ -1180,15 +1197,17 @@ String kpiScoreSummaryMarkdown(
     }
 
     final grade = person.resolvedGrade;
-    final scoreCell = person.isPending || person.isSkipped
+    final scoreCell = person.omitsScore
         ? '—'
         : person.mainScore.toStringAsFixed(2);
     final gradeCell = person.isSkipped
         ? person.skipLabel
-        : (person.isPending ? '待录入' : grade.label);
-    final coefCell = person.isPending || person.isSkipped
+        : person.isPending
+        ? '待录入'
+        : person.isUnscored
         ? '—'
-        : '${grade.coefficient}';
+        : grade.label;
+    final coefCell = person.omitsScore ? '—' : '${grade.coefficient}';
     buf.writeln(
       '| ${cell(kpiPersonShareDepartment(person))} | ${cell(kpiIndexedPersonName(i, person.userName))} | ${cell(person.position)} '
       '| $scoreCell | ${cell(gradeCell)} | $coefCell |',

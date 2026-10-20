@@ -294,10 +294,35 @@ ProposalSettleLineView proposalSettleLineView(
   ProposalFinanceSettleTerms terms, {
   required double scale,
   required double face,
+  ({double face, double share, String price})? promotionMain,
 }) {
+  if (promotionMain != null && proposalPromotionByRatio(terms)) {
+    final ratioText = terms.displayRatio.trim();
+    final rate = proposalParseSettleRatio(ratioText);
+    final share = promotionMain.share * rate;
+    final perUnit = promotionMain.face * share;
+    return ProposalSettleLineView(
+      share: share,
+      amount: proposalRoundWan(scale * share),
+      substitution: proposalPromotionSubstitution(
+        scale: scale,
+        share: promotionMain.share,
+        rateText: ratioText,
+        price: promotionMain.price,
+      ),
+      ratioText: ratioText,
+      perUnit: perUnit > 0 ? '${proposalFormatWan(perUnit)} 元' : '',
+      unfilled: promotionMain.share <= 0,
+    );
+  }
   if (terms.settleByTier) {
+    final promotion =
+        promotionMain != null && proposalSettleTierUsesSettlement(terms);
+    final volume = promotion
+        ? proposalRoundWan(scale * promotionMain.share)
+        : scale;
     final plans = proposalSettleTierPlans(terms);
-    final results = [for (final plan in plans) plan.evaluate(scale)];
+    final results = [for (final plan in plans) plan.evaluate(volume)];
     final amount = proposalRoundWan(
       results.fold<double>(0, (sum, item) => sum + item.amount),
     );
@@ -306,12 +331,21 @@ ProposalSettleLineView proposalSettleLineView(
       ProposalSettleLineView(
         share: scale > 0 ? amount / scale : 0,
         amount: amount,
-        substitution: plans.isEmpty
-            ? '按阶梯方案计算'
-            : results.map((item) => item.substitution).join('\n'),
+        substitution: [
+          if (promotion)
+            proposalPromotionVolumeText(
+              scale: scale,
+              share: promotionMain.share,
+              price: promotionMain.price,
+            ),
+          if (plans.isEmpty)
+            '按阶梯方案计算'
+          else
+            ...results.map((item) => item.substitution),
+        ].join('\n'),
         ratioText: '按阶梯',
         perUnit: '',
-        unfilled: plans.isEmpty,
+        unfilled: plans.isEmpty || (promotion && promotionMain.share <= 0),
       ),
     );
   }
@@ -1213,16 +1247,173 @@ String _projectCostRatioLabel(ProposalFinanceSettleTerms terms) {
   return proposalFormatWan(_projectCostSettleRatio(terms));
 }
 
+String _promotionLeaf(String text) => text
+    .trim()
+    .split('/')
+    .last
+    .trim()
+    .replaceAll(RegExp(r'[\u200b\u200c\u200d\ufeff\u00a0]'), '');
+
+bool _isPromotionLeaf(String text) {
+  final leaf = _promotionLeaf(text);
+  return leaf == '推广费' || leaf.startsWith('推广费');
+}
+
+bool proposalIsPromotion(ProposalFinanceSettleTerms terms) {
+  if (terms.isPromotionFee) return true;
+  final ref = terms.billTypeRef;
+  return _isPromotionLeaf(terms.billType) ||
+      _isPromotionLeaf(ref?.name ?? '') ||
+      _isPromotionLeaf(ref?.displayPath ?? '') ||
+      _isPromotionLeaf(ref?.parentName ?? '') ||
+      _isPromotionLeaf(proposalSettleBillTypeL3(terms));
+}
+
+/// 阶梯计费基数用主产品结算金额：账单是推广费，或公式按结算单价。
+bool proposalSettleTierUsesSettlement(ProposalFinanceSettleTerms terms) {
+  if (proposalIsPromotion(terms)) return true;
+  final method = (terms.formulaRef?.settleMethod ?? '').trim();
+  if (method == '5' || method.contains('单价')) return true;
+  final formula =
+      '${terms.displayFormula} ${terms.formulaRef?.formulaExpression ?? ''}';
+  return formula.contains('结算单价');
+}
+
+/// 推广费按产品结算金额：结算金额 × 推广费比例。
+/// 结算金额是主产品收入已经算好的金额，这里不再除以面值。
+/// 按阶梯时先把年化基数换成结算金额，再套月份或年阶梯。
+bool proposalPromotionByRatio(ProposalFinanceSettleTerms terms) {
+  if (terms.settleByTier || terms.settleByUnit) return false;
+  if (!proposalIsPromotion(terms)) return false;
+  return terms.displayRatio.trim().isNotEmpty;
+}
+
+String _promotionSettlementBase(
+  double scale,
+  double share, {
+  String price = '',
+}) {
+  if (share <= 0) return '主产品还没填结算金额';
+  final settled = proposalFormatWan(proposalRoundWan(scale * share));
+  final unit = price.trim();
+  if (unit.isEmpty) return '结算金额 $settled 万/年';
+  return '年化规模 ${proposalFormatWan(scale)} 万，结算单价 $unit，结算金额 $settled 万/年';
+}
+
+String proposalPromotionVolumeText({
+  required double scale,
+  required double share,
+  String price = '',
+}) =>
+    '计费基数：${_promotionSettlementBase(scale, share, price: price)}';
+
+/// 推广费阶梯的计费基数（万元/年）：各关联产品的结算金额加总。
+({double volume, String detail, bool missing}) proposalPromotionVolume(
+  Map<String, dynamic> form,
+  List<String> skuIds,
+) {
+  final parts = _promotionParts(form, skuIds);
+  final volume = proposalRoundWan(
+    parts.fold<double>(0, (sum, p) => sum + p.scale * p.share),
+  );
+  return (
+    volume: volume,
+    detail: parts.isEmpty
+        ? '计费基数：没有关联主产品'
+        : '计费基数：${parts.map((p) => _promotionSettlementBase(p.scale, p.share, price: p.price)).join(' + ')}',
+    missing: parts.isEmpty || parts.any((p) => p.share <= 0),
+  );
+}
+
+/// 主产品的面值和收入结算价占面值的比例，子产品取所属主产品。结算价 = 面值 × 比例。
+({double face, double share, String price}) proposalPromotionMain(
+  Map<String, dynamic> form,
+  ProposalSkuDetailRow sku,
+) {
+  var main = sku;
+  if (sku.parentSkuId.isNotEmpty) {
+    for (final row in proposalIntakeSkuDetails(form)) {
+      if (row.id == sku.parentSkuId) {
+        main = row;
+        break;
+      }
+    }
+  }
+  final face = proposalIntakeSkuSettleFace(main);
+  var share = 0.0;
+  final prices = <String>[];
+  for (final settle in proposalIntakeSkuSettlements(main)) {
+    if (settle.isCost || proposalPromotionByRatio(settle.terms)) continue;
+    final part = proposalIntakeSettleShare(settle.terms, face: face);
+    if (part <= 0) continue;
+    share += part;
+    final unit = settle.terms.displayUnitPrice.trim();
+    if (unit.isNotEmpty && !prices.contains(unit)) prices.add(unit);
+  }
+  return (face: face, share: share, price: prices.join('、'));
+}
+
+String proposalPromotionSubstitution({
+  required double scale,
+  required double share,
+  required String rateText,
+  String price = '',
+}) {
+  final settled = proposalRoundWan(scale * share);
+  final amount = proposalRoundWan(
+    settled * proposalParseSettleRatio(rateText),
+  );
+  if (share <= 0) return '推广费：主产品还没填结算金额，按 0 计';
+  final r = rateText.trim();
+  final base = _promotionSettlementBase(scale, share, price: price)
+      .replaceAll(' 万/年', ' 万');
+  return '推广费：$base × $r = ${proposalFormatWan(amount)} 万元/年';
+}
+
+List<({double scale, double face, double share, String price})> _promotionParts(
+  Map<String, dynamic> form,
+  List<String> skuIds,
+) {
+  final skus = {
+    for (final sku in proposalIntakeAllSellableSkus(form)) sku.id: sku,
+  };
+  final ids = skuIds.isNotEmpty
+      ? skuIds
+      : [for (final sku in proposalIntakeSkuDetails(form)) sku.id];
+  return [
+    for (final id in ids)
+      if (skus[id] case final sku?)
+        if (proposalPromotionMain(form, sku) case final main)
+          (
+            scale: ids.length == 1
+                ? proposalAssociatedSalesScale(form, [id])
+                : proposalSkuFaceShareScale(sku, form: form),
+            face: main.face,
+            share: main.share,
+            price: main.price,
+          ),
+  ];
+}
+
 double proposalPayableCostLineAmount(
   Map<String, dynamic> form,
   ProposalFinanceSettleTerms terms,
   List<String> skuIds,
 ) {
   if (terms.settleByTier) {
-    final scale = proposalAssociatedSalesScale(form, skuIds);
+    final scale = proposalSettleTierUsesSettlement(terms)
+        ? proposalPromotionVolume(form, skuIds).volume
+        : proposalAssociatedSalesScale(form, skuIds);
     return proposalSettleTierPlans(
       terms,
     ).fold<double>(0, (sum, plan) => sum + plan.evaluate(scale).amount);
+  }
+  if (proposalPromotionByRatio(terms)) {
+    final rate = proposalParseSettleRatio(terms.displayRatio.trim());
+    return _promotionParts(form, skuIds).fold<double>(
+      0,
+      (sum, p) => sum + proposalRoundWan(p.scale * p.share * rate),
+    );
   }
   final share = _projectCostSettleShare(form, terms, skuIds);
   if (share <= 0) return 0;
@@ -1359,8 +1550,22 @@ String proposalProjectCostFormulaSubstitution(
     for (final sku in proposalIntakeAllSellableSkus(form)) sku.id: sku,
   };
   final grouped = <String, List<double>>{};
+  final promotion = <String>[];
   for (final hit in proposalPayableProjectCostHits(form)) {
     if (!aliases.contains(hit.costName)) continue;
+    if (proposalPromotionByRatio(hit.terms)) {
+      for (final p in _promotionParts(form, hit.skuIds)) {
+        promotion.add(
+          proposalPromotionSubstitution(
+            scale: p.scale,
+            share: p.share,
+            rateText: hit.terms.displayRatio,
+            price: p.price,
+          ),
+        );
+      }
+      continue;
+    }
     final ratio = _projectCostSettleShare(form, hit.terms, hit.skuIds);
     if (ratio <= 0) continue;
     final label = _projectCostRatioLabel(hit.terms);
@@ -1376,6 +1581,7 @@ String proposalProjectCostFormulaSubstitution(
       if (scale > 0) (grouped[label] ??= []).add(scale);
     }
   }
+  if (promotion.isNotEmpty && grouped.isEmpty) return promotion.join('\n');
   if (grouped.isEmpty) {
     return '${kProposalProjectCostFormula} = ${proposalFormatWan(estimated)} 万元';
   }
@@ -1386,6 +1592,13 @@ String proposalProjectCostFormulaSubstitution(
       else
         '(${[for (final scale in entry.value) proposalFormatWan(scale)].join(' + ')}) × ${entry.key}',
   ];
+  if (promotion.isNotEmpty) {
+    return [
+      parts.join(' + '),
+      ...promotion,
+      '合计 ${proposalFormatWan(estimated)} 万元',
+    ].join('\n');
+  }
   return '${parts.join(' + ')} = ${proposalFormatWan(estimated)} 万元';
 }
 

@@ -130,9 +130,13 @@ class AppUpdateInstaller {
       // 先解除关窗进托盘，避免安装器/Restart Manager 发 WM_CLOSE 时只藏托盘不退出。
       // 不走 onBeforeQuit，保留本地登录态便于安装后恢复会话。
       await windowsTrayPrepareQuitForAppUpdate(exitProcess: false);
+      // 交给已在运行的 explorer 打开。直接启动会继承本进程的兼容模式，
+      // 安装器会把 Windows 11 误判成旧系统并拒绝安装。
+      final explorer =
+          '${Platform.environment['SystemRoot'] ?? r'C:\Windows'}\\explorer.exe';
       await Process.start(
-        path,
-        const <String>[],
+        explorer,
+        <String>[path],
         mode: ProcessStartMode.detached,
         runInShell: false,
       );

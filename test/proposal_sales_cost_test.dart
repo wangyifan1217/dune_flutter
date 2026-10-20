@@ -106,6 +106,146 @@ void main() {
     expect(proposalEstimateProjectCostAmount(form, '平台服务费'), closeTo(175, .01));
     expect(evaluation.bucket('project')!.lines.single.formula!.name, contains('阶梯'));
   });
+  test('fixed-ratio promotion fee uses main product settle price', () {
+    Map<String, dynamic> form(Map<String, dynamic> income) => {
+      'skuDetails': [
+        {
+          'id': 'main-1',
+          'faceValue': '100',
+          'settlements': [
+            {'id': 'sale', 'scale': '1200', ...income},
+            {
+              'id': 'promo',
+              'kind': 'cost',
+              'billType': '推广费',
+              'priceMode': kProposalSettlePriceModeDirect,
+              'settleRatio': '0.8',
+            },
+          ],
+        },
+      ],
+    };
+    // 结算金额 1200 × 46/100 = 552，再 × 0.8。
+    final byPrice = form({'priceMode': 'unit', 'settleUnitPrice': '46'});
+    expect(proposalEstimateProjectCostAmount(byPrice, '推广费'), closeTo(441.6, .01));
+    expect(
+      proposalProjectCostFormulaSubstitution(byPrice, '推广费'),
+      '推广费：年化规模 1200 万，结算单价 46，结算金额 552 万 × 0.8 = 441.60 万元/年',
+    );
+    final sku = proposalIntakeSkuDetails(byPrice).single;
+    final promo = proposalIntakeSkuSettlements(sku).last.terms;
+    final line = proposalSettleLineView(
+      promo,
+      scale: 1200,
+      face: 100,
+      promotionMain: proposalPromotionMain(byPrice, sku),
+    );
+    expect(line.amount, closeTo(441.6, .01));
+    expect(line.perUnit, '36.80 元');
+    // 主产品按比例：结算价 = 100 × 0.5。
+    final byRatio = form({'settleRatio': '0.5'});
+    expect(proposalEstimateProjectCostAmount(byRatio, '推广费'), closeTo(480, .01));
+    // 按面值的推广费不受影响：1200 ÷ 100 × 6。
+    final unit = form({'settleRatio': '0.5'});
+    final promoRow = ((unit['skuDetails'] as List).single['settlements'] as List).last as Map<String, dynamic>;
+    promoRow
+      ..['priceMode'] = 'unit'
+      ..['settleUnitPrice'] = '6'
+      ..remove('settleRatio');
+    expect(proposalEstimateProjectCostAmount(unit, '推广费'), closeTo(72, .01));
+  });
+  test('tier promotion fee uses scale ÷ face × settle price as volume', () {
+    final plan = ProposalPromotionTierPlan(id: 'p1', strategy: kProposalPromotionStrategyMonthSeq, segments: const [
+      ProposalPromotionSegment(fromMonth: 1, toMonth: 3, type: 'fixed', rate: .8),
+      ProposalPromotionSegment(fromMonth: 4, type: 'fixed', rate: .5),
+    ]);
+    final promo = ProposalFinanceSettleTerms(billType: '推广费', priceMode: kProposalSettlePriceModeTier, tierPlans: [plan]);
+    final form = {
+      'skuDetails': [
+        {
+          'id': 'main-1',
+          'faceValue': '100',
+          'settlements': [
+            {'id': 'sale', 'scale': '1200', 'priceMode': 'unit', 'settleUnitPrice': '46'},
+            {...promo.toJson(), 'id': 'promo', 'kind': 'cost'},
+          ],
+        },
+      ],
+    };
+    // 结算金额 552 万/年 = 46 万/月：46×0.8×3 + 46×0.5×9
+    expect(proposalEstimateProjectCostAmount(form, '推广费'), closeTo(317.4, .01));
+    expect(proposalEvaluateFinance(form).total('project'), closeTo(317.4, .01));
+    final sku = proposalIntakeSkuDetails(form).single;
+    final line = proposalSettleLineView(
+      proposalIntakeSkuSettlements(sku).last.terms,
+      scale: 1200,
+      face: 100,
+      promotionMain: proposalPromotionMain(form, sku),
+    );
+    expect(line.amount, closeTo(317.4, .01));
+    expect(
+      line.substitution,
+      startsWith('计费基数：年化规模 1200 万，结算单价 46，结算金额 552 万/年\n'),
+    );
+    expect(line.substitution, contains('46 × 0.8'));
+  });
+  test('empty price mode still uses income unit price for promotion tier', () {
+    final form = {
+      'salesScale': '1517',
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'faceValue': '55',
+          'settlements': [
+            {
+              'id': 'sale',
+              'kind': 'income',
+              'settleUnitPrice': '14.5',
+              'formula': '按下发统计结算单价',
+              'formulaRef': {
+                'name': '按下发统计结算单价',
+                'settleMethod': '2',
+              },
+            },
+            {
+              'id': 'promo',
+              'kind': 'cost',
+              'billType': '推广费',
+              'priceMode': 'tier',
+              'formula': '按下发统计结算单价*结算比例',
+              'formulaRef': {
+                'name': '按下发统计结算单价*结算比例',
+                'settleMethod': 5,
+                'formulaExpression': '按下发统计结算单价 * 结算比例',
+              },
+              'tierPlans': [
+                {
+                  'strategy': 'monthSeq',
+                  'segments': [
+                    {'fromMonth': 1, 'toMonth': 3, 'type': 'fixed', 'rate': 0.8},
+                    {'fromMonth': 4, 'type': 'fixed', 'rate': 0.5},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    final sku = proposalIntakeSkuDetails(form).single;
+    final scale = proposalSkuFaceShareScale(sku, form: form);
+    final line = proposalSettleLineView(
+      proposalIntakeSkuSettlements(sku).last.terms,
+      scale: scale,
+      face: proposalIntakeSkuSettleFace(sku),
+      promotionMain: proposalPromotionMain(form, sku),
+    );
+    expect(scale, closeTo(1517, .01));
+    expect(line.substitution, contains('年化规模 1517 万，结算单价 14.5'));
+    expect(line.substitution, contains('结算金额 399.94 万/年'));
+    expect(line.substitution, contains('33.33 × 0.8'));
+    expect(line.amount, closeTo(229.97, .05));
+  });
   test('business formulas are chosen once for the proposal, not per product', () {
     final followed = proposalEvaluateFinance(sample());
     expect(followed.bucket('business')!.names, isEmpty);

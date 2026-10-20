@@ -538,6 +538,7 @@ class XflowProposalItem {
     this.actionTitle,
     this.requiredFields = const <String>[],
     this.requiredFieldDefs = const <XflowTodoFieldDef>[],
+    this.highlights = const <ApprovalListHighlight>[],
   });
 
   final int id;
@@ -562,6 +563,9 @@ class XflowProposalItem {
   final List<String> requiredFields;
   final List<XflowTodoFieldDef> requiredFieldDefs;
 
+  /// 列表上用来辨认单据的摘要，如双方主体、事项、金额。
+  final List<ApprovalListHighlight> highlights;
+
   bool get isPending =>
       status.toUpperCase() == 'OPEN' || status.toUpperCase() == 'PENDING';
 
@@ -585,6 +589,7 @@ class XflowProposalItem {
     String? actionTitle,
     List<String>? requiredFields,
     List<XflowTodoFieldDef>? requiredFieldDefs,
+    List<ApprovalListHighlight>? highlights,
   }) {
     return XflowProposalItem(
       id: id,
@@ -608,8 +613,17 @@ class XflowProposalItem {
       actionTitle: actionTitle ?? this.actionTitle,
       requiredFields: requiredFields ?? this.requiredFields,
       requiredFieldDefs: requiredFieldDefs ?? this.requiredFieldDefs,
+      highlights: highlights ?? this.highlights,
     );
   }
+}
+
+/// 审批列表卡片上的一行辨认信息。
+class ApprovalListHighlight {
+  const ApprovalListHighlight({required this.label, required this.value});
+
+  final String label;
+  final String value;
 }
 
 class XflowTodoFieldDef {

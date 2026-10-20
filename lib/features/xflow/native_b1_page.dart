@@ -9,6 +9,7 @@ import '../proposal_intake/proposal_intake_select.dart';
 import '../shell/dunes_toast.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'approval_list_cache.dart';
+import 'approval_list_digest.dart';
 import 'approval_list_ui.dart';
 import 'approval_todo_flow_guide.dart';
 import 'task_todo_actions.dart';
@@ -173,6 +174,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   /// 快速切换筛选时丢弃过期响应，避免旧请求覆盖新数据。
   int _loadSeq = 0;
   Timer? _scrollRestoreRetry;
+  Timer? _highlightTimer;
   bool _searchListenerReady = false;
 
   String get _cacheListType => widget.type.name;
@@ -188,11 +190,15 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       listType: _cacheListType,
     );
     if (cached != null) {
-      _all = cached.rows;
+      _rememberHighlights(cached.rows);
+      _all = _withDigest(cached.rows);
       // 显式初始筛选（如 B1 默认「待我审批」）优先生效，避免被历史「全部」缓存盖住。
       if (widget.initialStatusFilter == null) {
         _statusFilter = cached.statusFilter;
       }
+      _templateFilter = cached.templateFilter.isEmpty
+          ? 'ALL'
+          : cached.templateFilter;
       _search.text = cached.searchQuery;
       _loading = false;
       _searchListenerReady = true;
@@ -211,6 +217,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     _persistScrollNow();
     _persistListSnapshot();
     _scrollRestoreRetry?.cancel();
+    _highlightTimer?.cancel();
     widget.workbenchRefresh?.removeListener(_onWorkbenchDataRefresh);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -240,13 +247,17 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   }
 
   void _persistListSnapshot() {
-    if (_all.isEmpty) return;
+    final keepEmpty =
+        _search.text.trim().isNotEmpty || _templateFilter != 'ALL';
+    if (_all.isEmpty && !keepEmpty) return;
+    _rememberHighlights(_all);
     ApprovalListCache.instance.put(
       userId: widget.session.userId,
       listType: _cacheListType,
       rows: _all,
       statusFilter: _statusFilter,
       searchQuery: _search.text,
+      templateFilter: _templateFilter,
     );
   }
 
@@ -337,11 +348,12 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       };
       if (!mounted || seq != _loadSeq) return;
       setState(() {
-        _all = rows;
+        _all = _withDigest(rows);
         _loading = false;
         _refreshing = false;
       });
       _persistListSnapshot();
+      unawaited(_enrichHighlights(seq));
       if (silent) _scheduleScrollRestore();
       final templateTitles = await templateTitlesFuture;
       if (!mounted || seq != _loadSeq) return;
@@ -433,8 +445,11 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
             return false;
           }
           if (q.isEmpty) return true;
+          final highlights = it.highlights
+              .map((line) => '${line.label} ${line.value}')
+              .join(' ');
           final text =
-              '${it.code} ${it.title} ${it.createdByName} ${it.tag1 ?? ''} ${it.txType ?? ''} ${it.actionTitle ?? ''} ${it.primaryAction ?? ''} ${it.documentKind ?? ''} ${it.proposalType ?? ''} ${it.templateKey ?? ''} ${it.businessType}'
+              '${it.code} ${it.title} ${it.createdByName} ${it.tag1 ?? ''} ${it.txType ?? ''} ${it.actionTitle ?? ''} ${it.primaryAction ?? ''} ${it.documentKind ?? ''} ${it.proposalType ?? ''} ${it.templateKey ?? ''} ${it.businessType} $highlights'
                   .toLowerCase();
           return text.contains(q);
         })
@@ -846,7 +861,123 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   void _selectTemplateFilter(String? value) {
     if (value == null || value == _templateFilter) return;
     setState(() => _templateFilter = value);
+    _persistListSnapshot();
     unawaited(_load(silent: true));
+  }
+
+  List<XflowProposalItem> _withDigest(List<XflowProposalItem> rows) {
+    return [
+      for (final row in rows) _rowWithDigest(row),
+    ];
+  }
+
+  XflowProposalItem _rowWithDigest(XflowProposalItem row) {
+    if (row.highlights.isNotEmpty) return row;
+    final cached = ApprovalListDigestStore.peek(row);
+    if (cached == null) return row;
+    return row.copyWith(highlights: cached);
+  }
+
+  void _rememberHighlights(List<XflowProposalItem> rows) {
+    for (final row in rows) {
+      if (row.highlights.isEmpty) continue;
+      ApprovalListDigestStore.put(row, row.highlights);
+    }
+  }
+
+  Future<void> _enrichHighlights(int seq) async {
+    final missing = <XflowProposalItem>[];
+    final seen = <String>{};
+    for (final row in _all) {
+      if (row.highlights.isNotEmpty || ApprovalListDigestStore.has(row)) {
+        continue;
+      }
+      if (row.id <= 0 || row.businessType.trim().isEmpty) continue;
+      if (!seen.add(ApprovalListDigestStore.keyOf(row))) continue;
+      missing.add(row);
+    }
+    if (missing.isEmpty || !mounted || seq != _loadSeq) return;
+
+    final templateKeys = <String>{
+      for (final row in missing)
+        if ((row.templateKey ?? '').trim().isNotEmpty) row.templateKey!.trim(),
+    };
+    await Future.wait(
+      templateKeys.map((key) async {
+        if (ApprovalListDigestStore.hasFields(key)) return;
+        try {
+          final detail = await _service.fetchTemplateDetail(
+            templateKey: key,
+            includeDictEnrich: false,
+          );
+          ApprovalListDigestStore.putFields(key, detail.fields);
+        } catch (_) {}
+      }),
+    );
+    if (!mounted || seq != _loadSeq) return;
+
+    var cursor = 0;
+    Future<void> worker() async {
+      while (mounted && seq == _loadSeq) {
+        final index = cursor++;
+        if (index >= missing.length) return;
+        final row = missing[index];
+        try {
+          final form = await _formOf(row);
+          if (!mounted || seq != _loadSeq) return;
+          final lines = buildApprovalListHighlights(
+            form: form,
+            fields: ApprovalListDigestStore.fieldsOf(row.templateKey),
+            title: row.title,
+          );
+          ApprovalListDigestStore.put(row, lines);
+          _scheduleHighlightPatch();
+        } catch (_) {}
+      }
+    }
+
+    final pool = missing.length < 4 ? missing.length : 4;
+    await Future.wait([for (var n = 0; n < pool; n++) worker()]);
+  }
+
+  Future<Map<String, dynamic>> _formOf(XflowProposalItem row) async {
+    if (row.businessType.toUpperCase() == 'PROPOSAL') {
+      final detail = await _service.fetchProposalDetail(row.id);
+      return detail.formValues;
+    }
+    final detail = await _service.fetchSubmissionDetail(
+      businessType: row.businessType,
+      businessId: row.id,
+    );
+    return detail.formData;
+  }
+
+  void _scheduleHighlightPatch() {
+    if (_highlightTimer != null) return;
+    _highlightTimer = Timer(const Duration(milliseconds: 50), () {
+      _highlightTimer = null;
+      if (!mounted) return;
+      final next = _withDigest(_all);
+      if (_sameHighlights(next, _all)) return;
+      setState(() => _all = next);
+      _persistListSnapshot();
+    });
+  }
+
+  bool _sameHighlights(
+    List<XflowProposalItem> next,
+    List<XflowProposalItem> current,
+  ) {
+    if (next.length != current.length) return false;
+    for (var i = 0; i < next.length; i++) {
+      final a = next[i].highlights;
+      final b = current[i].highlights;
+      if (a.length != b.length) return false;
+      for (var j = 0; j < a.length; j++) {
+        if (a[j].label != b[j].label || a[j].value != b[j].value) return false;
+      }
+    }
+    return true;
   }
 
   String _statusLabel(String key) {

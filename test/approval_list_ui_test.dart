@@ -98,4 +98,44 @@ void main() {
       );
     }
   }
+
+  testWidgets('approval card shows parties and matter under the title', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1100, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: XflowProposalListCard(
+            item: XflowProposalItem(
+              id: 881,
+              businessType: 'FINANCE_PROMOTION_PAYMENT',
+              code: 'PP-881',
+              title: '陆青 · 推广费付款申请单',
+              status: 'PENDING',
+              createdByName: '陆青',
+              createdAt: DateTime(2026, 10, 18),
+              documentKind: '推广费付款申请单',
+              highlights: const [
+                ApprovalListHighlight(
+                  label: '双方主体',
+                  value: '上海卓悦优泰 · 杭州推客',
+                ),
+                ApprovalListHighlight(label: '事由', value: '8月信息流推广费'),
+              ],
+            ),
+            onTap: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('双方主体'), findsOneWidget);
+    expect(find.textContaining('上海卓悦优泰 · 杭州推客'), findsOneWidget);
+    expect(find.textContaining('8月信息流推广费'), findsOneWidget);
+  });
 }

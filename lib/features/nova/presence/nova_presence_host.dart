@@ -881,26 +881,35 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
                   ? 112.0
                   : 24.0);
     final reducedMotion = media.disableAnimations;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cardSpace = math.max(180.0, constraints.maxHeight - bottom - 16);
-        final cardMaxHeight = math.min(desktop ? 520.0 : 560.0, cardSpace);
-        final cardWidth = desktop
-            ? math.min(392.0, math.max(300.0, constraints.maxWidth - 32))
-            : null;
-        return NovaPresenceScope(
-          open: floatOn && _available
-              ? _open
-              : () => widget.navigation.go('C4'),
-          floatShown: floatOn && _floatShown,
-          floatEnabled: floatOn,
-          desktopAway: _detached,
-          recallDesktop: _reattachFloat,
-          toggleFloat: _toggleFloat,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              widget.child,
+    // 浮层尺寸才需要父级约束。页面本身不能放进 LayoutBuilder：
+    // 布局回调里重建会话/导航会立刻插入 Tooltip 浮层，调试模式左侧整栏红屏。
+    return NovaPresenceScope(
+      open: floatOn && _available ? _open : () => widget.navigation.go('C4'),
+      floatShown: floatOn && _floatShown,
+      floatEnabled: floatOn,
+      desktopAway: _detached,
+      recallDesktop: _reattachFloat,
+      toggleFloat: _toggleFloat,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          widget.child,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardSpace = math.max(
+                180.0,
+                constraints.maxHeight - bottom - 16,
+              );
+              final cardMaxHeight = math.min(
+                desktop ? 520.0 : 560.0,
+                cardSpace,
+              );
+              final cardWidth = desktop
+                  ? math.min(392.0, math.max(300.0, constraints.maxWidth - 32))
+                  : null;
+              return Stack(
+                fit: StackFit.expand,
+                children: [
               if (floatOn && show && _panelOpen)
                 Positioned.fill(
                   child: GestureDetector(
@@ -1019,10 +1028,12 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
                     ),
                   ),
                 ),
-            ],
+                ],
+              );
+            },
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -1216,9 +1227,7 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
           child: InkWell(
             onTap: _onFloatTap,
             customBorder: const CircleBorder(),
-            child: Tooltip(
-              message: '展开小饕',
-              child: Stack(
+            child: Stack(
                 clipBehavior: Clip.none,
                 children: [
                   const NovaPresenceAvatar(),
@@ -1238,7 +1247,6 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
                     ),
                 ],
               ),
-            ),
           ),
         ),
       ),

@@ -3980,21 +3980,41 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     };
   }
 
+  /// 某个板块已经驳回、提案回到填写人修改。科技部和财务部这时仍要能驳回自己的板块。
+  bool get _returnedForEdit =>
+      !_row.techRevisionOpen &&
+      _review['reviewRejected'] == true &&
+      _review['presidentRejected'] != true &&
+      (_stage == 'filling' || _stage == 'awaiting_tech');
+
   /// 整板块驳回：本板块复核人可以驳回；销售提案里财务部负责人一和总裁一样，
   /// 可以驳回前面任何一个板块（市场部负责人一已复核的也行），后端同样放开。
+  /// 市场部先驳回之后，科技部负责人、财务部负责人仍可驳回自己已通过的板块。
   bool _moduleRejectEnabled(String keyName) {
     if (_moduleReviewEnabled(keyName)) return true;
-    if (_isPurchase || !_isReviewing || _me <= 0 || _row.techRevisionOpen) {
-      return false;
-    }
-    if (!_isOwner('financeOwner1')) return false;
-    return const {
+    if (_me <= 0 || _row.techRevisionOpen) return false;
+    final open = _isReviewing || _returnedForEdit;
+    if (!open) return false;
+    const modules = {
       'marketCompleted',
       'technologyCompleted',
       'financeCompleted',
       'purchaseContractCompleted',
       'salesContractCompleted',
-    }.contains(keyName);
+    };
+    if (!_isPurchase &&
+        _isOwner('financeOwner1') &&
+        modules.contains(keyName)) {
+      return true;
+    }
+    if (!_returnedForEdit) return false;
+    return switch (keyName) {
+      'technologyCompleted' => _isTechReviewer,
+      'financeCompleted' => !_isPurchase && _isOwner('financeOwner1'),
+      'purchaseContractCompleted' || 'salesContractCompleted' =>
+        _isOwner('financeOwner2'),
+      _ => false,
+    };
   }
 
   Map<String, dynamic> get _form => _row.form;
@@ -6017,13 +6037,49 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   ProposalIntakeNavSection? get _rejectedSection {
     if (_review['presidentRejected'] == true) return null;
     if (_review['reviewRejected'] != true) return null;
-    final raw = '${_review['reviewRejectSection'] ?? ''}'.trim();
+    final sections = _rejectSectionFlags;
+    final raw = sections.isEmpty
+        ? '${_review['reviewRejectSection'] ?? ''}'.trim()
+        : sections.first;
     if (raw.startsWith('market')) return ProposalIntakeNavSection.market;
     if (raw.startsWith('technology') || raw.startsWith('financeInterface')) {
       return ProposalIntakeNavSection.tech;
     }
     if (raw.isNotEmpty) return ProposalIntakeNavSection.finance;
     return null;
+  }
+
+  List<String> get _rejectSectionFlags {
+    final raw = _review['reviewRejectSections'];
+    if (raw is List) {
+      return [
+        for (final item in raw)
+          if ('$item'.trim().isNotEmpty) '$item'.trim(),
+      ];
+    }
+    final one = '${_review['reviewRejectSection'] ?? ''}'.trim();
+    return one.isEmpty ? const [] : [one];
+  }
+
+  String get _rejectBoardName {
+    final names = <String>[];
+    for (final flag in _rejectSectionFlags) {
+      final name = switch (flag) {
+        'marketCompleted' => '市场部',
+        'technologyCompleted' || 'financeInterfaceCompleted' => '科技部',
+        'financeCompleted' => '财务部',
+        'purchaseContractCompleted' => '采购合同',
+        'salesContractCompleted' => '销售合同',
+        _ => '',
+      };
+      if (name.isNotEmpty && !names.contains(name)) names.add(name);
+    }
+    if (names.isEmpty) {
+      return _rejectedSection == null
+          ? '板块'
+          : proposalIntakeNavSectionLabel(_rejectedSection!);
+    }
+    return names.join('、');
   }
 
   /// 原型标题旁的状态：比列表更细，写清卡在哪一步。
@@ -6035,6 +6091,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (_review['presidentRejected'] == true) return '总裁已驳回';
     final rejected = _rejectedSection;
     if (rejected != null) {
+      if (_rejectSectionFlags.length > 1) return '${_rejectBoardName}已驳回';
       return '${proposalIntakeNavSectionLabel(rejected)}已驳回';
     }
     return switch (_stage) {
@@ -10987,15 +11044,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       // 原型填写页「被驳回」横幅：橙色标签 + 谁驳回了哪个板块 + 意见；按钮在底部操作条。
       Color c(int v, [DunesColorRole r = DunesColorRole.foreground]) =>
           DunesColors.resolve(context, Color(v), role: r);
-      final boardName = president
-          ? '提案'
-          : (_rejectedSection == null
-                ? '板块'
-                : proposalIntakeNavSectionLabel(_rejectedSection!));
+      final boardName = president ? '提案' : _rejectBoardName;
       final next = president
           ? '请修改后重新通知财务填写，全部流程重新开始。'
           : techRound
           ? '请修改后点底部「确认本轮科技变更」。'
+          : _rejectSectionFlags.length > 1
+          ? '改这些被驳回的内容，改完点底部「重新提交并通知审核人」。还没被驳回的板块复核保留。'
           : '只改$boardName，改完点底部「重新提交并通知审核人」，其他板块复核保留。';
       return Container(
         key: const ValueKey('proposal-proto-reject-banner'),
@@ -17863,7 +17918,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             }
             if (coupon) name = '用券成本';
             // 按当前结算方式当场算。切换方式后不再显示上一种方式留下的数。
-            final line = proposalSettleLineView(t, scale: base, face: faceValue);
+            final line = proposalSettleLineView(
+              t,
+              scale: base,
+              face: faceValue,
+              promotionMain: cost ? proposalPromotionMain(_form, product) : null,
+            );
             final formula = t.displayFormula.trim();
             return ProposalProductCardLine(
               name: prefix.isEmpty

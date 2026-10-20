@@ -1204,6 +1204,7 @@ class XflowProposalListCard extends StatelessWidget {
                           ),
                       ],
                     ),
+                    _approvalHighlights(context),
                   ],
                 ),
               ),
@@ -1348,6 +1349,7 @@ class XflowProposalListCard extends StatelessWidget {
                   _StatusBadge(status: item.status),
                 ],
               ),
+              _approvalHighlights(context),
               const SizedBox(height: 7),
               _approvalMetadata(
                 context,
@@ -1428,6 +1430,7 @@ class XflowProposalListCard extends StatelessWidget {
                   _StatusBadge(status: item.status),
                 ],
               ),
+              _approvalHighlights(context),
               const SizedBox(height: 7),
               _approvalMetadata(
                 context,
@@ -1475,6 +1478,45 @@ class XflowProposalListCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _approvalHighlights(BuildContext context) {
+    if (item.highlights.isEmpty) return const SizedBox.shrink();
+    final labelColor = DunesColors.resolve(context, DunesColors.text3);
+    final valueColor = DunesColors.resolve(context, DunesColors.text);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < item.highlights.length; i++) ...[
+            if (i > 0) const SizedBox(height: 3),
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: item.highlights[i].label,
+                    style: TextStyle(fontSize: 12, color: labelColor),
+                  ),
+                  const TextSpan(text: '  '),
+                  TextSpan(
+                    text: item.highlights[i].value,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.35,
+                      fontWeight: FontWeight.w500,
+                      color: valueColor,
+                    ),
+                  ),
+                ],
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -6,11 +6,13 @@ class ApprovalListSnapshot {
     required this.rows,
     required this.statusFilter,
     required this.searchQuery,
+    this.templateFilter = 'ALL',
   });
 
   final List<XflowProposalItem> rows;
   final String statusFilter;
   final String searchQuery;
+  final String templateFilter;
 }
 
 class ApprovalListCache {
@@ -29,11 +31,16 @@ class ApprovalListCache {
   }) {
     if (userId <= 0 || listType.isEmpty) return null;
     final snap = _snapshots[_key(userId, listType)];
-    if (snap == null || snap.rows.isEmpty) return null;
+    if (snap == null) return null;
+    final hasQuery = snap.searchQuery.trim().isNotEmpty;
+    final hasTemplate =
+        snap.templateFilter.isNotEmpty && snap.templateFilter != 'ALL';
+    if (snap.rows.isEmpty && !hasQuery && !hasTemplate) return null;
     return ApprovalListSnapshot(
       rows: List<XflowProposalItem>.unmodifiable(snap.rows),
       statusFilter: snap.statusFilter,
       searchQuery: snap.searchQuery,
+      templateFilter: snap.templateFilter,
     );
   }
 
@@ -60,12 +67,14 @@ class ApprovalListCache {
     required List<XflowProposalItem> rows,
     required String statusFilter,
     required String searchQuery,
+    String templateFilter = 'ALL',
   }) {
     if (userId <= 0 || listType.isEmpty) return;
     _snapshots[_key(userId, listType)] = ApprovalListSnapshot(
       rows: List<XflowProposalItem>.unmodifiable(rows),
       statusFilter: statusFilter,
       searchQuery: searchQuery,
+      templateFilter: templateFilter,
     );
   }
 

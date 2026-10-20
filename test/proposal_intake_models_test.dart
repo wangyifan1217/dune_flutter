@@ -2940,6 +2940,7 @@ void main() {
           'id': 'sku-1',
           'faceValue': '100',
           'settlements': [
+            {'id': 'in', 'priceMode': 'unit', 'settleUnitPrice': '50'},
             {
               'id': 'st-1',
               'kind': 'cost',
@@ -2951,7 +2952,8 @@ void main() {
       ],
     };
     expect(proposalMatchedProjectCostNames(form), contains('推广费'));
-    expect(proposalEstimateProjectCostAmount(form, '推广费'), 1);
+    // 结算金额 100 × 50/100 = 50，再 × 0.01
+    expect(proposalEstimateProjectCostAmount(form, '推广费'), 0.5);
   });
 
   test('project cost on child coupon uses market scale and unit price', () {

@@ -2968,7 +2968,7 @@ void main() {
 
     test('v23 · 主 Hero 与账本同一套皮、同一条左沿，面板带浅边', () {
       expect(lighthouseHeroMatchesLedgerCard, isTrue);
-      expect(lighthouseHeroShellMarginH, 12);
+      expect(lighthouseHeroShellMarginH, 22);
       expect(lighthouseHeroPanelEdgeWidth, greaterThan(0));
       expect(
         lighthouseHeroPanelResultEdgeAlpha,

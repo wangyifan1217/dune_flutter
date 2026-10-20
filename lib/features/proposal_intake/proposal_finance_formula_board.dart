@@ -479,10 +479,10 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
         ],
         Flexible(
           child: Text(
-            widget.title,
+          widget.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: _sans(context, size: 12.5, weight: FontWeight.w700),
+          style: _sans(context, size: 12.5, weight: FontWeight.w700),
           ),
         ),
         if (widget.tag != null) ...[const SizedBox(width: 6), widget.tag!],
@@ -1370,7 +1370,7 @@ class _CategoryDetail extends StatelessWidget {
       ?table,
       for (final line in bucket.lines)
         if (!isSimple(line))
-          _CostLine(
+        _CostLine(
           category: category,
           line: line,
           onRemove: allowItemEdit && !line.locked && onItemsChanged != null

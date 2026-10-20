@@ -724,8 +724,8 @@ const bool lighthouseHeroSectionUsesHeroSurface = true;
 const bool lighthouseHeroMatchesLedgerCard = true;
 
 /// 与账本外框同一条左沿。
-/// 2026-10 · 22 → 12，跟 PK 页同宽：窄屏上两侧多出 20px 给三栏指标格和走势图。
-const double lighthouseHeroShellMarginH = 12;
+/// 2026-10 · 试过 22 → 12（跟 PK 页同宽），整体太宽，改回 22。
+const double lighthouseHeroShellMarginH = 22;
 
 /// 一级主页底色：比白卡深一档的淡灰紫（跟 PK 页 #F6F5F9 同族、再沉一点），
 /// 白卡 + 淡紫细边才浮得出来；原来的暖白 bgApp 跟白卡几乎一个色。
@@ -4405,6 +4405,10 @@ const lighthouseFundPoolPanelAssets = 'assets';
 /// 2026-10 挪进主 Hero：大数卡底部「总资产」点开就地看走势与对账，
 /// 供给页不再重复一块。改回 true 即恢复原位置。
 const bool lighthouseSupplyListShowsAssetOverview = false;
+
+/// 明细卡顶上的「▤ 产品明细 · N 个 · 按 X 排 …… 日期」小标题。
+/// 2026-10-20 去掉：维度 tab、排序、期间条都已经在页面上，再说一遍是噪音。
+const bool lighthouseLedgerShowsTitle = false;
 const lighthouseFundPoolPanelInvoice = 'invoice';
 
 /// 预览格 key → 它点开的面板；不认识的 key 不展开。

@@ -453,6 +453,14 @@ void main() {
       kProposalSkuPlatformStatusPending,
     );
     expect(proposalSkuPlatformStatusLabel(blank.platformStatus), '待配置');
+    expect(
+      proposalSkuPlatformReceiptInfoRows(
+        platformMessage: '渠道不存在',
+        buildStatusText: '建品失败：渠道不存在',
+      ),
+      isEmpty,
+      reason: '科技部/财务部产品卡在资管回执未对接时不展示平台说明和建品状态',
+    );
     expect(blank.toJson()['platformStatus'], kProposalSkuPlatformStatusPending);
     expect(
       ProposalSkuDetailRow.fromJson({

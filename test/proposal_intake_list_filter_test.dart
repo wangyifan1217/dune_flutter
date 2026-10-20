@@ -45,18 +45,23 @@ void main() {
         expect(find.descendant(of: strip, matching: find.text('草稿')), findsOneWidget);
         expect(find.descendant(of: strip, matching: find.text('填写中')), findsOneWidget);
         expect(find.text('全部板块'), findsNothing);
-        // 时间段是「库内提案 20」这样的一段富文本。
-        for (final label in ['库内提案', '本日提案', '本周提案', '本月提案']) {
-          expect(find.textContaining(label, findRichText: true), findsOneWidget);
-        }
-        await tester.tap(find.byKey(const ValueKey('proposal-period-day')));
-        await tester.pump();
+        // 时间、分类收成两个下拉，默认「全部」；不再单独一行「提案明细 N 份」。
         expect(
-          find.byKey(const ValueKey('proposal-period-day-selected')),
+          find.byKey(const ValueKey('proposal-period-all-selected')),
           findsOneWidget,
         );
+        expect(
+          find.byKey(const ValueKey('proposal-sector-filter')),
+          findsOneWidget,
+        );
+        expect(find.text('提案明细'), findsNothing);
+        // 打开时间下拉：「全部」一定在；数为 0 的时间段不列出来。
+        await tester.tap(find.byKey(const ValueKey('proposal-period-strip')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('proposal-period-all')), findsOneWidget);
+        expect(find.byKey(const ValueKey('proposal-period-day')), findsNothing);
         await tester.tap(find.byKey(const ValueKey('proposal-period-all')));
-        await tester.pump();
+        await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('proposal-period-all-selected')),
           findsOneWidget,

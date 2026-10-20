@@ -32,6 +32,37 @@ class ProposalIntakeService {
     return Uri.parse('$base$path').replace(queryParameters: query);
   }
 
+  /// 导出提案归档 Excel。不传 [revision] 导出当前生效版；传了导出那一版的快照。
+  /// 返回文件内容和服务端给的文件名（提案编号_名称_V1_日期.xlsx）。
+  Future<({Uint8List bytes, String fileName})> exportExcel(
+    int id, {
+    int? revision,
+  }) async {
+    if (!kProposalIntakeArchiveExportEnabled) {
+      throw Exception('归档导出已关闭');
+    }
+    final response = await http
+        .get(
+          _uri(
+            '/proposal-intakes/$id/export',
+            revision == null ? null : {'revision': '$revision'},
+          ),
+          headers: {'Authorization': 'Bearer ${session.token}'},
+        )
+        .timeout(const Duration(seconds: 60));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _unwrap(response);
+      throw Exception('导出失败（${response.statusCode}）');
+    }
+    return (
+      bytes: response.bodyBytes,
+      fileName: proposalExportFileName(
+        response.headers['content-disposition'] ?? '',
+        fallback: '提案_$id.xlsx',
+      ),
+    );
+  }
+
   Future<ProposalIntakeAccess> fetchAccess() async {
     final data = _unwrap(
       await http.get(_uri('/proposal-intakes/access'), headers: _headers),
@@ -435,4 +466,20 @@ class ProposalIntakeService {
     if (value is Map) return Map<String, dynamic>.from(value);
     return <String, dynamic>{};
   }
+}
+
+/// 从 Content-Disposition 里取文件名：优先 filename*=UTF-8''…（中文名），其次 filename="…"。
+String proposalExportFileName(String header, {String fallback = '提案.xlsx'}) {
+  final star = RegExp(r"filename\*=UTF-8''([^;]+)", caseSensitive: false)
+      .firstMatch(header);
+  if (star != null) {
+    try {
+      final name = Uri.decodeComponent(star.group(1)!.trim());
+      if (name.isNotEmpty) return name;
+    } catch (_) {}
+  }
+  final plain = RegExp(r'filename="?([^";]+)"?', caseSensitive: false)
+      .firstMatch(header);
+  final name = plain?.group(1)?.trim() ?? '';
+  return name.isEmpty ? fallback : name;
 }

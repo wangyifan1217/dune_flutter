@@ -6,6 +6,9 @@ import 'settlement_catalog.dart';
 
 export 'proposal_sla_models.dart';
 
+/// 提案归档 Excel 与生效版本快照。一期先关掉：没跑 V315 时读 revision 列会让提案页整体报错。
+const kProposalIntakeArchiveExportEnabled = false;
+
 String normalizeProposalIntakeKind(String raw) {
   switch (raw.trim().toLowerCase()) {
     case 'purchase':
@@ -169,6 +172,18 @@ String normalizeProposalSkuPlatformStatus(String raw) {
 
 /// 业务平台状态（资管建品回执）。还没和资管对接，先全部隐藏；对接好后改成 true。
 const bool kProposalSkuPlatformStatusVisible = false;
+
+/// 产品信息表里的「平台说明 / 建品状态」。开关关掉时科技部、财务部都不展示。
+List<(String, String)> proposalSkuPlatformReceiptInfoRows({
+  required String platformMessage,
+  required String buildStatusText,
+}) {
+  if (!kProposalSkuPlatformStatusVisible) return const [];
+  return [
+    if (platformMessage.trim().isNotEmpty) ('平台说明', platformMessage.trim()),
+    if (buildStatusText.trim().isNotEmpty) ('建品状态', buildStatusText.trim()),
+  ];
+}
 
 String proposalSkuPlatformStatusLabel(String raw) {
   final code = normalizeProposalSkuPlatformStatus(raw);
@@ -441,7 +456,12 @@ class ProposalIntakeRow {
     this.myAction = '',
     this.financeEstimate = const {},
     this.sla,
+    this.revision = 0,
   });
+
+  /// 当前生效版本号：V1 = 总裁第一次确认通过，之后每次变更生效 +1；0 = 还没生效过。
+  /// 归档 Excel / 版本快照屏蔽期间后端不返回此字段，前端按 0 处理。
+  final int revision;
 
   final int id;
   final String code;
@@ -500,6 +520,7 @@ class ProposalIntakeRow {
       myAction: '${json['myAction'] ?? ''}'.trim(),
       financeEstimate: _map(json['financeEstimate']),
       sla: ProposalSlaSummary.tryParse(json['sla']),
+      revision: (json['revision'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -553,6 +574,7 @@ class ProposalIntakeRow {
     myAction: myAction ?? this.myAction,
     financeEstimate: financeEstimate,
     sla: sla,
+    revision: revision,
   );
 
   String initiatorDisplayName(List<ProposalPerson> people) {

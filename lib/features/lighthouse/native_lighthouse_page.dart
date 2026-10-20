@@ -8956,6 +8956,7 @@ class _TrendChart extends StatefulWidget {
     this.zoomable = false,
     this.legendCompact = false,
     this.legendNamesOnly = false,
+    this.hoverSelects = false,
     this.legendTrailing,
     this.candles = false,
     this.initialFromMonth,
@@ -8987,6 +8988,10 @@ class _TrendChart extends StatefulWidget {
   /// 「本期合计」图例只留指标名（可点切换曲线），数值只给选中那条。
   /// 主 Hero 用：同样的数下面那排格子已经写了一遍，不再重复。
   final bool legendNamesOnly;
+
+  /// 桌面 / 网页：鼠标划过就选中那一格（不用点）。资金与资产的走势用，
+  /// 标题旁的日期和左栏三格跟着变。
+  final bool hoverSelects;
 
   /// 图例那一行最右侧挂的控件（全屏大图的缩放 / 收起）。
   final Widget? legendTrailing;
@@ -12075,7 +12080,13 @@ class _TrendChartState extends State<_TrendChart>
             ),
           ),
         );
-        if (!widget.zoomable) return gesture;
+        final interactive = widget.hoverSelects
+            ? MouseRegion(
+                onHover: (e) => _setSelectionFromX(e.localPosition.dx, w),
+                child: gesture,
+              )
+            : gesture;
+        if (!widget.zoomable) return interactive;
         return Listener(
           onPointerDown: _onZoomPointerDown,
           onPointerMove: (e) => _onZoomPointerMove(e, w),
@@ -12084,7 +12095,7 @@ class _TrendChartState extends State<_TrendChart>
           onPointerSignal: (e) => _onZoomSignal(e, w),
           onPointerPanZoomStart: _onPanZoomStart,
           onPointerPanZoomUpdate: (e) => _onPanZoomUpdate(e, w),
-          child: gesture,
+          child: interactive,
         );
       },
     );
@@ -12275,15 +12286,16 @@ class _TrendChartState extends State<_TrendChart>
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             curve: Curves.easeOut,
-            height: 26,
-            padding: const EdgeInsets.symmetric(horizontal: 9),
+            height: 24,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
               color: DunesColors.resolve(
                 context,
                 active ? _LhPlum.mist : LhColors.paper,
                 role: DunesColorRole.surface,
               ),
-              borderRadius: BorderRadius.circular(13),
+              // 方块：圆角 6，比整圆胶囊更像「表格里的一格」，和下面指标格同一语汇。
+              borderRadius: BorderRadius.circular(6),
               border: Border.all(
                 color: active
                     ? DunesColors.resolve(
@@ -12304,28 +12316,28 @@ class _TrendChartState extends State<_TrendChart>
               children: [
                 if (drawn)
                   Container(
-                    width: 10,
-                    height: 2.5,
+                    width: 7,
+                    height: 7,
                     decoration: BoxDecoration(
                       color: DunesColors.resolveNullable(
                         context,
                         color,
                         role: DunesColorRole.surface,
                       ),
-                      borderRadius: BorderRadius.circular(1.5),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   )
                 else
                   Container(
-                    width: 4,
-                    height: 4,
+                    width: 6,
+                    height: 6,
                     decoration: BoxDecoration(
                       color: DunesColors.resolve(
                         context,
                         LhColors.mute2,
                         role: DunesColorRole.surface,
                       ).withAlpha(110),
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(1.5),
                     ),
                   ),
                 const SizedBox(width: 5),
@@ -12672,23 +12684,6 @@ class _TrendChartState extends State<_TrendChart>
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              if (!widget.legendCompact) ...[
-                Container(
-                  width: 2.5,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? DunesColors.resolve(
-                            context,
-                            _LhPlum.deep,
-                            role: DunesColorRole.surface,
-                          )
-                        : lighthouseTrendEmphasisInk(_emphasisColor),
-                    borderRadius: BorderRadius.circular(1.5),
-                  ),
-                ),
-                const SizedBox(width: 6),
-              ],
               Text(
                 statusText,
                 style: LhTypography.mono(
@@ -21536,7 +21531,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // 跟「产品汇总」同款的小标题：两张卡都由标题开头。
-                if (_tab != 'analysis') _buildLedgerTitle(),
+                // 2026-10-20：维度 tab 已经说了是哪张表、期间条已经说了日期，不再重复一行标题。
+                if (lighthouseLedgerShowsTitle && _tab != 'analysis')
+                  _buildLedgerTitle(),
                 KeyedSubtree(
                   key: _ledgerTabsAnchorKey,
                   child: _buildTabSegment(),
@@ -23815,78 +23812,100 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     });
   }
 
-  /// 大数卡底部的「预收净增」。标签做成浅紫胶囊，两行：
+  /// 大数卡底部：「预收净增」和「资金与资产」合成一张小卡（2026-10-20）。
   ///
-  ///     [预收净增]        ↓562%
-  ///     −104.4万
+  ///     ┌──────────────────┐
+  ///     │ 预收净增   ↓454% │   ← 点它：主走势切到预收净增（淡紫底）
+  ///     │ −58.4万          │
+  ///     ├──────────────────┤
+  ///     │ 🏦 资金与资产   › │   ← 点它：下面展开资金与资产（深紫底）
+  ///     └──────────────────┘
   ///
-  /// 移动端这张卡只有 85~90 宽（Hero 里 KPI 卡占 3/10 栏），一行塞不下
-  /// 胶囊 + 值 + 环比（要 130+）。所以分两行，且**字号不跟卡宽缩放** ——
-  /// 按比例缩只会越缩越挤。宁可拆行，也不缩字。
-  ///
-  /// 环比跟标签同一行（而不是跟数值）：数值最长会有「−1044.5万」这种七字符，
-  /// 留它独占一行才永不被挤；环比短，跟标签挤一行刚好。
-  Widget _heroPrepaidBlock(Map<String, double> heroTotals) {
+  /// 原来是一颗浅紫胶囊标签 + 一行数 + 另一颗按钮，三样东西各自一套样式，
+  /// 堆在窄卡底部很乱。现在一张白卡、一根发丝线分上下两格，字号跟指标格同档。
+  /// 移动端这张卡只有 85~90 宽：分两行，字号不随卡宽缩。
+  Widget _buildHeroFundsMini(
+    Map<String, double> heroTotals, {
+    required bool withAssets,
+  }) {
+    if (withAssets) _ensureHeroFundPool();
+    final hasAssets = withAssets && _heroAssetLines.isNotEmpty;
     final ink = DunesColors.resolve(context, LhColors.ink);
+    final mute = DunesColors.resolve(context, LhColors.mute);
     final mute2 = DunesColors.resolve(context, LhColors.mute2);
+    final plum = DunesColors.resolve(context, _LhPlum.primary);
     final deep = DunesColors.resolve(context, _LhPlum.deep);
-    final chip = DunesColors.resolve(
-      context,
-      _LhPlum.lavender,
-      role: DunesColorRole.surface,
-    );
     final r = _heroPrepaidReadout(heroTotals);
-    return Semantics(
+
+    final prepaidPart = Semantics(
       button: true,
       selected: r.active,
       label: '预收净增走势',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _toggleHeroPrepaidTrend,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: lighthouseHeroPrepaidRowPadV,
-          ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+          color: r.active
+              ? DunesColors.resolve(
+                  context,
+                  _LhPlum.mist,
+                  role: DunesColorRole.surface,
+                )
+              : const Color(0x00FFFFFF),
+          // 手机上这张卡只有 85~90 宽：标签独占一行（宁可缩字也不省略成「预…」），
+          // 第二行左边数值、右边环比；数值太长时只缩数值。
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '预收净增',
+                  maxLines: 1,
+                  softWrap: false,
+                  style: LhTypography.sans(
+                    size: lighthouseHeroCellLabelFontSize,
+                    color: r.active ? deep : mute,
+                    weight: r.active ? FontWeight.w700 : FontWeight.w500,
+                    height: 1.1,
+                    context: context,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  // 张开时整块反色（深紫底白字），和「资金与资产」按钮的张开态
-                  // 一个语汇，一眼能看出「主走势图切到了预收净增」。
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: lighthouseHeroPrepaidChipPadH,
-                      vertical: lighthouseHeroPrepaidChipPadV,
-                    ),
-                    decoration: BoxDecoration(
-                      color: r.active ? deep : chip,
-                      borderRadius: BorderRadius.circular(
-                        lighthouseHeroPrepaidChipRadius,
-                      ),
-                    ),
-                    child: Text(
-                      '预收净增',
-                      maxLines: 1,
-                      softWrap: false,
-                      style: LhTypography.sans(
-                        size: lighthouseHeroPrepaidLabelFontSize,
-                        color: r.active ? Colors.white : deep,
-                        weight: FontWeight.w700,
-                        height: 1.0,
-                        context: context,
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _heroWan(r.value),
+                        maxLines: 1,
+                        softWrap: false,
+                        style: _tabular(
+                          LhTypography.number(
+                            size: lighthouseHeroMetricValueFontSize,
+                            color: r.active ? deep : ink,
+                            context: context,
+                          ),
+                        ).copyWith(fontWeight: FontWeight.w700, height: 1.0),
                       ),
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 4),
                   Text(
                     r.delta,
                     maxLines: 1,
                     softWrap: false,
                     style: _tabular(
                       LhTypography.mono(
-                        size: lighthouseHeroPrepaidDeltaFontSize,
+                        size: lighthouseHeroCellDeltaFontSize,
                         color: mute2,
                         weight: FontWeight.w600,
                         height: 1.0,
@@ -23896,135 +23915,104 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   ),
                 ],
               ),
-              const SizedBox(height: lighthouseHeroPrepaidLineGap),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _heroWan(r.value),
-                  maxLines: 1,
-                  softWrap: false,
-                  style: _tabular(
-                    LhTypography.number(
-                      size: lighthouseHeroPrepaidValueFontSize,
-                      color: ink,
-                      context: context,
-                    ),
-                  ).copyWith(fontWeight: FontWeight.w700, height: 1.0),
-                ),
-              ),
             ],
           ),
         ),
       ),
     );
-  }
 
-  /// 大数卡底部：预收净增是本期流量，单独一行小字，不进资产面板。
-  /// 有资金池时它在「资金与资产」按钮上面；没有时只剩这一行。
-  Widget _buildHeroFundsMini(
-    Map<String, double> heroTotals, {
-    required bool withAssets,
-  }) {
-    if (withAssets) _ensureHeroFundPool();
-    final hasAssets = withAssets && _heroAssetLines.isNotEmpty;
-    if (!hasAssets) {
-      return _heroPrepaidBlock(heroTotals);
-    }
+    Widget card(List<Widget> children) => Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(color: plum.withAlpha(45), width: 0.8),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: children,
+      ),
+    );
+    if (!hasAssets) return card([prepaidPart]);
 
     // 供给页选了中石油 / 中石化时，点开默认就看那一家。
     final assetKey = _tab == 'supply'
         ? (_supplySelectedAssetCategory ?? 'total')
         : 'total';
     final open = _heroAssetOpen;
-    // 颜色在 _heroPrepaidBlock 里各自取；这里只剩「资金与资产」按钮要用。
-    final plum = DunesColors.resolve(context, _LhPlum.primary);
-    final deep = DunesColors.resolve(context, _LhPlum.deep);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _heroPrepaidBlock(heroTotals),
-        const SizedBox(height: 4),
-        Semantics(
-          button: true,
-          expanded: open,
-          label: open ? '收起资金与资产' : '展开资金与资产',
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              LighthouseFeedback.instance.play(
-                open
-                    ? LighthouseFeedbackKind.collapse
-                    : LighthouseFeedbackKind.expand,
-              );
-              setState(() {
-                _heroAssetOpen = !open;
-                if (!open) {
-                  _heroAssetKey = _heroAssetLine(assetKey) == null
-                      ? 'total'
-                      : assetKey;
-                  _supplyAssetPointIndex = null;
-                }
-              });
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              height: 28,
-              padding: const EdgeInsets.symmetric(horizontal: 7),
-              decoration: BoxDecoration(
-                color: open
-                    ? deep
-                    : DunesColors.resolve(
-                        context,
-                        Colors.white,
-                        role: DunesColorRole.surface,
-                      ),
-                border: Border.all(
-                  color: open ? deep : plum.withAlpha(60),
-                  width: 0.8,
-                ),
-                borderRadius: BorderRadius.circular(9),
+    final assetsPart = Semantics(
+      button: true,
+      expanded: open,
+      label: open ? '收起资金与资产' : '展开资金与资产',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          LighthouseFeedback.instance.play(
+            open ? LighthouseFeedbackKind.collapse : LighthouseFeedbackKind.expand,
+          );
+          setState(() {
+            _heroAssetOpen = !open;
+            if (!open) {
+              _heroAssetKey = _heroAssetLine(assetKey) == null
+                  ? 'total'
+                  : assetKey;
+              _supplyAssetPointIndex = null;
+            }
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          height: 26,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          color: open ? deep : const Color(0x00FFFFFF),
+          child: Row(
+            children: [
+              Icon(
+                Icons.account_balance_rounded,
+                size: 11,
+                color: open ? Colors.white : plum,
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.account_balance_rounded,
-                    size: 12,
-                    color: open ? Colors.white : plum,
-                  ),
-                  const SizedBox(width: 4),
-                  // 大数卡窄：字放不下时整体缩一点，不再被截成「资…」。
-                  Expanded(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        '资金与资产',
-                        maxLines: 1,
-                        softWrap: false,
-                        style: LhTypography.sans(
-                          size: 10.5,
-                          color: open ? Colors.white : deep,
-                          weight: FontWeight.w700,
-                          height: 1.0,
-                          context: context,
-                        ),
-                      ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '资金与资产',
+                    maxLines: 1,
+                    softWrap: false,
+                    style: LhTypography.sans(
+                      size: 10,
+                      color: open ? Colors.white : deep,
+                      weight: FontWeight.w700,
+                      height: 1.0,
+                      context: context,
                     ),
                   ),
-                  Icon(
-                    open
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.chevron_right_rounded,
-                    size: 15,
-                    color: open ? Colors.white : plum,
-                  ),
-                ],
+                ),
               ),
-            ),
+              Icon(
+                open
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.chevron_right_rounded,
+                size: 13,
+                color: open ? Colors.white : plum,
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
+    return card([
+      prepaidPart,
+      Container(height: 0.7, color: plum.withAlpha(30)),
+      assetsPart,
+    ]);
   }
 
   /// 主 Hero 的「资金与资产」：一块矮卡。
@@ -24572,17 +24560,41 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     context: context,
                   ),
                 ),
-                const Spacer(),
-                if (asOfShort.isNotEmpty)
-                  Text(
-                    '资产截至 $asOfShort',
-                    style: LhTypography.mono(
-                      size: 8.5,
-                      color: mute2,
-                      height: 1.0,
-                      context: context,
+                const SizedBox(width: 8),
+                // 日期跟着走势走：鼠标划过 / 点哪一格就写哪一天，平时写最新快照日。
+                if (pickedLabel.isNotEmpty || asOfShort.isNotEmpty)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: pickedLabel.isNotEmpty
+                          ? DunesColors.resolve(
+                              context,
+                              _LhPlum.lavender,
+                              role: DunesColorRole.surface,
+                            )
+                          : const Color(0x00FFFFFF),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      pickedLabel.isNotEmpty ? pickedLabel : '截至 $asOfShort',
+                      style: _tabular(
+                        LhTypography.mono(
+                          size: 9.5,
+                          color: pickedLabel.isNotEmpty ? deep : mute2,
+                          weight: pickedLabel.isNotEmpty
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          height: 1.0,
+                          context: context,
+                        ),
+                      ),
                     ),
                   ),
+                const Spacer(),
                 Semantics(
                   button: true,
                   label: '收起资金与资产',
@@ -24642,6 +24654,92 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// 标题旁的日期「印章」：浅紫底细边小方块，月份淡、日子重；
+  /// 单日后面挂星期（周二），区间写成「10.01 → 10.18」。
+  /// 原来是一串灰色等宽数字，像页脚。
+  Widget _heroDateStamp(String label) {
+    final plum = DunesColors.resolve(context, _LhPlum.primary);
+    final deep = DunesColors.resolve(context, _LhPlum.deep);
+    // 一个色：整枚印章都走深紫，只用深浅分层（2026-10 · 原来紫 / 深紫 / 灰三色打架）。
+    final soft = deep.withAlpha(140);
+    final dateRe = RegExp(r'^(\d{1,2})\.(\d{1,2})$');
+    final parts = label
+        .split(RegExp(r'\s*[–—~-]\s*'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final dates = [for (final p in parts) dateRe.firstMatch(p)];
+    TextStyle numStyle(Color c, FontWeight w) => _tabular(
+      LhTypography.mono(
+        size: lighthouseHeroSummaryRangeFontSize,
+        color: c,
+        weight: w,
+        letterSpacing: 0.2,
+        height: 1.0,
+        context: context,
+      ),
+    );
+    final spans = <InlineSpan>[];
+    if (dates.isEmpty || dates.any((m) => m == null)) {
+      // 认不出的格式（「近 7 天」之类）：原样写，只换成印章样式。
+      spans.add(TextSpan(text: label, style: numStyle(deep, FontWeight.w700)));
+    } else {
+      for (var i = 0; i < dates.length; i++) {
+        final m = dates[i]!;
+        if (i > 0) {
+          spans.add(TextSpan(text: ' → ', style: numStyle(soft, FontWeight.w500)));
+        }
+        spans
+          ..add(TextSpan(text: m[1]!.padLeft(2, '0'), style: numStyle(deep, FontWeight.w600)))
+          ..add(TextSpan(text: '.', style: numStyle(soft, FontWeight.w500)))
+          ..add(TextSpan(text: m[2]!.padLeft(2, '0'), style: numStyle(deep, FontWeight.w800)));
+      }
+      if (dates.length == 1) {
+        final now = _nowCST();
+        final d = DateTime(now.year, int.parse(dates[0]![1]!), int.parse(dates[0]![2]!));
+        const wk = ['一', '二', '三', '四', '五', '六', '日'];
+        spans.add(
+          TextSpan(
+            text: '  周${wk[d.weekday - 1]}',
+            style: LhTypography.sans(
+              size: lighthouseHeroSummaryRangeFontSize - 1.5,
+              color: soft,
+              weight: FontWeight.w500,
+              height: 1.0,
+              context: context,
+            ),
+          ),
+        );
+      }
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 3, 7, 3),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          _LhPlum.lavender,
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(color: plum.withAlpha(45), width: 0.8),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.event_rounded, size: 11, color: soft),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text.rich(
+              TextSpan(children: spans),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
@@ -24945,7 +25043,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final rangeLabel = _selectedRangeLabel;
     // 产品 / 供给 / 渠道的汇总 Hero 共用同一视觉身份；只替换标题和数据。
     final summaryAccent = DunesColors.resolve(context, _LhPlum.primary);
-    const summaryIcon = Icons.dashboard_outlined;
+    // 图标按维度换：产品 = 货品盒，供给 = 加油站（供给方就是油站），
+    // 渠道 = 分流，人效 = 人群；不再是一个看不出含义的「仪表盘」。
+    final summaryIcon = switch (_tab) {
+      'supply' => Icons.local_gas_station_rounded,
+      'channel' => Icons.alt_route_rounded,
+      'people' => Icons.groups_rounded,
+      'netTa' => Icons.account_balance_wallet_rounded,
+      _ => Icons.inventory_2_rounded,
+    };
 
     // v14 · 版式压缩 441 → ~300pt (首屏占比 53% → 36%, 列表可见 2 行 → 4 行)：
     //   · §02 大数与环比并到同一 baseline —— 省一整行 (−24)
@@ -25002,19 +25108,40 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 height: lighthouseHeroSummaryIconSize,
                 // 卡标题是这一屏层级最高的字：图标片走实心 + 白图标，
                 // 不能比下面「规模 / 成本 / 利润」的实心小片还淡。
+                // 2026-10 · 实心紫 → 紫到深紫的斜向渐变 + 一圈很淡的内高光，
+                //   像一枚小徽章，跟顶部深色带同一个色系。
                 decoration: BoxDecoration(
-                  color: DunesColors.resolveNullable(
-                    context,
-                    summaryAccent,
-                    role: DunesColorRole.surface,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      summaryAccent,
+                      DunesColors.resolve(
+                        context,
+                        _LhPlum.deep,
+                        role: DunesColorRole.surface,
+                      ),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withAlpha(60),
+                    width: 0.8,
                   ),
                   borderRadius: BorderRadius.circular(
                     lighthouseHeroSummaryIconRadius,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _LhPlum.deep.withAlpha(50),
+                      blurRadius: 6,
+                      spreadRadius: -2,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Icon(
                   summaryIcon,
-                  size: 12,
+                  size: 12.5,
                   color: DunesColors.resolve(context, LhColors.paper),
                 ),
               ),
@@ -25040,27 +25167,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ),
                     if (rangeLabel.isNotEmpty) ...[
                       const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          rangeLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: _tabular(
-                            LhTypography.mono(
-                              size: lighthouseHeroSummaryRangeFontSize,
-                              // 日期是标题的注脚：退到灰、减一档字重，别跟标题抢。
-                              color: DunesColors.resolve(
-                                context,
-                                LhColors.mute,
-                              ),
-                              weight: FontWeight.w500,
-                              letterSpacing: 0.2,
-                              height: 1.1,
-                              context: context,
-                            ),
-                          ),
-                        ),
-                      ),
+                      Flexible(child: _heroDateStamp(rangeLabel)),
                     ],
                     if (showFilters && _activeHeroFilters().isNotEmpty) ...[
                       const SizedBox(width: 10),
@@ -28440,28 +28547,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           setState(() => _opCostOpen = !open);
         },
         child: Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.only(top: lighthouseCompactHeroMetricGap),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 虚线：跟上面三格（账单口径）隔开。
-              SizedBox(
-                height: 1,
-                child: CustomPaint(
-                  painter: _LhDashedRulePainter(
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFFD9D3E4),
-                    ),
-                  ),
+              // 跟上面三格之间同一根内缩实线发丝（原来是虚线，格子对不上）。
+              Container(
+                height: 0.6,
+                margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                color: DunesColors.resolve(
+                  context,
+                  LhColors.line2,
+                  role: DunesColorRole.surface,
                 ),
               ),
               AnimatedContainer(
                 duration: const Duration(milliseconds: 160),
                 curve: Curves.easeOut,
-                margin: const EdgeInsets.only(top: 4),
-                padding: EdgeInsets.fromLTRB(open ? 6 : 0, 6, open ? 6 : 0, 6),
+                // 内边距跟指标格一致（4 / 3 / 2 / 3），标签左沿和上面对齐。
+                margin: const EdgeInsets.only(top: 1),
+                padding: const EdgeInsets.fromLTRB(4, 3, 2, 3),
                 decoration: BoxDecoration(
                   color: open
                       ? DunesColors.resolve(
@@ -28506,12 +28612,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                         ? deep
                                         : DunesColors.resolve(
                                             context,
-                                            LhColors.ink2,
+                                            LhColors.mute,
                                           ),
                                     weight: open
                                         ? FontWeight.w700
-                                        : FontWeight.w600,
-                                    height: 1.0,
+                                        : FontWeight.w500,
+                                    height: 1.1,
                                     context: context,
                                   ),
                                 ),
@@ -28523,17 +28629,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           open
                               ? Icons.keyboard_arrow_down_rounded
                               : Icons.chevron_right_rounded,
-                          size: 14,
-                          color: plum,
+                          size: 13,
+                          color: DunesColors.resolve(context, LhColors.mute2),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 5),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
+                    const SizedBox(height: 3),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Flexible(
+                          flex: 0,
                           child: Text.rich(
                             TextSpan(
                               children: [
@@ -28558,7 +28665,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   TextSpan(
                                     text: unitText,
                                     style: LhTypography.sans(
-                                      size: 8.5,
+                                      size: lighthouseLedgerSummaryUnitFontSize,
                                       color: DunesColors.resolve(
                                         context,
                                         LhColors.mute,
@@ -28574,10 +28681,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (deltaText != null) ...[
-                          const SizedBox(width: 4),
+                        ...[
+                          const SizedBox(height: 3),
                           Text(
-                            deltaText,
+                            deltaText ?? '—',
                             maxLines: 1,
                             softWrap: false,
                             style: _tabular(
@@ -44671,7 +44778,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     active ? _LhPlum.mist : LhColors.paper,
                     role: DunesColorRole.surface,
                   ),
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: active
                         ? DunesColors.resolve(
@@ -44692,28 +44799,28 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   children: [
                     if (drawn)
                       Container(
-                        width: 10,
-                        height: 2.5,
+                        width: 7,
+                        height: 7,
                         decoration: BoxDecoration(
                           color: DunesColors.resolve(
                             context,
                             const Color(lighthouseScaleAccentValue),
                             role: DunesColorRole.surface,
                           ),
-                          borderRadius: BorderRadius.circular(1.5),
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       )
                     else
                       Container(
-                        width: 4,
-                        height: 4,
+                        width: 6,
+                        height: 6,
                         decoration: BoxDecoration(
                           color: DunesColors.resolve(
                             context,
                             LhColors.mute2,
                             role: DunesColorRole.surface,
                           ).withAlpha(110),
-                          shape: BoxShape.circle,
+                          borderRadius: BorderRadius.circular(1.5),
                         ),
                       ),
                     const SizedBox(width: 5),
@@ -44752,7 +44859,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       '总资产',
                       const Color(lighthouseScaleAccentValue),
                     ),
-                    if (hasPrincipal)
+                    // 原资产 = 资产合计 − 窗口内累计利润，是后端拿两样数推出来的，
+                    // 资管接口里没有这一项；主 Hero 只画接口直给的数。
+                    if (hasPrincipal && !compactLegend)
                       nameChip(
                         'revenue',
                         '原资产',
@@ -44808,9 +44917,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 scale: total,
                 scaleLabel: '总资产',
                 periodScale: total.isEmpty ? null : total.last,
-                revenue: principal,
+                revenue: compactLegend ? const <double>[] : principal,
                 revenueLabel: '原资产',
-                periodRevenue: hasPrincipal ? points.last.principal : null,
+                periodRevenue: hasPrincipal && !compactLegend
+                    ? points.last.principal
+                    : null,
                 cost: const <double>[],
                 profit: profit,
                 profitLabel: '增值 / 利润',
@@ -44819,6 +44930,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 title: '$scopeLabel走势',
                 // 一屏几格；格数多于它时可以左右拖（跟主 Hero 同一套视窗）。
                 viewportCount: viewportCount,
+                hoverSelects: compactLegend,
                 showHeader: false,
                 showLegend: false,
                 showExtremeLabels: false,

@@ -58,22 +58,30 @@ class ProposalProductCardLine {
 /// 权益包里包含的一个关联产品（现金券、满减券等）：名称、说明，以及它自己的收钱 / 付钱结算。
 class ProposalRelatedProductEntry {
   const ProposalRelatedProductEntry({
+    required this.id,
     required this.title,
     this.subtitle = '',
+    this.info = const [],
     this.receivables = const [],
     this.payables = const [],
     this.action,
+    this.onSettleDetail,
   });
 
+  final String id;
   final String title;
 
-  /// 如「× 2 · 面值 50 元 · 规模 200 万」。
+  /// 标题下的摘要，如「包内数量 2 · 2 条结算」。
   final String subtitle;
+
+  /// 复核时展示关联产品已填的基础字段。
+  final List<(String, String)> info;
   final List<ProposalProductCardLine> receivables;
   final List<ProposalProductCardLine> payables;
 
   /// 「填写结算 ›」等。
   final Widget? action;
+  final VoidCallback? onSettleDetail;
 }
 
 /// 复核状态小标签。
@@ -186,6 +194,8 @@ class ProposalProductCard extends StatefulWidget {
     BuildContext context, {
     required bool expanded,
     required VoidCallback onToggle,
+    required Set<String> expandedRelatedIds,
+    required ValueChanged<String> onRelatedToggle,
   }) {
     Color c(Color v, [DunesColorRole role = DunesColorRole.foreground]) =>
         DunesColors.resolve(context, v, role: role);
@@ -209,13 +219,20 @@ class ProposalProductCard extends StatefulWidget {
         color: c(bg, DunesColorRole.surface),
         borderRadius: BorderRadius.circular(5),
       ),
-      child: Text(label, style: text(11, color: fg, weight: FontWeight.w500)),
+      child: Text(
+        label,
+        style: text(11, color: fg, weight: FontWeight.w500),
+      ),
     );
 
     Widget statusTag(ProposalProductCardStatus? status) => status == null
         ? const SizedBox.shrink()
         : status.done
-        ? tag('✓ ${status.label}', ProposalPalette.green, ProposalPalette.greenSoft)
+        ? tag(
+            '✓ ${status.label}',
+            ProposalPalette.green,
+            ProposalPalette.greenSoft,
+          )
         : tag(status.label, ProposalPalette.amber, ProposalPalette.amberSoft);
 
     Widget otherLink() => onOtherSide == null || otherSideLabel.isEmpty
@@ -258,48 +275,62 @@ class ProposalProductCard extends StatefulWidget {
 
     final line = c(ProposalPalette.borderSoft, DunesColorRole.border);
 
-    /// 产品信息表：外面一圈细框，名称灰、值黑，宽屏一行两组（名称 | 值 | 名称 | 值），手机一行一组。
-    Widget infoTable(List<(String, String)> rows) => LayoutBuilder(
+    /// 主产品与关联产品共用两列字段表；窄屏每格把标签放在值上方。
+    Widget infoTable(
+      List<(String, String)> rows, {
+      bool embedded = false,
+    }) => LayoutBuilder(
       builder: (context, box) {
-        final pairs = box.maxWidth >= 520 ? 2 : 1;
-        final labelWidth = box.maxWidth >= 520 ? 96.0 : 84.0;
+        final stacked = box.maxWidth < 520;
+        const labelWidth = 96.0;
         Widget pair((String, String)? row) {
           if (row == null) return const Expanded(child: SizedBox.shrink());
           final (label, value) = row;
           final empty = value.trim().isEmpty;
+          final labelText = Text(
+            label,
+            style: text(12.5, color: ProposalPalette.text2),
+          );
+          final valueText = Tooltip(
+            message: empty ? '' : value,
+            waitDuration: const Duration(milliseconds: 500),
+            child: Text(
+              empty ? '未填写' : value,
+              softWrap: true,
+              style: text(
+                12.5,
+                color: empty ? ProposalPalette.text3 : ProposalPalette.text,
+              ),
+            ),
+          );
           return Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: labelWidth,
-                    child: Text(label, style: text(12.5, color: ProposalPalette.text2)),
-                  ),
-                  Expanded(
-                    child: Tooltip(
-                      message: empty ? '' : value,
-                      waitDuration: const Duration(milliseconds: 500),
-                      child: Text(
-                        empty ? '未填写' : value,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: text(
-                          12.5,
-                          color: empty ? ProposalPalette.text3 : ProposalPalette.text,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              padding: EdgeInsets.symmetric(
+                horizontal: stacked ? 6 : 10,
+                vertical: 6,
               ),
+              child: stacked
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        labelText,
+                        const SizedBox(height: 2),
+                        valueText,
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(width: labelWidth, child: labelText),
+                        Expanded(child: valueText),
+                      ],
+                    ),
             ),
           );
         }
 
         final lines = <Widget>[];
-        for (var i = 0; i < rows.length; i += pairs) {
+        for (var i = 0; i < rows.length; i += 2) {
           lines.add(
             Container(
               decoration: BoxDecoration(
@@ -309,17 +340,19 @@ class ProposalProductCard extends StatefulWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   pair(rows[i]),
-                  if (pairs == 2) pair(i + 1 < rows.length ? rows[i + 1] : null),
+                  pair(i + 1 < rows.length ? rows[i + 1] : null),
                 ],
               ),
             ),
           );
         }
         return Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: line),
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: embedded
+              ? null
+              : BoxDecoration(
+                  border: Border.all(color: line),
+                  borderRadius: BorderRadius.circular(8),
+                ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: lines,
@@ -329,11 +362,15 @@ class ProposalProductCard extends StatefulWidget {
     );
 
     /// 一条结算（和财务部「收入与成本」同一个样子）：右下「看明细 ›」「去复核 ›」两个按钮。
-    Widget settleLine(ProposalProductCardLine item, {required bool cost}) =>
+    Widget settleLine(
+      ProposalProductCardLine item, {
+      required bool cost,
+      VoidCallback? detail,
+    }) =>
         ProposalSettleLineTile(
           line: item,
           cost: cost,
-          onDetail: onSettleDetail,
+          onDetail: detail ?? onSettleDetail,
           onReview: onSettleTap == null ? null : () => onSettleTap!(cost),
         );
 
@@ -364,8 +401,9 @@ class ProposalProductCard extends StatefulWidget {
 
     List<Widget> settleRows(
       List<ProposalProductCardLine> income,
-      List<ProposalProductCardLine> cost,
-    ) {
+      List<ProposalProductCardLine> cost, {
+      VoidCallback? detail,
+    }) {
       final all = [
         for (final item in income) (item, false),
         for (final item in cost) (item, true),
@@ -376,7 +414,7 @@ class ProposalProductCard extends StatefulWidget {
             decoration: BoxDecoration(
               border: i == 0 ? null : Border(top: BorderSide(color: line)),
             ),
-            child: settleLine(all[i].$1, cost: all[i].$2),
+            child: settleLine(all[i].$1, cost: all[i].$2, detail: detail),
           ),
       ];
     }
@@ -440,72 +478,94 @@ class ProposalProductCard extends StatefulWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
+                    Material(
                       color: c(ProposalPalette.app, DunesColorRole.surface),
-                      padding: const EdgeInsets.fromLTRB(10, 7, 8, 7),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 20,
-                            height: 20,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: c(tint.soft, DunesColorRole.surface),
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: Text(
-                              '${i + 1}',
-                              style: text(
-                                11.5,
-                                color: tint.deep,
-                                weight: FontWeight.w600,
+                      child: InkWell(
+                        onTap: () => onRelatedToggle(relatedProducts[i].id),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 7, 8, 7),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 20,
+                                    height: 20,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: c(tint.soft, DunesColorRole.surface),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    child: Text(
+                                      '${i + 1}',
+                                      style: text(
+                                        11.5,
+                                        color: tint.deep,
+                                        weight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      relatedProducts[i].title,
+                                      style: text(13, weight: FontWeight.w600),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    expandedRelatedIds.contains(relatedProducts[i].id)
+                                        ? Icons.expand_less_rounded
+                                        : Icons.expand_more_rounded,
+                                    size: 18,
+                                    color: c(ProposalPalette.text3),
+                                  ),
+                                ],
                               ),
-                            ),
+                              if (relatedProducts[i].subtitle.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 28, top: 3),
+                                  child: Text(
+                                    relatedProducts[i].subtitle,
+                                    style: text(12, color: ProposalPalette.text2),
+                                  ),
+                                ),
+                              if (relatedProducts[i].action != null)
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: relatedProducts[i].action!,
+                                ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              relatedProducts[i].title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: text(13, weight: FontWeight.w600),
-                            ),
-                          ),
-                          if (relatedProducts[i].subtitle.isNotEmpty)
-                            Flexible(
-                              child: Text(
-                                relatedProducts[i].subtitle,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.right,
-                                style: text(12, color: ProposalPalette.text2),
-                              ),
-                            ),
-                          if (relatedProducts[i].action != null) ...[
-                            const SizedBox(width: 6),
-                            relatedProducts[i].action!,
-                          ],
-                        ],
+                        ),
                       ),
                     ),
-                    Container(height: 1, color: line),
-                    if (relatedProducts[i].receivables.isEmpty &&
-                        relatedProducts[i].payables.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 7,
+                    if (expandedRelatedIds.contains(relatedProducts[i].id)) ...[
+                      Container(height: 1, color: line),
+                      if (relatedProducts[i].info.isNotEmpty) ...[
+                        infoTable(relatedProducts[i].info, embedded: true),
+                        Container(height: 1, color: line),
+                      ],
+                      if (relatedProducts[i].receivables.isEmpty &&
+                          relatedProducts[i].payables.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 7,
+                          ),
+                          child: Text(
+                            '还没填结算',
+                            style: text(12.5, color: ProposalPalette.amber),
+                          ),
+                        )
+                      else
+                        ...settleRows(
+                          relatedProducts[i].receivables,
+                          relatedProducts[i].payables,
+                          detail: relatedProducts[i].onSettleDetail,
                         ),
-                        child: Text(
-                          '还没填结算',
-                          style: text(12.5, color: ProposalPalette.amber),
-                        ),
-                      )
-                    else
-                      ...settleRows(
-                        relatedProducts[i].receivables,
-                        relatedProducts[i].payables,
-                      ),
+                    ],
                   ],
                 ),
               ),
@@ -535,7 +595,12 @@ class ProposalProductCard extends StatefulWidget {
       if (metaSpans.isNotEmpty) {
         metaSpans.add(TextSpan(text: '   ', style: text(11.5)));
       }
-      metaSpans.add(TextSpan(text: label, style: text(11.5, color: color)));
+      metaSpans.add(
+        TextSpan(
+          text: label,
+          style: text(11.5, color: color),
+        ),
+      );
     }
 
     if (faceText.isNotEmpty) meta('面值 $faceText');
@@ -649,12 +714,17 @@ class ProposalProductCard extends StatefulWidget {
 
 class _ProposalProductCardState extends State<ProposalProductCard> {
   late bool _expanded = widget.initiallyExpanded;
+  final Set<String> _expandedRelatedIds = {};
 
   @override
   Widget build(BuildContext context) => widget._buildCard(
     context,
     expanded: _expanded,
     onToggle: () => setState(() => _expanded = !_expanded),
+    expandedRelatedIds: _expandedRelatedIds,
+    onRelatedToggle: (id) => setState(() {
+      if (!_expandedRelatedIds.remove(id)) _expandedRelatedIds.add(id);
+    }),
   );
 }
 
@@ -697,7 +767,8 @@ class ProposalSettleLineTile extends StatelessWidget {
     final ratio = line.ratio.trim();
     // 「0」「0.98」这种没写百分号的比例补上 %，和填写时的写法一致。
     final parsedRatio = double.tryParse(ratio);
-    final ratioText = ratio.isEmpty || ratio.endsWith('%') || parsedRatio == null
+    final ratioText =
+        ratio.isEmpty || ratio.endsWith('%') || parsedRatio == null
         ? ratio
         : '${parsedRatio <= 1 && parsedRatio != 0 ? _trimNumber(parsedRatio * 100) : _trimNumber(parsedRatio)}%';
     final rateRaw = line.redemptionRate.trim();
@@ -721,7 +792,11 @@ class ProposalSettleLineTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         child: Text(
           label,
-          style: text(11.5, color: ProposalPalette.purple, weight: FontWeight.w600),
+          style: text(
+            11.5,
+            color: ProposalPalette.purple,
+            weight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -729,74 +804,95 @@ class ProposalSettleLineTile extends StatelessWidget {
       if (onDetail != null) action('看明细 ›', onDetail!),
       if (onReview != null) action('去复核 ›', onReview!),
     ];
+    final amountText = amount.isEmpty || amount == '—'
+        ? '年化 —'
+        : '年化 ${line.minus ? '−' : ''}$amount';
+    final categoryTag = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: c(
+          minusSide ? ProposalPalette.coralSoft : ProposalPalette.greenSoft,
+          DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        tag,
+        style: text(
+          11,
+          color: minusSide ? ProposalPalette.coral : ProposalPalette.green,
+          weight: FontWeight.w500,
+        ),
+      ),
+    );
+    final valueText = Text(
+      value,
+      style: text(
+        13,
+        weight: FontWeight.w600,
+        color: value == '比例未填' ? ProposalPalette.amber : ProposalPalette.text,
+      ),
+    );
+    final amountValue = Text(
+      amountText,
+      style: text(
+        12,
+        color: line.minus ? ProposalPalette.coral : ProposalPalette.text2,
+      ),
+    );
     Widget body = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: c(
-                    minusSide
-                        ? ProposalPalette.coralSoft
-                        : ProposalPalette.greenSoft,
-                    DunesColorRole.surface,
-                  ),
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text(
-                  tag,
-                  style: text(
-                    11,
-                    color: minusSide
-                        ? ProposalPalette.coral
-                        : ProposalPalette.green,
-                    weight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  line.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: text(13, weight: FontWeight.w600),
-                ),
-              ),
-              Text(
-                value,
-                style: text(
-                  13,
-                  weight: FontWeight.w600,
-                  color: value == '比例未填'
-                      ? ProposalPalette.amber
-                      : ProposalPalette.text,
-                ),
-              ),
-              // 年化测算：这一条一年大概多少钱（后端按产品年化规模 × 比例算）。
-              const SizedBox(width: 10),
-              Text(
-                amount.isEmpty || amount == '—'
-                    ? '年化 —'
-                    : '年化 ${line.minus ? '−' : ''}$amount',
-                style: text(
-                  12,
-                  color: line.minus ? ProposalPalette.coral : ProposalPalette.text2,
-                ),
-              ),
-              if (onTap != null) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 16,
-                  color: c(ProposalPalette.text3),
-                ),
-              ],
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 390;
+              final name = Text(
+                line.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: text(13, weight: FontWeight.w600),
+              );
+              final chevron = onTap == null
+                  ? const SizedBox.shrink()
+                  : Icon(
+                      Icons.chevron_right_rounded,
+                      size: 16,
+                      color: c(ProposalPalette.text3),
+                    );
+              if (narrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        categoryTag,
+                        const SizedBox(width: 8),
+                        Expanded(child: name),
+                        chevron,
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [valueText, amountValue],
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  categoryTag,
+                  const SizedBox(width: 8),
+                  Expanded(child: name),
+                  valueText,
+                  const SizedBox(width: 10),
+                  amountValue,
+                  if (onTap != null) ...[const SizedBox(width: 4), chevron],
+                ],
+              );
+            },
           ),
           if (line.detail.trim().isNotEmpty || actions.isNotEmpty)
             Padding(

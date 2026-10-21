@@ -203,10 +203,57 @@ class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
   bool _expanded = false;
   bool _hovered = false;
   int _frontIndex = 0;
-  double _horizontalDragDistance = 0;
+  double _dragOffsetX = 0;
   double _lastLongPressOffsetX = 0;
   LongPressStartDetails? _longPressStartDetails;
   bool _promotedDuringLongPress = false;
+  bool _isStackDragging = false;
+  int _stackTransitionGeneration = 0;
+
+  void _beginStackDrag() {
+    _stackTransitionGeneration++;
+    _dragOffsetX = 0;
+    _isStackDragging = true;
+  }
+
+  void _updateStackDrag(double deltaX) {
+    setState(() => _dragOffsetX += deltaX);
+  }
+
+  void _finishStackDrag({required int imageCount, required double cardWidth}) {
+    final dragOffset = _dragOffsetX;
+    final threshold = math.max(36.0, cardWidth * 0.2);
+    final shouldChangeImage = imageCount > 1 && dragOffset.abs() >= threshold;
+    final transitionGeneration = ++_stackTransitionGeneration;
+    setState(() => _isStackDragging = false);
+    if (!shouldChangeImage) {
+      setState(() => _dragOffsetX = 0);
+      return;
+    }
+
+    final direction = dragOffset.isNegative ? 1 : -1;
+    HapticFeedback.selectionClick();
+    setState(
+      () => _dragOffsetX = dragOffset.isNegative ? -cardWidth : cardWidth,
+    );
+    Future<void>.delayed(const Duration(milliseconds: 190), () {
+      if (!mounted || transitionGeneration != _stackTransitionGeneration) {
+        return;
+      }
+      setState(() {
+        _frontIndex = (_frontIndex + direction + imageCount) % imageCount;
+        _dragOffsetX = 0;
+      });
+    });
+  }
+
+  void _cancelStackDrag() {
+    _stackTransitionGeneration++;
+    setState(() {
+      _isStackDragging = false;
+      _dragOffsetX = 0;
+    });
+  }
 
   Widget _image(
     NativeChatMessage message, {
@@ -272,7 +319,7 @@ class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
   }
 
   Widget _expandButton(int imageCount, double height) => SizedBox(
-    width: 48,
+    width: 64,
     height: math.max(36, height),
     child: Center(
       child: Tooltip(
@@ -289,13 +336,39 @@ class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
             shape: const StadiumBorder(),
             side: BorderSide(color: DunesColors.borderSoft),
           ),
-          child: Text(
-            _expanded ? '收起' : '展开',
-            style: DunesTypography.sans(
-              fontSize: 11,
-              color: DunesColors.text2,
-              context: context,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _expanded ? '收起' : '展开',
+                style: DunesTypography.sans(
+                  fontSize: 11,
+                  color: DunesColors.text2,
+                  context: context,
+                ),
+              ),
+              if (!_expanded) ...[
+                const SizedBox(width: 4),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 16),
+                  height: 16,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolve(context, DunesColors.bgApp),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '$imageCount',
+                    style: DunesTypography.sans(
+                      fontSize: 9,
+                      color: DunesColors.text2,
+                      context: context,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),
@@ -352,45 +425,50 @@ class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
                   onExit: (_) => setState(() => _hovered = false),
                   child: GestureDetector(
                     onHorizontalDragStart: mobileSwipe
-                        ? (_) => _horizontalDragDistance = 0
+                        ? (_) => _beginStackDrag()
                         : null,
                     onHorizontalDragUpdate: mobileSwipe
-                        ? (details) {
-                            _horizontalDragDistance += details.delta.dx;
-                            if (_horizontalDragDistance.abs() >= 32) {
-                              setState(() {
-                                _frontIndex = (_frontIndex + 1) % images.length;
-                                _horizontalDragDistance = 0;
-                              });
-                            }
-                          }
+                        ? (details) => _updateStackDrag(details.delta.dx)
+                        : null,
+                    onHorizontalDragEnd: mobileSwipe
+                        ? (_) => _finishStackDrag(
+                            imageCount: images.length,
+                            cardWidth: cardWidth,
+                          )
+                        : null,
+                    onHorizontalDragCancel: mobileSwipe
+                        ? _cancelStackDrag
                         : null,
                     onLongPressStart: mobileSwipe
                         ? (details) {
                             _longPressStartDetails = details;
                             _lastLongPressOffsetX = 0;
-                            _horizontalDragDistance = 0;
                             _promotedDuringLongPress = false;
+                            _beginStackDrag();
                           }
                         : null,
                     onLongPressMoveUpdate: mobileSwipe
                         ? (details) {
                             final offsetX = details.offsetFromOrigin.dx;
-                            _horizontalDragDistance +=
-                                offsetX - _lastLongPressOffsetX;
+                            final deltaX = offsetX - _lastLongPressOffsetX;
                             _lastLongPressOffsetX = offsetX;
-                            if (_horizontalDragDistance.abs() >= 32) {
-                              setState(() {
-                                _frontIndex = (_frontIndex + 1) % images.length;
-                                _horizontalDragDistance = 0;
-                                _promotedDuringLongPress = true;
-                              });
-                            }
+                            _updateStackDrag(deltaX);
+                            _promotedDuringLongPress =
+                                _dragOffsetX.abs() >=
+                                math.max(36, cardWidth * 0.2);
                           }
                         : null,
                     onLongPressEnd: mobileSwipe
                         ? (_) {
                             final start = _longPressStartDetails;
+                            if (_promotedDuringLongPress) {
+                              _finishStackDrag(
+                                imageCount: images.length,
+                                cardWidth: cardWidth,
+                              );
+                            } else {
+                              _cancelStackDrag();
+                            }
                             if (!_promotedDuringLongPress && start != null) {
                               widget.onLongPressStart?.call(start);
                             }
@@ -471,13 +549,24 @@ class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
                             child: AnimatedScale(
                               scale: _hovered ? 1.015 : 1,
                               duration: const Duration(milliseconds: 200),
-                              child: _photoCard(
-                                front,
-                                width: cardWidth - 14,
-                                height: cardHeight - 8,
-                                onTap: () => widget.onOpenImage(front),
-                                fillCard: true,
-                                allowLongPress: !mobileSwipe,
+                              child: AnimatedContainer(
+                                duration: _isStackDragging
+                                    ? Duration.zero
+                                    : const Duration(milliseconds: 190),
+                                curve: Curves.easeOutCubic,
+                                transform: Matrix4.translationValues(
+                                  _dragOffsetX,
+                                  _dragOffsetX.abs() * -0.025,
+                                  0,
+                                ),
+                                child: _photoCard(
+                                  front,
+                                  width: cardWidth - 14,
+                                  height: cardHeight - 8,
+                                  onTap: () => widget.onOpenImage(front),
+                                  fillCard: true,
+                                  allowLongPress: !mobileSwipe,
+                                ),
                               ),
                             ),
                           ),

@@ -26,6 +26,8 @@ bool get _preferDesktopImageWindow => DesktopImagePreviewPref.enabled;
 
 bool _chatImageHasSeparateOriginal(Map<String, dynamic>? payload) {
   if (payload == null) return false;
+  // 气泡和预览已经在播 GIF 原文件，旁边的 JPEG 静帧不是另一张原图。
+  if (ConversationService.mediaIsGif(payload)) return false;
   final originalKey = (payload['objectKey'] ?? '').toString().trim();
   final originalUrl = (payload['url'] ?? '').toString().trim();
   final previewKey = (payload['previewObjectKey'] ?? '').toString().trim();
@@ -88,11 +90,7 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
   }
 
   void _bindMedia() {
-    final mime = (widget.payload?['mimeType'] ?? '').toString().toLowerCase();
-    final fileName = ConversationService.mediaFileName(
-      widget.payload,
-    ).toLowerCase();
-    _isGif = mime.contains('gif') || fileName.endsWith('.gif');
+    _isGif = ConversationService.mediaIsGif(widget.payload);
     _previewPayload = _isGif
         ? widget.payload
         : ConversationService.previewMediaPayload(widget.payload);
@@ -305,10 +303,10 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
   }
 
   Widget _gifPlaceholder() {
-    final box = chatImageBubbleMaxSize(context);
+    final box = chatGifBubbleMaxSize(chatImageBubbleMaxSize(context));
     return _placeholder(
-      width: box.width * 0.72,
-      height: box.width * 0.54,
+      width: box.width,
+      height: box.height,
       child: SizedBox(
         width: 20,
         height: 20,
@@ -394,7 +392,11 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
   ImageStream? _netStream;
   ImageStreamListener? _netListener;
 
-  Size get _maxBox => chatImageBubbleMaxSize(context);
+  Size get _maxBox {
+    final photo = chatImageBubbleMaxSize(context);
+    if (!widget.isGif) return photo;
+    return chatGifBubbleMaxSize(photo);
+  }
 
   @override
   void initState() {
@@ -490,7 +492,8 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
         maxHeight: box.height,
       );
     }
-    // 未知尺寸时用较扁占位，避免按 maxHeight 撑出大块空白。
+    // 表情包先占满固定方框；普通图片用较扁占位，避免按 maxHeight 撑出大块空白。
+    if (widget.isGif) return box;
     return Size(box.width, box.width * 0.72);
   }
 

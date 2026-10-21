@@ -1184,6 +1184,52 @@ class ConversationService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> fetchStickerPacks({
+    bool summaryOnly = false,
+  }) async {
+    final response = await _client.get(
+      _uri('/emoji/sticker-packs${summaryOnly ? '?summary=1' : ''}'),
+      headers: _headers,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('表情包加载失败: HTTP ${response.statusCode}');
+    }
+    final body = _decode(response.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '表情包加载失败').toString());
+    }
+    final raw = body['data'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> fetchStickerPackAssets(
+    int packId, {
+    int offset = 0,
+    int limit = 24,
+  }) async {
+    final query = Uri(
+      queryParameters: {'offset': '$offset', 'limit': '$limit'},
+    ).query;
+    final response = await _client.get(
+      _uri('/emoji/sticker-packs/$packId/assets?$query'),
+      headers: _headers,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('表情图片加载失败: HTTP ${response.statusCode}');
+    }
+    final body = _decode(response.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '表情图片加载失败').toString());
+    }
+    final data = body['data'];
+    if (data is! Map) return const <String, dynamic>{};
+    return Map<String, dynamic>.from(data);
+  }
+
   Future<void> markConversationRead(int conversationId) async {
     final resp = await _client.post(
       _uri('/conversations/$conversationId/read'),
@@ -3378,11 +3424,16 @@ class ConversationService {
     final public = _isPublicMediaUrl(objectKey);
     final request = http.Request(
       'GET',
-      public ? Uri.parse(objectKey) : downloadUri(
-        objectKey: _normalizeObjectKeyForBucket(objectKey, bucket: bucket),
-        bucket: bucket,
-        fileName: fileName,
-      ),
+      public
+          ? Uri.parse(objectKey)
+          : downloadUri(
+              objectKey: _normalizeObjectKeyForBucket(
+                objectKey,
+                bucket: bucket,
+              ),
+              bucket: bucket,
+              fileName: fileName,
+            ),
     );
     if (!public) request.headers.addAll(_headers);
     return request;
@@ -3398,7 +3449,9 @@ class ConversationService {
     if (objectKey.isEmpty) throw Exception('附件地址为空');
     cancelToken?.throwIfCancelled(download: true);
     final req = attachmentDownloadRequest(
-      objectKey: objectKey, bucket: bucket, fileName: fileName,
+      objectKey: objectKey,
+      bucket: bucket,
+      fileName: fileName,
     );
     final ownsClient = cancelToken != null;
     final client = ownsClient ? http.Client() : _client;
@@ -3647,6 +3700,7 @@ class ConversationService {
     if (objectKey.isNotEmpty) {
       return downloadAttachmentBytes(
         objectKey: objectKey,
+        bucket: (payload?['mediaBucket'] ?? 'im-attachments').toString(),
         fileName: mediaFileName(payload),
         onProgress: onProgress,
         cancelToken: cancelToken,
@@ -3740,9 +3794,15 @@ class ConversationService {
       try {
         return await cachedChatMediaUrl(objectKey, () async {
           try {
-            return await resolveMediaUrl(objectKey);
+            return await resolveMediaUrl(
+              objectKey,
+              bucket: (payload['mediaBucket'] ?? 'im-attachments').toString(),
+            );
           } catch (e) {
-            final proxy = mediaProxyUrl(objectKey);
+            final proxy = mediaProxyUrl(
+              objectKey,
+              bucket: (payload['mediaBucket'] ?? 'im-attachments').toString(),
+            );
             if (proxy.isNotEmpty) return proxy;
             rethrow;
           }
@@ -3768,6 +3828,7 @@ class ConversationService {
         originalAuthKey,
         () => downloadAttachmentBytes(
           objectKey: originalAuthKey,
+          bucket: (payload?['mediaBucket'] ?? 'im-attachments').toString(),
           fileName: mediaFileName(payload),
         ),
       );
@@ -3792,6 +3853,7 @@ class ConversationService {
           previewAuthKey,
           () => downloadAttachmentBytes(
             objectKey: previewAuthKey,
+            bucket: (payload?['mediaBucket'] ?? 'im-attachments').toString(),
             fileName: mediaFileName(payload),
           ),
         );
@@ -3837,11 +3899,29 @@ class ConversationService {
     return '';
   }
 
+  /// GIF 必须用原文件播放。预览图是抽出来的一帧 JPEG，放大后会糊，也不会动。
+  static bool mediaIsGif(Map<String, dynamic>? payload) {
+    if (payload == null) return false;
+    final mime = (payload['mimeType'] ?? '').toString().toLowerCase();
+    if (mime.contains('gif')) return true;
+    final name = mediaFileName(payload, fallback: '').toLowerCase();
+    if (name.endsWith('.gif')) return true;
+    for (final raw in [payload['url'], payload['objectKey']]) {
+      final text = raw?.toString().toLowerCase().trim() ?? '';
+      if (text.isEmpty) continue;
+      final path = text.split('?').first.split('#').first;
+      if (path.endsWith('.gif')) return true;
+    }
+    return false;
+  }
+
   /// 返回用于会话内联展示的「预览图」payload；旧消息或无预览时回退为原 payload。
+  /// GIF 始终回原文件，避免气泡和预览页落到静帧 JPEG。
   static Map<String, dynamic>? previewMediaPayload(
     Map<String, dynamic>? payload,
   ) {
     if (payload == null) return null;
+    if (mediaIsGif(payload)) return payload;
     final previewObjectKey = (payload['previewObjectKey'] ?? '')
         .toString()
         .trim();

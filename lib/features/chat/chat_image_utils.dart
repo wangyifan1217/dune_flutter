@@ -4,6 +4,24 @@ import 'package:image/image.dart' as img;
 
 import '../../core/layout/chat_layout.dart';
 
+/// 表情包（GIF）固定展示框。
+///
+/// 微信、QQ 都不按原图像素或图片气泡的百分比缩放：原图常见 240～800，
+/// 按 80% 会忽大忽小。会话里固定进约 120 的方框（与后台相册宫格一致），
+/// 点开预览仍看原图。小图不放大。
+const Size kChatGifBubbleMaxSize = Size(120, 120);
+
+/// 表情包上限：不超过 [photoMax]，窄屏时跟着图片气泡一起变小。
+Size chatGifBubbleMaxSize(Size photoMax) {
+  final w = photoMax.width < kChatGifBubbleMaxSize.width
+      ? photoMax.width
+      : kChatGifBubbleMaxSize.width;
+  final h = photoMax.height < kChatGifBubbleMaxSize.height
+      ? photoMax.height
+      : kChatGifBubbleMaxSize.height;
+  return Size(w, h);
+}
+
 /// 微信 / 工作台 IM 风格：会话内图片上限。
 /// 宽屏用绝对上限，避免按整窗宽度比例把气泡撑得过高。
 Size chatImageBubbleMaxSize(BuildContext context) {
@@ -135,9 +153,19 @@ Future<Uint8List?> compressChatImageForSend(
   }
 }
 
+bool _bytesLookLikeGif(Uint8List bytes) {
+  return bytes.length >= 6 &&
+      bytes[0] == 0x47 &&
+      bytes[1] == 0x49 &&
+      bytes[2] == 0x46 &&
+      bytes[3] == 0x38 &&
+      (bytes[4] == 0x37 || bytes[4] == 0x39) &&
+      bytes[5] == 0x61;
+}
+
 /// 生成用于会话内展示的压缩预览图（最长边 [maxDim]px，JPEG [quality]% 质量）。
 ///
-/// 返回 null 表示无需/无法生成（解码失败，或压缩后体积反而更大），
+/// 返回 null 表示无需/无法生成（GIF、解码失败，或压缩后体积反而更大），
 /// 调用方应回退为直接使用原图展示。解码/编码在后台 isolate 执行，避免卡顿。
 Future<ChatImagePreview?> buildChatImagePreview(
   Uint8List bytes, {
@@ -145,6 +173,10 @@ Future<ChatImagePreview?> buildChatImagePreview(
   int maxDim = 1280,
   int quality = 70,
 }) async {
+  // GIF 抽成 JPEG 只会留下一帧，而且常常是不完整的小帧。会话直接播原文件。
+  if (fileName.toLowerCase().endsWith('.gif') || _bytesLookLikeGif(bytes)) {
+    return null;
+  }
   try {
     final jpeg = await compute(
       _encodePreview,

@@ -277,56 +277,63 @@ class ChatQuickActions extends StatelessWidget {
             ),
           ),
         ),
-        child: Row(
-          children: cells
-              .map(
-                (c) => Expanded(
-                  child: Tooltip(
-                    message: (c.hint ?? '').isNotEmpty
-                        ? '${c.label}（${c.hint}）'
-                        : c.label,
-                    waitDuration: const Duration(milliseconds: 400),
-                    child: DesktopFeedbackSurface(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: c.onTap,
-                      child: SizedBox(
-                        height: isDesktopCommOnly
-                            ? 46 +
-                                  (MediaQuery.textScalerOf(context).scale(9.5) -
-                                          9.5)
-                                      .clamp(0, 20)
-                            : 46,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              c.icon,
-                              size: 18,
-                              color: DunesColors.resolve(
-                                context,
-                                DunesColors.text2,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              c.label,
-                              style: DunesTypography.sans(
-                                fontSize: 9.5,
-                                color: DunesColors.resolve(
-                                  context,
-                                  DunesColors.text3,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Row(
+              children: cells
+                  .map(
+                    (c) => Expanded(
+                      child: Tooltip(
+                        message: (c.hint ?? '').isNotEmpty
+                            ? '${c.label}（${c.hint}）'
+                            : c.label,
+                        waitDuration: const Duration(milliseconds: 400),
+                        child: DesktopFeedbackSurface(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: c.onTap,
+                          child: SizedBox(
+                            height: isDesktopCommOnly
+                                ? 46 +
+                                      (MediaQuery.textScalerOf(
+                                                context,
+                                              ).scale(9.5) -
+                                              9.5)
+                                          .clamp(0, 20)
+                                : 46,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  c.icon,
+                                  size: 18,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text2,
+                                  ),
                                 ),
-                                context: context,
-                              ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  c.label,
+                                  style: DunesTypography.sans(
+                                    fontSize: 9.5,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text3,
+                                    ),
+                                    context: context,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              )
-              .toList(),
+                  )
+                  .toList(),
+            ),
+          ),
         ),
       );
     }
@@ -2216,9 +2223,9 @@ class _ChatSelectableRichTextState extends State<_ChatSelectableRichText> {
     if (!widget.mine) return selectable;
     // 己方紫底气泡上默认的主色选区几乎看不见，改用白色半透明高亮。
     return TextSelectionTheme(
-      data: TextSelectionTheme.of(context).copyWith(
-        selectionColor: Colors.white.withValues(alpha: 0.38),
-      ),
+      data: TextSelectionTheme.of(
+        context,
+      ).copyWith(selectionColor: Colors.white.withValues(alpha: 0.38)),
       child: selectable,
     );
   }

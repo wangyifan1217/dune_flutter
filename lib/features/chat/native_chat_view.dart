@@ -2629,8 +2629,9 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       final groupedImages = <NativeChatMessage>[m];
       final isImage = m.kind.toUpperCase() == 'IMAGE' && m.payload != null;
+      final isNoCollapseImage = m.payload?['noCollapse'] == true || m.payload?['isSticker'] == true;
       final mediaGroupId = (m.payload?['mediaGroupId'] ?? '').toString().trim();
-      if (isImage && !_messageMultiSelectMode && m.createdAt != null) {
+      if (isImage && !isNoCollapseImage && !_messageMultiSelectMode && m.createdAt != null) {
         var nextIndex = messageIndex + 1;
         var previousAt = m.createdAt!;
         while (nextIndex < _messages.length) {
@@ -2641,6 +2642,8 @@ class _NativeChatViewState extends State<NativeChatView>
               .trim();
           if (next.kind.toUpperCase() != 'IMAGE' ||
               next.payload == null ||
+              next.payload?['noCollapse'] == true ||
+              next.payload?['isSticker'] == true ||
               next.senderUserId != m.senderUserId ||
               (mediaGroupId.isNotEmpty
                   ? nextMediaGroupId != mediaGroupId
@@ -5401,6 +5404,32 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
+  Future<void> _sendSticker(Map<String, dynamic> sticker) async {
+    if (_uploading || _mediaBusy || (_conversation?.dissolved ?? false)) return;
+    final objectKey = (sticker['objectKey'] ?? '').toString().trim();
+    if (objectKey.isEmpty) { _showToast('表情资源地址无效'); return; }
+    await _guardSend(() async {
+      final name = (sticker['fileName'] ?? 'sticker').toString();
+      await _service.sendMessageRaw(
+        conversationId: _requireReadyConversationId(),
+        kind: 'IMAGE',
+        bodyText: '',
+        payload: <String, dynamic>{
+          'objectKey': objectKey,
+          'fileName': name,
+          'mimeType': (sticker['mimeType'] ?? 'image/png').toString(),
+          'mediaBucket': 'im-stickers',
+          'isSticker': true,
+          'noCollapse': true,
+          'stickerPackId': sticker['stickerPackId'],
+          'stickerPackName': sticker['stickerPackName'],
+          'stickerAssetId': sticker['id'],
+        },
+      );
+    });
+    if (mounted) setState(() => _emojiOpen = false);
+  }
+
   Future<void> _guardSend(
     Future<void> Function() task, {
     ChatUploadCancelToken? cancelToken,
@@ -6916,7 +6945,11 @@ class _NativeChatViewState extends State<NativeChatView>
               showVideo: false,
             ),
           if (_emojiOpen && !locked)
-            ChatEmojiGifPanel(controller: _inputController),
+            ChatEmojiGifPanel(
+              controller: _inputController,
+              service: _service,
+              onSendSticker: _sendSticker,
+            ),
         ],
       ),
     );

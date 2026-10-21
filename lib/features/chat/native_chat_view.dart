@@ -319,7 +319,7 @@ class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
   }
 
   Widget _expandButton(int imageCount, double height) => SizedBox(
-    width: 64,
+    width: 72,
     height: math.max(36, height),
     child: Center(
       child: Tooltip(
@@ -347,27 +347,25 @@ class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
                   context: context,
                 ),
               ),
-              if (!_expanded) ...[
-                const SizedBox(width: 4),
-                Container(
-                  constraints: const BoxConstraints(minWidth: 16),
-                  height: 16,
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    color: DunesColors.resolve(context, DunesColors.bgApp),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '$imageCount',
-                    style: DunesTypography.sans(
-                      fontSize: 9,
-                      color: DunesColors.text2,
-                      context: context,
-                    ),
+              const SizedBox(width: 4),
+              Container(
+                constraints: const BoxConstraints(minWidth: 22),
+                height: 18,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolve(context, DunesColors.bgApp),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Text(
+                  '$imageCount张',
+                  style: DunesTypography.sans(
+                    fontSize: 9,
+                    color: DunesColors.text2,
+                    context: context,
                   ),
                 ),
-              ],
+              ),
             ],
           ),
         ),

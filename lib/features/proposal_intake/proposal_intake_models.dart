@@ -4593,17 +4593,43 @@ String proposalIntakeResolvedSyncSourceName(
   return fromSku.isNotEmpty ? fromSku : fromForm;
 }
 
-/// 业务平台：优先 `syncSourceRef`，兼容对外 JSON 里的 `syncSource` 对象或纯 code。
-CatalogRef? proposalIntakeSyncSourceRefFromJson(Map raw) {
-  final fromRef = catalogRefOrNull(raw['syncSourceRef']);
-  if (fromRef != null && fromRef.isNotEmpty) return fromRef;
-  final source = raw['syncSource'];
+bool proposalPlatformCode(String value) {
+  final text = value.trim();
+  if (text.isEmpty) return false;
+  return RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(text);
+}
+
+CatalogRef? _proposalSyncSourceFromField(Object? source) {
   final fromSource = catalogRefOrNull(source);
   if (fromSource != null && fromSource.isNotEmpty) return fromSource;
   if (source is String && source.trim().isNotEmpty) {
     return CatalogRef(code: source.trim(), name: source.trim());
   }
   return null;
+}
+
+/// 业务平台：`syncSource` 能提供平台 code 时优先用它。
+/// 旧数据把中文名写进 `syncSourceRef.code`（如「出行」）时，不再盖住真正的 code。
+CatalogRef? proposalIntakeSyncSourceRefFromJson(Map raw) {
+  final fromRef = catalogRefOrNull(raw['syncSourceRef']);
+  final fromSource = _proposalSyncSourceFromField(raw['syncSource']);
+  if (fromRef == null || fromRef.isEmpty) return fromSource;
+  if (fromSource == null || fromSource.isEmpty) return fromRef;
+  if (proposalPlatformCode(fromSource.code) &&
+      !proposalPlatformCode(fromRef.code)) {
+    final name = fromRef.name.trim().isNotEmpty
+        ? fromRef.name.trim()
+        : fromSource.name.trim();
+    return CatalogRef(
+      id: fromRef.id ?? fromSource.id,
+      idText: fromRef.idText.trim().isNotEmpty
+          ? fromRef.idText
+          : fromSource.idText,
+      code: fromSource.code,
+      name: name.isNotEmpty ? name : fromSource.code,
+    );
+  }
+  return fromRef;
 }
 
 String proposalIntakeExistingBuiltText(Object? raw) {

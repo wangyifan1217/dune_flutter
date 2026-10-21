@@ -4370,6 +4370,15 @@ void main() {
     );
     expect(sku.toJson()['syncSource'], 'DIGITALG');
     expect(sku.toJson()['syncSourceRef']['name'], '能源');
+    final labeled = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-travel',
+      'productName': '多终端出行业务DICT',
+      'syncSource': 'CX_MEMBER',
+      'syncSourceRef': {'code': '出行', 'name': '出行'},
+    });
+    expect(labeled.syncSourceCode, 'CX_MEMBER');
+    expect(labeled.syncSourceRef?.name, '出行');
+    expect(labeled.toJson()['syncSource'], 'CX_MEMBER');
     expect(sector.toJson()['code'], 'NY');
 
     final categorized = ProposalSkuDetailRow.fromJson({

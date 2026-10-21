@@ -202,16 +202,24 @@ class _ChatImageGroupContent extends StatefulWidget {
 class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
   bool _expanded = false;
   bool _hovered = false;
+  int _frontIndex = 0;
+  double _horizontalDragDistance = 0;
+  double _lastLongPressOffsetX = 0;
+  LongPressStartDetails? _longPressStartDetails;
+  bool _promotedDuringLongPress = false;
 
-  Widget _image(NativeChatMessage message, {required VoidCallback onTap}) =>
-      ChatAuthImageBubble(
-        service: widget.service,
-        payload: message.payload,
-        mine: widget.mine,
-        conversationId: widget.conversationId,
-        onTap: onTap,
-        onLongPressStart: widget.onLongPressStart,
-      );
+  Widget _image(
+    NativeChatMessage message, {
+    required VoidCallback onTap,
+    bool allowLongPress = true,
+  }) => ChatAuthImageBubble(
+    service: widget.service,
+    payload: message.payload,
+    mine: widget.mine,
+    conversationId: widget.conversationId,
+    onTap: onTap,
+    onLongPressStart: allowLongPress ? widget.onLongPressStart : null,
+  );
 
   Widget _photoCard(
     NativeChatMessage message, {
@@ -219,16 +227,22 @@ class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
     required double height,
     required VoidCallback onTap,
     bool fillCard = false,
+    bool allowLongPress = true,
   }) {
     final payload = message.payload ?? const <String, dynamic>{};
     final rawWidth = payload['width'] ?? payload['image_width'];
     final rawHeight = payload['height'] ?? payload['image_height'];
     final imageWidth = rawWidth is num ? rawWidth.toDouble() : null;
     final imageHeight = rawHeight is num ? rawHeight.toDouble() : null;
-    final imageAspect = imageWidth != null && imageHeight != null && imageHeight > 0
+    final imageAspect =
+        imageWidth != null && imageHeight != null && imageHeight > 0
         ? imageWidth / imageHeight
         : null;
-    Widget image = _image(message, onTap: onTap);
+    Widget image = _image(
+      message,
+      onTap: onTap,
+      allowLongPress: allowLongPress,
+    );
     return SizedBox(
       width: width,
       height: height,
@@ -257,12 +271,49 @@ class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
     );
   }
 
+  Widget _expandButton(int imageCount, double height) => SizedBox(
+    width: 48,
+    height: math.max(36, height),
+    child: Center(
+      child: Tooltip(
+        message: _expanded ? '收起图片' : '展开 $imageCount 张图片',
+        child: TextButton(
+          onPressed: () => setState(() => _expanded = !_expanded),
+          style: TextButton.styleFrom(
+            foregroundColor: DunesColors.text2,
+            backgroundColor: DunesColors.bgSoft,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            minimumSize: const Size(44, 30),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+            shape: const StadiumBorder(),
+            side: BorderSide(color: DunesColors.borderSoft),
+          ),
+          child: Text(
+            _expanded ? '收起' : '展开',
+            style: DunesTypography.sans(
+              fontSize: 11,
+              color: DunesColors.text2,
+              context: context,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final images = widget.messages;
-    final front = images.first;
-    final back = images.length > 2 ? images[2] : images.last;
-    final middle = images.length > 2 ? images[1] : null;
+    if (images.isEmpty) return const SizedBox.shrink();
+    final frontIndex = _frontIndex % images.length;
+    final front = images[frontIndex];
+    final middle = images.length > 1
+        ? images[(frontIndex + 1) % images.length]
+        : null;
+    final back = images.length > 2
+        ? images[(frontIndex + 2) % images.length]
+        : images.last;
     final screenWidth = MediaQuery.sizeOf(context).width;
     final frontPayload = front.payload ?? const <String, dynamic>{};
     final rawWidth = frontPayload['width'] ?? frontPayload['image_width'];
@@ -277,114 +328,169 @@ class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
     final cardWidth = math.min(maxCardWidth, maxCardHeight * sourceAspect);
     final cardHeight = cardWidth / sourceAspect;
     final photoHeight = cardHeight;
+    final mobileSwipe =
+        !isDesktopCommOnly &&
+        (!kIsWeb || screenWidth < kWideChatLayoutBreakpoint);
     return Column(
       crossAxisAlignment: widget.mine
           ? CrossAxisAlignment.end
           : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (!_expanded)
-          MouseRegion(
-            onEnter: (_) => setState(() => _hovered = true),
-            onExit: (_) => setState(() => _hovered = false),
-            child: SizedBox(
-              width: cardWidth,
-              height: cardHeight,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                if (images.length > 2)
-                  Positioned(
-                    top: 4,
-                    left: 7,
-                    right: 7,
-                    bottom: 4,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 240),
-                      curve: Curves.easeOut,
-                      transform: Matrix4.translationValues(
-                        _hovered ? 10 : 7,
-                        _hovered ? -7 : -4,
-                        0,
-                      ),
-                      child: IgnorePointer(
-                        child: AnimatedRotation(
-                          turns: (_hovered ? 1.2 : 0.7) / 360,
-                          duration: const Duration(milliseconds: 240),
-                          child: _photoCard(
-                            back,
-                            width: cardWidth - 14,
-                            height: cardHeight - 8,
-                            onTap: () {},
-                            fillCard: true,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                Positioned(
-                  top: 4,
-                  left: 7,
-                  right: 7,
-                  bottom: 4,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 240),
-                    curve: Curves.easeOut,
-                    transform: Matrix4.translationValues(
-                      _hovered ? 5 : 3,
-                      _hovered ? -4 : -2,
-                      0,
-                    ),
-                    child: IgnorePointer(
-                      child: AnimatedRotation(
-                        turns: (_hovered ? 0.6 : 0.35) / 360,
-                        duration: const Duration(milliseconds: 240),
-                        child: _photoCard(
-                          middle ?? back,
-                            width: cardWidth - 14,
-                          height: cardHeight - 8,
-                          onTap: () {},
-                            fillCard: true,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 4,
-                  left: 7,
-                  right: 7,
-                  bottom: 4,
-                  child: AnimatedScale(
-                    scale: _hovered ? 1.015 : 1,
-                    duration: const Duration(milliseconds: 200),
-                    child: _photoCard(
-                      front,
-                      width: cardWidth - 14,
-                      height: cardHeight - 8,
-                      onTap: () => widget.onOpenImage(front),
-                      fillCard: true,
-                    ),
-                  ),
-                ),
-                ],
-              ),
-            ),
-          ),
         AnimatedSize(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeInOut,
-          alignment: Alignment.topCenter,
-          child: _expanded
-              ? Padding(
-                  padding: EdgeInsets.only(
-                    top: 10,
-                    left: widget.mine ? 0 : 54,
+          alignment: widget.mine ? Alignment.centerRight : Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (widget.mine) _expandButton(images.length, cardHeight),
+              if (!_expanded)
+                MouseRegion(
+                  onEnter: (_) => setState(() => _hovered = true),
+                  onExit: (_) => setState(() => _hovered = false),
+                  child: GestureDetector(
+                    onHorizontalDragStart: mobileSwipe
+                        ? (_) => _horizontalDragDistance = 0
+                        : null,
+                    onHorizontalDragUpdate: mobileSwipe
+                        ? (details) {
+                            _horizontalDragDistance += details.delta.dx;
+                            if (_horizontalDragDistance.abs() >= 32) {
+                              setState(() {
+                                _frontIndex = (_frontIndex + 1) % images.length;
+                                _horizontalDragDistance = 0;
+                              });
+                            }
+                          }
+                        : null,
+                    onLongPressStart: mobileSwipe
+                        ? (details) {
+                            _longPressStartDetails = details;
+                            _lastLongPressOffsetX = 0;
+                            _horizontalDragDistance = 0;
+                            _promotedDuringLongPress = false;
+                          }
+                        : null,
+                    onLongPressMoveUpdate: mobileSwipe
+                        ? (details) {
+                            final offsetX = details.offsetFromOrigin.dx;
+                            _horizontalDragDistance +=
+                                offsetX - _lastLongPressOffsetX;
+                            _lastLongPressOffsetX = offsetX;
+                            if (_horizontalDragDistance.abs() >= 32) {
+                              setState(() {
+                                _frontIndex = (_frontIndex + 1) % images.length;
+                                _horizontalDragDistance = 0;
+                                _promotedDuringLongPress = true;
+                              });
+                            }
+                          }
+                        : null,
+                    onLongPressEnd: mobileSwipe
+                        ? (_) {
+                            final start = _longPressStartDetails;
+                            if (!_promotedDuringLongPress && start != null) {
+                              widget.onLongPressStart?.call(start);
+                            }
+                            _longPressStartDetails = null;
+                          }
+                        : null,
+                    onLongPressCancel: mobileSwipe
+                        ? () => _longPressStartDetails = null
+                        : null,
+                    child: SizedBox(
+                      width: cardWidth,
+                      height: cardHeight,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          if (images.length > 2)
+                            Positioned(
+                              top: 4,
+                              left: 7,
+                              right: 7,
+                              bottom: 4,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 240),
+                                curve: Curves.easeOut,
+                                transform: Matrix4.translationValues(
+                                  _hovered ? 10 : 7,
+                                  _hovered ? -7 : -4,
+                                  0,
+                                ),
+                                child: IgnorePointer(
+                                  child: AnimatedRotation(
+                                    turns: (_hovered ? 1.2 : 0.7) / 360,
+                                    duration: const Duration(milliseconds: 240),
+                                    child: _photoCard(
+                                      back,
+                                      width: cardWidth - 14,
+                                      height: cardHeight - 8,
+                                      onTap: () {},
+                                      fillCard: true,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          Positioned(
+                            top: 4,
+                            left: 7,
+                            right: 7,
+                            bottom: 4,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 240),
+                              curve: Curves.easeOut,
+                              transform: Matrix4.translationValues(
+                                _hovered ? 5 : 3,
+                                _hovered ? -4 : -2,
+                                0,
+                              ),
+                              child: IgnorePointer(
+                                child: AnimatedRotation(
+                                  turns: (_hovered ? 0.6 : 0.35) / 360,
+                                  duration: const Duration(milliseconds: 240),
+                                  child: _photoCard(
+                                    middle ?? back,
+                                    width: cardWidth - 14,
+                                    height: cardHeight - 8,
+                                    onTap: () {},
+                                    fillCard: true,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 4,
+                            left: 7,
+                            right: 7,
+                            bottom: 4,
+                            child: AnimatedScale(
+                              scale: _hovered ? 1.015 : 1,
+                              duration: const Duration(milliseconds: 200),
+                              child: _photoCard(
+                                front,
+                                width: cardWidth - 14,
+                                height: cardHeight - 8,
+                                onTap: () => widget.onOpenImage(front),
+                                fillCard: true,
+                                allowLongPress: !mobileSwipe,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Column(
-                    crossAxisAlignment: widget.mine
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       for (final message in images)
                         Padding(
@@ -398,36 +504,9 @@ class _ChatImageGroupContentState extends State<_ChatImageGroupContent> {
                         ),
                     ],
                   ),
-                )
-              : const SizedBox.shrink(),
-        ),
-        Align(
-          alignment: widget.mine ? Alignment.centerRight : Alignment.centerLeft,
-          child: SizedBox(
-            width: cardWidth,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Align(
-                alignment: Alignment.center,
-                child: IconButton(
-                  onPressed: () => setState(() => _expanded = !_expanded),
-                  tooltip: _expanded ? '收起图片' : '展开 ${images.length} 张图片',
-                  iconSize: 19,
-                  padding: const EdgeInsets.all(3),
-                  constraints: const BoxConstraints.tightFor(width: 30, height: 30),
-                  splashRadius: 17,
-                  style: IconButton.styleFrom(
-                    foregroundColor: DunesColors.text2,
-                    backgroundColor: DunesColors.bgSoft,
-                  shape: const CircleBorder(),
-                  side: BorderSide(color: DunesColors.borderSoft),
-                  ),
-                  icon: Icon(
-                    _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                  ),
                 ),
-              ),
-            ),
+              if (!widget.mine) _expandButton(images.length, cardHeight),
+            ],
           ),
         ),
       ],
@@ -2629,9 +2708,13 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       final groupedImages = <NativeChatMessage>[m];
       final isImage = m.kind.toUpperCase() == 'IMAGE' && m.payload != null;
-      final isNoCollapseImage = m.payload?['noCollapse'] == true || m.payload?['isSticker'] == true;
+      final isNoCollapseImage =
+          m.payload?['noCollapse'] == true || m.payload?['isSticker'] == true;
       final mediaGroupId = (m.payload?['mediaGroupId'] ?? '').toString().trim();
-      if (isImage && !isNoCollapseImage && !_messageMultiSelectMode && m.createdAt != null) {
+      if (isImage &&
+          !isNoCollapseImage &&
+          !_messageMultiSelectMode &&
+          m.createdAt != null) {
         var nextIndex = messageIndex + 1;
         var previousAt = m.createdAt!;
         while (nextIndex < _messages.length) {
@@ -5305,7 +5388,9 @@ class _NativeChatViewState extends State<NativeChatView>
   void _beginDownload(String fileKey) {
     if (!mounted) return;
     _activeDownloadCancel = ChatUploadCancelToken();
-    _downloadProgressClock..reset()..start();
+    _downloadProgressClock
+      ..reset()
+      ..start();
     _lastDownloadProgressUpdate = -200;
     setState(() {
       _downloadingFileKey = fileKey.isEmpty ? '__download__' : fileKey;
@@ -5407,7 +5492,10 @@ class _NativeChatViewState extends State<NativeChatView>
   Future<void> _sendSticker(Map<String, dynamic> sticker) async {
     if (_uploading || _mediaBusy || (_conversation?.dissolved ?? false)) return;
     final objectKey = (sticker['objectKey'] ?? '').toString().trim();
-    if (objectKey.isEmpty) { _showToast('表情资源地址无效'); return; }
+    if (objectKey.isEmpty) {
+      _showToast('表情资源地址无效');
+      return;
+    }
     await _guardSend(() async {
       final name = (sticker['fileName'] ?? 'sticker').toString();
       await _service.sendMessageRaw(
@@ -8188,10 +8276,7 @@ class _NativeChatViewState extends State<NativeChatView>
       final convId = _conversation?.id ?? 0;
       open(
         messageId > 0 && convId > 0
-            ? share.withChatAnchor(
-                conversationId: convId,
-                messageId: messageId,
-              )
+            ? share.withChatAnchor(conversationId: convId, messageId: messageId)
             : share,
       );
       return;
@@ -8825,7 +8910,9 @@ class _NativeChatViewState extends State<NativeChatView>
     final conversationId = _chatConversationId;
     final cancel = _activeDownloadCancel;
     final path = await file_dl.downloadChatAttachment(
-      _service, payload, fileName,
+      _service,
+      payload,
+      fileName,
       onProgress: _setDownloadProgress,
       cacheKey: cacheKey.isEmpty ? null : cacheKey,
       conversationId: conversationId,
@@ -9378,8 +9465,7 @@ class _NativeChatViewState extends State<NativeChatView>
         return ProposalIntakeShareCard(
           session: widget.session,
           share: approvalShare,
-          onTap: () =>
-              _openApprovalShare(approvalShare, messageId: m.id),
+          onTap: () => _openApprovalShare(approvalShare, messageId: m.id),
           onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
               ? (details) =>
                     _onMessageActions(m, mine, anchor: details.globalPosition)

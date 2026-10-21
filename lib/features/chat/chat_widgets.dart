@@ -260,6 +260,7 @@ class ChatQuickActions extends StatelessWidget {
     ];
     if (wide) {
       return Container(
+        width: double.infinity,
         padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
         decoration: BoxDecoration(
           color: DunesColors.resolve(

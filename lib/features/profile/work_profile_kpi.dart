@@ -333,6 +333,10 @@ class WorkProfileKpiPerson {
     required this.bonus,
     required this.telecomWeight,
     required this.energyWeight,
+    double? autoTelecomWeight,
+    double? autoEnergyWeight,
+    this.categoryWeightManual = false,
+    this.categoryWeightFrom = '',
     required this.telecomScore,
     required this.energyScore,
     this.grade = '',
@@ -353,7 +357,8 @@ class WorkProfileKpiPerson {
     this.skipReason = '',
     this.skipNote = '',
     this.categories = const [],
-  });
+  }) : autoTelecomWeight = autoTelecomWeight ?? telecomWeight,
+       autoEnergyWeight = autoEnergyWeight ?? energyWeight;
 
   final int userId;
   final String userName;
@@ -367,6 +372,19 @@ class WorkProfileKpiPerson {
   final double bonus;
   final double telecomWeight;
   final double energyWeight;
+
+  /// 按两边当月营收算出的板块占比（手工设定前的值）。
+  final double autoTelecomWeight;
+  final double autoEnergyWeight;
+
+  /// 运营商 / 能源板块占比是手工设定的；[categoryWeightFrom] 是生效月（YYYY-MM），之后月份沿用。
+  final bool categoryWeightManual;
+  final String categoryWeightFrom;
+
+  bool get hasBothSectors =>
+      !isRubric &&
+      categories.any((c) => c.category == 'telecom') &&
+      categories.any((c) => c.category == 'energy');
   final double telecomScore;
   final double energyScore;
   final String scoreSource;
@@ -436,6 +454,10 @@ class WorkProfileKpiPerson {
       bonus: (json['bonus'] as num?)?.toDouble() ?? 0,
       telecomWeight: (json['telecomWeight'] as num?)?.toDouble() ?? 0,
       energyWeight: (json['energyWeight'] as num?)?.toDouble() ?? 0,
+      autoTelecomWeight: (json['autoTelecomWeight'] as num?)?.toDouble(),
+      autoEnergyWeight: (json['autoEnergyWeight'] as num?)?.toDouble(),
+      categoryWeightManual: json['categoryWeightManual'] == true,
+      categoryWeightFrom: '${json['categoryWeightFrom'] ?? ''}',
       telecomScore: (json['telecomScore'] as num?)?.toDouble() ?? 0,
       energyScore: (json['energyScore'] as num?)?.toDouble() ?? 0,
       scoreSource: '${json['scoreSource'] ?? ''}',

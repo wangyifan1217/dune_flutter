@@ -153,6 +153,27 @@ class WorkbenchKpiOverrideItem {
   };
 }
 
+/// 运营商 / 能源板块间占比。随「保存变更」提交；不传表示不动。
+class WorkbenchKpiCategoryWeight {
+  const WorkbenchKpiCategoryWeight.manual({
+    required double this.telecomPct,
+    required double this.energyPct,
+  }) : auto = false;
+
+  const WorkbenchKpiCategoryWeight.auto()
+    : auto = true,
+      telecomPct = null,
+      energyPct = null;
+
+  final bool auto;
+  final double? telecomPct;
+  final double? energyPct;
+
+  Map<String, dynamic> toJson() => auto
+      ? {'auto': true}
+      : {'telecomPct': telecomPct, 'energyPct': energyPct};
+}
+
 class WorkbenchKpiRubricItem {
   const WorkbenchKpiRubricItem({
     required this.key,
@@ -464,6 +485,7 @@ class WorkbenchKpiService {
     required String month,
     required int userId,
     required List<WorkbenchKpiOverrideItem> items,
+    WorkbenchKpiCategoryWeight? categoryWeight,
   }) async {
     final resp = await dunesHttpPut(
       session,
@@ -472,6 +494,7 @@ class WorkbenchKpiService {
         'month': month.trim(),
         'userId': userId,
         'items': [for (final item in items) item.toJson()],
+        if (categoryWeight != null) 'categoryWeight': categoryWeight.toJson(),
       }),
       client: _client,
     );

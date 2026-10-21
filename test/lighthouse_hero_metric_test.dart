@@ -2382,7 +2382,7 @@ void main() {
     expect(lighthouseHeroMastheadLabelIconSize, 18);
     expect(lighthouseHeroMastheadLabelRadius, 8);
     expect(lighthouseHeroGroupTitleFontSize, 10);
-    expect(lighthouseHeroMastheadFontSize, 29);
+    expect(lighthouseHeroMastheadFontSize, 32);
     expect(lighthouseHeroMetricValueFontSize, 13);
     expect(lighthouseHeroMetricLabelFontSize, 9);
     expect(lighthouseHeroMetricDeltaFontSize, 8);
@@ -2929,7 +2929,8 @@ void main() {
       expect(lighthouseLedgerResultBlockKeepsMetricTint, isFalse);
       expect(lighthouseLedgerResultBlockRailWidth, 2);
       expect(lighthouseLedgerResultBlockTintAlpha, 38);
-      expect(lighthouseLedgerResultBlockAccentValue, 0xFF4A83C4);
+      // 2026-10-21 · 结果色从蓝改回灯塔紫。
+      expect(lighthouseLedgerResultBlockAccentValue, 0xFF7B5CD8);
     });
 
     test('字号维持原状 —— 层级由分区承担，不放大数字', () {
@@ -2976,9 +2977,10 @@ void main() {
       );
     });
 
-    test('v23.2 · 蓝面板上的分区标题用蓝色系，不再玫红 / 绿压蓝底', () {
-      expect(lighthouseHeroResultSectionChipValue, 0xFFD9E6F4);
-      expect(lighthouseHeroResultSectionTitleValue, 0xFF2C5A8C);
+    test('2026-10-21 · 结果分区标题跟灯塔紫走，大数卡不再整块换结果色', () {
+      expect(lighthouseHeroResultSectionChipValue, 0xFFEAE4F8);
+      expect(lighthouseHeroResultSectionTitleValue, 0xFF5A458F);
+      expect(lighthouseHeroKpiUsesResultTint, isFalse);
     });
 
     test('v23.3 · 分区标题走轻版：无彩色胶囊，图标中性灰紫', () {

@@ -124,16 +124,26 @@ flutter:
         - asset: assets/fonts/Geist-Regular.ttf
         - asset: assets/fonts/Geist-Medium.ttf
           weight: 500
+        - asset: assets/fonts/Geist-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Geist-Bold.ttf
+          weight: 700
     - family: Geist Mono
       fonts:
         - asset: assets/fonts/GeistMono-Regular.ttf
         - asset: assets/fonts/GeistMono-Medium.ttf
           weight: 500
+        - asset: assets/fonts/GeistMono-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/GeistMono-Bold.ttf
+          weight: 700
     - family: Noto Sans SC
       fonts:
         - asset: assets/fonts/NotoSansSC-Regular.ttf
         - asset: assets/fonts/NotoSansSC-Medium.ttf
           weight: 500
+        - asset: assets/fonts/NotoSansSC-Bold.otf
+          weight: 700
     # 提案测算格子的数字字体，与原型一致（SIL OFL，见 assets/fonts/JetBrainsMono-OFL.txt）。
     - family: JetBrains Mono
       fonts:

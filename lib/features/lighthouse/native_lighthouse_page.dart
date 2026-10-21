@@ -38,6 +38,8 @@ import 'lighthouse_forecast_strip.dart';
 import 'lighthouse_product_ordinal.dart';
 import 'lighthouse_product_ordinal_view.dart';
 import 'lighthouse_hero_metric.dart';
+import 'lighthouse_hero_chart.dart';
+import 'lighthouse_hero_swipe.dart';
 import 'lighthouse_period_bar.dart';
 import 'lighthouse_product_l3.dart';
 import 'lighthouse_rank_badge.dart';
@@ -14857,6 +14859,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   bool _heroFundPoolTried = false;
   String _heroAssetPrimeKey = '';
 
+  // ── 主 Hero · 滑动（2026-10-21）──────────────────────────────────
+  //   走势卡左滑拉宽（大数卡收成竖条）；大数卡左滑翻到「资金与资产」。
+  bool _heroTrendWide = false;
+  int _heroKpiPage = 0;
+
+  /// 资金模式右卡：'trend' 走势（线 = 资产，柱 = 预收净增）/ 'mix' 构成。
+  String _heroFundsView = 'trend';
+  bool _heroFundsBars = true;
+
+  /// 大数卡翻页的跟手位置（0 利润 · 1 资金），右边走势卡跟着它换模式。
+  final ValueNotifier<double> _heroPagePos = ValueNotifier<double>(0);
+
+  /// 主 Hero 上滑收起成一条摘要（方便对照下面的产品 / 供给 / 渠道列表）。
+  bool _heroFolded = false;
+  double _heroFoldDrag = 0;
+
   /// 资金与资产走势要几格：日 / 周拉满 31 格，月 / 季 / 年 12 个月（后端上限）。
   int get _heroAssetTrendCount =>
       const {'day', 'week'}.contains(_period) ? 31 : 12;
@@ -16146,6 +16164,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   @override
   void dispose() {
+    _heroPagePos.dispose();
     _pkHost = null;
     _pkQueryCtrl.dispose();
     _clearBackInterceptor();
@@ -23616,7 +23635,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               : const ValueKey('hero-overview'),
           viewportCount: fullscreen
               ? _heroFullscreenViewportCount
-              : _heroViewportCount,
+              : _heroInlineViewportCount,
           initialViewEnd: fullscreen ? null : widget.sharedCard?.viewEnd,
           onViewEndChanged: fullscreen ? null : (value) => _heroViewEnd = value,
           zoomable: fullscreen,
@@ -23810,6 +23829,1780 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _expandedTrendKey = next.focus;
       _heroTraceKey = next.trace;
     });
+  }
+
+  // ── 主 Hero · 滑动（2026-10-21）──────────────────────────────────────────
+  //   手势和几何在 lighthouse_hero_swipe.dart；这里只管内容：
+  //   竖条、资金与资产页、拉宽后多看几天。
+
+  /// 主 Hero 走势一屏几个点：拉宽后多看一倍（日线 7 → 14），封顶 31。
+  /// 宽度多了 ~50%，点数翻倍后点距反而略密 —— 拉宽就是为了看更长的一段。
+  int get _heroInlineViewportCount {
+    final base = _heroViewportCount;
+    if (!_heroTrendWide || base < 2 || widget.sharedCard != null) return base;
+    return math.min(31, base * 2);
+  }
+
+  void _setHeroTrendWide(bool wide) {
+    if (_heroTrendWide == wide) return;
+    LighthouseFeedback.instance.play(
+      wide ? LighthouseFeedbackKind.expand : LighthouseFeedbackKind.collapse,
+    );
+    setState(() => _heroTrendWide = wide);
+    // 宽了要多画一倍的点：历史还没拉过就现在拉。
+    if (wide) _scheduleHeroHistoryPreload();
+  }
+
+  void _setHeroKpiPage(int page) {
+    if (_heroKpiPage == page) return;
+    setState(() => _heroKpiPage = page);
+  }
+
+  /// 「资金与资产」面板的展开 / 收起（大数卡底部那一格和资金页的「明细」共用）。
+  void _toggleHeroAssetPanel() {
+    final assetKey = _tab == 'supply'
+        ? (_supplySelectedAssetCategory ?? 'total')
+        : 'total';
+    final open = _heroAssetOpen;
+    LighthouseFeedback.instance.play(
+      open ? LighthouseFeedbackKind.collapse : LighthouseFeedbackKind.expand,
+    );
+    setState(() {
+      _heroAssetOpen = !open;
+      if (!open) {
+        _heroAssetKey = _heroAssetLine(assetKey) == null ? 'total' : assetKey;
+        _supplyAssetPointIndex = null;
+      }
+    });
+  }
+
+  // ── 主 Hero · 上滑收起（2026-10-21）──────────────────────────────────
+  //   Hero 底下一根把手：往上一推，大数 / 走势 / 规模成本利润收成一条摘要，
+  //   下面产品 / 供给 / 渠道列表顶上来，方便边看列表边对数；往下拉或点摘要展开。
+
+  void _setHeroFolded(bool folded) {
+    if (_heroFolded == folded) return;
+    LighthouseFeedback.instance.play(
+      folded ? LighthouseFeedbackKind.collapse : LighthouseFeedbackKind.expand,
+    );
+    setState(() => _heroFolded = folded);
+  }
+
+  Widget _buildHeroFoldHandle() {
+    final folded = _heroFolded;
+    final mute2 = DunesColors.resolve(context, LhColors.mute2);
+    final plum = DunesColors.resolve(context, _LhPlum.primary);
+    return Semantics(
+      button: true,
+      label: folded ? '展开主卡' : '收起主卡',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _setHeroFolded(!folded),
+        onVerticalDragStart: (_) => _heroFoldDrag = 0,
+        onVerticalDragUpdate: (d) => _heroFoldDrag += d.delta.dy,
+        onVerticalDragEnd: (d) {
+          final v = d.primaryVelocity ?? 0;
+          if (!folded && (_heroFoldDrag < -24 || v < -300)) {
+            _setHeroFolded(true);
+          } else if (folded && (_heroFoldDrag > 24 || v > 300)) {
+            _setHeroFolded(false);
+          }
+          _heroFoldDrag = 0;
+        },
+        child: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: SizedBox(
+            height: 24,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 34,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: plum.withAlpha(folded ? 120 : 60),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      folded
+                          ? Icons.keyboard_arrow_down_rounded
+                          : Icons.keyboard_arrow_up_rounded,
+                      size: 12,
+                      color: mute2,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      folded ? '下拉展开' : '上滑收起',
+                      style: LhTypography.sans(
+                        size: 9,
+                        color: mute2,
+                        weight: FontWeight.w500,
+                        height: 1.0,
+                        context: context,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 收起后的一条摘要：大数（本日利润）· 规模（核销 / 销售）· 总资产（或 GMV）。
+  Widget _buildHeroFoldedStrip({
+    required String mastheadKey,
+    required double value,
+    required bool isRate,
+    required bool isNeg,
+    required ({double pct, bool isUp})? delta,
+    required Map<String, double> heroTotals,
+  }) {
+    final mute = DunesColors.resolve(context, LhColors.mute);
+    final ink = DunesColors.resolve(context, LhColors.ink);
+
+    Widget deltaText(({double pct, bool isUp})? d, {bool rate = false}) {
+      if (d == null || !lighthouseDeltaPctShown(d.pct, isRate: rate)) {
+        return const SizedBox.shrink();
+      }
+      final a = d.pct.abs();
+      return Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: Text(
+          '${d.isUp ? '↑' : '↓'}${a.toStringAsFixed(a >= 10 ? 0 : 1)}'
+          '${rate ? 'pp' : '%'}',
+          maxLines: 1,
+          softWrap: false,
+          style: _tabular(
+            LhTypography.mono(
+              size: 10.5,
+              color: DunesColors.resolve(
+                context,
+                d.isUp ? LhColors.neg : LhColors.pos,
+              ),
+              weight: FontWeight.w700,
+              height: 1.0,
+              context: context,
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget metric(
+      String label,
+      String number,
+      String unit,
+      Color color,
+      Widget trailing,
+    ) => Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: LhTypography.sans(
+              size: 9.5,
+              color: mute,
+              weight: FontWeight.w500,
+              height: 1.1,
+              context: context,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: number,
+                          style: _tabular(
+                            LhTypography.number(
+                              size: 15,
+                              color: color,
+                              context: context,
+                            ),
+                          ).copyWith(height: 1.0),
+                        ),
+                        TextSpan(
+                          text: unit,
+                          style: LhTypography.sans(
+                            size: 9,
+                            color: mute,
+                            weight: FontWeight.w500,
+                            context: context,
+                          ),
+                        ),
+                      ],
+                    ),
+                    maxLines: 1,
+                    softWrap: false,
+                  ),
+                ),
+              ),
+              trailing,
+            ],
+          ),
+        ],
+      ),
+    );
+
+    Widget divider() => Container(
+      width: 0.7,
+      height: 26,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      color: DunesColors.resolve(
+        context,
+        LhColors.line2,
+        role: DunesColorRole.surface,
+      ),
+    );
+
+    String money(double v) => '${v < 0 ? '−' : ''}${_fmtMoney(v.abs())}';
+
+    final headColor = _grossProfitValueColor(
+      mastheadKey,
+      value,
+      isNeg
+          ? DunesColors.resolve(context, LhColors.pos)
+          : DunesColors.resolve(context, _LhPlum.heroNum),
+    );
+    final scaleKey = _anchor == _LhAnchor.verified ? 'verifiedSales' : 'sales';
+    final scaleV = heroTotals[scaleKey] ?? 0;
+    final assetTotal = _heroAssetsEligible
+        ? _heroAssetLine('total')?.amounts?.totalAssets
+        : null;
+    final third = assetTotal != null
+        ? (() {
+            final p = lighthouseFormatFundPoolWanParts(assetTotal.abs());
+            return metric(
+              '总资产',
+              '${assetTotal < 0 ? '−' : ''}${p.number}',
+              p.unit,
+              DunesColors.resolve(context, _LhPlum.heroNum),
+              const SizedBox.shrink(),
+            );
+          })()
+        : metric(
+            'GMV',
+            money(heroTotals['gmv'] ?? 0),
+            _unitMoney(heroTotals['gmv'] ?? 0),
+            ink,
+            deltaText(_deltaForMetric('gmv')),
+          );
+
+    return Semantics(
+      button: true,
+      label: '展开主卡',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _setHeroFolded(false),
+        child: Container(
+          margin: const EdgeInsets.only(top: 10),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              context,
+              const Color(lighthouseLedgerSummaryNeutralPanelValue),
+              role: DunesColorRole.surface,
+            ),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(lighthouseHeroPanelNeutralEdgeValue),
+                role: DunesColorRole.border,
+              ),
+              width: lighthouseHeroPanelEdgeWidth,
+            ),
+            borderRadius: BorderRadius.circular(
+              lighthouseLedgerSummaryPanelRadius,
+            ),
+          ),
+          child: Row(
+            children: [
+              metric(
+                lighthouseHeroMetricPeriodLabel(_period, mastheadKey),
+                isRate
+                    ? value.toStringAsFixed(2)
+                    : '${isNeg ? '−' : ''}${_fmtMoney(value.abs())}',
+                isRate ? '%' : _unitMoney(value.abs()),
+                headColor,
+                deltaText(delta, rate: isRate),
+              ),
+              divider(),
+              metric(
+                scaleKey == 'verifiedSales' ? '核销额' : '销售额',
+                money(scaleV),
+                _unitMoney(scaleV),
+                ink,
+                deltaText(_deltaForMetric(scaleKey)),
+              ),
+              divider(),
+              third,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 大数卡内容：能挂资产的一级页面包一层翻页（利润 ⇄ 资金），底部「利润 · 资金」
+  /// 文字页签 + 跟手短条；右边走势卡读 [_heroPagePos] 跟着换模式。
+  /// 其它（二三级、净TA、拍平版）原样返回第一页。
+  Widget _heroKpiPaged({
+    required bool enabled,
+    required Map<String, double> heroTotals,
+    required Widget first,
+  }) {
+    if (!enabled) return first;
+    return LighthouseHeroCardPager(
+      page: _heroKpiPage,
+      onPageChanged: _setHeroKpiPage,
+      accent: DunesColors.resolve(context, _LhPlum.primary),
+      indicatorBottom: 2,
+      position: _heroPagePos,
+      tabs: const ['利润', '资金'],
+      tabStyle: LhTypography.sans(
+        size: 10.5,
+        color: DunesColors.resolve(context, LhColors.mute2),
+        weight: FontWeight.w500,
+        height: 1.0,
+        context: context,
+      ),
+      tabActiveStyle: LhTypography.sans(
+        size: 10.5,
+        color: DunesColors.resolve(context, _LhPlum.deep),
+        weight: FontWeight.w700,
+        height: 1.0,
+        context: context,
+      ),
+      pages: [first, _buildHeroFundsPage(heroTotals)],
+    );
+  }
+
+
+  /// 过拉到头时浮在走势卡左缘的一颗小胶囊：再松手就进全屏大图。
+  Widget _heroOverpullHint() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(7, 5, 9, 5),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          _LhPlum.deep,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(
+            color: _LhPlum.deep.withAlpha(60),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.open_in_full_rounded, size: 11, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(
+            '松手看大图',
+            style: LhTypography.sans(
+              size: 10,
+              color: Colors.white,
+              weight: FontWeight.w700,
+              height: 1.0,
+              context: context,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 走势拉宽后，大数卡剩下的那根竖条：口径（竖排）· 数 · 环比 · 回位钮。
+  /// 整条可点、可往右拽，都会还原；底色和边跟原来的大数卡同一套。
+  Widget _buildHeroWideRail({
+    required String label,
+    required String mastheadKey,
+    required double value,
+    required bool isRate,
+    required bool isNeg,
+    required ({double pct, bool isUp})? delta,
+    required bool profitPanel,
+  }) {
+    final plum = DunesColors.resolve(context, _LhPlum.primary);
+    final deep = DunesColors.resolve(context, _LhPlum.deep);
+    final mute = DunesColors.resolve(context, LhColors.mute);
+    final mute2 = DunesColors.resolve(context, LhColors.mute2);
+    final resultAccent = DunesColors.resolve(
+      context,
+      const Color(lighthouseLedgerResultBlockAccentValue),
+      role: DunesColorRole.surface,
+    );
+    final decoration = BoxDecoration(
+      color: profitPanel
+          ? resultAccent.withAlpha(lighthouseLedgerSummaryResultPanelAlpha)
+          : DunesColors.resolve(
+              context,
+              const Color(lighthouseLedgerSummaryNeutralPanelValue),
+              role: DunesColorRole.surface,
+            ),
+      border: Border.all(
+        color: profitPanel
+            ? DunesColors.resolve(
+                context,
+                const Color(lighthouseLedgerResultBlockAccentValue),
+                role: DunesColorRole.border,
+              ).withAlpha(lighthouseHeroPanelResultEdgeAlpha)
+            : DunesColors.resolve(
+                context,
+                const Color(lighthouseHeroPanelNeutralEdgeValue),
+                role: DunesColorRole.border,
+              ),
+        width: lighthouseHeroPanelEdgeWidth,
+      ),
+      borderRadius: BorderRadius.circular(lighthouseLedgerSummaryPanelRadius),
+    );
+    final number = isRate
+        ? value.toStringAsFixed(1)
+        : (lighthouseHeroMetricPlainNumber(mastheadKey, value.abs()) ??
+              _fmtMoney(value.abs()));
+    final unit = isRate
+        ? '%'
+        : (lighthouseHeroMetricPlainUnit(mastheadKey) ??
+              _unitMoney(value.abs()));
+    final valueColor = _grossProfitValueColor(
+      mastheadKey,
+      value,
+      isNeg
+          ? DunesColors.resolve(context, LhColors.pos)
+          : DunesColors.resolve(context, _LhPlum.heroNum),
+    );
+    final d = delta;
+    final shown = d != null && lighthouseDeltaPctShown(d.pct, isRate: isRate);
+    final a = shown ? d!.pct.abs() : 0.0;
+    final deltaText = shown
+        ? '${d!.isUp ? '↑' : '↓'}${a.toStringAsFixed(a >= 10 ? 0 : 1)}'
+              '${isRate ? 'pp' : '%'}'
+        : '';
+    final deltaColor = !shown
+        ? mute2
+        : DunesColors.resolve(context, d!.isUp ? LhColors.neg : LhColors.pos);
+    // 竖排口径：一字一行，最多四个字（「本日利润」「本月核销」）。
+    final glyphs = label.runes.take(4).map(String.fromCharCode).join('\n');
+
+    return Semantics(
+      button: true,
+      label: '收起走势，回到$label',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _setHeroTrendWide(false),
+        child: Container(
+          decoration: decoration,
+          padding: const EdgeInsets.fromLTRB(3, 8, 3, 8),
+          child: LayoutBuilder(
+            builder: (context, box) => Column(
+              children: [
+                Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: (profitPanel ? resultAccent : plum).withAlpha(30),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Icon(
+                    Icons.trending_up_rounded,
+                    size: 10,
+                    color: profitPanel
+                        ? DunesColors.resolve(
+                            context,
+                            const Color(lighthouseHeroResultSectionTitleValue),
+                          )
+                        : plum,
+                  ),
+                ),
+                if (box.maxHeight >= 168) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    glyphs,
+                    textAlign: TextAlign.center,
+                    style: LhTypography.sans(
+                      size: 10,
+                      color: DunesColors.resolve(context, LhColors.ink2),
+                      weight: FontWeight.w700,
+                      height: 1.15,
+                      context: context,
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${isNeg ? '−' : ''}$number',
+                    maxLines: 1,
+                    softWrap: false,
+                    style: _tabular(
+                      LhTypography.number(
+                        size: 13,
+                        color: valueColor,
+                        context: context,
+                      ),
+                    ).copyWith(height: 1.0),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  unit,
+                  style: LhTypography.sans(
+                    size: 8.5,
+                    color: mute,
+                    weight: FontWeight.w500,
+                    height: 1.0,
+                    context: context,
+                  ),
+                ),
+                if (deltaText.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      deltaText,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: _tabular(
+                        LhTypography.mono(
+                          size: 9,
+                          color: deltaColor,
+                          weight: FontWeight.w700,
+                          height: 1.0,
+                          context: context,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: plum.withAlpha(22),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 15,
+                    color: deep,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── 主 Hero · 双模式（2026-10-21 · 原型「产品汇总 · 主 Hero 双模式」）──────
+  //   左卡翻到「资金」，右卡跟着从利润多线走势换成资金走势：
+  //   线 = 资产（截至快照日），柱 = 预收净增（含今天）。原来往下展开的
+  //   资金与资产面板不再出现，明细进右卡的「构成」。
+
+  /// 大数卡两页共用的口径胶囊（「本日利润」那颗的同款）。
+  Widget _heroPageChip(IconData icon, String label) {
+    final plum = DunesColors.resolve(context, _LhPlum.primary);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(5, 4, 7, 4),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          _LhPlum.primary,
+          role: DunesColorRole.surface,
+        ).withAlpha(12),
+        borderRadius: BorderRadius.circular(lighthouseHeroMastheadLabelRadius),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: lighthouseHeroMastheadLabelIconSize,
+            height: lighthouseHeroMastheadLabelIconSize,
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                context,
+                _LhPlum.primary,
+                role: DunesColorRole.surface,
+              ).withAlpha(24),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Icon(icon, size: 11, color: plum),
+          ),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: LhTypography.sans(
+                size: lighthouseHeroMastheadLabelFontSize,
+                color: DunesColors.resolve(context, LhColors.ink),
+                weight: FontWeight.w600,
+                letterSpacing: 0.1,
+                height: 1.0,
+                context: context,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 「1.02亿」拆成数 + 单位两段排（单位小一号、灰）。
+  Widget _heroSplitWan(
+    double? v, {
+    required double size,
+    Color? color,
+    double unitSize = 9,
+  }) {
+    final mute = DunesColors.resolve(context, LhColors.mute);
+    if (v == null || !v.isFinite) {
+      return Text(
+        '—',
+        style: _tabular(
+          LhTypography.number(
+            size: size * 0.8,
+            color: DunesColors.resolve(context, LhColors.mute2),
+            context: context,
+          ),
+        ),
+      );
+    }
+    final p = lighthouseFormatFundPoolWanParts(v.abs());
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '${v < 0 ? '−' : ''}${p.number}',
+            style: _tabular(
+              LhTypography.number(
+                size: size,
+                color: color ?? DunesColors.resolve(context, LhColors.ink),
+                context: context,
+              ),
+            ).copyWith(height: 1.0, letterSpacing: size >= 24 ? -0.6 : -0.2),
+          ),
+          TextSpan(
+            text: p.unit,
+            style: LhTypography.sans(
+              size: unitSize,
+              color: mute,
+              weight: FontWeight.w500,
+              context: context,
+            ),
+          ),
+        ],
+      ),
+      maxLines: 1,
+      softWrap: false,
+    );
+  }
+
+  /// 迷你柱：最近 [count] 期，最后一根（今天）高亮。
+  /// [signed] = 正负两向（预收净增），否则从底往上（利润）。
+  Widget _heroMiniBars(
+    List<double> series, {
+    required bool signed,
+    required Color today,
+    required Color pos,
+    Color? neg,
+    int count = 7,
+  }) {
+    if (series.isEmpty) return const SizedBox.shrink();
+    final vals = series.length <= count
+        ? series
+        : series.sublist(series.length - count);
+    final mx = vals.fold<double>(0, (m, v) => math.max(m, v.abs()));
+    return LayoutBuilder(
+      builder: (context, box) {
+        final h = box.maxHeight.isFinite ? box.maxHeight : 18.0;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < vals.length; i++) ...[
+              if (i > 0) SizedBox(width: signed ? 1.5 : 3),
+              Expanded(
+                child: Builder(
+                  builder: (_) {
+                    final v = vals[i];
+                    final isToday = i == vals.length - 1;
+                    final c = isToday
+                        ? today
+                        : (v < 0 && neg != null ? neg : pos);
+                    double top, bh;
+                    if (signed) {
+                      bh = mx <= 0
+                          ? 1.5
+                          : math.max(1.5, v.abs() / mx * h * 0.48);
+                      top = v >= 0 ? h / 2 - bh : h / 2;
+                    } else {
+                      bh = mx <= 0
+                          ? h * 0.18
+                          : h * (0.18 + 0.82 * math.max(0.0, v) / mx);
+                      top = h - bh;
+                    }
+                    return Stack(
+                      children: [
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: top,
+                          height: bh,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: c,
+                              borderRadius: BorderRadius.circular(
+                                signed ? 1 : 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  /// 利润页底部：近 7 日利润迷你柱（今天铜色）。
+  Widget _buildHeroProfitMiniBars(List<double> series) {
+    if (series.length < 2) return const SizedBox.shrink();
+    final k = math.min(7, series.length);
+    final copper = DunesColors.resolve(
+      context,
+      const Color(lighthouseProfitAccentValue),
+    );
+    final mute2 = DunesColors.resolve(context, LhColors.mute2);
+    final unit = _period == 'day' ? '日' : '期';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          height: 0.7,
+          color: DunesColors.resolve(
+            context,
+            LhColors.line2,
+            role: DunesColorRole.surface,
+          ),
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 24,
+          child: _heroMiniBars(
+            series,
+            signed: false,
+            today: copper,
+            pos: DunesColors.resolve(
+              context,
+              const Color(0xFFDCD3F6),
+              role: DunesColorRole.surface,
+            ),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '近 $k $unit利润',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: LhTypography.sans(
+                  size: 8.5,
+                  color: mute2,
+                  weight: FontWeight.w500,
+                  height: 1.0,
+                  context: context,
+                ),
+              ),
+            ),
+            Text(
+              _period == 'day' ? '今' : '本期',
+              style: LhTypography.sans(
+                size: 8.5,
+                color: copper,
+                weight: FontWeight.w700,
+                height: 1.0,
+                context: context,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// 点资金页的预收净增：右卡切到走势并打开柱。
+  void _focusHeroPrepaid() {
+    LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
+    setState(() {
+      _heroFundsView = 'trend';
+      _heroFundsBars = true;
+    });
+  }
+
+  /// 大数卡第二页：资金与资产。
+  ///
+  ///     [🏦 资金与资产]
+  ///     总资产          截至 10-20
+  ///     1.02亿                       ← 30 / w700 / 深紫
+  ///     ┌──────────────────────┐
+  ///     │ ⇅ 预收净增       本日 │     ← 点它：右卡走势 + 打开柱
+  ///     │ −29.2万  ▁▃▂▅▁▇▂     │     ← 迷你柱与右卡的柱同一套编码
+  ///     │ ↓158% vs 上月同日     │
+  ///     └──────────────────────┘
+  Widget _buildHeroFundsPage(Map<String, double> heroTotals) {
+    _ensureHeroFundPool();
+    final ink = DunesColors.resolve(context, LhColors.ink);
+    final mute = DunesColors.resolve(context, LhColors.mute);
+    final mute2 = DunesColors.resolve(context, LhColors.mute2);
+    final deep = DunesColors.resolve(context, _LhPlum.deep);
+    final total = _heroAssetLine('total')?.amounts?.totalAssets;
+    final asOf = _fundPoolSnapshot.asOfDate;
+    final asOfShort = asOf.length == 10 ? asOf.substring(5) : asOf;
+    final r = _heroPrepaidReadout(heroTotals);
+    final d = _heroPointIndex != null
+        ? _deltaAtHeroPoint('prepaid')
+        : _deltaForMetric('prepaid');
+    final deltaColor = d == null || r.delta == '—'
+        ? mute2
+        : DunesColors.resolve(context, d.isUp ? LhColors.neg : LhColors.pos);
+    final ppActive = _heroFundsView == 'trend' && _heroFundsBars;
+    final vp = lighthouseFormatFundPoolWanParts(r.value.abs());
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _heroPageChip(Icons.account_balance_rounded, '资金与资产'),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, box) => FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: box.maxWidth,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            '总资产',
+                            style: LhTypography.sans(
+                              size: 10,
+                              color: mute,
+                              weight: FontWeight.w500,
+                              height: 1.1,
+                              context: context,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (asOfShort.isNotEmpty)
+                            Text(
+                              '截至 $asOfShort',
+                              style: LhTypography.mono(
+                                size: 9,
+                                color: mute2,
+                                height: 1.1,
+                                context: context,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      total == null
+                          ? Text(
+                              _fundPoolLoading ? '资金池加载中…' : '暂无资金数据',
+                              style: LhTypography.sans(
+                                size: 10,
+                                color: mute2,
+                                height: 1.2,
+                                context: context,
+                              ),
+                            )
+                          : _heroSplitWan(
+                              total,
+                              size: 30,
+                              unitSize: 11,
+                              color: DunesColors.resolve(
+                                context,
+                                _LhPlum.heroNum,
+                              ),
+                            ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Semantics(
+            button: true,
+            selected: ppActive,
+            label: '预收净增走势',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _focusHeroPrepaid,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding: const EdgeInsets.fromLTRB(6, 6, 6, 5),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ).withAlpha(ppActive ? 255 : 153),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      ppActive
+                          ? const Color(0xFFCDBEF3)
+                          : const Color(0xFFE7E3EF),
+                      role: DunesColorRole.border,
+                    ),
+                    width: 0.8,
+                  ),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.swap_vert_rounded, size: 11, color: deep),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            '预收净增',
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: LhTypography.sans(
+                              size: 9.5,
+                              color: deep,
+                              weight: FontWeight.w600,
+                              height: 1.1,
+                              context: context,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          _period == 'day' ? '本日' : '本期',
+                          style: LhTypography.sans(
+                            size: 8.5,
+                            color: mute2,
+                            weight: FontWeight.w500,
+                            height: 1.1,
+                            context: context,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: '${r.value < 0 ? '−' : ''}${vp.number}',
+                                style: _tabular(
+                                  LhTypography.number(
+                                    size: 14,
+                                    color: ink,
+                                    context: context,
+                                  ),
+                                ).copyWith(height: 1.0),
+                              ),
+                              TextSpan(
+                                text: vp.unit,
+                                style: LhTypography.sans(
+                                  size: 8.5,
+                                  color: mute,
+                                  weight: FontWeight.w500,
+                                  context: context,
+                                ),
+                              ),
+                            ],
+                          ),
+                          maxLines: 1,
+                          softWrap: false,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: SizedBox(
+                            height: 18,
+                            child: _heroMiniBars(
+                              _seriesForMetric('prepaid'),
+                              signed: true,
+                              today: deep,
+                              pos: DunesColors.resolve(
+                                context,
+                                const Color(0xFFB39CF0),
+                              ),
+                              neg: DunesColors.resolve(
+                                context,
+                                const Color(0xFFDCD3F6),
+                                role: DunesColorRole.surface,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: r.delta,
+                            style: _tabular(
+                              LhTypography.mono(
+                                size: 8.5,
+                                color: deltaColor,
+                                weight: FontWeight.w600,
+                                height: 1.0,
+                                context: context,
+                              ),
+                            ),
+                          ),
+                          TextSpan(
+                            text: ' $_periodVsLabel',
+                            style: LhTypography.mono(
+                              size: 8.5,
+                              color: mute2,
+                              height: 1.0,
+                              context: context,
+                            ),
+                          ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── 主 Hero 右卡 ───────────────────────────────────────────────────────
+
+  List<double?> _heroAlignTo(int n, List<double> s) {
+    final out = List<double?>.filled(n, null);
+    for (var i = 0; i < s.length && i < n; i++) {
+      out[n - 1 - i] = s[s.length - 1 - i];
+    }
+    return out;
+  }
+
+  String _heroChartMoney(double v) =>
+      '${v < 0 ? '−' : ''}${_fmtMoney(v.abs())}${_unitMoney(v)}';
+
+  String _heroChartSigned(double v) =>
+      '${v < 0 ? '−' : '+'}${_fmtMoney(v.abs())}${_unitMoney(v)}';
+
+  /// 一屏几个点：平时一屏（日线 7），拉宽后多一倍，封顶 31。
+  int _heroChartVisibleCount(int labelCount) {
+    final base = _heroViewportCount >= 2 ? _heroViewportCount : labelCount;
+    final n = _heroTrendWide ? math.min(31, base * 2) : base;
+    return math.max(1, n);
+  }
+
+  Widget _heroTrendKButton() {
+    final can = _heroCanOpenFullscreen;
+    return Semantics(
+      button: true,
+      enabled: can,
+      label: '打开走势大图',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: can ? () => _openHeroTrendFullscreen() : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          child: LighthouseHeroCandleGlyph(enabled: can),
+        ),
+      ),
+    );
+  }
+
+  /// 右卡：利润模式 / 资金模式。翻页过程中整卡先淡出再淡入（过 0.5 换内容）。
+  Widget _buildHeroDualTrend({
+    required Map<String, double> totals,
+    required List<double> profitSeries,
+    required List<String> labels,
+    required bool paged,
+  }) {
+    _heroTrendArgs = (
+      totals: totals,
+      profitSeries: profitSeries,
+      labels: labels,
+    );
+    _scheduleHeroHistoryPreload();
+    if (!paged) return _buildHeroProfitTrendCard(labels, profitSeries);
+    return ValueListenableBuilder<double>(
+      valueListenable: _heroPagePos,
+      builder: (context, pos, _) {
+        final funds = pos >= 0.5;
+        final moving = (pos - pos.roundToDouble()).abs() > 0.001;
+        final fade = moving
+            ? ((pos - 0.5).abs() * 2.2).clamp(0.0, 1.0).toDouble()
+            : 1.0;
+        return Opacity(
+          opacity: 0.35 + 0.65 * fade,
+          child: funds
+              ? _buildHeroFundsTrendCard(labels)
+              : _buildHeroProfitTrendCard(labels, profitSeries),
+        );
+      },
+    );
+  }
+
+  /// 利润模式：核销 / 销售 / 利润 / 收入默认叠画，GMV、成本点图例加上。
+  Widget _buildHeroProfitTrendCard(
+    List<String> labels,
+    List<double> profitSeries,
+  ) {
+    final n = labels.length;
+    final preferVerified = _anchor == _LhAnchor.verified;
+    final scaleKey = preferVerified ? 'verifiedSales' : 'sales';
+    final altKey = preferVerified ? 'sales' : 'verifiedSales';
+    String nameOf(String k) => k == 'verifiedSales' ? '核销额' : '销售额';
+    LhHeroLine line(
+      String key,
+      String name,
+      Color color,
+      List<double> s, {
+      List<double>? dash,
+    }) => LhHeroLine(
+      key: key,
+      name: name,
+      color: color,
+      values: _heroAlignTo(n, s),
+      format: _heroChartMoney,
+      dash: dash,
+    );
+    final lines = <LhHeroLine>[
+      line(
+        scaleKey,
+        nameOf(scaleKey),
+        const Color(0xFF6A4FC9),
+        _seriesForMetric(scaleKey),
+      ),
+      line(
+        altKey,
+        nameOf(altKey),
+        const Color(0xFF9C82E6),
+        _seriesForMetric(altKey),
+      ),
+      line(
+        'profit',
+        '利润',
+        const Color(lighthouseProfitAccentValue),
+        profitSeries,
+      ),
+      line(
+        'revenue',
+        '收入',
+        const Color(0xFFB39CF0),
+        _seriesForMetric('revenue'),
+        dash: const [4, 3],
+      ),
+      line(
+        'gmv',
+        'GMV',
+        const Color(0xFFCFC2F6),
+        _seriesForMetric('gmv'),
+        dash: const [2, 3],
+      ),
+      line(
+        'totalCost',
+        '成本',
+        const Color(0xFF8F86A8),
+        _seriesForMetric('totalCost'),
+        dash: const [6, 3],
+      ),
+    ];
+    String? focus;
+    final f = _expandedTrendKey;
+    if (f != null) {
+      for (final l in lines) {
+        if (lighthouseLedgerMetricKeysMatch(f, l.key)) {
+          focus = l.key;
+          break;
+        }
+      }
+    }
+    return LighthouseHeroTrendCard(
+      key: const ValueKey('hero-trend-profit'),
+      title: '本期合计',
+      labels: labels,
+      lines: lines,
+      defaultVisible: {scaleKey, altKey, 'profit', 'revenue'},
+      focusKey: focus,
+      visibleCount: _heroChartVisibleCount(n),
+      selectedIndex: _heroPointIndex,
+      onSelectedIndexChanged: _onHeroPointSelected,
+      lastIsPartial: _periodInProgress,
+      trailing: _heroTrendKButton(),
+    );
+  }
+
+  /// 资产走势先拉好（合计 / 中石油 / 中石化 同一个格数），拉完重画一次。
+  void _primeHeroAssetTrends() {
+    final trendCount = _heroAssetTrendCount;
+    final scopes = <String>{
+      for (final l in _heroAssetLines)
+        if (l.scope case final scope?) scope,
+    };
+    if (scopes.isEmpty) return;
+    final primeKey = '$_period::$trendCount::${scopes.join('|')}';
+    if (_heroAssetPrimeKey == primeKey) return;
+    _heroAssetPrimeKey = primeKey;
+    final period = _period;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await Future.wait([
+          for (final scope in scopes)
+            LighthouseAssetTrendLoader.prefetch(
+              service: _service,
+              scope: scope,
+              period: period,
+              count: trendCount,
+            ),
+        ]);
+      } catch (_) {
+        // 某一类缺走势时，那根线就不画。
+      }
+      if (mounted && _heroAssetPrimeKey == primeKey) setState(() {});
+    });
+  }
+
+  /// 资产（存量）折到主走势的横轴上。日线按日期精确对位 —— 快照日之后的
+  /// 格子留空（不往后补），图上那根线就停在快照日，读数卡写「待更新」。
+  List<double?> _heroFundsAxisValues(
+    List<String> axis,
+    LighthouseAssetTrend? trend,
+  ) {
+    final empty = List<double?>.filled(axis.length, null);
+    if (trend == null || axis.isEmpty) return empty;
+    final pts = [
+      for (final p in trend.points)
+        if (p.total != null) p,
+    ];
+    if (pts.isEmpty) return empty;
+    if (_period == 'day') {
+      final byKey = <String, double>{};
+      for (final p in pts) {
+        final d = DateTime.tryParse(p.asOfDate);
+        if (d == null) continue;
+        byKey['${d.month}.${d.day.toString().padLeft(2, '0')}'] = p.total!;
+      }
+      final hit = <double?>[for (final l in axis) byKey[l.trim()]];
+      if (hit.any((v) => v != null)) return hit;
+    }
+    final folded = lighthouseFoldStockToAxis(
+      axisLabels: axis,
+      seriesLabels: [
+        for (final p in pts) p.asOfDate.isNotEmpty ? p.asOfDate : p.label,
+      ],
+      values: [for (final p in pts) p.total!],
+    );
+    if (folded.isEmpty) return empty;
+    return <double?>[for (final v in folded) v];
+  }
+
+  /// 资金模式：走势（线 = 资产，柱 = 预收净增）/ 构成。
+  Widget _buildHeroFundsTrendCard(List<String> labels) {
+    _ensureHeroFundPool();
+    _primeHeroAssetTrends();
+    final seg = LighthouseHeroSegment(
+      labels: const ['走势', '构成'],
+      index: _heroFundsView == 'mix' ? 1 : 0,
+      onChanged: (i) {
+        LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
+        setState(() => _heroFundsView = i == 1 ? 'mix' : 'trend');
+      },
+    );
+    if (_heroFundsView == 'mix') {
+      return LighthouseHeroTrendCard(
+        key: const ValueKey('hero-trend-funds-mix'),
+        title: '资金',
+        labels: const <String>[],
+        lines: const <LhHeroLine>[],
+        trailing: seg,
+        body: _buildHeroFundsMix(),
+      );
+    }
+    final n = labels.length;
+    final lines = <LhHeroLine>[];
+    void add(String key, String name, Color color, List<double>? dash) {
+      final line = _heroAssetLine(key);
+      final scope = line?.scope;
+      if (line == null || scope == null) return;
+      final trend = LighthouseAssetTrendLoader.cached(
+        scope,
+        _period,
+        count: _heroAssetTrendCount,
+      );
+      lines.add(
+        LhHeroLine(
+          key: key,
+          name: name,
+          color: color,
+          dash: dash,
+          values: _heroFundsAxisValues(labels, trend),
+          format: _heroChartMoney,
+        ),
+      );
+    }
+
+    add('total', '总资产', const Color(0xFF6A4FC9), null);
+    add(
+      lighthouseAssetCategoryOil,
+      '中石油',
+      const Color(0xFFB5563F),
+      const [3, 3],
+    );
+    add(
+      lighthouseAssetCategoryPetro,
+      '中石化',
+      const Color(0xFF3E7F62),
+      const [3, 3],
+    );
+    final pp = _seriesForMetric('prepaid');
+    return LighthouseHeroTrendCard(
+      key: const ValueKey('hero-trend-funds'),
+      title: '资金',
+      labels: labels,
+      lines: lines,
+      defaultVisible: const {'total'},
+      bars: pp.isEmpty
+          ? null
+          : LhHeroBars(
+              name: '预收净增',
+              values: _heroAlignTo(n, pp),
+              format: _heroChartSigned,
+            ),
+      barsVisible: _heroFundsBars,
+      onBarsVisibleChanged: (v) {
+        LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
+        setState(() => _heroFundsBars = v);
+      },
+      visibleCount: _heroChartVisibleCount(n),
+      lastIsPartial: _periodInProgress,
+      trailing: seg,
+      emptyText: _fundPoolLoading ? '资金池加载中…' : '暂无资金走势',
+    );
+  }
+
+  /// 资金「构成」：原来点「资金与资产」往下展开那块的全部明细，搬进右卡。
+  ///
+  ///     [ 合计 1.02亿 | 中石油 2508万 | 中石化 7700万 ]   ← 点哪个看哪个
+  ///     ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 中石油 / 中石化 占比
+  ///     ┌ 账面资产怎么来 ─────┐ ┌ 期末预付怎么拆 ──────┐
+  ///     │   已入账       x万 │ │   期末预付       x万 │
+  ///     │ + 待入账       x万 │ │ − 可动用额度     x万 │
+  ///     │ + 期末预付     x万 │ │ − 券资产         x万 │
+  ///     │ = 账面资产     x万 │ │ − 应收返利       x万 │
+  ///     └────────────────────┘ │ = 对账差额       x万 │
+  ///                             └──────────────────────┘
+  Widget _buildHeroFundsMix() {
+    final ink = DunesColors.resolve(context, LhColors.ink);
+    final ink2 = DunesColors.resolve(context, LhColors.ink2);
+    final mute = DunesColors.resolve(context, LhColors.mute);
+    final mute2 = DunesColors.resolve(context, LhColors.mute2);
+    final plum = DunesColors.resolve(context, _LhPlum.primary);
+    final deep = DunesColors.resolve(context, _LhPlum.deep);
+    final warn = DunesColors.resolve(context, LhColors.neg);
+    final edge = DunesColors.resolve(
+      context,
+      const Color(0xFFECE6F8),
+      role: DunesColorRole.border,
+    );
+    final ordered = <LighthouseAssetFooterLine>[
+      for (final k in const [
+        'total',
+        lighthouseAssetCategoryOil,
+        lighthouseAssetCategoryPetro,
+      ])
+        if (_heroAssetLine(k) case final l?) l,
+    ];
+    if (ordered.isEmpty) {
+      return Center(
+        child: Text(
+          _fundPoolLoading ? '资金池加载中…' : '暂无资金数据',
+          style: LhTypography.sans(size: 10, color: mute2, context: context),
+        ),
+      );
+    }
+    final selected = _heroAssetLine(_heroAssetKey) ?? ordered.first;
+    String shortLabel(String key) => switch (key) {
+      lighthouseAssetCategoryOil => '中石油',
+      lighthouseAssetCategoryPetro => '中石化',
+      _ => '合计',
+    };
+    Color accentOf(String key) => DunesColors.resolve(context, switch (key) {
+      lighthouseAssetCategoryOil => LhColors.cnpc,
+      lighthouseAssetCategoryPetro => LhColors.sinopec,
+      _ => _LhPlum.primary,
+    });
+    final asOf = _fundPoolSnapshot.asOfDate;
+    final asOfShort = asOf.length == 10 ? asOf.substring(5) : asOf;
+    final a = selected.amounts;
+    double? v(String key) => lighthouseFundPoolAmountByKey(a, key);
+    bool hasDiff(double? x) => x != null && x.abs() >= 1;
+
+    // ── 分类切换：合计 / 中石油 / 中石化，每格带总资产 ──
+    Widget pick(LighthouseAssetFooterLine l) {
+      final on = l.key == selected.key;
+      return Expanded(
+        child: Semantics(
+          button: true,
+          selected: on,
+          label: '${shortLabel(l.key)}资产明细',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: on
+                ? null
+                : () {
+                    LighthouseFeedback.instance.play(
+                      LighthouseFeedbackKind.select,
+                    );
+                    setState(() => _heroAssetKey = l.key);
+                  },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              padding: const EdgeInsets.fromLTRB(6, 5, 4, 5),
+              decoration: BoxDecoration(
+                color: on
+                    ? DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      )
+                    : const Color(0x00FFFFFF),
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: on
+                    ? [
+                        BoxShadow(
+                          color: _LhPlum.deep.withAlpha(30),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 2.5,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: accentOf(l.key),
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          shortLabel(l.key),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: LhTypography.sans(
+                            size: 9.5,
+                            color: on ? ink : mute,
+                            weight: on ? FontWeight.w700 : FontWeight.w500,
+                            height: 1.0,
+                            context: context,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _heroWan(l.amounts?.totalAssets),
+                      maxLines: 1,
+                      softWrap: false,
+                      style: _tabular(
+                        LhTypography.number(
+                          size: 11.5,
+                          color: on ? ink : ink2,
+                          context: context,
+                        ),
+                      ).copyWith(fontWeight: FontWeight.w700, height: 1.0),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final picker = Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFEEE8FB),
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < ordered.length; i++) ...[
+            if (i > 0) const SizedBox(width: 2),
+            pick(ordered[i]),
+          ],
+        ],
+      ),
+    );
+
+    // ── 中石油 / 中石化 占比条 ──
+    final oilV = _heroAssetLine(lighthouseAssetCategoryOil)?.amounts?.totalAssets;
+    final petroV =
+        _heroAssetLine(lighthouseAssetCategoryPetro)?.amounts?.totalAssets;
+    final sum = (oilV ?? 0).abs() + (petroV ?? 0).abs();
+    final oilShare = sum > 0 ? (oilV ?? 0).abs() / sum : 0.0;
+    Widget shareBar() => ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: SizedBox(
+        height: 4,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: math.max(1, (oilShare * 1000).round()),
+              child: ColoredBox(color: accentOf(lighthouseAssetCategoryOil)),
+            ),
+            const SizedBox(width: 2),
+            Expanded(
+              flex: math.max(1, ((1 - oilShare) * 1000).round()),
+              child: ColoredBox(color: accentOf(lighthouseAssetCategoryPetro)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // ── 两列竖账（同原来资产面板的「明细」） ──
+    Widget ledgerRow(
+      String op,
+      String label,
+      double? value, {
+      bool total = false,
+      bool hl = false,
+      Color? valueColor,
+      Color? boxTint,
+    }) {
+      final row = Row(
+        children: [
+          SizedBox(
+            width: 10,
+            child: Text(
+              op,
+              style: LhTypography.mono(
+                size: 10,
+                color: mute2,
+                weight: FontWeight.w700,
+                height: 1.0,
+                context: context,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: LhTypography.sans(
+                size: total ? 10 : 9.5,
+                color: total ? ink : (hl ? deep : ink2),
+                weight: total
+                    ? FontWeight.w700
+                    : (hl ? FontWeight.w700 : FontWeight.w500),
+                height: 1.0,
+                context: context,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            _heroWan(value),
+            maxLines: 1,
+            style: _tabular(
+              LhTypography.number(
+                size: total ? 12 : 10,
+                color: valueColor ?? (hl ? deep : ink),
+                context: context,
+              ),
+            ).copyWith(
+              fontWeight: total ? FontWeight.w700 : FontWeight.w600,
+              height: 1.0,
+            ),
+          ),
+        ],
+      );
+      if (!total) return SizedBox(height: 19, child: row);
+      final tint = boxTint ?? plum;
+      return Container(
+        height: 26,
+        margin: const EdgeInsets.only(top: 3, bottom: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 5),
+        decoration: BoxDecoration(
+          color: tint.withAlpha(18),
+          border: Border.all(color: tint.withAlpha(110), width: 0.9),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: row,
+      );
+    }
+
+    Widget ledgerColumn(String title, List<Widget> rows) => Expanded(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(7, 6, 7, 0),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          border: Border.all(color: edge, width: 0.7),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: LhTypography.sans(
+                size: 9,
+                color: mute,
+                weight: FontWeight.w700,
+                height: 1.0,
+                context: context,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...rows,
+          ],
+        ),
+      ),
+    );
+
+    final diff = v('systemDifference');
+    final ledger = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ledgerColumn('账面资产怎么来', [
+          ledgerRow('', '已入账', v('regulatoryAccountBalance')),
+          ledgerRow('+', '待入账', v('inTransitFunds')),
+          ledgerRow('+', '期末预付', v('endingPrepaymentBalance'), hl: true),
+          ledgerRow(
+            '=',
+            '账面资产',
+            v('totalAssets'),
+            total: true,
+            valueColor: deep,
+          ),
+        ]),
+        const SizedBox(width: 6),
+        ledgerColumn('期末预付怎么拆', [
+          ledgerRow('', '期末预付', v('endingPrepaymentBalance'), hl: true),
+          ledgerRow('−', '可动用额度', v('fundPoolBalance')),
+          ledgerRow('−', '券资产', v('stockAndSyncVouchers')),
+          ledgerRow('−', '应收返利', v('endingReceivableRebate')),
+          ledgerRow(
+            '=',
+            '对账差额',
+            diff,
+            total: true,
+            valueColor: hasDiff(diff) ? warn : null,
+            boxTint: hasDiff(diff) ? warn : null,
+          ),
+        ]),
+      ],
+    );
+
+    return SingleChildScrollView(
+      physics: const ClampingScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          picker,
+          if (sum > 0) ...[const SizedBox(height: 5), shareBar()],
+          const SizedBox(height: 7),
+          ledger,
+          if (asOfShort.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text(
+              '资管快照 · 截至 $asOfShort',
+              textAlign: TextAlign.right,
+              style: LhTypography.mono(
+                size: 8.5,
+                color: mute2,
+                height: 1.0,
+                context: context,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   /// 大数卡底部：「预收净增」和「资金与资产」合成一张小卡（2026-10-20）。
@@ -24692,12 +26485,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       for (var i = 0; i < dates.length; i++) {
         final m = dates[i]!;
         if (i > 0) {
-          spans.add(TextSpan(text: ' → ', style: numStyle(soft, FontWeight.w500)));
+          spans.add(TextSpan(text: ' → ', style: numStyle(deep, FontWeight.w700)));
         }
         spans
-          ..add(TextSpan(text: m[1]!.padLeft(2, '0'), style: numStyle(deep, FontWeight.w600)))
-          ..add(TextSpan(text: '.', style: numStyle(soft, FontWeight.w500)))
-          ..add(TextSpan(text: m[2]!.padLeft(2, '0'), style: numStyle(deep, FontWeight.w800)));
+          // 2026-10-21 · 日期整枚加粗（月 / 点 / 日原来 600 / 500 / 800 三档，读着发虚）。
+          ..add(TextSpan(text: m[1]!.padLeft(2, '0'), style: numStyle(deep, FontWeight.w700)))
+          ..add(TextSpan(text: '.', style: numStyle(deep, FontWeight.w700)))
+          ..add(TextSpan(text: m[2]!.padLeft(2, '0'), style: numStyle(deep, FontWeight.w700)));
       }
       if (dates.length == 1) {
         final now = _nowCST();
@@ -24708,8 +26502,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             text: '  周${wk[d.weekday - 1]}',
             style: LhTypography.sans(
               size: lighthouseHeroSummaryRangeFontSize - 1.5,
-              color: soft,
-              weight: FontWeight.w500,
+              color: deep,
+              weight: FontWeight.w700,
               height: 1.0,
               context: context,
             ),
@@ -25060,13 +26854,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     //   · §05 stat rail 每格四层压到三层，去掉 30×10 迷你折线 (−59)
     //     30px 宽画不出任何可辨认形状，七格白扔 119pt。指标一个不减。
     //   字号阶梯收敛成 34 / 16 / 13 / 11 / 10 五档，8.5 与 9 全部上提。
+    final heroFolded = totalsOverride == null && _heroFolded;
     return LighthouseShareableCard(
       session: widget.session,
       title: title,
       rangeLabel: rangeLabel,
       data: () => _sharedCardData(kind: 'hero', title: title, totals: totals),
       previewBuilder: _sharedCardPreview,
-      builder: (shareIcon) => Column(
+      builder: (shareIcon) => AnimatedSize(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.topCenter,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── § 01 · 来源路径 + 当前页标题 ───────────────────────────
@@ -25206,6 +27005,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             _buildDelayNoticePanel(_activeDelayNotices),
 
           // ── § 02 · 主数与趋势左右并排；窄屏只加高走势图 ─────────
+          if (!heroFolded)
           Padding(
             padding: const EdgeInsets.only(top: 10, bottom: 10),
             child: LayoutBuilder(
@@ -25251,8 +27051,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 // 拍平版：两块内容不再各住一张卡，靠中间一条竖线分开。
                 final flatHero =
                     lighthouseHeroUsesFlatLayout && totalsOverride == null;
+                // 2026-10-21 · 一级产品 / 供给 / 渠道：大数卡翻页（利润 ⇄ 资金），
+                //   右卡换成新走势卡（多线 + 资金模式）。
+                final heroPaged =
+                    totalsOverride == null &&
+                    !flatHero &&
+                    _tab != 'netTa' &&
+                    _heroAssetsEligible;
+                final useNewTrend =
+                    lighthouseHeroUsesTrendCard &&
+                    totalsOverride == null &&
+                    !flatHero &&
+                    _tab != 'netTa' &&
+                    hasHeroTrend &&
+                    widget.sharedCard == null;
                 final profitPanel =
-                    mastheadKey == 'profit' && lighthouseHeroMatchesLedgerCard;
+                    lighthouseHeroKpiUsesResultTint &&
+                    mastheadKey == 'profit' &&
+                    lighthouseHeroMatchesLedgerCard;
                 final kpiCard = Container(
                   decoration: flatHero
                       ? null
@@ -25325,11 +27141,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       // 内边距下沉到内容层：BI 底栏要通栏贴到卡的两边和底边，
                       // 留着外层 padding 它就只能是一颗浮在留白里的钮。
                       Expanded(
-                        child: Padding(
+                        // 2026-10-21 · 左滑翻到「资金与资产」（一级产品 / 供给 / 渠道）。
+                        child: _heroKpiPaged(
+                          enabled: heroPaged,
+                          heroTotals: heroTotals,
+                          first: Padding(
                           // 拍平版没有卡，左边不再缩进 —— 大数要和标题、和下面
                           // 分区表头的左缘对齐成一条线，那条线是整屏的基准。
                           padding: flatHero
                               ? const EdgeInsets.fromLTRB(0, 2, 8, 0)
+                              : heroPaged
+                              // 底部留 24 给「利润 · 资金」页签。
+                              ? const EdgeInsets.fromLTRB(8, 8, 8, 24)
                               : const EdgeInsets.fromLTRB(8, 6, 8, 4),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -25439,11 +27262,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                     // 而日期本来就是更具体的那一个，该它站在前面。
                                                     if (heroPointLabel !=
                                                         null) ...[
-                                                      // 月视图的日期是「2026.10」，比日视图长；
-                                                      // 大数卡窄时让它也能缩（省略号），不再把整行顶出去。
-                                                      Flexible(
-                                                        flex: 3,
-                                                        child: Text(
+                                                      // 2026-10-21 · 日期不再参与缩：窄卡上「10.16」被挤成「10.…」，
+                                                      // 读不出是哪一天。日期最短也就「2026.10」，让口径名去缩。
+                                                      Text(
                                                           heroPointLabel,
                                                           maxLines: 1,
                                                           softWrap: false,
@@ -25468,7 +27289,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                             ),
                                                           ),
                                                         ),
-                                                      ),
                                                       const SizedBox(width: 4),
                                                       Flexible(
                                                         flex: 2,
@@ -25716,7 +27536,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   ),
                                 ),
                               ),
-                              if (!flatHero && _tab != 'netTa') ...[
+                              if (!flatHero && _tab != 'netTa' && !heroPaged) ...[
                                 Container(
                                   height: 0.7,
                                   margin: const EdgeInsets.fromLTRB(2, 0, 2, 5),
@@ -25739,8 +27559,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   withAssets: totalsOverride == null,
                                 ),
                               ],
+                              // 翻页版：预收净增去了资金页，这里换成近 7 日利润迷你柱。
+                              if (heroPaged)
+                                _buildHeroProfitMiniBars(profitSeries),
                             ],
                           ),
+                        ),
                         ),
                       ),
                       // BI 入口钉在大数卡底部：它问的是「这个数还能怎么看」，
@@ -25751,7 +27575,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   ),
                 );
 
-                final trendCard = Container(
+                final trendCard = useNewTrend
+                    ? _buildHeroDualTrend(
+                        totals: totals,
+                        profitSeries: profitSeries,
+                        labels: heroTrendLabels.isNotEmpty
+                            ? heroTrendLabels
+                            : profitLabels,
+                        paged: heroPaged,
+                      )
+                    : Container(
                   clipBehavior: Clip.none,
                   padding: flatHero
                       ? const EdgeInsets.fromLTRB(0, 2, 0, 0)
@@ -25823,6 +27656,54 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       : SizedBox(height: sparkH),
                 );
 
+                // 2026-10-21 · 走势卡左滑拉宽，大数卡收成竖条（lighthouse_hero_swipe.dart）。
+                //   拍平版没有卡、没有走势时不挂 —— 没有东西可拉。
+                if (!flatHero && hasHeroTrend) {
+                  return SizedBox(
+                    height: trendSectionH,
+                    child: LighthouseHeroWideRow(
+                      wide: _heroTrendWide,
+                      onWideChanged: _setHeroTrendWide,
+                      kpiFlex: lighthouseCompactHeroKpiFlex,
+                      trendFlex: lighthouseCompactHeroTrendFlex,
+                      gap: 10,
+                      radius: lighthouseHeroMatchesLedgerCard
+                          ? lighthouseLedgerSummaryPanelRadius
+                          : lighthouseHeroCardRadius,
+                      accent: DunesColors.resolve(context, _LhPlum.primary),
+                      // 2026-10-21 · 拉到头不再自动弹全屏大图（像 bug）；
+                      //   要看大图点走势卡右上角的小 K 线。
+                      onOverpull: null,
+                      overpullHint: _heroOverpullHint(),
+                      kpi: kpiCard,
+                      rail: heroPaged && _heroKpiPage == 1
+                          ? _buildHeroWideRail(
+                              label: '总资产',
+                              mastheadKey: 'totalAssets',
+                              value:
+                                  _heroAssetLine('total')?.amounts?.totalAssets ??
+                                  0,
+                              isRate: false,
+                              isNeg: false,
+                              delta: null,
+                              profitPanel: false,
+                            )
+                          : _buildHeroWideRail(
+                              label: lighthouseHeroMetricPeriodLabel(
+                                _period,
+                                mastheadKey,
+                              ),
+                              mastheadKey: mastheadKey,
+                              value: heroMastheadValue,
+                              isRate: mastheadIsRate,
+                              isNeg: mastheadIsNeg,
+                              delta: profitDelta,
+                              profitPanel: profitPanel,
+                            ),
+                      trend: trendCard,
+                    ),
+                  );
+                }
                 return SizedBox(
                   height: trendSectionH,
                   child: Row(
@@ -25857,10 +27738,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ),
 
           if (totalsOverride == null &&
+              !heroFolded &&
               _heroAssetOpen &&
               _heroAssetsEligible &&
+              !lighthouseHeroFundsInHero &&
               _heroAssetLines.isNotEmpty) ...[
-            const SizedBox(height: 10),
             _buildHeroAssetPanel(),
           ],
           // ── § 05 · Stat rail (7 格全平铺, 固定 4 列网格) ─────────────
@@ -25869,9 +27751,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           // 已经是一条足够强的界线，再加线就成了两道。
           if (lighthouseHeroUsesFlatLayout && totalsOverride == null)
             const SizedBox(height: 14),
-          _buildHeroStatRail(heroTotals),
+          if (!heroFolded) _buildHeroStatRail(heroTotals),
+          // 2026-10-21 · 收起后一条摘要 + 底部把手（上滑收起 / 下拉展开）。
+          if (heroFolded)
+            _buildHeroFoldedStrip(
+              mastheadKey: mastheadKey,
+              value: heroMastheadValue,
+              isRate: mastheadIsRate,
+              isNeg: mastheadIsNeg,
+              delta: profitDelta,
+              heroTotals: heroTotals,
+            ),
+          if (totalsOverride == null) _buildHeroFoldHandle(),
           // 同步落款 —— 整张卡的出处说明，放在最后一行，读完数字才需要它。
         ],
+      ),
       ),
     );
   }
@@ -26505,9 +28399,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       overflow: TextOverflow.ellipsis,
       style: _tabular(
         LhTypography.mono(
-          size: d == null ? 9.5 : 11.5,
+          // 2026-10-21 · 环比加粗放大：11.5 / w600 → 13.5 / w800。
+          size: d == null ? 9.5 : 13.5,
           color: color,
-          weight: FontWeight.w600,
+          weight: d == null ? FontWeight.w600 : FontWeight.w800,
           letterSpacing: 0.2,
           context: context,
         ),
@@ -29342,10 +31237,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  // 2026-10-21 · 分区标题加粗、改深墨色（原型：12 / w700 / ink）。
                   style: LhTypography.sans(
-                    size: lighthouseHeroGroupTitleFontSize + 1.5,
-                    color: DunesColors.resolve(context, LhColors.ink2),
-                    weight: FontWeight.w600,
+                    size: lighthouseHeroGroupTitleFontSize + 2,
+                    color: DunesColors.resolve(context, LhColors.ink),
+                    weight: FontWeight.w700,
                     letterSpacing: 0.2,
                     height: 1.3,
                     context: context,

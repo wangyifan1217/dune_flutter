@@ -269,6 +269,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
 
   Future<void> _saveDetail(
     List<WorkbenchKpiOverrideItem> items,
+    WorkbenchKpiCategoryWeight? categoryWeight,
     String summary,
   ) async {
     final ok = await _confirm(
@@ -283,6 +284,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
         month: formatKpiMonth(_month),
         userId: _detailUserId,
         items: items,
+        categoryWeight: categoryWeight,
       );
       if (!mounted) return;
       setState(() => _detailScore = score);

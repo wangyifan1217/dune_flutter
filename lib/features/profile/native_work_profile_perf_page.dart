@@ -670,7 +670,7 @@ class _SummaryCard extends StatelessWidget {
                 ),
               if (!person.isRubric) ...[
                 Text(
-                  '运营商权重 ${person.telecomWeight.toStringAsFixed(4)}',
+                  '运营商权重 ${person.telecomWeight.toStringAsFixed(4)}${person.categoryWeightManual ? '（手工）' : ''}',
                   style: DunesTypography.sans(
                     fontSize: 12,
                     color: DunesColors.resolve(context, DunesColors.text2),
@@ -678,7 +678,7 @@ class _SummaryCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '能源权重 ${person.energyWeight.toStringAsFixed(4)}',
+                  '能源权重 ${person.energyWeight.toStringAsFixed(4)}${person.categoryWeightManual ? '（手工）' : ''}',
                   style: DunesTypography.sans(
                     fontSize: 12,
                     color: DunesColors.resolve(context, DunesColors.text2),

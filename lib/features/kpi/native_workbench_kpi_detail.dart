@@ -40,6 +40,8 @@ double kpiPreviewMainScore({
   required WorkProfileKpiPerson person,
   required Map<int, TextEditingController> weightCtrls,
   required Map<int, TextEditingController> adjCtrls,
+  double? telecomWeight,
+  double? energyWeight,
 }) {
   var telecom = 0.0;
   var energy = 0.0;
@@ -55,7 +57,25 @@ double kpiPreviewMainScore({
       telecom = score;
     }
   }
-  return telecom * person.telecomWeight + energy * person.energyWeight;
+  return telecom * (telecomWeight ?? person.telecomWeight) +
+      energy * (energyWeight ?? person.energyWeight);
+}
+
+/// 百分数显示：整数不带小数，其余最多两位。
+String kpiFormatSharePct(double v) {
+  final r = (v * 100).roundToDouble() / 100;
+  if (r == r.roundToDouble()) return r.toInt().toString();
+  var s = r.toStringAsFixed(2);
+  if (s.endsWith('0')) s = s.substring(0, s.length - 1);
+  return s;
+}
+
+/// '2026-09' → '2026年9月'
+String kpiFormatYm(String ym) {
+  final parts = ym.trim().split('-');
+  if (parts.length < 2) return ym;
+  final m = int.tryParse(parts[1]);
+  return m == null ? ym : '${parts[0]}年$m月';
 }
 
 class WorkbenchKpiDetailPane extends StatefulWidget {
@@ -79,6 +99,7 @@ class WorkbenchKpiDetailPane extends StatefulWidget {
   final bool busy;
   final Future<void> Function(
     List<WorkbenchKpiOverrideItem> items,
+    WorkbenchKpiCategoryWeight? categoryWeight,
     String summary,
   )?
   onSave;
@@ -99,6 +120,12 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
   final Map<int, TextEditingController> _adjCtrls = {};
   final Map<int, TextEditingController> _remarkCtrls = {};
   final Map<int, TextEditingController> _pointCtrls = {};
+  final TextEditingController _telecomShareCtrl = TextEditingController();
+  final TextEditingController _energyShareCtrl = TextEditingController();
+
+  /// 板块占比是否按营收自动；手改输入框后变 false，点「恢复按营收自动」变回 true。
+  bool _shareAuto = true;
+  String? _shareError;
   String? _rubricError;
   bool _syncingCtrls = false;
 
@@ -136,6 +163,8 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
     for (final c in _pointCtrls.values) {
       c.dispose();
     }
+    _telecomShareCtrl.dispose();
+    _energyShareCtrl.dispose();
     super.dispose();
   }
 
@@ -198,7 +227,106 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
       ctrl.dispose();
       return true;
     });
+    final person = _person;
+    if (person != null) {
+      _shareAuto = !person.categoryWeightManual;
+      _shareError = null;
+      _telecomShareCtrl.text = kpiFormatSharePct(person.telecomWeight * 100);
+      _energyShareCtrl.text = kpiFormatSharePct(person.energyWeight * 100);
+    }
     _syncingCtrls = false;
+  }
+
+  void _onTelecomShareChanged(String raw) {
+    final v = double.tryParse(raw.trim());
+    setState(() {
+      _shareAuto = false;
+      _shareError = null;
+      if (v != null && v >= 0 && v <= 100) {
+        _energyShareCtrl.text = kpiFormatSharePct(100 - v);
+      }
+    });
+  }
+
+  void _onEnergyShareChanged(String raw) {
+    final v = double.tryParse(raw.trim());
+    setState(() {
+      _shareAuto = false;
+      _shareError = null;
+      if (v != null && v >= 0 && v <= 100) {
+        _telecomShareCtrl.text = kpiFormatSharePct(100 - v);
+      }
+    });
+  }
+
+  void _resetShareAuto() {
+    final person = _person;
+    if (person == null) return;
+    setState(() {
+      _shareAuto = true;
+      _shareError = null;
+      _telecomShareCtrl.text = kpiFormatSharePct(
+        person.autoTelecomWeight * 100,
+      );
+      _energyShareCtrl.text = kpiFormatSharePct(person.autoEnergyWeight * 100);
+    });
+  }
+
+  /// 预览用的板块占比（0~1）。输入框没填完整时沿用服务端的值。
+  (double, double) _previewSectorWeights(WorkProfileKpiPerson person) {
+    if (!person.hasBothSectors) {
+      return (person.telecomWeight, person.energyWeight);
+    }
+    if (_shareAuto) return (person.autoTelecomWeight, person.autoEnergyWeight);
+    final t = double.tryParse(_telecomShareCtrl.text.trim());
+    final e = double.tryParse(_energyShareCtrl.text.trim());
+    if (t == null || e == null) {
+      return (person.telecomWeight, person.energyWeight);
+    }
+    return (t / 100, e / 100);
+  }
+
+  /// 板块占比有变化才返回；校验不过时写 [_shareError] 并返回 null。
+  WorkbenchKpiCategoryWeight? _collectCategoryWeight() {
+    _shareError = null;
+    final person = _person;
+    if (person == null || !person.hasBothSectors) return null;
+    if (_shareAuto) {
+      return person.categoryWeightManual
+          ? const WorkbenchKpiCategoryWeight.auto()
+          : null;
+    }
+    final t = double.tryParse(_telecomShareCtrl.text.trim());
+    final e = double.tryParse(_energyShareCtrl.text.trim());
+    if (t == null || e == null) {
+      _shareError = '请填写运营商和能源的板块占比';
+      return null;
+    }
+    if (t < 0 || t > 100 || e < 0 || e > 100) {
+      _shareError = '板块占比需在 0 到 100 之间';
+      return null;
+    }
+    if ((t + e - 100).abs() > 0.01) {
+      _shareError =
+          '运营商 + 能源合计需为 100%，当前 ${kpiFormatSharePct(t + e)}%';
+      return null;
+    }
+    final same =
+        (t - person.telecomWeight * 100).abs() < 0.005 &&
+        (e - person.energyWeight * 100).abs() < 0.005;
+    if (person.categoryWeightManual && same) return null;
+    // 自动状态下手填（哪怕填的就是当月营收比例）也按手工保存，之后各月固定这个比例。
+    return WorkbenchKpiCategoryWeight.manual(telecomPct: t, energyPct: e);
+  }
+
+  String _categoryWeightSummary(WorkbenchKpiCategoryWeight cw) {
+    final person = _person!;
+    final before =
+        '运营商 ${kpiFormatSharePct(person.telecomWeight * 100)}% / 能源 ${kpiFormatSharePct(person.energyWeight * 100)}%';
+    if (cw.auto) {
+      return '板块占比 $before → 按营收自动（运营商 ${kpiFormatSharePct(person.autoTelecomWeight * 100)}% / 能源 ${kpiFormatSharePct(person.autoEnergyWeight * 100)}%），${widget.monthLabel}起';
+    }
+    return '板块占比 $before → 运营商 ${kpiFormatSharePct(cw.telecomPct!)}% / 能源 ${kpiFormatSharePct(cw.energyPct!)}%，${widget.monthLabel}起之后各月沿用';
   }
 
   List<WorkProfileKpiTask> _allTasks() {
@@ -235,7 +363,7 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
     return items;
   }
 
-  String _confirmSummary(List<WorkbenchKpiOverrideItem> items) {
+  List<String> _taskSummaryLines(List<WorkbenchKpiOverrideItem> items) {
     final byId = {for (final t in _allTasks()) t.taskId: t};
     final lines = <String>[];
     for (final item in items) {
@@ -256,17 +384,34 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
       }
       lines.add('${task.taskName}  ${parts.join('，')}');
     }
-    return '${widget.personName} ${widget.monthLabel}\n${lines.join('\n')}';
+    return lines;
   }
 
   Future<void> _submit() async {
     final onSave = widget.onSave;
     if (onSave == null || widget.busy) return;
     final items = _collectItems();
-    final summary = items.isEmpty
-        ? '${widget.personName} ${widget.monthLabel}\n将清空手工权重、加减分和备注，恢复自动计算。'
-        : _confirmSummary(items);
-    await onSave(items, summary);
+    final categoryWeight = _collectCategoryWeight();
+    if (_shareError != null) {
+      setState(() {});
+      return;
+    }
+    final head = '${widget.personName} ${widget.monthLabel}';
+    final String summary;
+    if (items.isEmpty && categoryWeight == null) {
+      summary = '$head\n将清空手工权重、加减分和备注，恢复自动计算。';
+    } else {
+      final hadTaskAdjust = _allTasks().any(
+        (t) => t.weightOverridden || t.scoreAdjusted || t.remark.isNotEmpty,
+      );
+      summary = [
+        head,
+        if (categoryWeight != null) _categoryWeightSummary(categoryWeight),
+        ..._taskSummaryLines(items),
+        if (items.isEmpty && hadTaskAdjust) '清空任务手工权重、加减分和备注',
+      ].join('\n');
+    }
+    await onSave(items, categoryWeight, summary);
   }
 
   Future<void> _submitRubric() async {
@@ -309,6 +454,7 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
         ),
       );
     }
+    final sectorWeights = _previewSectorWeights(person);
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       child: Column(
@@ -357,12 +503,17 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
           const SizedBox(height: 8),
           _ScoreHeader(
             person: person,
+            telecomWeight: sectorWeights.$1,
+            energyWeight: sectorWeights.$2,
+            manualShare: person.hasBothSectors && !_shareAuto,
             previewMainScore: person.isRubric
                 ? null
                 : kpiPreviewMainScore(
                     person: person,
                     weightCtrls: _weightCtrls,
                     adjCtrls: _adjCtrls,
+                    telecomWeight: sectorWeights.$1,
+                    energyWeight: sectorWeights.$2,
                   ),
           ),
           if (widget.canEdit && widget.onSkip != null) ...[
@@ -419,6 +570,25 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
               ),
             ],
           ] else ...[
+            if (person.hasBothSectors) ...[
+              _SectorShareEditor(
+                person: person,
+                scoreMonth: widget.score.month,
+                monthLabel: widget.monthLabel,
+                canEdit: widget.canEdit,
+                auto: _shareAuto,
+                error: _shareError,
+                telecomCtrl: _telecomShareCtrl,
+                energyCtrl: _energyShareCtrl,
+                telecomWeight: sectorWeights.$1,
+                energyWeight: sectorWeights.$2,
+                weightCtrls: _weightCtrls,
+                onTelecomChanged: _onTelecomShareChanged,
+                onEnergyChanged: _onEnergyShareChanged,
+                onResetAuto: _resetShareAuto,
+              ),
+              const SizedBox(height: 12),
+            ],
             for (final cat in person.categories) ...[
               _CategoryEditor(
                 category: cat,
@@ -437,6 +607,243 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
                 child: Text(widget.busy ? '保存中…' : '保存变更'),
               ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 同时负责运营商、能源两个板块的人：调板块间占比，并列出每条任务的最终占比
+///（板块占比 × 板块内权重），合计 100%。
+class _SectorShareEditor extends StatelessWidget {
+  const _SectorShareEditor({
+    required this.person,
+    required this.scoreMonth,
+    required this.monthLabel,
+    required this.canEdit,
+    required this.auto,
+    required this.error,
+    required this.telecomCtrl,
+    required this.energyCtrl,
+    required this.telecomWeight,
+    required this.energyWeight,
+    required this.weightCtrls,
+    required this.onTelecomChanged,
+    required this.onEnergyChanged,
+    required this.onResetAuto,
+  });
+
+  final WorkProfileKpiPerson person;
+  final String scoreMonth;
+  final String monthLabel;
+  final bool canEdit;
+  final bool auto;
+  final String? error;
+  final TextEditingController telecomCtrl;
+  final TextEditingController energyCtrl;
+  final double telecomWeight;
+  final double energyWeight;
+  final Map<int, TextEditingController> weightCtrls;
+  final ValueChanged<String> onTelecomChanged;
+  final ValueChanged<String> onEnergyChanged;
+  final VoidCallback onResetAuto;
+
+  String get _hint {
+    if (auto) {
+      return person.categoryWeightManual
+          ? '保存后从$monthLabel起恢复按营收自动分摊'
+          : '默认按两边当月营收分摊；手改后从$monthLabel起生效，之后各月沿用，直到再次修改';
+    }
+    final from = person.categoryWeightFrom.trim();
+    if (person.categoryWeightManual && from.isNotEmpty && from != scoreMonth) {
+      return '沿用${kpiFormatYm(from)}起的手工设定；在这里改会从$monthLabel起生效';
+    }
+    return '手工设定，$monthLabel起生效，之后各月沿用，直到再次修改';
+  }
+
+  double _taskWeight(WorkProfileKpiTask task) =>
+      kpiParseAdjustNum(weightCtrls[task.taskId]?.text ?? '') ?? task.weightPct;
+
+  @override
+  Widget build(BuildContext context) {
+    final text2 = DunesColors.resolve(context, DunesColors.text2);
+    final text3 = DunesColors.resolve(context, DunesColors.text3);
+    final sectors = [
+      for (final cat in person.categories)
+        if (cat.category == 'telecom') (cat, telecomWeight * 100),
+      for (final cat in person.categories)
+        if (cat.category == 'energy') (cat, energyWeight * 100),
+    ];
+    final shares = <double>[];
+    final lines = <Widget>[];
+    for (final (cat, sectorPct) in sectors) {
+      lines.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            '${cat.categoryLabel}（${kpiFormatSharePct(sectorPct)}%）',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: DunesColors.resolve(context, DunesColors.text),
+            ),
+          ),
+        ),
+      );
+      for (final task in cat.tasks) {
+        final w = _taskWeight(task);
+        final share = sectorPct * w / 100;
+        shares.add(share);
+        lines.add(
+          Padding(
+            padding: const EdgeInsets.only(left: 12, top: 2),
+            child: Text(
+              '${task.taskName}：${kpiFormatSharePct(sectorPct)}% × ${kpiFormatSharePct(w)}% = ${kpiFormatSharePct(share)}%',
+              style: TextStyle(fontSize: 12, color: text2),
+            ),
+          ),
+        );
+      }
+    }
+    final total = shares.fold<double>(0, (a, b) => a + b);
+    return Container(
+      key: const Key('kpi-sector-share'),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '板块占比',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+              ),
+              Text(
+                auto ? '按营收自动' : '手工设定',
+                key: const Key('kpi-sector-share-mode'),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: auto
+                      ? text3
+                      : DunesColors.resolveNullable(context, _accent),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(_hint, style: TextStyle(fontSize: 12, color: text3)),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _KpiAdjustField(
+                  label: '运营商',
+                  hint: '自动 ${kpiFormatSharePct(person.autoTelecomWeight * 100)}%',
+                  suffix: '%',
+                  controller: telecomCtrl,
+                  fieldKey: const Key('kpi-sector-telecom'),
+                  enabled: canEdit,
+                  onChanged: onTelecomChanged,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _KpiAdjustField(
+                  label: '能源',
+                  hint: '自动 ${kpiFormatSharePct(person.autoEnergyWeight * 100)}%',
+                  suffix: '%',
+                  controller: energyCtrl,
+                  fieldKey: const Key('kpi-sector-energy'),
+                  enabled: canEdit,
+                  onChanged: onEnergyChanged,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (canEdit && !auto)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                key: const Key('kpi-sector-reset'),
+                onPressed: onResetAuto,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                ),
+                child: Text(
+                  '恢复按营收自动（运营商 ${kpiFormatSharePct(person.autoTelecomWeight * 100)}% / 能源 ${kpiFormatSharePct(person.autoEnergyWeight * 100)}%）',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                error!,
+                key: const Key('kpi-sector-error'),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    const Color(0xFFB42318),
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: 6),
+          Text(
+            '每条任务最终占比 = 板块占比 × 板块内权重',
+            style: TextStyle(fontSize: 12, color: text3),
+          ),
+          ...lines,
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              '合计：${shares.map((v) => '${kpiFormatSharePct(v)}%').join(' + ')} = ${kpiFormatSharePct(total)}%',
+              key: const Key('kpi-sector-total'),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: (total - 100).abs() > 0.05
+                    ? DunesColors.resolveNullable(
+                        context,
+                        const Color(0xFFB42318),
+                      )
+                    : text2,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -969,8 +1376,10 @@ class _KpiAdjustField extends StatelessWidget {
     this.maxLines = 1,
     this.keyboardType,
     this.inputFormatters,
+    this.onChanged,
   });
 
+  final ValueChanged<String>? onChanged;
   final String label;
   final String? hint;
   final String? suffix;
@@ -1004,6 +1413,7 @@ class _KpiAdjustField extends StatelessWidget {
           maxLines: maxLines,
           keyboardType: keyboardType,
           inputFormatters: inputFormatters,
+          onChanged: onChanged,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -1106,9 +1516,18 @@ class _KpiSkipBar extends StatelessWidget {
 /// 顶部：主营分、等级系数，以及运营商/能源两个板块各占多少权重。
 /// 没有某个板块的任务时不再显示「运营商 0.0」这种看着像出错的数。
 class _ScoreHeader extends StatelessWidget {
-  const _ScoreHeader({required this.person, this.previewMainScore});
+  const _ScoreHeader({
+    required this.person,
+    required this.telecomWeight,
+    required this.energyWeight,
+    this.manualShare = false,
+    this.previewMainScore,
+  });
 
   final WorkProfileKpiPerson person;
+  final double telecomWeight;
+  final double energyWeight;
+  final bool manualShare;
   final double? previewMainScore;
 
   @override
@@ -1213,7 +1632,7 @@ class _ScoreHeader extends StatelessWidget {
                       ? '量表未录完必填项，暂不算绩效等级'
                       : '主营分 = 量表各档加总（减分项默认为 0）')
                 : hasTelecom && hasEnergy
-                ? '主营分 = 运营商 ${person.telecomScore.toStringAsFixed(1)} × ${(person.telecomWeight * 100).toStringAsFixed(0)}% + 能源 ${person.energyScore.toStringAsFixed(1)} × ${(person.energyWeight * 100).toStringAsFixed(0)}%（按两边当月营收占比）'
+                ? '主营分 = 运营商 ${person.telecomScore.toStringAsFixed(1)} × ${kpiFormatSharePct(telecomWeight * 100)}% + 能源 ${person.energyScore.toStringAsFixed(1)} × ${kpiFormatSharePct(energyWeight * 100)}%（${manualShare ? '手工设定板块占比' : '按两边当月营收占比'}）'
                 : hasEnergy
                 ? '只有能源任务，主营分就是能源分'
                 : '只有运营商任务，主营分就是运营商分',

@@ -30,6 +30,7 @@ import 'flow_panorama/flow_ctx_mapper.dart';
 import 'flow_panorama/flow_lane_section.dart';
 import 'flow_panorama/flow_lanes.dart';
 import 'proposal_cost_estimate.dart';
+import 'proposal_estimate_audit.dart';
 import 'proposal_estimate_summary.dart';
 import 'proposal_finance_formula.dart';
 import 'proposal_finance_formula_board.dart';
@@ -5735,6 +5736,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final ratingRule = remoteRating?.ratingRule ?? '';
     return ProposalEstimateSummaryData(
       remoteSummary: _remoteFinance.result!.summary,
+      // 测算合计右上角「算法」：一步步怎么算，数据和柱状图同一份。
+      calcSteps: proposalEstimateCalcSteps(_remoteFinance.result!, _form),
       rating: rating,
       ratingRule: ratingRule,
       scale: _remoteFinance.result!.main.salesScale,
@@ -9661,6 +9664,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   ),
           ),
           const SizedBox(width: 8),
+          // 「测算过程」整页透视先隐藏，测算合计卡里的「算法」已经能看每一步。
+          if (!_isPurchase && kProposalEstimateAuditButton) ...[
+            _auditToggle(compact: compact),
+            const SizedBox(width: 2),
+          ],
           _progressToggle(compact: compact),
           const SizedBox(width: 6),
           _topPrimaryTools(),
@@ -9692,6 +9700,68 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       width: 0.8,
     ),
   );
+
+  /// 右上角「测算过程」：点开才看到——每一步怎么算、代入了什么、自动对账查错。
+  Widget _auditToggle({required bool compact}) {
+    final ready = _remoteFinance.result != null;
+    final color = DunesColors.resolve(
+      context,
+      ready ? ProposalPalette.purpleDeep : ProposalPalette.text3,
+    );
+    return Tooltip(
+      message: ready ? '查看所有测算的计算过程' : '测算还在算，稍等一下',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: const ValueKey('proposal-estimate-audit'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {
+            final result = _remoteFinance.result;
+            if (result == null) {
+              showProposalCenterToast(
+                context,
+                _remoteFinance.error != null ? '测算失败，先在页面上重试测算' : '测算还在算，稍等一下',
+                error: _remoteFinance.error != null,
+              );
+              return;
+            }
+            unawaited(
+              showProposalEstimateAudit(
+                context: context,
+                result: result,
+                form: _form,
+                title: _headerTitle,
+              ),
+            );
+          },
+          child: SizedBox(
+            height: _topToolH,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.calculate_outlined, size: 15, color: color),
+                  if (!compact) ...[
+                    const SizedBox(width: 3),
+                    Text(
+                      '测算过程',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        height: 1.1,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _progressToggle({required bool compact}) {
     return Tooltip(

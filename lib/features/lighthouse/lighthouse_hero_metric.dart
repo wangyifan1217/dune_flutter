@@ -744,8 +744,13 @@ const double lighthouseHeroPanelEdgeWidth = 0.8;
 /// v23.2 · 蓝面板上的分区标题胶囊（利润 / 经营性净现金流）。
 /// 图标片用结果蓝 [lighthouseLedgerResultBlockAccentValue]；胶囊比面板底色
 /// 深一档的实色淡蓝；标题字用同色相的深蓝，保证对比度。
-const int lighthouseHeroResultSectionChipValue = 0xFFD9E6F4;
-const int lighthouseHeroResultSectionTitleValue = 0xFF2C5A8C;
+const int lighthouseHeroResultSectionChipValue = 0xFFEAE4F8;
+const int lighthouseHeroResultSectionTitleValue = 0xFF5A458F;
+
+/// 2026-10-21 · 大数卡一律走中性灰紫面板（#F7F6FA + 浅边），不再因为
+/// 大数是利润就整块换成结果色 —— 翻到「资金与资产」或切到别的指标时
+/// 卡片底色跟着跳，看着像换了一张卡。想恢复：改回 true。
+const bool lighthouseHeroKpiUsesResultTint = false;
 
 /// v23.3 · 分区标题「轻」版（方案 A）：线条图标 + 深灰字，去掉彩色胶囊。
 /// 关掉即回到彩色胶囊（v23.2 的蓝色系仍生效）。
@@ -758,7 +763,15 @@ const double lighthouseHeroMastheadLabelFontSize = 11;
 const double lighthouseHeroMastheadLabelIconSize = 18;
 const double lighthouseHeroMastheadLabelRadius = 8;
 const double lighthouseHeroGroupTitleFontSize = 10;
-const double lighthouseHeroMastheadFontSize = 29;
+/// 2026-10-21 · 29 → 32：对齐改版原型（大数卡翻页后只放大数 + 环比 + 迷你柱）。
+const double lighthouseHeroMastheadFontSize = 32;
+
+/// 主 Hero 右卡用新走势卡（多线叠画 + 资金模式），见 lighthouse_hero_chart.dart。
+/// 改回 false 退回原来的 _TrendChart（带历史拖动 / 月末预测）。
+const bool lighthouseHeroUsesTrendCard = true;
+
+/// 资金与资产的明细放进主 Hero 右卡「构成」，不再在 Hero 下面展开一块。
+const bool lighthouseHeroFundsInHero = true;
 const double lighthouseHeroMetricValueFontSize = 13;
 const double lighthouseHeroMetricLabelFontSize = 9;
 const double lighthouseHeroMetricDeltaFontSize = 8;
@@ -4628,7 +4641,10 @@ const bool lighthouseLedgerUsesResultBlock = true;
 
 /// 竖轨与底色同一支蓝。原来的 0xFF5C6FB5 偏灰靛，铺淡了只剩一层脏灰；
 /// 这支蓝饱和度够，12% 就能读出「淡蓝」而不是「白里带脏」。
-const int lighthouseLedgerResultBlockAccentValue = 0xFF4A83C4;
+///
+/// 2026-10-21 · 蓝改回灯塔紫：一屏里蓝紫两套主色打架，「结果」不再单独用蓝。
+/// 想恢复蓝：改回 0xFF4A83C4（下面两颗胶囊 / 标题色同理）。
+const int lighthouseLedgerResultBlockAccentValue = 0xFF7B5CD8;
 
 /// 底色不透明度（0–255）。38 ≈ 15%，压在白底上约 #E4EDF6。
 /// 往下 30 ≈ #EAF0F8（偏淡），往上 46 ≈ #DEE9F4 就开始跟数字抢注意力了。

@@ -98,6 +98,7 @@ class _FakeKpiService extends WorkbenchKpiService {
   int fetchCount = 0;
   int saveCount = 0;
   List<WorkbenchKpiOverrideItem>? lastItems;
+  WorkbenchKpiCategoryWeight? lastCategoryWeight;
 
   WorkProfileKpiScore _personScore(String month) {
     return WorkProfileKpiScore(
@@ -189,9 +190,11 @@ class _FakeKpiService extends WorkbenchKpiService {
     required String month,
     required int userId,
     required List<WorkbenchKpiOverrideItem> items,
+    WorkbenchKpiCategoryWeight? categoryWeight,
   }) async {
     saveCount++;
     lastItems = items;
+    lastCategoryWeight = categoryWeight;
     return _personScore(month);
   }
 
@@ -254,9 +257,11 @@ class _SingleTaskKpiService extends _FakeKpiService {
     required String month,
     required int userId,
     required List<WorkbenchKpiOverrideItem> items,
+    WorkbenchKpiCategoryWeight? categoryWeight,
   }) async {
     saveCount++;
     lastItems = items;
+    lastCategoryWeight = categoryWeight;
     final weight = items.isEmpty ? 100.0 : (items.single.weightPct ?? 100.0);
     final adj = items.isEmpty ? 0.0 : (items.single.scoreAdj ?? 0.0);
     final taskTotal = 25.1 + adj;

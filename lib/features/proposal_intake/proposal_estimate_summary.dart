@@ -71,6 +71,35 @@ abstract final class _C {
   static const profitBg = Color(0xFFF4F6FC);
 }
 
+/// 测算合计里「算法」的一行：名称、怎么算（简短代入）、结果。
+class ProposalEstimateCalcStep {
+  const ProposalEstimateCalcStep(
+    this.label,
+    this.formula,
+    this.value, {
+    this.strong = false,
+    this.sub = false,
+    this.warn = false,
+    this.detail = '',
+  });
+
+  final String label;
+  final String formula;
+  final String value;
+
+  /// 点开这一行看到的详细算法（每一步代入了什么、为什么是 0）。
+  final String detail;
+
+  /// 汇总行（收入、成本合计、利差）加粗。
+  final bool strong;
+
+  /// 明细行（每条结算、每项成本）缩进一格。
+  final bool sub;
+
+  /// 可疑的行标红（如用券成本把收入扣没了）。
+  final bool warn;
+}
+
 /// 顶部测算的原始数字（万元）。算不出来的为 null，显示「—」。
 /// 只读，全部取自财务部同一套测算，不写回表单。
 class ProposalEstimateSummaryData {
@@ -96,6 +125,7 @@ class ProposalEstimateSummaryData {
     this.channelKey = 'skuDetails',
     this.platform = '',
     this.remoteSummary,
+    this.calcSteps = const {},
     this.businessCostHidden = false,
   });
 
@@ -105,6 +135,10 @@ class ProposalEstimateSummaryData {
   /// 科技部「τ-标签一」的简称（如 三桶油），放在年化利润下面。
   final String platform;
   final Map<String, dynamic>? remoteSummary;
+
+  /// 「测算合计」右上角「算法」打开后，柱状图位置显示的计算步骤（自上而下，可滑动）。
+  /// 按指标分开（key = 左边的指标名），点哪个指标就看哪个指标怎么算。
+  final Map<String, List<ProposalEstimateCalcStep>> calcSteps;
 
   /// 渠道取自各产品的渠道分类 / 渠道名（科技部 SKU），点它跳科技部 SKU 清单。
   final bool channelFromSku;
@@ -1296,6 +1330,111 @@ class _Bar {
 class _CompactEstimateState extends State<_CompactEstimate> {
   String _selected = kProposalFinanceShowEstimates ? '收入' : '年化规模';
 
+  /// 右上角「算法」：柱状图换成一步步的计算过程。
+  bool _showCalc = false;
+
+  /// 算法里点开了哪几行（指标名#行号）。
+  final Set<String> _openCalc = {};
+
+  Widget _calcPanel(double height) {
+    final steps = _d.calcSteps[_selected] ?? const <ProposalEstimateCalcStep>[];
+    final line = DunesColors.resolve(context, _C.border, role: DunesColorRole.border);
+    return Container(
+      key: const ValueKey('proposal-estimate-calc'),
+      height: height,
+      decoration: BoxDecoration(
+        color: _bg(Colors.white),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: steps.isEmpty
+          ? Center(child: _t('这一项没有要算的，直接取自填写内容', size: 11, color: _C.grey))
+          : Scrollbar(
+        child: ListView.separated(
+          key: ValueKey('proposal-estimate-calc-$_selected'),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          itemCount: steps.length,
+          separatorBuilder: (context, index) => Divider(height: 1, thickness: 0.6, color: line),
+          itemBuilder: (_, i) {
+            final step = steps[i];
+            final color = step.warn ? const Color(0xFFB42318) : _C.ink;
+            final key = '$_selected#$i';
+            final open = _openCalc.contains(key);
+            final canOpen = step.detail.isNotEmpty;
+            return InkWell(
+              key: ValueKey('proposal-estimate-calc-row-$key'),
+              onTap: canOpen
+                  ? () => setState(() {
+                      if (!_openCalc.remove(key)) _openCalc.add(key);
+                    })
+                  : null,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(step.sub ? 12 : 0, 5, 0, 5),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _t(
+                                step.label,
+                                size: step.sub ? 11 : 11.5,
+                                weight: step.strong ? FontWeight.w700 : FontWeight.w500,
+                                color: step.sub && !step.warn ? _C.text2 : color,
+                                maxLines: 2,
+                              ),
+                              if (step.formula.isNotEmpty)
+                                _t(step.formula, size: 10, color: step.warn ? color : _C.grey, maxLines: 3),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _t(
+                          step.value,
+                          size: step.sub ? 11 : 12,
+                          weight: step.strong ? FontWeight.w700 : FontWeight.w600,
+                          color: color,
+                          mono: true,
+                          align: TextAlign.right,
+                        ),
+                        if (canOpen)
+                          Icon(
+                            open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                            size: 16,
+                            color: DunesColors.resolve(context, _C.grey),
+                          ),
+                      ],
+                    ),
+                    if (open && canOpen)
+                      Container(
+                        margin: const EdgeInsets.only(top: 5),
+                        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                        decoration: BoxDecoration(
+                          color: _bg(const Color(0xFFF6F3FD)),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: _t(
+                          step.detail,
+                          size: 10.5,
+                          color: step.warn ? color : _C.text2,
+                          maxLines: 40,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   /// 下面规模 / 成本 / 利润里被点中的那一格（同灯塔：点格子，上面的图跟着换）。
   String? _activeCell;
 
@@ -2065,7 +2204,10 @@ class _CompactEstimateState extends State<_CompactEstimate> {
           ],
         ),
         const SizedBox(height: 6),
-        _barChart(bars, height: sideBySide ? 138 : 112),
+        if (_showCalc && _d.calcSteps.isNotEmpty)
+          _calcPanel(sideBySide ? 138 : 240)
+        else
+          _barChart(bars, height: sideBySide ? 138 : 112),
       ],
     );
     return Container(
@@ -2096,11 +2238,45 @@ class _CompactEstimateState extends State<_CompactEstimate> {
               const SizedBox(width: 8),
               Expanded(
                 child: _t(
-                  sideBySide ? '年化 · 万元 · 点指标切换柱状图' : '点指标切换',
+                  _showCalc
+                      ? '年化 · 万元 · 点左边指标切换，点每一行看怎么算'
+                      : (sideBySide ? '年化 · 万元 · 点指标切换柱状图' : '点指标切换'),
                   size: 10,
                   color: _C.grey,
                 ),
               ),
+              if (kProposalFinanceShowEstimates && _d.calcSteps.isNotEmpty)
+                InkWell(
+                  key: const ValueKey('proposal-estimate-calc-toggle'),
+                  onTap: () => setState(() => _showCalc = !_showCalc),
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _bg(_showCalc ? _C.purple : const Color(0xFFEFEAFB)),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _showCalc ? Icons.bar_chart_rounded : Icons.functions_rounded,
+                          size: 13,
+                          color: _showCalc
+                              ? Colors.white
+                              : DunesColors.resolve(context, _C.purple),
+                        ),
+                        const SizedBox(width: 3),
+                        _t(
+                          _showCalc ? '看图' : '算法',
+                          size: 10.5,
+                          weight: FontWeight.w700,
+                          color: _showCalc ? Colors.white : _C.purple,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 8),

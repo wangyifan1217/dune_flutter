@@ -3391,6 +3391,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   int _productL3Seq = 0;
   List<CatalogRef> _projectCatalog = const [];
   List<CatalogRef> _syncSourceCatalog = const [];
+  List<CatalogRef> _formChannels = const [];
+  String _formChannelSource = '';
+  bool _formChannelsLoading = false;
+  int _formChannelSeq = 0;
+  List<CatalogRef> _assetInvoiceTypes = const [];
+  List<CatalogRef> _assetTaxRates = const [];
   List<CatalogRef> _liveChannelFormulas = const [];
   bool _liveChannelFormulasLoading = false;
   List<CatalogRef> _channelCategoryL1 = const [];
@@ -4148,18 +4154,30 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       return;
     }
     if (_itemReviewed('technologyItem:syncSourceRef')) return;
+    final previousPlatform = proposalIntakeFormSyncSourceCode(_form);
     var form = proposalIntakeApplyFormSyncSource(
       _form,
       value,
       overwriteSkus: !kProposalSkuChannelSettingsEnabled,
     );
+    final nextPlatform = (value?.code ?? '').trim();
+    if (previousPlatform != nextPlatform) {
+      form.remove('channelRef');
+    }
     form = _keepUnreviewed(form);
     final review = Map<String, dynamic>.from(_review)
       ..['technologyCompleted'] = false;
     final items = review['technologyItems'];
     if (items is Map) {
-      review['technologyItems'] = Map<String, dynamic>.from(items)
-        ..remove('syncSourceRef');
+      final nextItems = Map<String, dynamic>.from(items)..remove('syncSourceRef');
+      if (previousPlatform != nextPlatform) nextItems.remove('channelRef');
+      review['technologyItems'] = nextItems;
+    }
+    if (previousPlatform != nextPlatform) {
+      _formChannelSeq++;
+      _formChannelSource = '';
+      _formChannels = const [];
+      _formChannelsLoading = false;
     }
     _markFormDirty();
     _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
@@ -4171,6 +4189,58 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     if (mounted) setState(() {});
     _emitChanged(_row);
+  }
+
+  void _setTechChannel(CatalogRef? value) {
+    if (_moduleReviewed('technologyCompleted') &&
+        _review['reviewRejected'] != true) {
+      return;
+    }
+    if (_itemReviewed('technologyItem:channelRef')) return;
+    final form = Map<String, dynamic>.from(_form);
+    if (value == null || value.isEmpty) {
+      form.remove('channelRef');
+    } else {
+      form['channelRef'] = catalogRefToJson(value);
+    }
+    final review = Map<String, dynamic>.from(_review)
+      ..['technologyCompleted'] = false;
+    final items = review['technologyItems'];
+    if (items is Map) {
+      review['technologyItems'] = Map<String, dynamic>.from(items)
+        ..remove('channelRef');
+    }
+    _markFormDirty();
+    _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
+    if (mounted) setState(() {});
+    _emitChanged(_row);
+  }
+
+  void _loadFormChannels(String syncSource) {
+    final source = syncSource.trim();
+    if (source == _formChannelSource) return;
+    final seq = ++_formChannelSeq;
+    _formChannelSource = source;
+    if (source.isEmpty) {
+      _formChannels = const [];
+      _formChannelsLoading = false;
+      return;
+    }
+    _formChannels = const [];
+    _formChannelsLoading = true;
+    unawaited(() async {
+      List<CatalogRef> rows = const [];
+      try {
+        rows = await _catalog.fetchChannels(syncSource: source);
+      } catch (_) {
+        rows = const [];
+      }
+      if (!mounted || seq != _formChannelSeq) return;
+      setState(() {
+        _formChannels = rows;
+        _formChannelsLoading = false;
+      });
+    }());
   }
 
   void _bumpCostAmountStamps(
@@ -5007,6 +5077,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _catalog.fetchProductCategoryL3(),
       _catalog.fetchProjects(),
       _catalog.fetchSyncSources(),
+      _catalog.fetchInvoiceTypes(),
+      _catalog.fetchTaxRates(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -5015,6 +5087,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _productL3CatalogAll = results[2];
       _projectCatalog = results[3];
       _syncSourceCatalog = results[4];
+      _assetInvoiceTypes = results[5];
+      _assetTaxRates = results[6];
     });
     _prefetchLiveChannelFormulas();
     unawaited(
@@ -5393,8 +5467,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return CatalogRef(code: key, name: key);
   }
 
-  List<CatalogRef> _businessPlatformOptions() =>
-      widget.options.resolvedBusinessPlatforms;
+  /// 科技部「业务平台」用资管同步来源，不再用提案录入选项里的手写列表。
+  List<CatalogRef> _businessPlatformOptions() => _syncSourceCatalog;
 
   CatalogRef? _selectedBusinessPlatform(CatalogRef? current) {
     final options = _businessPlatformOptions();
@@ -7243,7 +7317,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       '' => '',
       final other => '中油好客 $other',
     };
-    final asset = (sku.assetProduct?.label ?? '').trim();
     return [
       ('face', face.isEmpty ? '' : '面值 $face 元'),
       ('coupon', t(sku.couponKind).isEmpty ? '' : '券种 ${t(sku.couponKind)}'),
@@ -7269,10 +7342,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         t(sku.supplierCodes).isEmpty ? '' : '供应商编码 ${t(sku.supplierCodes)}',
       ),
       ('rollback', t(sku.rollback).isEmpty ? '' : '回滚 ${t(sku.rollback)}'),
-      (
-        'existing',
-        sku.isExistingBuilt ? (asset.isEmpty ? '已有产品' : '已有产品 $asset') : '',
-      ),
       (
         'code',
         t(sku.partnerProductCode).isEmpty
@@ -7787,13 +7856,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   /// SKU 字段拆成「名称、值」，给展开后的小字段表用。
   List<(String, String)> _skuFieldKv(ProposalSkuDetailRow sku) {
-    final asset = (sku.assetProduct?.label ?? '').trim();
     return [
       for (final (key, text) in _skuFieldTexts(sku))
         if (text.isNotEmpty)
           switch (key) {
             'sync' => ('中油好客', text.replaceAll('中油好客', '').trim()),
-            'existing' => ('已有产品', asset.isEmpty ? '是' : asset),
             _ =>
               text.contains(' ')
                   ? (
@@ -13391,11 +13458,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         ),
                         _marketSheetGroup(
                           label: '接口',
-                          description: '业务平台与财务技术接口',
+                          description: '业务平台、渠道与财务技术接口',
                           child: _fieldGrid(
                             wide,
                             [
                               _techSyncSourceField(),
+                              _techChannelField(),
                               _salesFinanceInterfaceField(interfaces),
                             ],
                             columns: 3,
@@ -13648,6 +13716,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           reviewLabel: _techReviewLabel,
         ),
         _techSyncSourceField(),
+        _techChannelField(),
         _salesFinanceInterfaceField(interfaces),
         _rdSimpleLine(),
         _dateField(
@@ -16203,6 +16272,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             : '否',
         rollback: kProposalDefaultRollback,
         syncSourceRef: proposalIntakeFormSyncSourceRef(_form),
+        channelRef: proposalIntakeFormChannelRef(_form),
         settlements: const [],
       );
 
@@ -16214,6 +16284,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             : '否',
         rollback: kProposalDefaultRollback,
         syncSourceRef: proposalIntakeFormSyncSourceRef(_form),
+        channelRef: proposalIntakeFormChannelRef(_form),
         settlements: const [],
       );
 
@@ -17036,6 +17107,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         rollbackOptions: widget.options.rollbackOptions,
         readOnly: !_canEditProducts,
         proposalTitle: _row.title,
+        syncSource: _selectedBusinessPlatform(
+          proposalIntakeFormSyncSourceRef(_form),
+        ),
+        channel: proposalIntakeFormChannelRef(_form),
         initialLinked: child
             ? const []
             : [
@@ -17194,7 +17269,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ProposalSkuSettleRow(
         id: proposalIntakeNewSkuSettleId(),
         kind: proposalIntakeNormalizeSkuSettleKind(kind),
-        terms: ProposalFinanceSettleTerms(channelRef: row.channelRef),
+        terms: ProposalFinanceSettleTerms(
+          channelRef: proposalIntakeFormChannelRef(_form) ?? row.channelRef,
+        ),
       ),
     ]);
   }
@@ -18163,7 +18240,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final scale = ownScale > 0
         ? ownScale
         : proposalSkuFaceShareScale(sku, form: _form);
-    final assetLabel = (sku.assetProduct?.label ?? '').trim();
     return [
       if (sku.productName.trim().isNotEmpty &&
           sku.productName.trim() != sku.displayName.trim())
@@ -18196,15 +18272,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         'remark',
       ])
         if ((texts[key] ?? '').trim().isNotEmpty) (labels[key]!, value(key)),
-      if (sku.existingBuilt.trim().isNotEmpty || assetLabel.isNotEmpty)
-        (
-          '已有产品',
-          sku.isExistingBuilt
-              ? (assetLabel.isEmpty ? '是' : assetLabel)
-              : (sku.existingBuilt.trim().isEmpty
-                    ? assetLabel
-                    : sku.existingBuilt.trim()),
-        ),
       if (sku.partnerProductCode.trim().isNotEmpty)
         ('平台编码', sku.partnerProductCode.trim()),
       ...proposalSkuPlatformReceiptInfoRows(
@@ -18916,9 +18983,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           child: Text(
             child
                 ? '不勾：手工填写产品信息。\n'
-                      '勾选：先选业务平台，再搜索选中资管已建的产品。选中后会按资管结算规则同步账单类型、结算方式、税率，下面的字段不用再填。'
+                      '勾选：按科技部已选业务平台，搜索选中资管已建的产品。选中后会按资管结算规则同步账单类型、结算方式、税率，下面的字段不用再填。'
                 : '不勾：手工填写产品信息。\n'
-                      '勾选：先选业务平台，再搜索选中资管已建的产品。选中后会按资管结算规则同步账单类型、结算方式、税率；券包会带出子产品基础信息和对应结算，仍可继续增改。',
+                      '勾选：按科技部已选业务平台，搜索选中资管已建的产品。选中后会按资管结算规则同步账单类型、结算方式、税率；券包会带出子产品基础信息和对应结算，仍可继续增改。',
             style: TextStyle(
               color: DunesColors.resolve(context, ProposalPalette.text3),
               fontSize: 11,
@@ -19032,64 +19099,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ],
         ),
         _fieldGrid(wide, [
-          _skuCatalogCell(
-            label: '业务平台',
-            current: row.syncSourceRef,
-            options: _businessPlatformOptions(),
-            locked: locked,
-            required: existing,
-            hint: _businessPlatformOptions().isEmpty ? '暂无业务平台' : '请选择业务平台',
-            onSelected: (value) {
-              patch((current) {
-                final changed = current.syncSourceCode != (value?.code ?? '');
-                var next = current.copyWith(
-                  syncSourceRef: value,
-                  channelRef: changed ? null : current.channelRef,
-                  settlements: changed
-                      ? [
-                          for (final item in proposalIntakeSkuSettlements(
-                            current,
-                          ))
-                            item.copyWith(
-                              terms: item.terms.clearedCatalog(
-                                keepManual: false,
-                              ),
-                            ),
-                        ]
-                      : current.settlements,
-                );
-                if (changed && existing) {
-                  next = next.applyAssetProduct(null);
-                  _assetProductSyncSeq[row.id] =
-                      (_assetProductSyncSeq[row.id] ?? 0) + 1;
-                  _assetProductSyncHint.remove(row.id);
-                }
-                return next;
-              });
-              if (value != null && value.isNotEmpty) {
-                _prefetchSettle(
-                  _boundSyncSourceCode(value.code, name: value.name),
-                  'CHANNEL',
-                );
-              }
-            },
-          ),
-          _skuChannelCell(
-            current: row.channelRef,
-            locked: locked,
-            syncSource: _skuSyncSource(row),
-            onSelected: (value) => patch(
-              (current) => current.copyWith(
-                channelRef: value,
-                settlements: [
-                  for (final item in proposalIntakeSkuSettlements(current))
-                    item.copyWith(
-                      terms: item.terms.copyWith(channelRef: value),
-                    ),
-                ],
-              ),
-            ),
-          ),
           if (!existing) ...[
             _skuInstitutionCell(
               current: row.institutionRef,
@@ -19550,12 +19559,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           : ProposalSelectField<ChannelProductHit>(
               value: resolved,
               title: label,
-              hint: noPlatform ? '请先选择业务平台' : '输入产品名称关键字搜索',
+              hint: noPlatform ? '请先在科技部选择业务平台' : '输入产品名称关键字搜索',
               searchable: true,
               requireKeyword: true,
               remoteOptions: true,
               emptyText: noPlatform
-                  ? '请先选择业务平台'
+                  ? '请先在科技部选择业务平台'
                   : (searching ? '搜索中…' : (supplier ? '未找到已建供给产品' : '未找到已建产品')),
               options: [
                 for (final item in values)
@@ -19597,33 +19606,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       locked: locked,
       hint: options.isEmpty ? '请先在管理端配置我方供给' : '请选择我方供给',
       emptyText: options.isEmpty ? '请先在管理后台「提案录入选项」中配置我方供给' : null,
-      onSelected: onSelected,
-    );
-  }
-
-  Widget _skuChannelCell({
-    required CatalogRef? current,
-    required bool locked,
-    required String syncSource,
-    required ValueChanged<CatalogRef?> onSelected,
-  }) {
-    if (syncSource.trim().isNotEmpty) {
-      _prefetchSettle(syncSource, 'CHANNEL');
-    }
-    final settleKey = _settleCacheKey(syncSource, 'CHANNEL');
-    final loading = _settleLoading.contains(settleKey);
-    final options =
-        (_settleBundles[settleKey] ?? const _SettleCatalogBundle()).channels;
-    final noPlatform = syncSource.trim().isEmpty;
-    return _skuCatalogCell(
-      label: '渠道',
-      current: current,
-      options: options,
-      locked: locked,
-      hint: noPlatform
-          ? '请先选择业务平台'
-          : (options.isEmpty ? (loading ? '字典加载中…' : '该业务平台暂无渠道') : '请选择渠道'),
-      emptyText: noPlatform ? '请先选择业务平台' : (loading ? '字典加载中…' : '该业务平台暂无渠道'),
       onSelected: onSelected,
     );
   }
@@ -19790,9 +19772,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               : ProposalSelectField<CatalogRef>(
                   value: selected == null || selected.isEmpty ? null : selected,
                   title: '业务平台',
-                  hint: emptyCatalog ? '暂无业务平台' : '请选择业务平台',
+                  hint: emptyCatalog ? '字典加载中或暂无平台' : '请选择业务平台',
                   searchable: true,
-                  emptyText: emptyCatalog ? '暂无业务平台' : '暂无业务平台',
+                  emptyText: emptyCatalog ? '字典加载中或暂无平台' : '暂无业务平台',
                   options: [
                     for (final item in values)
                       ProposalSelectOption(
@@ -19804,6 +19786,64 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       ),
                   ],
                   onSelected: onSelected ?? _setTechSyncSource,
+                ),
+        ),
+      ),
+    );
+  }
+
+  /// 销售提案的渠道。选项跟着科技部当前业务平台，从资管渠道目录来。
+  Widget _techChannelField() {
+    final platform = _primarySyncSource();
+    _loadFormChannels(platform);
+    final enabled = _fillEnabled(
+      _canEditTech,
+      resetReview: 'technologyCompleted',
+      reviewSection: 'technologyItem:channelRef',
+    );
+    final current = proposalIntakeFormChannelRef(_form);
+    final selected =
+        _selectedCatalog(current, _formChannels) ??
+        ((current != null && current.isNotEmpty) ? current : null);
+    final values = _withCurrent(_formChannels, selected);
+    final display = (selected?.label ?? current?.label ?? '').trim();
+    final tone = proposalFieldTone(enabled: enabled);
+    final noPlatform = platform.isEmpty;
+    final hint = noPlatform
+        ? '请先选择业务平台'
+        : (_formChannelsLoading
+              ? '字典加载中…'
+              : (_formChannels.isEmpty ? '该业务平台暂无渠道' : '请选择渠道'));
+    return _FullWidthField(
+      child: _anchor(
+        'channelRef',
+        ProposalField(
+          label: '渠道',
+          required: !noPlatform && _formChannels.isNotEmpty,
+          tone: tone,
+          trailing: _rowReviewToggle(
+            'technologyItem:channelRef',
+            _techReviewLabel,
+          ),
+          child: !enabled || _showSelectedAsText
+              ? _readonlySelectedText(display)
+              : ProposalSelectField<CatalogRef>(
+                  value: selected == null || selected.isEmpty ? null : selected,
+                  title: '渠道',
+                  hint: hint,
+                  searchable: true,
+                  emptyText: hint,
+                  options: [
+                    for (final item in values)
+                      ProposalSelectOption(
+                        value: item,
+                        label: item.label,
+                        meta: item.code.isEmpty || item.code == item.name
+                            ? null
+                            : item.code,
+                      ),
+                  ],
+                  onSelected: _setTechChannel,
                 ),
         ),
       ),
@@ -20229,6 +20269,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final raw = proposalIntakeResolvedSyncSourceCode(_form, sku);
     final name = proposalIntakeResolvedSyncSourceName(_form, sku);
     return _boundSyncSourceCode(raw, name: name);
+  }
+
+  /// 供给产品不再单独选平台，跟科技部业务平台走；旧数据没写到表单上时仍用本行。
+  String _supplySyncSource(ProposalSupplyProductRow row) {
+    final fromForm = _primarySyncSource();
+    if (fromForm.isNotEmpty) return fromForm;
+    return _boundSyncSourceCode(
+      row.syncSourceCode,
+      name: row.syncSourceRef?.name ?? '',
+    );
   }
 
   Widget _skuSettleProductCard({
@@ -22357,9 +22407,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final loading = _settleLoading.contains(settleKey);
     final bundle = _settleBundles[settleKey] ?? const _SettleCatalogBundle();
     final noPlatform = syncSource.trim().isEmpty;
-    final catalogHint = noPlatform ? '请先选择业务平台' : '请选择';
+    final catalogHint = noPlatform ? '请先在科技部选择业务平台' : '请选择';
     final catalogEmptyText = noPlatform
-        ? '请先选择业务平台'
+        ? '请先在科技部选择业务平台'
         : (loading ? '字典加载中…' : '该业务平台暂无选项');
 
     Widget field(
@@ -22521,19 +22571,25 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ], columns: wide ? 2 : 1);
     }
 
-    final invoiceField = _settleStringSelectField(
+    final invoiceField = _assetDictCodeField(
       label: '发票类型',
       value: terms.invoiceType,
-      options: kProposalInvoiceTypes,
+      options: proposalAssetCodeOptions(
+        _assetInvoiceTypes,
+        kProposalAssetInvoiceTypeCodes,
+      ),
       enabled: enabled,
       fieldKey: 'settle-$keyPrefix-invoice',
       onSelected: (value) =>
           onChanged(terms.copyWith(invoiceType: value ?? '')),
     );
-    final taxField = _settleStringSelectField(
+    final taxField = _assetDictCodeField(
       label: '税率',
       value: terms.taxRate,
-      options: kProposalTaxRates,
+      options: proposalAssetCodeOptions(
+        _assetTaxRates,
+        kProposalAssetTaxRateCodes,
+      ),
       enabled: enabled,
       fieldKey: 'settle-$keyPrefix-tax',
       onSelected: (value) => onChanged(terms.copyWith(taxRate: value ?? '')),
@@ -22990,6 +23046,66 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
         ], columns: cols);
       },
+    );
+  }
+
+  /// 结算发票、税率写入资管字典 `code`。查询接口按这个 key 对字典。
+  Widget _assetDictCodeField({
+    required String label,
+    required String value,
+    required List<CatalogRef> options,
+    required bool enabled,
+    required ValueChanged<String?> onSelected,
+    String? fieldKey,
+  }) {
+    final current = value.trim();
+    CatalogRef? selected;
+    for (final item in options) {
+      if (item.code.trim() == current || item.name.trim() == current) {
+        selected = item;
+        break;
+      }
+    }
+    final values = [
+      if (selected == null && current.isNotEmpty)
+        CatalogRef(code: current, name: current),
+      ...options,
+    ];
+    final shown = selected ??
+        (current.isEmpty ? null : CatalogRef(code: current, name: current));
+    return ProposalField(
+      label: label,
+      child: !enabled
+          ? _readonlySelectedText(
+              (shown?.name.trim().isNotEmpty == true)
+                  ? shown!.name.trim()
+                  : current,
+            )
+          : ProposalSelectField<CatalogRef>(
+              key: ValueKey(fieldKey ?? 'settle-$label'),
+              value: shown == null || shown.isEmpty ? null : shown,
+              title: label,
+              hint: options.isEmpty ? '字典加载中' : '请选择',
+              searchable: true,
+              options: [
+                for (final item in values)
+                  ProposalSelectOption(
+                    value: item,
+                    label: item.name.trim().isNotEmpty
+                        ? item.name.trim()
+                        : item.code.trim(),
+                    meta: item.code.trim().isNotEmpty &&
+                            item.code.trim() != item.name.trim()
+                        ? item.code.trim()
+                        : null,
+                  ),
+              ],
+              onSelected: (item) => onSelected(
+                item == null || item.code.trim().isEmpty
+                    ? null
+                    : item.code.trim(),
+              ),
+            ),
     );
   }
 
@@ -26209,7 +26325,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         Padding(
           padding: EdgeInsets.only(top: 4),
           child: Text(
-            '勾选后先选业务平台，再搜索并选择已建供给产品（必填）。选中后会按资管供应商产品结算规则同步账单类型、结算方式、税率等。',
+            '勾选后按科技部已选业务平台，搜索并选择已建供给产品（必填）。选中后会按资管供应商产品结算规则同步账单类型、结算方式、税率等。',
             style: TextStyle(
               color: DunesColors.resolve(context, ProposalPalette.text3),
               fontSize: 11,
@@ -26241,9 +26357,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       locked: locked,
       required: true,
       hint: noPlatform
-          ? '请先选择业务平台'
+          ? '请先在科技部选择业务平台'
           : (options.isEmpty ? (loading ? '字典加载中…' : '该业务平台暂无供应商') : '请选择供应商'),
-      emptyText: noPlatform ? '请先选择业务平台' : (loading ? '字典加载中…' : '该业务平台暂无供应商'),
+      emptyText: noPlatform ? '请先在科技部选择业务平台' : (loading ? '字典加载中…' : '该业务平台暂无供应商'),
       onSelected: onSelected,
     );
   }
@@ -26303,51 +26419,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ],
           ),
           _fieldGrid(wide, [
-            _skuCatalogCell(
-              label: '业务平台',
-              current: row.syncSourceRef,
-              options: _syncSourceCatalog,
-              locked: locked,
-              required: existing,
-              hint: _syncSourceCatalog.isEmpty ? '字典加载中或暂无平台' : '请选择业务平台',
-              onSelected: (value) {
-                _patchSupplyProduct(row.id, (current) {
-                  final changed = current.syncSourceCode != (value?.code ?? '');
-                  var next = current.copyWith(
-                    syncSourceRef: value,
-                    supplierRef: changed ? null : current.supplierRef,
-                    supplierCode: changed ? '' : current.supplierCode,
-                    settlements: changed
-                        ? [
-                            for (final item in proposalIntakeSupplySettlements(
-                              current,
-                            ))
-                              item.copyWith(
-                                terms: item.terms.clearedCatalog(
-                                  keepManual: false,
-                                ),
-                              ),
-                          ]
-                        : current.settlements,
-                  );
-                  if (changed && existing) {
-                    next = next.applyAssetProduct(null);
-                    _assetProductSyncSeq[row.id] =
-                        (_assetProductSyncSeq[row.id] ?? 0) + 1;
-                    _assetProductSyncHint.remove(row.id);
-                  }
-                  return next;
-                });
-                if (value != null && value.isNotEmpty) {
-                  _prefetchSettle(value.code, 'SUPPLIER');
-                }
-              },
-            ),
             if (existing)
               _assetProductSearchCell(
                 rowId: row.id,
                 current: row.assetProduct,
-                syncSource: row.syncSourceCode,
+                syncSource: _supplySyncSource(row),
                 locked: locked,
                 label: '已建供给产品',
                 supplier: true,
@@ -26373,7 +26449,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                             name: row.supplierCode,
                           )),
                 locked: locked,
-                syncSource: row.syncSourceCode,
+                syncSource: _supplySyncSource(row),
                 onSelected: (value) => _patchSupplyProduct(
                   row.id,
                   (current) => current.copyWith(
@@ -26564,16 +26640,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ),
     ];
     if (enabled && rows.isEmpty) {
-      rows = [proposalIntakeNewSupplyProduct(existing: true)];
+      rows = [_seedSupplyProduct(existing: true)];
     }
     _writeSupplyProducts(rows, isExistingSupplyProduct: enabled);
+  }
+
+  ProposalSupplyProductRow _seedSupplyProduct({required bool existing}) {
+    return proposalIntakeNewSupplyProduct(existing: existing).copyWith(
+      syncSourceRef: proposalIntakeFormSyncSourceRef(_form),
+    );
   }
 
   void _addSupplyProduct() {
     if (!_canEditMarket) return;
     _writeSupplyProducts([
       ...proposalIntakeSupplyProducts(_form),
-      proposalIntakeNewSupplyProduct(
+      _seedSupplyProduct(
         existing: proposalIntakeIsExistingSupplyProduct(_form),
       ),
     ]);
@@ -26945,6 +27027,8 @@ class _SkuProductEditorDialog extends StatefulWidget {
     required this.readOnly,
     this.proposalTitle = '',
     this.initialLinked = const [],
+    this.syncSource,
+    this.channel,
   });
 
   final bool childProduct;
@@ -26956,6 +27040,8 @@ class _SkuProductEditorDialog extends StatefulWidget {
   final bool readOnly;
   final String proposalTitle;
   final List<_SkuProductDraft> initialLinked;
+  final CatalogRef? syncSource;
+  final CatalogRef? channel;
 
   @override
   State<_SkuProductEditorDialog> createState() =>
@@ -26975,6 +27061,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
   late String _parentSkuId;
   late String _rollback;
   late String _couponKind;
+  CatalogRef? _syncSource;
   final List<_SkuProductDraft> _linked = [];
   _SkuProductDraft? _linkedClipboard;
 
@@ -27000,6 +27087,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     _parentSkuId = widget.initial.parentSkuId;
     _rollback = proposalIntakeSkuRollbackValue(widget.initial);
     _couponKind = widget.initial.resolvedCouponKind;
+    _syncSource = widget.syncSource;
   }
 
   @override
@@ -27054,6 +27142,8 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
           inventoryQty: _qty.text.trim(),
           supplierCodes: _suppliers.text.trim(),
           syncZhongyouHaoke: _syncZhongyouHaoke,
+          syncSourceRef: _syncSource,
+          channelRef: widget.channel ?? widget.initial.channelRef,
           parentSkuId: widget.childProduct ? _parentSkuId : '',
           rollback: _rollback,
           remark: _remark.text.trim(),
@@ -27077,7 +27167,8 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
           id: proposalIntakeNewChildSkuId(),
           existingBuilt: widget.initial.existingBuilt,
           rollback: kProposalDefaultRollback,
-          syncSourceRef: widget.initial.syncSourceRef,
+          syncSourceRef: widget.syncSource,
+          channelRef: widget.channel,
           parentSkuId: widget.initial.id,
           settlements: const [],
         ),
@@ -27085,6 +27176,8 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
         mainProducts: widget.mainProducts,
         rollbackOptions: widget.rollbackOptions,
         readOnly: widget.readOnly,
+        syncSource: widget.syncSource,
+        channel: widget.channel,
       ),
     );
     if (result == null || !mounted) return;

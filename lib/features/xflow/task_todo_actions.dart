@@ -138,6 +138,7 @@ TaskTodoConfirmCopy taskTodoConfirmCopy(
           ? '提交实付金额后，按先票/先款进入核验或补票。不重审。'
           : '提交实付金额和支付凭证后，按先票/先款进入核验或补票。不重审。',
     'UPLOAD_INVOICE' => '请上传发票文件（可多张，电脑可拖拽）。提交后核验人会收到「核验发票」。不重审。',
+    'URGE' => '只会提醒申请人上传发票，并保留申请人的「补传发票」待办。本条催办不办结，回票流程不会因此结束。',
     'ISSUE_INVOICE' => '请上传已开具的发票文件（可多张，电脑可拖拽）。提交后写入原单，不重新走审批。',
     'SEAL' => '确认盖章后，合同用印进入「填写快递单号」。不重审。',
     'REPAY' => loan ? '提交还款金额后冲减资金借调剩余未还。不重审。' : '提交还款金额和凭证后关闭本条待办。不重审。',
@@ -191,7 +192,11 @@ Future<bool> confirmAndCompleteTaskTodo({
     if (context.mounted) {
       showDunesToast(
         context,
-        verifyPassed == false ? '已退回补票，发起人将收到「补传发票」' : '已办理',
+        verifyPassed == false
+            ? '已退回补票，发起人将收到「补传发票」'
+            : action == 'URGE'
+            ? '已提醒申请人上传发票'
+            : '已办理',
       );
     }
     return true;

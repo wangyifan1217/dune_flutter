@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -9,6 +11,7 @@ import '../proposal_intake/proposal_intake_select.dart';
 import '../shell/dunes_toast.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'approval_list_cache.dart';
+import 'approval_todo_export.dart';
 import 'approval_list_digest.dart';
 import 'approval_list_ui.dart';
 import 'approval_todo_flow_guide.dart';
@@ -1005,6 +1008,61 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     }
   }
 
+  Future<void> _exportVisibleTodos() async {
+    final rows = _visible;
+    if (rows.isEmpty) {
+      showDunesToast(context, '当前没有可导出的待办');
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认导出审批待办？'),
+        content: Text('将导出当前列表 ${rows.length} 条（CSV）。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            key: const Key('approval-todo-export-ok'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认导出'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final name =
+        '审批待办-${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}.csv';
+    try {
+      final location = await getSaveLocation(
+        suggestedName: name,
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'CSV', extensions: <String>['csv']),
+        ],
+      );
+      if (location == null) return;
+      final file = XFile.fromData(
+        utf8.encode(approvalTodoCsv(rows)),
+        mimeType: 'text/csv',
+        name: name,
+      );
+      await file.saveTo(location.path);
+      if (mounted) showDunesToast(context, '已导出 ${rows.length} 条');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          '导出失败：${friendlyErrorText(e)}',
+          kind: DunesToastKind.error,
+        );
+      }
+    }
+  }
+
   Widget _buildTopBar() {
     return Container(
       height: 50,
@@ -1043,6 +1101,13 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
               ),
             ),
           ),
+          if (widget.type == _ListType.b13)
+            IconButton(
+              key: const Key('approval-todo-export'),
+              onPressed: _exportVisibleTodos,
+              icon: const Icon(Icons.file_download_outlined, size: 20),
+              tooltip: '导出',
+            ),
           if (widget.type == _ListType.b13)
             IconButton(
               onPressed: () => showApprovalTodoFlowGuide(context),

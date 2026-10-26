@@ -2466,6 +2466,7 @@ const kProposalTechnologyReviewFields = <String>[
   'technologyPlatform',
   'outputForms',
   'syncSourceRef',
+  'channelRef',
   'developmentTypes',
   'hasRdCost',
   'rdAmount',
@@ -2480,6 +2481,7 @@ const kProposalTechnologyReviewLabels = <String, String>{
   'technologyPlatform': 'τ-标签一',
   'outputForms': '能力输出/输入形式',
   'syncSourceRef': '业务平台',
+  'channelRef': '渠道',
   'developmentTypes': '研发类型',
   'hasRdCost': '是否涉及研发费用',
   'rdAmount': '研发费用金额',
@@ -4162,10 +4164,11 @@ void _tallyPurchaseSupplyFill(
     tally.slot(false);
     return;
   }
+  final formSource = proposalIntakeFormSyncSourceCode(form);
   for (final product in products) {
     final rowExisting = existing || product.isExistingBuilt;
     if (!rowExisting && !proposalIntakeSupplyStarted(product)) continue;
-    tally.slot(product.syncSourceCode.isNotEmpty);
+    tally.slot(product.syncSourceCode.isNotEmpty || formSource.isNotEmpty);
     if (rowExisting) {
       tally.slot(
         product.assetProduct != null && product.assetProduct!.isNotEmpty,
@@ -4541,7 +4544,12 @@ CatalogRef? proposalIntakeFormSyncSourceRef(Map<String, dynamic> form) =>
 String proposalIntakeFormSyncSourceCode(Map<String, dynamic> form) =>
     (proposalIntakeFormSyncSourceRef(form)?.code ?? '').trim();
 
-/// 把科技板块选的业务平台写到表单，并补到还没选平台的产品上。
+/// 销售提案科技部选的渠道。产品弹窗不再单独选，结算行仍保留自己的渠道。
+CatalogRef? proposalIntakeFormChannelRef(Map<String, dynamic> form) =>
+    catalogRefOrNull(form['channelRef']);
+
+/// 把科技板块选的业务平台写到表单级字段，并补到还没选平台的销售产品上。
+/// 不改供给产品：供应商、已建产品和结算都保持原样，查字典时再读表单上的平台。
 Map<String, dynamic> proposalIntakeApplyFormSyncSource(
   Map<String, dynamic> form,
   CatalogRef? source, {
@@ -4826,14 +4834,24 @@ String proposalIntakeNormalizeSettleRatio(Object? raw) {
   return _proposalIntakeFormatDecimalRatio(n / 100);
 }
 
-/// 渠道已有产品的结算比例本身已是小数（如 `0.975`），不要再当成百分数除 100。
-/// 仅兼容旧目录里大于 1 的百分数写法（如 `98.5` → `0.985`）和带 `%` 的值。
+/// 裸数字绝对值大于等于 2 时，是旧的百分数写法（`4` = 4%，`98.5` = 98.5%）。
+/// 小于 2 的是小数系数：`0.08` = 8%，`1.0333333` = 103.33333%。
+bool proposalRatioUsesPercentPoints(double n) => n.abs() >= 2;
+
+/// 卡片上要写成百分数的那个数。`1.0333333` → 103.33333，`0.975` → 97.5，`4` → 4。
+double proposalRatioDisplayPercent(double n) {
+  if (n == 0 || proposalRatioUsesPercentPoints(n)) return n;
+  return n * 100;
+}
+
+/// 渠道已有产品的结算比例本身已是小数（如 `0.975`、`1.0333333`），不要再除 100。
+/// 仅兼容旧目录里大于等于 2 的百分数写法（如 `98.5` → `0.985`）和带 `%` 的值。
 String proposalIntakeSettleRatioFromCatalog(Object? raw) {
   final text = catalogScalarText(raw);
   if (text.isEmpty) return '';
   if (text.contains('%')) return proposalIntakeNormalizeSettleRatio(text);
   final n = double.tryParse(text);
-  if (n != null && n > 1) {
+  if (n != null && proposalRatioUsesPercentPoints(n)) {
     return proposalIntakeNormalizeSettleRatio('$text%');
   }
   return proposalIntakeNormalizeSettleRatio(text);
@@ -7819,6 +7837,8 @@ List<String> proposalIntakePurchaseSupplyIssues(Map<String, dynamic> form) {
     issues.add('已勾选已有供给产品，请至少添加一条并搜索选择已建供给产品');
     return issues;
   }
+  final formSource = proposalIntakeFormSyncSourceCode(form);
+  var missingPlatform = false;
   for (var i = 0; i < products.length; i++) {
     final product = products[i];
     final label = '供给产品 ${i + 1}';
@@ -7826,8 +7846,8 @@ List<String> proposalIntakePurchaseSupplyIssues(Map<String, dynamic> form) {
     if (!rowExisting && !proposalIntakeSupplyStarted(product)) {
       continue;
     }
-    if (product.syncSourceCode.isEmpty) {
-      issues.add('$label 请选择业务平台');
+    if (product.syncSourceCode.isEmpty && formSource.isEmpty) {
+      missingPlatform = true;
     }
     if (rowExisting) {
       if (product.assetProduct == null || product.assetProduct!.isEmpty) {
@@ -7884,6 +7904,9 @@ List<String> proposalIntakePurchaseSupplyIssues(Map<String, dynamic> form) {
         );
       }
     }
+  }
+  if (missingPlatform) {
+    issues.insert(0, '请先在科技部选择业务平台');
   }
   return issues;
 }

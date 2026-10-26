@@ -154,6 +154,13 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
   final TextEditingController _peekInput = TextEditingController();
   NovaPersonalCapability? _personalMode;
   NovaTaskPreview? _taskPreview;
+  Map<String, dynamic>? _lighthouseState;
+  String? _lighthouseQuestion;
+  DateTime? _lighthouseAt;
+  String? _busyStatus;
+  List<String> _suggestions = const <String>[];
+  NovaPersonalCapability _suggestionCapability =
+      NovaPersonalCapability.lighthouse;
   final ScrollController _peekScroll = ScrollController();
   static final Tween<double> _panelTween = Tween(begin: 0, end: 1);
 
@@ -598,10 +605,30 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
     unawaited(_sendPeek(value));
   }
 
+  NativeNovaService _ensureChatService() {
+    _chatClient ??= http.Client();
+    return _chatService ??= NativeNovaService(
+      session: widget.session,
+      client: _chatClient!,
+    );
+  }
+
   Future<void> _sendPeek(String text) async {
     final value = text.trim();
     if (_sending || value.isEmpty) return;
-    final inferred = _personalMode ?? novaPersonalCapabilityFor(value);
+    var inferred = _personalMode;
+    if (inferred == null && _taskPreview == null) {
+      setState(() => _sending = true);
+      final at = _lighthouseAt;
+      inferred = await _ensureChatService().routePersonal(
+        value,
+        afterLighthouse:
+            at != null &&
+            DateTime.now().difference(at) < novaLighthouseFollowUpWindow,
+      );
+      if (!mounted) return;
+      setState(() => _sending = false);
+    }
     if (_taskPreview != null && !_isPersonalPreviewCommand(value)) {
       await _requestPersonalWithContext(
         NovaPersonalCapability.tasks,
@@ -659,30 +686,67 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
     _publishDesktop();
     NovaPersonalReply result;
     try {
-      _chatClient ??= http.Client();
-      _chatService ??= NativeNovaService(
-        session: widget.session,
-        client: _chatClient!,
-      );
       final history = _turns
           .map(
             (turn) =>
                 (role: turn.fromUser ? 'user' : 'assistant', text: turn.text),
           )
           .toList(growable: false);
-      result = await _chatService!.askPersonalCapability(
+      result = await _ensureChatService().askPersonalCapability(
         capability: capability == NovaPersonalCapability.tasks
             ? 'tasks'
             : 'lighthouse',
         text: prompt,
         history: novaPersonalContextTurns(history),
         pendingPreview: pendingPreview,
+        lastQuery: _lighthouseState,
+        onProgress: (status) {
+          if (!mounted || !_sending) return;
+          setState(() => _busyStatus = status);
+          _publishDesktop();
+        },
       );
     } catch (error) {
       result = NovaPersonalReply(friendlyErrorText(error));
     }
     if (!mounted) return;
-    await _recordPersonal(prompt, result, arm: capability);
+    _busyStatus = null;
+    if (result.routeToChat) {
+      setState(() {
+        _sending = false;
+        _personalMode = null;
+      });
+      await _sendChat(prompt);
+      return;
+    }
+    if (result.state != null) _lighthouseState = result.state;
+    final handledBy = result.capability ?? capability;
+    await _recordPersonal(prompt, result, arm: handledBy);
+    if (!mounted) return;
+    setState(() {
+      _suggestions = result.suggestions;
+      _suggestionCapability = handledBy;
+      if (handledBy == NovaPersonalCapability.lighthouse) {
+        _lighthouseQuestion = prompt;
+        _lighthouseAt = DateTime.now();
+      }
+    });
+  }
+
+  void _askSuggestion(String text) {
+    if (_sending) return;
+    unawaited(_requestPersonalWithContext(_suggestionCapability, text));
+  }
+
+  Future<void> _answerAsChat() async {
+    final question = _lighthouseQuestion;
+    if (question == null || _sending) return;
+    setState(() {
+      _lighthouseQuestion = null;
+      _lighthouseAt = null;
+      _personalMode = null;
+    });
+    await _sendChat(question);
   }
 
   bool _isPersonalPreviewCommand(String value) {
@@ -738,7 +802,11 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
       _snippetVisible = false;
       _sending = false;
       _chatError = null;
-      _personalMode = arm;
+      // 灯塔不锁定模式，追问靠 afterLighthouse 接上；任务保留，方便接着处理草稿和列表。
+      _personalMode = arm == NovaPersonalCapability.lighthouse ? null : arm;
+      _lighthouseQuestion = null;
+      _lighthouseAt = null;
+      _suggestions = const <String>[];
       if (result.preview != null) _taskPreview = result.preview;
       _turns.add(NovaPresenceTurn(fromUser: true, text: prompt));
       _turns.add(NovaPresenceTurn(fromUser: false, text: result.text));
@@ -910,124 +978,124 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
               return Stack(
                 fit: StackFit.expand,
                 children: [
-              if (floatOn && show && _panelOpen)
-                Positioned.fill(
-                  child: GestureDetector(
-                    onTap: _close,
-                    child: ColoredBox(
-                      color: Colors.black.withValues(
-                        alpha: dark ? 0.24 : 0.035,
-                      ),
-                    ),
-                  ),
-                ),
-              if (showFloat && _peekOpen && !_panelOpen && !_detached)
-                Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _collapsePeek,
-                    child: const SizedBox.expand(),
-                  ),
-                ),
-              if (showFloat &&
-                  !_detached &&
-                  !_panelOpen &&
-                  (_message != null ||
-                      _sending ||
-                      (_replyPreview?.trim().isNotEmpty ?? false) ||
-                      !_root ||
-                      desktop))
-                _floatSlot(
-                  desktop: desktop,
-                  constraints: constraints,
-                  bottom: bottom,
-                  openWidth: cardWidth,
-                  openHeight: cardMaxHeight,
-                  child: TweenAnimationBuilder<double>(
-                    key: ValueKey(_message?.id ?? 'presence-idle'),
-                    tween: Tween(begin: 0, end: 1),
-                    duration: reducedMotion
-                        ? Duration.zero
-                        : const Duration(milliseconds: 420),
-                    curve: Curves.easeOutCubic,
-                    builder: (context, value, child) => Opacity(
-                      opacity: value,
-                      child: Transform.translate(
-                        offset: Offset(0, 10 * (1 - value)),
-                        child: child,
-                      ),
-                    ),
-                    child: _peekOpen
-                        ? _peekCard(dark, cardWidth, cardMaxHeight)
-                        : _idleIcon(),
-                  ),
-                ),
-              if (floatOn && _detached && show)
-                Positioned(right: 24, bottom: bottom, child: _recallChip()),
-              if (floatOn && show && _panelOpen)
-                _panelSlot(
-                  desktop: desktop,
-                  constraints: constraints,
-                  bottom: media.padding.bottom + (desktop ? 26 : 12),
-                  child: TweenAnimationBuilder<double>(
-                    tween: _panelTween,
-                    duration: reducedMotion
-                        ? Duration.zero
-                        : const Duration(milliseconds: 280),
-                    curve: Curves.easeOutCubic,
-                    builder: (context, value, child) => Opacity(
-                      opacity: value,
-                      child: Transform.translate(
-                        offset: Offset(0, 18 * (1 - value)),
-                        child: child,
-                      ),
-                    ),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(28),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF34234D,
-                            ).withValues(alpha: dark ? 0.3 : 0.13),
-                            blurRadius: 52,
-                            offset: const Offset(0, 18),
+                  if (floatOn && show && _panelOpen)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        onTap: _close,
+                        child: ColoredBox(
+                          color: Colors.black.withValues(
+                            alpha: dark ? 0.24 : 0.035,
                           ),
-                        ],
-                      ),
-                      child: NovaPresencePanel(
-                        session: widget.session,
-                        pageName: _pageName,
-                        message: _message,
-                        turns: _turns,
-                        sending: _sending,
-                        error: _chatError,
-                        conversationId: _chatConversationId,
-                        onClose: _close,
-                        onSend: (text) => unawaited(_sendPeek(text)),
-                        confirmPending: _taskPreview != null,
-                        onConfirm: _sending
-                            ? null
-                            : () => unawaited(_confirmTaskPreview()),
-                        onCancel: _sending ? null : _cancelTaskPreview,
-                        onRetry: _retryText == null
-                            ? null
-                            : () => unawaited(
-                                _sendChat(_retryText!, retry: true),
-                              ),
-                        onDragStart: desktop
-                            ? (_) => _capturePanelOrigin()
-                            : null,
-                        onDragUpdate: desktop ? _movePanel : null,
-                        onDragEnd: desktop ? (_) => _persistPanel() : null,
-                        onExpand: (id) => unawaited(_expand(id)),
-                        onOpenTask: _message?.task == null
-                            ? null
-                            : () => unawaited(_openTask()),
+                        ),
                       ),
                     ),
-                  ),
-                ),
+                  if (showFloat && _peekOpen && !_panelOpen && !_detached)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _collapsePeek,
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                  if (showFloat &&
+                      !_detached &&
+                      !_panelOpen &&
+                      (_message != null ||
+                          _sending ||
+                          (_replyPreview?.trim().isNotEmpty ?? false) ||
+                          !_root ||
+                          desktop))
+                    _floatSlot(
+                      desktop: desktop,
+                      constraints: constraints,
+                      bottom: bottom,
+                      openWidth: cardWidth,
+                      openHeight: cardMaxHeight,
+                      child: TweenAnimationBuilder<double>(
+                        key: ValueKey(_message?.id ?? 'presence-idle'),
+                        tween: Tween(begin: 0, end: 1),
+                        duration: reducedMotion
+                            ? Duration.zero
+                            : const Duration(milliseconds: 420),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, value, child) => Opacity(
+                          opacity: value,
+                          child: Transform.translate(
+                            offset: Offset(0, 10 * (1 - value)),
+                            child: child,
+                          ),
+                        ),
+                        child: _peekOpen
+                            ? _peekCard(dark, cardWidth, cardMaxHeight)
+                            : _idleIcon(),
+                      ),
+                    ),
+                  if (floatOn && _detached && show)
+                    Positioned(right: 24, bottom: bottom, child: _recallChip()),
+                  if (floatOn && show && _panelOpen)
+                    _panelSlot(
+                      desktop: desktop,
+                      constraints: constraints,
+                      bottom: media.padding.bottom + (desktop ? 26 : 12),
+                      child: TweenAnimationBuilder<double>(
+                        tween: _panelTween,
+                        duration: reducedMotion
+                            ? Duration.zero
+                            : const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, value, child) => Opacity(
+                          opacity: value,
+                          child: Transform.translate(
+                            offset: Offset(0, 18 * (1 - value)),
+                            child: child,
+                          ),
+                        ),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(28),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFF34234D,
+                                ).withValues(alpha: dark ? 0.3 : 0.13),
+                                blurRadius: 52,
+                                offset: const Offset(0, 18),
+                              ),
+                            ],
+                          ),
+                          child: NovaPresencePanel(
+                            session: widget.session,
+                            pageName: _pageName,
+                            message: _message,
+                            turns: _turns,
+                            sending: _sending,
+                            error: _chatError,
+                            conversationId: _chatConversationId,
+                            onClose: _close,
+                            onSend: (text) => unawaited(_sendPeek(text)),
+                            confirmPending: _taskPreview != null,
+                            onConfirm: _sending
+                                ? null
+                                : () => unawaited(_confirmTaskPreview()),
+                            onCancel: _sending ? null : _cancelTaskPreview,
+                            onRetry: _retryText == null
+                                ? null
+                                : () => unawaited(
+                                    _sendChat(_retryText!, retry: true),
+                                  ),
+                            onDragStart: desktop
+                                ? (_) => _capturePanelOrigin()
+                                : null,
+                            onDragUpdate: desktop ? _movePanel : null,
+                            onDragEnd: desktop ? (_) => _persistPanel() : null,
+                            onExpand: (id) => unawaited(_expand(id)),
+                            onOpenTask: _message?.task == null
+                                ? null
+                                : () => unawaited(_openTask()),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               );
             },
@@ -1075,6 +1143,9 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
       _sending = true;
       _chatError = null;
       _retryText = value;
+      _lighthouseQuestion = null;
+      _lighthouseAt = null;
+      _suggestions = const <String>[];
       if (!retry) {
         _turns.add(NovaPresenceTurn(fromUser: true, text: value));
       }
@@ -1198,7 +1269,7 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
 
   String? get _snippetText {
     if (_peekOpen || _panelOpen || !_snippetVisible) return null;
-    if (_sending) return '正在想…';
+    if (_sending) return _busyStatus ?? '正在想…';
     final reply = _replyPreview?.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (reply != null && reply.isNotEmpty) return reply;
     final message = _message?.text.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -1228,25 +1299,25 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
             onTap: _onFloatTap,
             customBorder: const CircleBorder(),
             child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const NovaPresenceAvatar(),
-                  if (pending)
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      child: Container(
-                        width: 9,
-                        height: 9,
-                        decoration: BoxDecoration(
-                          color: novaPresenceAccent,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
+              clipBehavior: Clip.none,
+              children: [
+                const NovaPresenceAvatar(),
+                if (pending)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: novaPresenceAccent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
                       ),
                     ),
-                ],
-              ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1403,13 +1474,51 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
                       for (final turn in bubbles) _peekBubble(turn, dark, ink),
                       if (_sending)
                         _peekBubble(
-                          const NovaPresenceTurn(fromUser: false, text: '正在想…'),
+                          NovaPresenceTurn(
+                            fromUser: false,
+                            text: _busyStatus ?? '正在想…',
+                          ),
                           dark,
                           muted,
                         ),
                     ],
                   ),
                 ),
+                if (_suggestions.isNotEmpty &&
+                    !_sending &&
+                    _taskPreview == null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          for (final suggestion in _suggestions)
+                            _peekPill(
+                              suggestion,
+                              dark: dark,
+                              onTap: () => _askSuggestion(suggestion),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_lighthouseQuestion != null &&
+                    !_sending &&
+                    _taskPreview == null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _peekPill(
+                        '已按灯塔数据回答 · 改为普通回答',
+                        dark: dark,
+                        onTap: () => unawaited(_answerAsChat()),
+                      ),
+                    ),
+                  ),
                 if (_taskPreview != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
@@ -1591,21 +1700,25 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
         child: SizedBox(
           height: 34,
           child: Center(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13,
-                height: 1,
-                fontWeight: FontWeight.w500,
-                color: !enabled
-                    ? const Color(0xFFC7C7CC)
-                    : filled
-                    ? Colors.white
-                    : (dark
-                          ? const Color(0xFFF5F2FA)
-                          : const Color(0xFF3A3A3C)),
+            widthFactor: 1,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1,
+                  fontWeight: FontWeight.w500,
+                  color: !enabled
+                      ? const Color(0xFFC7C7CC)
+                      : filled
+                      ? Colors.white
+                      : (dark
+                            ? const Color(0xFFF5F2FA)
+                            : const Color(0xFF3A3A3C)),
+                ),
               ),
             ),
           ),
@@ -1616,7 +1729,10 @@ class _NovaPresenceHostState extends State<NovaPresenceHost>
 
   Widget _peekBubble(NovaPresenceTurn turn, bool dark, Color ink) {
     final mine = turn.fromUser;
-    final actionable = turn.text.trim().isNotEmpty && turn.text != '正在想…';
+    final actionable =
+        turn.text.trim().isNotEmpty &&
+        turn.text != '正在想…' &&
+        !(_sending && turn.text == _busyStatus);
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Align(

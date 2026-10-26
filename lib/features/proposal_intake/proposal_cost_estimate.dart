@@ -220,6 +220,8 @@ bool proposalIsFinanceEstimateInputKey(String key) =>
     key == kProposalSalesScaleKey ||
     key == kProposalTurnoverTimesKey;
 
+/// 结算比例、预计核销率按小数系数。`0.08` = 8%，`1.0333333` = 103.33333%。
+/// 带 `%` 的按百分数。大于等于 2 的旧写法（`4`、`98.5`）仍按百分数。税率不走这里。
 double proposalParseSettleRatio(Object? raw) {
   final text = '$raw'.trim().replaceAll('％', '%');
   if (text.isEmpty) return 1;
@@ -227,7 +229,9 @@ double proposalParseSettleRatio(Object? raw) {
     final cleaned = text.replaceAll('%', '').trim();
     return (double.tryParse(cleaned) ?? 0) / 100;
   }
-  return proposalParseTaxRate(text);
+  final n = double.tryParse(text) ?? 0;
+  if (proposalRatioUsesPercentPoints(n)) return n / 100;
+  return n;
 }
 
 /// 一条结算对规模的乘数。以当前结算方式为准：

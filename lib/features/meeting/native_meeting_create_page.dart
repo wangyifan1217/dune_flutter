@@ -435,8 +435,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
           content: Text(
             '录音「$displayTitle」已结束。\n\n'
             '选择「立即生成」将上传录音并开始转写；'
-            '选择「存为草稿」会保存到列表，稍后可进详情页生成；'
-            '选择「取消」只把录音留在本机，不上传会议纪要。',
+            '选择「存为草稿」会保存到列表，稍后可进详情页生成。'
+            '没有网络时会先留在本机，有网后自动上传；'
+            '选择「取消」只把录音留在本机，不进入会议列表。',
             style: DunesTypography.sans(
               fontSize: 13.5,
               height: 1.55,
@@ -679,7 +680,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       if (!mounted) return;
       showDunesToast(
         context,
-        generate ? '录音正在后台上传，完成后将自动开始转写' : '录音正在后台上传，完成后可在详情页生成纪要',
+        meetingId < 0
+            ? '录音已保存在本机，有网后会自动上传'
+            : generate
+            ? '录音正在后台上传，完成后将自动开始转写'
+            : '录音正在后台上传，完成后可在详情页生成纪要',
       );
       _live.clearPreview();
       _live.consumeRecordedFile();

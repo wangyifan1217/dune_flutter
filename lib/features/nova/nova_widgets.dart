@@ -18,12 +18,31 @@ import 'nova_media.dart';
 import 'nova_file_utils.dart';
 import 'nova_models_service.dart';
 import 'nova_personal_query.dart';
+import 'nova_reply_presentation.dart';
 
 const kNovaName = '小饕';
 const kNovaIdentityReply = '我是小饕';
 const kNovaIntro = '你好，我是你的小饕AI助手。可以帮你检索知识库、读文档、整理会议纪要；直接问我即可。';
 const kNovaInputPlaceholder = '问小饕...';
 const kNovaInputBusyHint = '小饕正在生成中，请稍候…';
+
+String novaThinkingStatusLabel(String status) {
+  final value = status.trim();
+  if (value.isEmpty) return '正在整理你的问题';
+  if (value.contains('查询你的任务')) return '正在查看你的任务';
+  if (value.contains('灯塔数据')) return '正在查询灯塔数据';
+  if (value.contains('知识库') || value.contains('检索') || value.contains('搜索')) {
+    return '正在查找相关资料';
+  }
+  if (value.contains('生成') || value.contains('组织回复')) return '正在整理回复';
+  if (value.contains('分析') || value.contains('思考') || value.contains('理解')) {
+    return '正在整理你的问题';
+  }
+  if (value.contains('调用工具') || value.contains('执行工具')) {
+    return '正在查询相关信息';
+  }
+  return value.replaceFirst(RegExp(r'[.…。]+$'), '').trim();
+}
 
 String novaModelDisplayName(String id) => id.trim().toUpperCase();
 
@@ -807,6 +826,7 @@ class NovaC4BusyHint extends StatelessWidget {
         t.contains('正在检查知识库') ||
         t.contains('正在加载') ||
         t.contains('正在生成') ||
+        t.contains('已停止') ||
         t.contains('请稍候')) {
       return const SizedBox.shrink();
     }
@@ -976,15 +996,18 @@ class _NovaC4ThinkPanelState extends State<NovaC4ThinkPanel> {
 }
 
 class NovaC4AiBubble extends StatelessWidget {
-  const NovaC4AiBubble({super.key, required this.child});
+  const NovaC4AiBubble({super.key, required this.child, this.compact = false});
 
   final Widget child;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       constraints: BoxConstraints(
-        maxWidth: MediaQuery.sizeOf(context).width * 0.88,
+        maxWidth: compact && MediaQuery.sizeOf(context).width > 800
+            ? 680
+            : MediaQuery.sizeOf(context).width * 0.88,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -1650,6 +1673,7 @@ class NovaC4MessageRow extends StatelessWidget {
     this.highlighted = false,
     this.ragUsed = false,
     this.onResend,
+    this.onRetryReply,
     this.onCopyReply,
     this.onForwardReply,
   });
@@ -1677,6 +1701,7 @@ class NovaC4MessageRow extends StatelessWidget {
   final bool highlighted;
   final bool ragUsed;
   final VoidCallback? onResend;
+  final VoidCallback? onRetryReply;
   final VoidCallback? onCopyReply;
   final VoidCallback? onForwardReply;
 
@@ -1839,6 +1864,7 @@ class NovaC4MessageRow extends StatelessWidget {
 
   Widget _buildAiBubbleContent(BuildContext context) {
     final resolver = mediaResolver;
+    final presentation = NovaLighthouseReplyPresentation.tryParse(text);
     final kindMedia = _buildKindMedia(context, resolver, onDarkBubble: false);
     if (kindMedia != null) return kindMedia;
     return Column(
@@ -1846,17 +1872,94 @@ class NovaC4MessageRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (thinking)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 2),
-            child: NovaC4ThinkingDots(),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: NovaC4ThinkingDots(
+              label: novaThinkingStatusLabel(thinkStatus),
+            ),
           )
         else ...[
+          if (presentation?.empty == true)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '暂未找到匹配数据',
+                style: DunesTypography.sans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
+                ),
+              ),
+            ),
           NovaMarkdownBody(
-            text: text,
+            text: presentation?.body ?? text,
             streaming: streaming,
             mediaResolver: resolver,
             manageSelection: false,
           ),
+          if (presentation != null)
+            Container(
+              margin: const EdgeInsets.only(top: 14),
+              padding: const EdgeInsets.only(top: 10),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.text3,
+                    ).withValues(alpha: .12),
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    presentation.scope,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.5,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
+                  ),
+                  if (presentation.period.isNotEmpty)
+                    Text(
+                      presentation.period,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        height: 1.5,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if (!streaming && thinkStatus.contains('中断'))
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                children: [
+                  Text(
+                    '回复已中断',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
+                  ),
+                  if (onRetryReply != null)
+                    TextButton(
+                      onPressed: onRetryReply,
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: const Text('重新生成'),
+                    ),
+                ],
+              ),
+            ),
           if (attachments.isNotEmpty && resolver != null)
             ...attachments.map(
               (a) => Padding(
@@ -1977,7 +2080,6 @@ class NovaC4MessageRow extends StatelessWidget {
   bool get _showReplyActions =>
       !mine &&
       !thinking &&
-      !streaming &&
       _aiCopyText.trim().isNotEmpty &&
       (onCopyReply != null || onForwardReply != null);
 
@@ -2172,7 +2274,12 @@ class NovaC4MessageRow extends StatelessWidget {
                       : null,
                   child: _wrapCopyable(
                     context,
-                    NovaC4AiBubble(child: _buildAiBubbleContent(context)),
+                    NovaC4AiBubble(
+                      compact:
+                          NovaLighthouseReplyPresentation.tryParse(text) !=
+                          null,
+                      child: _buildAiBubbleContent(context),
+                    ),
                     _aiCopyText,
                   ),
                 ),
@@ -2459,7 +2566,10 @@ class _CapabilityPick {
 }
 
 class _NovaCapabilitySwitch extends StatelessWidget {
-  const _NovaCapabilitySwitch({required this.capability, required this.onChanged});
+  const _NovaCapabilitySwitch({
+    required this.capability,
+    required this.onChanged,
+  });
 
   final NovaPersonalCapability? capability;
   final ValueChanged<NovaPersonalCapability?>? onChanged;
@@ -2604,7 +2714,13 @@ class _NovaCapabilityMenu extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _row(context, null, '通用', ink, line),
-                      _row(context, NovaPersonalCapability.tasks, '任务', ink, line),
+                      _row(
+                        context,
+                        NovaPersonalCapability.tasks,
+                        '任务',
+                        ink,
+                        line,
+                      ),
                       _row(
                         context,
                         NovaPersonalCapability.lighthouse,
@@ -2658,8 +2774,7 @@ class _NovaCapabilityMenu extends StatelessWidget {
                   ),
                 ),
               ),
-              if (selected)
-                Icon(Icons.check_rounded, size: 18, color: ink),
+              if (selected) Icon(Icons.check_rounded, size: 18, color: ink),
             ],
           ),
         ),
@@ -2961,7 +3076,8 @@ class NovaC4InputBar extends StatelessWidget {
                         child: _NovaComposerField(
                           controller: controller,
                           focusNode: focusNode,
-                          enabled: enabled && !showStop,
+                          // 生成中仍可输入下一句；保持焦点，移动端键盘不会被收起。
+                          enabled: enabled,
                           locked: locked,
                           hintText: hintText,
                           onInputFocused: onInputFocused,

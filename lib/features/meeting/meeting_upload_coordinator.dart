@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../auth/auth_session.dart';
@@ -10,7 +11,29 @@ import 'meeting_audio_converter.dart';
 import 'meeting_upload_storage.dart';
 import 'native_meeting_service.dart';
 
+/// 创建会议或上传因断网失败时，录音应留在本机等待重试。
+bool meetingSaveFailureIsOffline(Object error) {
+  if (error is SocketException ||
+      error is http.ClientException ||
+      error is TimeoutException ||
+      error is HandshakeException ||
+      error is TlsException) {
+    return true;
+  }
+  final text = error.toString().toLowerCase();
+  return text.contains('failed host lookup') ||
+      text.contains('network is unreachable') ||
+      text.contains('connection refused') ||
+      text.contains('connection reset') ||
+      text.contains('connection abort') ||
+      text.contains('connection closed') ||
+      text.contains('socketexception') ||
+      text.contains('clientexception') ||
+      text.contains('network error');
+}
+
 /// 会议录音后台上传：先落盘本地录音，再创建会议记录并后台上传绑定 draft/upload。
+/// 没网时保留本地文件和离线草稿，联网后自动创建会议并上传。
 class MeetingUploadCoordinator extends ChangeNotifier {
   MeetingUploadCoordinator._();
 
@@ -66,7 +89,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
   }
 
   MeetingUploadJob? jobForMeeting(int meetingId) {
-    if (meetingId <= 0) return null;
+    if (meetingId == 0) return null;
     final idx = _indexOfJob(meetingId);
     if (idx < 0) return null;
     return _jobs[idx];
@@ -139,7 +162,10 @@ class MeetingUploadCoordinator extends ChangeNotifier {
         generate: generate,
         createdAtMs: DateTime.now().millisecondsSinceEpoch,
         phase: MeetingUploadPhase.uploading,
-        recordingDurationSeconds: recordingDurationSeconds.clamp(0, 24 * 60 * 60),
+        recordingDurationSeconds: recordingDurationSeconds.clamp(
+          0,
+          24 * 60 * 60,
+        ),
       );
       _jobs = <MeetingUploadJob>[..._jobs, job];
       _runningMeetingIds.add(meetingId);
@@ -150,6 +176,29 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       notifyListeners();
       return meetingId;
     } catch (e) {
+      if (!jobQueued && meetingId <= 0 && meetingSaveFailureIsOffline(e)) {
+        final localId = _allocateLocalMeetingId();
+        final job = MeetingUploadJob(
+          meetingId: localId,
+          userId: userId,
+          localFilePath: stagingPath,
+          title: trimmedTitle,
+          meetingDate: meetingDate,
+          generate: generate,
+          createdAtMs: DateTime.now().millisecondsSinceEpoch,
+          phase: MeetingUploadPhase.pending,
+          recordingDurationSeconds: recordingDurationSeconds.clamp(
+            0,
+            24 * 60 * 60,
+          ),
+          error: '网络不可用，已保存在本机',
+        );
+        _jobs = <MeetingUploadJob>[..._jobs, job];
+        await MeetingUploadStorage.save(userId, _jobs);
+        notifyListeners();
+        _scheduleRetryTimer();
+        return localId;
+      }
       if (!jobQueued) {
         _runningMeetingIds.remove(meetingId);
         await _deleteLocalFile(stagingPath);
@@ -173,10 +222,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     }
   }
 
-  Future<void> _startJob(
-    int meetingId, {
-    bool alreadyClaimed = false,
-  }) async {
+  Future<void> _startJob(int meetingId, {bool alreadyClaimed = false}) async {
     if (alreadyClaimed) {
       _runningMeetingIds.add(meetingId);
     } else if (!_runningMeetingIds.add(meetingId)) {
@@ -191,11 +237,31 @@ class MeetingUploadCoordinator extends ChangeNotifier {
           job.phase != MeetingUploadPhase.uploading) {
         return;
       }
-      await _runJob(idx);
+      await _runJob(
+        idx,
+        onMeetingIdChanged: (nextId) {
+          _runningMeetingIds.remove(meetingId);
+          meetingId = nextId;
+          _runningMeetingIds.add(meetingId);
+        },
+      );
     } finally {
       _runningMeetingIds.remove(meetingId);
       _scheduleRetryTimer();
     }
+  }
+
+  /// 丢掉尚未上传的本机草稿，并删除本地录音文件。
+  Future<void> discardOfflineDraft(int meetingId) async {
+    if (meetingId >= 0) return;
+    final idx = _indexOfJob(meetingId);
+    if (idx < 0) return;
+    final job = _jobs[idx];
+    _runningMeetingIds.remove(meetingId);
+    await _deleteLocalFile(job.localFilePath);
+    _jobs = List<MeetingUploadJob>.from(_jobs)..removeAt(idx);
+    await _persistJobs();
+    notifyListeners();
   }
 
   Future<void> retry(int meetingId) async {
@@ -298,18 +364,40 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     return job;
   }
 
-  Future<void> _runJob(int index) async {
+  int _allocateLocalMeetingId() {
+    var id = -DateTime.now().millisecondsSinceEpoch;
+    if (id == 0) id = -1;
+    while (_jobs.any((job) => job.meetingId == id)) {
+      id -= 1;
+    }
+    return id;
+  }
+
+  Future<void> _runJob(
+    int index, {
+    void Function(int meetingId)? onMeetingIdChanged,
+  }) async {
     if (index < 0 || index >= _jobs.length) return;
     var job = _jobs[index];
     final svc = _service!;
+    if (job.meetingId < 0) {
+      try {
+        final promoted = await _promoteOfflineDraft(index, svc);
+        index = promoted.index;
+        job = promoted.job;
+        onMeetingIdChanged?.call(job.meetingId);
+      } catch (e) {
+        if (meetingSaveFailureIsOffline(e)) {
+          await _markWaitingForNetwork(index, job);
+          return;
+        }
+        await _markFailed(index, job, _stripError(e), permanent: false);
+        return;
+      }
+    }
     final file = File(job.localFilePath);
     if (!await file.exists()) {
-      await _markFailed(
-        index,
-        job,
-        '本地录音文件已丢失，请重新录制',
-        permanent: true,
-      );
+      await _markFailed(index, job, '本地录音文件已丢失，请重新录制', permanent: true);
       return;
     }
 
@@ -392,6 +480,49 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     }
   }
 
+  Future<({int index, MeetingUploadJob job})> _promoteOfflineDraft(
+    int index,
+    NativeMeetingService svc,
+  ) async {
+    final current = _jobs[index];
+    final meetingId = await svc.createMeeting(
+      title: current.title,
+      meetingDate: current.meetingDate,
+    );
+    if (meetingId <= 0) {
+      throw Exception('创建会议记录失败，请重试');
+    }
+    final destPath = await _renamePersistedCopy(
+      stagingPath: current.localFilePath,
+      meetingId: meetingId,
+    );
+    final promoted = current.copyWith(
+      meetingId: meetingId,
+      localFilePath: destPath,
+      phase: MeetingUploadPhase.uploading,
+      uploadProgressPercent: 0,
+      clearError: true,
+    );
+    _jobs = List<MeetingUploadJob>.from(_jobs)..[index] = promoted;
+    await _persistJobs();
+    notifyListeners();
+    return (index: index, job: promoted);
+  }
+
+  Future<void> _markWaitingForNetwork(int index, MeetingUploadJob job) async {
+    if (index < 0 || index >= _jobs.length) return;
+    final next = job.copyWith(
+      phase: MeetingUploadPhase.pending,
+      uploadProgressPercent: 0,
+      retryCount: 0,
+      error: '网络不可用，已保存在本机',
+    );
+    _jobs = List<MeetingUploadJob>.from(_jobs)..[index] = next;
+    await _persistJobs();
+    notifyListeners();
+    _scheduleRetryTimer();
+  }
+
   Future<void> _markFailed(
     int index,
     MeetingUploadJob job,
@@ -401,8 +532,9 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     if (index < 0 || index >= _jobs.length) return;
     final next = job.copyWith(
       phase: permanent ? MeetingUploadPhase.failed : MeetingUploadPhase.pending,
-      uploadProgressPercent:
-          permanent ? job.uploadProgressPercent : job.uploadProgressPercent,
+      uploadProgressPercent: permanent
+          ? job.uploadProgressPercent
+          : job.uploadProgressPercent,
       retryCount: job.retryCount + 1,
       error: message,
     );
@@ -440,8 +572,14 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     final dot = normalized.lastIndexOf('.');
     final ext = dot >= 0 ? normalized.substring(dot).toLowerCase() : '';
     final destPath = ext == '.wav'
-        ? '${normalized.substring(0, dot)}.m4a'.replaceAll('/', Platform.pathSeparator)
-        : '${normalized}_compressed.m4a'.replaceAll('/', Platform.pathSeparator);
+        ? '${normalized.substring(0, dot)}.m4a'.replaceAll(
+            '/',
+            Platform.pathSeparator,
+          )
+        : '${normalized}_compressed.m4a'.replaceAll(
+            '/',
+            Platform.pathSeparator,
+          );
 
     final prepared = await MeetingAudioConverter.prepareForUpload(
       src,

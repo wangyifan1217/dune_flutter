@@ -82,6 +82,7 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
   late List<ChatImageDraft> _drafts;
   int _selected = 0;
   bool _closing = false;
+  bool _preparing = false;
 
   @override
   void initState() {
@@ -178,22 +179,31 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
   }
 
   Future<void> _confirmSend() async {
+    if (_preparing || _closing) return;
+    setState(() => _preparing = true);
     // 非原图且未编辑：发送前压缩，保持「查看原图」对应压缩后的全图 + 另存预览缩略图。
-    for (final draft in _drafts) {
-      if (draft.isGif || draft.edited || draft.sendAsOriginal) continue;
-      final compressed = await compressChatImageForSend(
-        draft.sourceBytes,
-        fileName: draft.sourceFileName,
-      );
-      if (compressed != null) {
-        draft.bytes = compressed;
-        draft.fileName = chatImageEditedFileName(draft.sourceFileName);
-      } else {
-        draft.bytes = draft.sourceBytes;
-        draft.fileName = draft.sourceFileName;
+    try {
+      for (final draft in _drafts) {
+        if (!mounted || _closing) return;
+        if (draft.isGif || draft.edited || draft.sendAsOriginal) continue;
+        final compressed = await compressChatImageForSend(
+          draft.sourceBytes,
+          fileName: draft.sourceFileName,
+        );
+        if (!mounted || _closing) return;
+        if (compressed != null) {
+          draft.bytes = compressed;
+          draft.fileName = chatImageEditedFileName(draft.sourceFileName);
+        } else {
+          draft.bytes = draft.sourceBytes;
+          draft.fileName = draft.sourceFileName;
+        }
       }
+    } catch (_) {
+      if (mounted && !_closing) setState(() => _preparing = false);
+      return;
     }
-    if (!mounted) return;
+    if (!mounted || _closing) return;
     _closing = true;
     Navigator.pop(context, _drafts);
   }
@@ -221,11 +231,16 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
         title: Text(_drafts.length == 1 ? '预览' : '预览 (${_drafts.length})'),
         actions: [
           if (canEdit)
-            TextButton(onPressed: _editCurrent, child: const Text('编辑')),
+            TextButton(
+              onPressed: _preparing ? null : _editCurrent,
+              child: const Text('编辑'),
+            ),
           TextButton(
-            onPressed: _confirmSend,
+            onPressed: _preparing ? null : _confirmSend,
             child: Text(
-              _drafts.length == 1 ? '发送' : '发送(${_drafts.length})',
+              _preparing
+                  ? '处理中'
+                  : (_drafts.length == 1 ? '发送' : '发送(${_drafts.length})'),
               style: TextStyle(
                 color: DunesColors.resolveNullable(context, Color(0xFF07C160)),
                 fontWeight: FontWeight.w600,
@@ -234,212 +249,245 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: canEdit ? _editCurrent : null,
-              child: Center(
-                child: InteractiveViewer(
-                  minScale: 0.5,
-                  maxScale: 4,
-                  child: Image.memory(
-                    draft.bytes,
-                    fit: BoxFit.contain,
-                    gaplessPlayback: true,
+          Column(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: canEdit ? _editCurrent : null,
+                  child: Center(
+                    child: InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 4,
+                      child: Image.memory(
+                        draft.bytes,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SafeArea(
+                top: false,
+                child: Container(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFF161616),
+                    role: DunesColorRole.surface,
+                  ),
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_anyAllowsOriginal)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: Checkbox(
+                                  value: _sendAsOriginal,
+                                  activeColor: DunesColors.resolve(
+                                    context,
+                                    const Color(0xFF07C160),
+                                  ),
+                                  side: BorderSide(
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white54,
+                                      role: DunesColorRole.border,
+                                    ),
+                                  ),
+                                  onChanged: _toggleOriginal,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () => _toggleOriginal(!_sendAsOriginal),
+                                child: Text(
+                                  _sendAsOriginal
+                                      ? '原图 ($_originalSizeLabel)'
+                                      : '原图',
+                                  style: TextStyle(
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white,
+                                    ),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              if (_sendAsOriginal) ...[
+                                const SizedBox(width: 8),
+                                Text(
+                                  '将上传未压缩原图',
+                                  style: TextStyle(
+                                    color: DunesColors.resolve(
+                                      context,
+                                      Colors.white54,
+                                    ),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 72,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _drafts.length,
+                                separatorBuilder: (_, _) =>
+                                    const SizedBox(width: 8),
+                                itemBuilder: (context, index) {
+                                  final item = _drafts[index];
+                                  final selected = index == _selected;
+                                  return GestureDetector(
+                                    onTap: () =>
+                                        setState(() => _selected = index),
+                                    child: Container(
+                                      width: 72,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: selected
+                                              ? DunesColors.resolve(
+                                                  context,
+                                                  const Color(0xFF07C160),
+                                                  role: DunesColorRole.border,
+                                                )
+                                              : DunesColors.resolve(
+                                                  context,
+                                                  Colors.white24,
+                                                  role: DunesColorRole.border,
+                                                ),
+                                          width: selected ? 2 : 1,
+                                        ),
+                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          Image.memory(
+                                            item.bytes,
+                                            fit: BoxFit.cover,
+                                            gaplessPlayback: true,
+                                          ),
+                                          if (item.sendAsOriginal &&
+                                              !item.edited)
+                                            Align(
+                                              alignment: Alignment.topLeft,
+                                              child: Padding(
+                                                padding: EdgeInsets.all(4),
+                                                child: DecoratedBox(
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        DunesColors.resolveNullable(
+                                                          context,
+                                                          Color(0x99000000),
+                                                          role: DunesColorRole
+                                                              .surface,
+                                                        ),
+                                                    borderRadius:
+                                                        BorderRadius.all(
+                                                          Radius.circular(4),
+                                                        ),
+                                                  ),
+                                                  child: Padding(
+                                                    padding:
+                                                        EdgeInsets.symmetric(
+                                                          horizontal: 4,
+                                                          vertical: 1,
+                                                        ),
+                                                    child: Text(
+                                                      '原图',
+                                                      style: TextStyle(
+                                                        color:
+                                                            DunesColors.resolve(
+                                                              context,
+                                                              Colors.white,
+                                                            ),
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          if (selected)
+                                            Align(
+                                              alignment: Alignment.bottomRight,
+                                              child: Padding(
+                                                padding: EdgeInsets.all(4),
+                                                child: Icon(
+                                                  Icons.check_circle,
+                                                  size: 16,
+                                                  color:
+                                                      DunesColors.resolveNullable(
+                                                        context,
+                                                        Color(0xFF07C160),
+                                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: '删除当前',
+                            onPressed: _removeCurrent,
+                            icon: Icon(
+                              Icons.delete_outline,
+                              color: DunesColors.resolve(
+                                context,
+                                Colors.white70,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_preparing)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Color(0x99000000),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: Colors.white),
+                      SizedBox(height: 12),
+                      Text(
+                        '正在处理图片…',
+                        style: TextStyle(color: Colors.white, fontSize: 15),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          ),
-          SafeArea(
-            top: false,
-            child: Container(
-              color: DunesColors.resolve(
-                context,
-                const Color(0xFF161616),
-                role: DunesColorRole.surface,
-              ),
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_anyAllowsOriginal)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: Checkbox(
-                              value: _sendAsOriginal,
-                              activeColor: DunesColors.resolve(
-                                context,
-                                const Color(0xFF07C160),
-                              ),
-                              side: BorderSide(
-                                color: DunesColors.resolve(
-                                  context,
-                                  Colors.white54,
-                                  role: DunesColorRole.border,
-                                ),
-                              ),
-                              onChanged: _toggleOriginal,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            onTap: () => _toggleOriginal(!_sendAsOriginal),
-                            child: Text(
-                              _sendAsOriginal
-                                  ? '原图 ($_originalSizeLabel)'
-                                  : '原图',
-                              style: TextStyle(
-                                color: DunesColors.resolve(
-                                  context,
-                                  Colors.white,
-                                ),
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          if (_sendAsOriginal) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              '将上传未压缩原图',
-                              style: TextStyle(
-                                color: DunesColors.resolve(
-                                  context,
-                                  Colors.white54,
-                                ),
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 72,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _drafts.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(width: 8),
-                            itemBuilder: (context, index) {
-                              final item = _drafts[index];
-                              final selected = index == _selected;
-                              return GestureDetector(
-                                onTap: () => setState(() => _selected = index),
-                                child: Container(
-                                  width: 72,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                      color: selected
-                                          ? DunesColors.resolve(
-                                              context,
-                                              const Color(0xFF07C160),
-                                              role: DunesColorRole.border,
-                                            )
-                                          : DunesColors.resolve(
-                                              context,
-                                              Colors.white24,
-                                              role: DunesColorRole.border,
-                                            ),
-                                      width: selected ? 2 : 1,
-                                    ),
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      Image.memory(
-                                        item.bytes,
-                                        fit: BoxFit.cover,
-                                        gaplessPlayback: true,
-                                      ),
-                                      if (item.sendAsOriginal && !item.edited)
-                                        Align(
-                                          alignment: Alignment.topLeft,
-                                          child: Padding(
-                                            padding: EdgeInsets.all(4),
-                                            child: DecoratedBox(
-                                              decoration: BoxDecoration(
-                                                color:
-                                                    DunesColors.resolveNullable(
-                                                      context,
-                                                      Color(0x99000000),
-                                                      role: DunesColorRole
-                                                          .surface,
-                                                    ),
-                                                borderRadius: BorderRadius.all(
-                                                  Radius.circular(4),
-                                                ),
-                                              ),
-                                              child: Padding(
-                                                padding: EdgeInsets.symmetric(
-                                                  horizontal: 4,
-                                                  vertical: 1,
-                                                ),
-                                                child: Text(
-                                                  '原图',
-                                                  style: TextStyle(
-                                                    color: DunesColors.resolve(
-                                                      context,
-                                                      Colors.white,
-                                                    ),
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      if (selected)
-                                        Align(
-                                          alignment: Alignment.bottomRight,
-                                          child: Padding(
-                                            padding: EdgeInsets.all(4),
-                                            child: Icon(
-                                              Icons.check_circle,
-                                              size: 16,
-                                              color:
-                                                  DunesColors.resolveNullable(
-                                                    context,
-                                                    Color(0xFF07C160),
-                                                  ),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: '删除当前',
-                        onPressed: _removeCurrent,
-                        icon: Icon(
-                          Icons.delete_outline,
-                          color: DunesColors.resolve(context, Colors.white70),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );

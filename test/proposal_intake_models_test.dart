@@ -364,6 +364,23 @@ void main() {
     }, source);
     expect(proposalIntakeFormSyncSourceCode(form), 'DIGITALG');
     expect(proposalIntakeSkuDetails(form).single.syncSourceCode, 'DIGITALG');
+    final supplied = proposalIntakeApplyFormSyncSource({
+      'supplyProducts': [
+        {
+          'id': 'sp-1',
+          'syncSourceRef': {'code': 'OLD', 'name': '旧平台'},
+          'supplierCode': 'S1',
+          'settlements': [
+            {'id': 'st-1', 'settleRatio': '0.1'},
+          ],
+        },
+      ],
+    }, source, overwriteSkus: true);
+    final supply = proposalIntakeSupplyProducts(supplied).single;
+    expect(proposalIntakeFormSyncSourceCode(supplied), 'DIGITALG');
+    expect(supply.syncSourceCode, 'OLD');
+    expect(supply.supplierCode, 'S1');
+    expect(supply.settlements.single.terms.settleRatio, '0.1');
     expect(
       proposalIntakeResolvedSyncSourceCode(
         form,
@@ -650,6 +667,7 @@ void main() {
     );
     expect(synced, hasLength(1));
     expect(synced.single.terms.settleModeRef?.code, '1');
+    expect(synced.single.terms.settleModeRef?.settleMethod, '1');
     expect(synced.single.terms.settleRatio, '0.985');
     expect(
       proposalIntakeSettlementsFromChannelCatalog(
@@ -3987,11 +4005,18 @@ void main() {
     expect(proposalParseSettleRatio('1%'), 0.01);
     expect(proposalParseSettleRatio('90%'), 0.9);
     expect(proposalParseSettleRatio('0.926'), 0.926);
+    expect(proposalParseSettleRatio('1.0333333'), 1.0333333);
+    expect(proposalParseSettleRatio('4'), 0.04);
+    expect(proposalParseSettleRatio('98.5'), 0.985);
+    expect(proposalRatioDisplayPercent(1.0333333), closeTo(103.33333, 0.000001));
+    expect(proposalRatioDisplayPercent(0.975), 97.5);
+    expect(proposalRatioDisplayPercent(4), 4);
     expect(proposalIntakeSettleRatioFromCatalog(0.975), '0.975');
     expect(proposalIntakeSettleRatioFromCatalog('0.975'), '0.975');
     expect(proposalIntakeSettleRatioFromCatalog(98.5), '0.985');
     expect(proposalIntakeSettleRatioFromCatalog('98.5%'), '0.985');
     expect(proposalIntakeSettleRatioFromCatalog(1), '1');
+    expect(proposalIntakeSettleRatioFromCatalog('1.0333333'), '1.0333333');
   });
 
   test('settlement terms map bill-type fields and keep legacy price/rule', () {
@@ -4531,6 +4556,25 @@ void main() {
           ],
         }),
         contains('供给产品 1 请搜索并选择已建供给产品'),
+      );
+      expect(
+        proposalIntakePurchaseSupplyIssues({
+          'isExistingSupplyProduct': true,
+          'syncSourceRef': {'code': 'P1', 'name': '能源'},
+          'supplyProducts': [
+            {'id': 's1'},
+          ],
+        }),
+        isNot(contains('请先在科技部选择业务平台')),
+      );
+      expect(
+        proposalIntakePurchaseSupplyIssues({
+          'isExistingSupplyProduct': true,
+          'supplyProducts': [
+            {'id': 's1'},
+          ],
+        }),
+        contains('请先在科技部选择业务平台'),
       );
       expect(
         proposalIntakePurchaseSupplyIssues({

@@ -134,6 +134,35 @@ bool shouldPersistNovaGenerating({
   return false;
 }
 
+/// 草稿是显示缓存，不能证明任务还在运行；服务端生成标记优先于旧的本地缓存。
+({bool generating, String status, int afterMessageId, bool clearLocal})
+resolveNovaGeneratingState({
+  required bool serverGenerating,
+  required bool streamInFlight,
+  String status = '',
+  int afterMessageId = 0,
+  NovaGeneratingState? localGen,
+  NovaStreamDraft? draft,
+  bool hasAiReplyAfter = false,
+}) {
+  final stopped =
+      localGen != null && isNovaStoppedGeneratingStatus(localGen.status);
+  final active =
+      !stopped && (streamInFlight || (serverGenerating && !hasAiReplyAfter));
+  return (
+    generating: active,
+    status: active
+        ? (status.isNotEmpty
+              ? status
+              : (localGen?.status ?? draft?.status ?? '正在生成…'))
+        : '',
+    afterMessageId: afterMessageId > 0
+        ? afterMessageId
+        : (localGen?.afterMessageId ?? draft?.afterMessageId ?? 0),
+    clearLocal: !active && localGen != null && !stopped,
+  );
+}
+
 NovaStreamDraft? readNovaStreamDraftFromStorage(
   Map<String, String> storage,
   int convId,
@@ -176,10 +205,9 @@ Future<void> clearNovaGeneratingState({
   required int conversationId,
 }) async {
   if (userId <= 0 || conversationId <= 0) return;
-  final existing = await NovaWebStorage.load(userId);
-  final merged = Map<String, String>.from(existing);
-  merged.remove(novaGeneratingStorageKey(conversationId));
-  await NovaWebStorage.save(userId, Map<String, dynamic>.from(merged));
+  await NovaWebStorage.removeKeys(userId, [
+    novaGeneratingStorageKey(conversationId),
+  ]);
 }
 
 Future<void> clearNovaStreamDraftState({
@@ -187,10 +215,9 @@ Future<void> clearNovaStreamDraftState({
   required int conversationId,
 }) async {
   if (userId <= 0 || conversationId <= 0) return;
-  final existing = await NovaWebStorage.load(userId);
-  final merged = Map<String, String>.from(existing);
-  merged.remove(novaStreamDraftStorageKey(conversationId));
-  await NovaWebStorage.save(userId, Map<String, dynamic>.from(merged));
+  await NovaWebStorage.removeKeys(userId, [
+    novaStreamDraftStorageKey(conversationId),
+  ]);
 }
 
 Future<void> persistNovaStreamDraftState({

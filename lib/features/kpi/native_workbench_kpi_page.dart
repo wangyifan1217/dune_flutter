@@ -338,23 +338,55 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   }
 
   Future<void> _saveSkip(String reason) async {
-    final label = reason.isEmpty ? '取消不考核' : kpiSkipLabel(reason);
+    final label = reason.isEmpty ? '恢复考核' : kpiSkipLabel(reason);
+    final who = _detailName.trim().isEmpty ? '该人员' : _detailName.trim();
+    final ok = await _confirm(
+      title: reason.isEmpty ? '确认恢复考核？' : '确认标记为$label？',
+      content: reason.isEmpty
+          ? '$who 将重新参与本月绩效，并计入均分。'
+          : '$who 本月标记为「$label」，不进入均分，名单上会显示这个标记。',
+      confirmLabel: reason.isEmpty ? '恢复考核' : '确认标记',
+    );
+    if (!ok || !mounted) return;
+    await _applySkip(userId: _detailUserId, reason: reason);
+  }
+
+  Future<void> _markFromList(WorkProfileKpiPerson person) async {
+    final picked = await showDialog<_KpiMarkResult>(
+      context: context,
+      builder: (ctx) => _KpiMarkDialog(
+        name: person.userName,
+        current: person.isSkipped ? person.skipReason : '',
+      ),
+    );
+    if (picked == null || !mounted) return;
+    if (picked.reason == (person.isSkipped ? person.skipReason : '')) return;
+    await _applySkip(userId: person.userId, reason: picked.reason);
+  }
+
+  Future<void> _applySkip({
+    required int userId,
+    required String reason,
+  }) async {
+    final label = reason.isEmpty ? '恢复考核' : kpiSkipLabel(reason);
     setState(() => _busy = true);
     try {
       final score = await _service.saveSkip(
         month: formatKpiMonth(_month),
-        userId: _detailUserId,
+        userId: userId,
         reason: reason,
       );
       if (!mounted) return;
-      setState(() => _detailScore = score);
+      if (userId == _detailUserId) {
+        setState(() => _detailScore = score);
+      }
       unawaited(_load());
-      showDunesToast(context, reason.isEmpty ? '已恢复考核' : '已备注 $label');
+      showDunesToast(context, reason.isEmpty ? '已恢复考核' : '已标记为$label');
     } catch (e) {
       if (mounted) {
         showDunesToast(
           context,
-          friendlyErrorText(e, fallback: '备注失败'),
+          friendlyErrorText(e, fallback: '标记失败'),
           kind: DunesToastKind.error,
         );
       }
@@ -864,6 +896,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       deptNameOf: _deptNameOf,
       scrollController: _scrollController,
       busy: _busy,
+      onMark: _markFromList,
       onOpen: (person) {
         final index = people.indexWhere((e) => e.userId == person.userId);
         unawaited(
@@ -1740,6 +1773,7 @@ class _KpiRosterPane extends StatelessWidget {
     required this.deptNameOf,
     required this.busy,
     required this.onOpen,
+    required this.onMark,
     this.scrollController,
   });
 
@@ -1750,6 +1784,7 @@ class _KpiRosterPane extends StatelessWidget {
   final String Function(WorkProfileKpiPerson person) deptNameOf;
   final bool busy;
   final ValueChanged<WorkProfileKpiPerson> onOpen;
+  final ValueChanged<WorkProfileKpiPerson> onMark;
   final ScrollController? scrollController;
 
   @override
@@ -1789,6 +1824,7 @@ class _KpiRosterPane extends StatelessWidget {
                       last: last,
                       busy: busy,
                       onOpen: () => onOpen(person),
+                      onMark: () => onMark(person),
                     )
                   : _KpiTableRow(
                       person: person,
@@ -1797,6 +1833,7 @@ class _KpiRosterPane extends StatelessWidget {
                       last: last,
                       busy: busy,
                       onOpen: () => onOpen(person),
+                      onMark: () => onMark(person),
                     ),
             );
           }
@@ -2172,6 +2209,7 @@ class _KpiPersonTile extends StatelessWidget {
     required this.last,
     required this.busy,
     required this.onOpen,
+    required this.onMark,
   });
 
   final WorkProfileKpiPerson person;
@@ -2180,6 +2218,7 @@ class _KpiPersonTile extends StatelessWidget {
   final bool last;
   final bool busy;
   final VoidCallback onOpen;
+  final VoidCallback onMark;
 
   @override
   Widget build(BuildContext context) {
@@ -2259,6 +2298,10 @@ class _KpiPersonTile extends StatelessWidget {
                   ],
                 ),
               ),
+              if (person.canWrite) ...[
+                const SizedBox(width: 4),
+                _KpiMarkButton(person: person, busy: busy, onMark: onMark),
+              ],
               const SizedBox(width: 10),
               if (person.isSkipped)
                 _KpiBadge(
@@ -2354,6 +2397,8 @@ class _KpiTableHeader extends StatelessWidget {
           Expanded(flex: 6, child: _KpiColLabel('系数', align: TextAlign.right)),
           SizedBox(width: 24),
           Expanded(flex: 8, child: _KpiColLabel('状态')),
+          const SizedBox(width: 8),
+          SizedBox(width: 64, child: _KpiColLabel('操作')),
         ],
       ),
     );
@@ -2388,6 +2433,7 @@ class _KpiTableRow extends StatelessWidget {
     required this.last,
     required this.busy,
     required this.onOpen,
+    required this.onMark,
   });
 
   final WorkProfileKpiPerson person;
@@ -2396,6 +2442,7 @@ class _KpiTableRow extends StatelessWidget {
   final bool last;
   final bool busy;
   final VoidCallback onOpen;
+  final VoidCallback onMark;
 
   static const _cell = TextStyle(fontSize: 13, color: DunesColors.text2);
 
@@ -2555,8 +2602,35 @@ class _KpiTableRow extends StatelessWidget {
               const SizedBox(width: 24),
               Expanded(
                 flex: 8,
-                child: person.isRubric && !person.isPending && !person.isSkipped
+                child: person.isSkipped
+                    ? Text(
+                        person.skipLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _cell.copyWith(
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _cell.color,
+                          ),
+                        ),
+                      )
+                    : person.isRubric && !person.isPending
                     ? _kpiAckText(person)
+                    : Text(
+                        '—',
+                        style: _cell.copyWith(
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _cell.color,
+                          ),
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 64,
+                child: person.canWrite
+                    ? _KpiMarkButton(person: person, busy: busy, onMark: onMark)
                     : Text(
                         '—',
                         style: _cell.copyWith(
@@ -2571,6 +2645,112 @@ class _KpiTableRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _KpiMarkButton extends StatelessWidget {
+  const _KpiMarkButton({
+    required this.person,
+    required this.busy,
+    required this.onMark,
+  });
+
+  final WorkProfileKpiPerson person;
+  final bool busy;
+  final VoidCallback onMark;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      key: Key('kpi-mark-${person.userId}'),
+      onPressed: busy ? null : onMark,
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        minimumSize: const Size(0, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        foregroundColor: DunesColors.resolve(context, DunesColors.brandPurple),
+      ),
+      child: Text(
+        person.isSkipped ? '修改' : '标记',
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+class _KpiMarkResult {
+  const _KpiMarkResult(this.reason);
+  final String reason;
+}
+
+class _KpiMarkDialog extends StatefulWidget {
+  const _KpiMarkDialog({required this.name, required this.current});
+
+  final String name;
+  final String current;
+
+  @override
+  State<_KpiMarkDialog> createState() => _KpiMarkDialogState();
+}
+
+class _KpiMarkDialogState extends State<_KpiMarkDialog> {
+  late String _reason = widget.current;
+
+  @override
+  Widget build(BuildContext context) {
+    final changed = _reason != widget.current;
+    return AlertDialog(
+      title: const Text('标记本月考核'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${widget.name} 确认后才会写入。标记后不进入本月均分，名单的等级和状态会显示这个结果。'),
+            const SizedBox(height: 8),
+            RadioGroup<String>(
+              groupValue: _reason,
+              onChanged: (value) => setState(() => _reason = value ?? ''),
+              child: Column(
+                children: [
+                  for (final option in kKpiSkipReasons)
+                    RadioListTile<String>(
+                      key: Key('kpi-mark-reason-${option.key}'),
+                      value: option.key,
+                      title: Text(option.value),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  if (widget.current.isNotEmpty)
+                    const RadioListTile<String>(
+                      key: Key('kpi-mark-reason-clear'),
+                      value: '',
+                      title: Text('恢复考核'),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          key: const Key('kpi-mark-ok'),
+          onPressed: changed
+              ? () => Navigator.pop(context, _KpiMarkResult(_reason))
+              : null,
+          child: Text(_reason.isEmpty ? '确认恢复' : '确认标记'),
+        ),
+      ],
     );
   }
 }

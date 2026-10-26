@@ -2,13 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum MeetingUploadPhase {
-  pending,
-  uploading,
-  attaching,
-  done,
-  failed,
-}
+enum MeetingUploadPhase { pending, uploading, attaching, done, failed }
 
 class MeetingUploadJob {
   const MeetingUploadJob({
@@ -45,6 +39,7 @@ class MeetingUploadJob {
       phase == MeetingUploadPhase.attaching;
 
   MeetingUploadJob copyWith({
+    int? meetingId,
     MeetingUploadPhase? phase,
     int? uploadProgressPercent,
     int? retryCount,
@@ -54,7 +49,7 @@ class MeetingUploadJob {
     bool clearError = false,
   }) {
     return MeetingUploadJob(
-      meetingId: meetingId,
+      meetingId: meetingId ?? this.meetingId,
       userId: userId,
       localFilePath: localFilePath ?? this.localFilePath,
       title: title,
@@ -73,19 +68,19 @@ class MeetingUploadJob {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'meetingId': meetingId,
-        'userId': userId,
-        'localFilePath': localFilePath,
-        'title': title,
-        'meetingDate': meetingDate,
-        'generate': generate,
-        'createdAtMs': createdAtMs,
-        'phase': phase.name,
-        'uploadProgressPercent': uploadProgressPercent,
-        'retryCount': retryCount,
-        'recordingDurationSeconds': recordingDurationSeconds,
-        if (error != null && error!.isNotEmpty) 'error': error,
-      };
+    'meetingId': meetingId,
+    'userId': userId,
+    'localFilePath': localFilePath,
+    'title': title,
+    'meetingDate': meetingDate,
+    'generate': generate,
+    'createdAtMs': createdAtMs,
+    'phase': phase.name,
+    'uploadProgressPercent': uploadProgressPercent,
+    'retryCount': retryCount,
+    'recordingDurationSeconds': recordingDurationSeconds,
+    if (error != null && error!.isNotEmpty) 'error': error,
+  };
 
   factory MeetingUploadJob.fromJson(Map<String, dynamic> json) {
     final phaseRaw = (json['phase'] ?? 'pending').toString();
@@ -96,14 +91,16 @@ class MeetingUploadJob {
       title: (json['title'] ?? '').toString(),
       meetingDate: (json['meetingDate'] ?? '').toString(),
       generate: json['generate'] == true,
-      createdAtMs: (json['createdAtMs'] as num?)?.toInt() ??
+      createdAtMs:
+          (json['createdAtMs'] as num?)?.toInt() ??
           DateTime.now().millisecondsSinceEpoch,
       phase: MeetingUploadPhase.values.firstWhere(
         (e) => e.name == phaseRaw,
         orElse: () => MeetingUploadPhase.pending,
       ),
-      uploadProgressPercent:
-          _clampPercent((json['uploadProgressPercent'] as num?)?.toInt() ?? 0),
+      uploadProgressPercent: _clampPercent(
+        (json['uploadProgressPercent'] as num?)?.toInt() ?? 0,
+      ),
       retryCount: (json['retryCount'] as num?)?.toInt() ?? 0,
       recordingDurationSeconds:
           (json['recordingDurationSeconds'] as num?)?.toInt() ?? 0,
@@ -118,6 +115,11 @@ class MeetingUploadJob {
     if (value > 100) return 100;
     return value;
   }
+}
+
+/// 已创建的会议，或尚未创建、只存在本机的离线草稿（meetingId 为负数）。
+bool meetingUploadJobIsPersistable(MeetingUploadJob job) {
+  return job.meetingId != 0 && job.localFilePath.trim().isNotEmpty;
 }
 
 abstract final class MeetingUploadStorage {
@@ -136,7 +138,7 @@ abstract final class MeetingUploadStorage {
       return decoded
           .whereType<Map>()
           .map((e) => MeetingUploadJob.fromJson(Map<String, dynamic>.from(e)))
-          .where((job) => job.meetingId > 0 && job.localFilePath.isNotEmpty)
+          .where(meetingUploadJobIsPersistable)
           .toList(growable: false);
     } catch (_) {
       return const [];

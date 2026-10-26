@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'nova_file_utils.dart';
 import 'nova_stream_parser.dart';
+import 'nova_reply_presentation.dart';
 
 /// 云枢回复中的可交付物（图片 / 文件），对齐 WebView `renderNovaImageCard` / `renderNovaFileCard`。
 class NovaDeliverableItem {
@@ -127,7 +128,9 @@ String stripNovaToolCallLeak(String text) {
 String novaAssistantCopyText(String body) {
   final prep = prepareNovaAssistantBody(body);
   final shown = prep.raw.trim();
-  if (shown.isNotEmpty) return shown;
+  if (shown.isNotEmpty) {
+    return NovaLighthouseReplyPresentation.tryParse(shown)?.copyText ?? shown;
+  }
   return stripNovaToolCallLeak(prep.toolRaw).trim();
 }
 

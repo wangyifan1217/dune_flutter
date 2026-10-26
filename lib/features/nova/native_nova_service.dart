@@ -12,6 +12,7 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import 'nova_draft.dart';
+import 'nova_deliverable.dart';
 import 'nova_file_utils.dart';
 import 'nova_generating_storage.dart';
 import 'nova_history_sync.dart';
@@ -19,6 +20,7 @@ import 'nova_history_utils.dart';
 import 'nova_image_utils.dart';
 import 'nova_inbox_preview.dart';
 import 'nova_model_utils.dart';
+import 'nova_personal_plan.dart';
 import 'nova_personal_query.dart';
 import 'nova_stream_parser.dart';
 import 'nova_web_storage.dart';
@@ -242,6 +244,48 @@ List<NativeNovaMessage> sortNovaMessages(List<NativeNovaMessage> items) {
 
 /// 客户端发送前用毫秒时间戳作临时 id；IM BIGSERIAL 远小于这个值。
 bool isNovaClientTempMessageId(int id) => id >= 1000000000000;
+
+/// 把本轮的客户端临时消息 ID 换成服务端回传的真实 ID（im-svc SSE `user_message` /
+/// `done`、停止接口）。对齐后，本地缓存、IM、审计按 ID 合并，不再依赖文本相同和
+/// 时间窗口（生成超过 3 分钟、时钟偏差、正文规范化差异都会让旧规则合并失败）。
+/// 若列表里已有服务端同 ID 的副本，按 [mergeNovaHistoryById] 合成一条。
+List<NativeNovaMessage> remapNovaTurnMessageIds(
+  List<NativeNovaMessage> rows, {
+  int localUserId = 0,
+  int serverUserId = 0,
+  int localAssistantId = 0,
+  int serverAssistantId = 0,
+}) {
+  final remapUser =
+      localUserId > 0 && serverUserId > 0 && localUserId != serverUserId;
+  final remapAssistant =
+      localAssistantId > 0 &&
+      serverAssistantId > 0 &&
+      localAssistantId != serverAssistantId;
+  if (!remapUser && !remapAssistant) return rows;
+  final out = <NativeNovaMessage>[];
+  final indexById = <int, int>{};
+  for (final m in rows) {
+    var next = m;
+    if (remapUser && m.role == 'user' && m.id == localUserId) {
+      next = m.copyWith(id: serverUserId);
+    } else if (remapAssistant &&
+        m.role == 'assistant' &&
+        m.id == localAssistantId) {
+      next = m.copyWith(id: serverAssistantId);
+    }
+    if (!next.isWelcome && next.id > 0) {
+      final existing = indexById[next.id];
+      if (existing != null && out[existing].role == next.role) {
+        out[existing] = mergeNovaHistoryById(out[existing], next);
+        continue;
+      }
+      indexById[next.id] = out.length;
+    }
+    out.add(next);
+  }
+  return out;
+}
 
 /// 回复被写进了用户气泡：kind 已是助手、带思考正文，或正文是模型要求的长 Markdown。
 bool isMisplacedNovaUserReply(NativeNovaMessage m) {
@@ -909,20 +953,92 @@ List<NativeNovaMessage> reconcileMisclassifiedNovaRoles(
   return sortNovaMessages([...welcome, ...fixed]);
 }
 
-bool _novaHasAiReplyAfter(List<NativeNovaMessage> rows, int afterMessageId) {
-  if (afterMessageId <= 0) return false;
-  var seen = false;
-  for (final m in rows) {
-    if (m.isWelcome) continue;
-    if (m.id == afterMessageId) {
-      seen = true;
-      continue;
+/// 临时消息 ID 可能已被 IM 换成真实 ID，按本轮用户消息的文本与时间兜底匹配。
+bool novaHasReplyForDraft(
+  List<NativeNovaMessage> rows, {
+  required int afterMessageId,
+  NovaStreamDraft? draft,
+}) {
+  var index = rows.indexWhere(
+    (m) => m.role == 'user' && m.id == afterMessageId,
+  );
+  if (index < 0 && draft != null && draft.userText.trim().isNotEmpty) {
+    for (var i = rows.length - 1; i >= 0; i--) {
+      if (rows[i].role == 'user' &&
+          novaHasMatchingUserMessage(
+            [rows[i]],
+            afterMessageId: afterMessageId,
+            userText: draft.userText,
+          )) {
+        index = i;
+        break;
+      }
     }
-    if (!seen) continue;
-    if (m.streaming) continue;
-    if (m.role == 'assistant' && m.text.trim().isNotEmpty) return true;
+  }
+  if (index < 0) return false;
+  for (final message in rows.skip(index + 1)) {
+    if (message.role == 'user') break;
+    if (message.role == 'assistant' &&
+        !message.streaming &&
+        novaAssistantCopyText(message.text).isNotEmpty &&
+        message.payload?['nova_retryable'] != true)
+      return true;
   }
   return false;
+}
+
+/// 进程退出或连接中断后的草稿保留已生成文字，并明确提示重试，不冒充完成或继续转圈。
+List<NativeNovaMessage> recoverNovaInterruptedDraft(
+  List<NativeNovaMessage> rows, {
+  NovaStreamDraft? draft,
+  int afterMessageId = 0,
+}) {
+  final out = [
+    for (final m in rows)
+      if (!(m.role == 'assistant' &&
+          m.streaming &&
+          m.text.trim().isEmpty &&
+          draft == null))
+        if (m.streaming)
+          m.copyWith(
+            streaming: false,
+            thinkStatus: '回复已中断',
+            payload: {...?m.payload, 'nova_retryable': true},
+          )
+        else
+          m,
+  ];
+  if (draft == null ||
+      draft.expired ||
+      novaHasReplyForDraft(rows, afterMessageId: afterMessageId, draft: draft))
+    return out;
+  final text = draft.text.trim();
+  if (text.isEmpty && draft.userText.trim().isEmpty) return out;
+  final interrupted = draft.streaming;
+  final recovered = NativeNovaMessage(
+    id: afterMessageId > 0 ? afterMessageId + 1 : draft.at + 1,
+    role: 'assistant',
+    text: text.isNotEmpty ? text : '回复已中断，请重试',
+    thinkText: draft.thinkText,
+    thinkStatus: interrupted ? '回复已中断' : '',
+    streaming: false,
+    payload: interrupted ? {'nova_retryable': true} : null,
+    createdAt: DateTime.fromMillisecondsSinceEpoch(draft.at),
+    kind: 'AI_ASSISTANT',
+  );
+  final index = out.indexWhere(
+    (m) =>
+        m.id == recovered.id ||
+        (m.role == 'assistant' &&
+            m.payload?['nova_retryable'] == true &&
+            m.text.trim() == text),
+  );
+  if (index >= 0) {
+    out[index] = recovered;
+  } else {
+    out.add(recovered);
+  }
+  return out;
 }
 
 class NovaHistoryLoadResult {
@@ -931,9 +1047,11 @@ class NovaHistoryLoadResult {
     this.assistantGenerating = false,
     this.generatingStatus = '',
     this.generatingAfterMessageId = 0,
+    this.serverStateKnown = true,
   });
 
   final List<NativeNovaMessage> messages;
+  final bool serverStateKnown;
   final bool assistantGenerating;
   final String generatingStatus;
   final int generatingAfterMessageId;
@@ -1017,6 +1135,21 @@ class NativeNovaService {
   final Map<int, DateTime> _userMessageAtByConv = <int, DateTime>{};
 
   /// SSE 仍在进行（离开 C4 后共享 service 上可能仍在跑）。
+  int _streamConversationId = 0;
+  int _streamEpoch = 0;
+  int _lastStoppedConversationId = 0;
+
+  bool wasStoppedFor(int conversationId) =>
+      userStoppedStream &&
+      conversationId > 0 &&
+      conversationId == _lastStoppedConversationId;
+  final Map<int, int> _personalQueryConversations = {};
+
+  bool isReplyInFlightFor(int conversationId) =>
+      conversationId > 0 &&
+      ((isStreamInFlight && _streamConversationId == conversationId) ||
+          (_personalQueryConversations[conversationId] ?? 0) > 0);
+
   bool get isStreamInFlight => _streamClient != null && !userStoppedStream;
 
   NovaConversationSnapshot? get lastSessionSnapshot => _lastSessionSnapshot;
@@ -1057,49 +1190,244 @@ class NativeNovaService {
     }
   }
 
+  /// 没选能力时，问后端这句话该走灯塔、任务还是普通对话。只用规则，很快。
+  /// 请求失败按普通对话处理，不挡住发送。
+  Future<NovaPersonalCapability?> routePersonal(
+    String text, {
+    bool afterLighthouse = false,
+  }) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return null;
+    try {
+      final resp = await _client
+          .post(
+            _dunesUri('/ai/assistant/route'),
+            headers: _dunesHeaders,
+            body: jsonEncode(<String, Object>{
+              'text': trimmed,
+              'afterLighthouse': afterLighthouse,
+            }),
+          )
+          // 规则判断不了时服务端会看对象名、再问一次模型，最多约 8 秒。
+          .timeout(const Duration(seconds: 10));
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+      final data = decoded is Map ? decoded['data'] : null;
+      if (data is! Map) return null;
+      return novaPersonalCapabilityFromName('${data['capability'] ?? ''}');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  final Set<Completer<void>> _personalCancellations = {};
+  int _personalRequestsInFlight = 0;
+
+  /// 独立于普通聊天 SSE，生命周期恢复不能用旧历史覆盖正在进行的查询。
+  bool get isPersonalQueryInFlight => _personalRequestsInFlight > 0;
+
   /// 任务或灯塔提问交给后端决定查什么。这里只提交原话并取回展示结果。
   Future<NovaPersonalReply> askPersonalCapability({
     required String capability,
     required String text,
+    int conversationId = 0,
+    int userMessageId = 0,
+    List<NativeNovaMessage> existingMessages = const [],
     List<({String role, String text})> history = const [],
     NovaTaskPreview? pendingPreview,
+    Map<String, dynamic>? lastQuery,
+    void Function(String status)? onProgress,
   }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) {
       throw Exception('输入内容为空，无法查询');
     }
-    final resp = await _client
-        .post(
-          _dunesUri('/ai/assistant/personal'),
-          headers: _dunesHeaders,
-          body: jsonEncode(<String, dynamic>{
-            'capability': capability,
-            'text': trimmed,
-            'history': [
-              for (final turn in novaPersonalContextTurns(history))
-                {'role': turn.role, 'text': turn.text},
-            ],
-            if (pendingPreview != null)
-              'pendingPreview': {
-                'kind': pendingPreview.kind,
-                'summary': pendingPreview.summary,
-                if (pendingPreview.taskId != null)
-                  'taskId': pendingPreview.taskId,
-                'body': pendingPreview.body,
-              },
-          }),
-        )
-        .timeout(const Duration(seconds: 70));
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception(_parseApiError(resp, fallback: '小饕这次没有完成查询'));
+    userStoppedStream = false;
+    final cancelled = Completer<void>();
+    _personalCancellations.add(cancelled);
+    _personalRequestsInFlight++;
+    _personalQueryConversations.update(
+      conversationId,
+      (count) => count + 1,
+      ifAbsent: () => 1,
+    );
+    try {
+      if (conversationId > 0) {
+        await persistNovaGeneratingState(
+          userId: session.userId,
+          conversationId: conversationId,
+          status: '正在查询…',
+          afterMessageId: userMessageId,
+        );
+        await persistNovaStreamDraftState(
+          userId: session.userId,
+          conversationId: conversationId,
+          status: '正在查询…',
+          afterMessageId: userMessageId,
+          userText: trimmed,
+          streaming: true,
+        );
+        await persistSession(conversationId, existingMessages);
+      }
+      final req = http.Request('POST', _dunesUri('/ai/assistant/personal'))
+        ..headers.addAll(_dunesHeaders)
+        ..headers['Accept'] = 'text/event-stream, application/json'
+        ..body = jsonEncode(<String, dynamic>{
+          'capability': capability,
+          'text': trimmed,
+          'history': [
+            for (final turn in novaPersonalContextTurns(history))
+              {'role': turn.role, 'text': turn.text},
+          ],
+          if (pendingPreview != null)
+            'pendingPreview': {
+              'kind': pendingPreview.kind,
+              'summary': pendingPreview.summary,
+              if (pendingPreview.taskId != null)
+                'taskId': pendingPreview.taskId,
+              'body': pendingPreview.body,
+            },
+          'lastQuery': ?lastQuery,
+        });
+      final data = await Future.any<Map>([
+        _sendPersonalRequest(req, (status) {
+          if (!cancelled.isCompleted) {
+            if (conversationId > 0) {
+              unawaited(
+                persistNovaStreamDraftState(
+                  userId: session.userId,
+                  conversationId: conversationId,
+                  status: status,
+                  afterMessageId: userMessageId,
+                  userText: trimmed,
+                  streaming: true,
+                ),
+              );
+            }
+            onProgress?.call(status);
+          }
+        }),
+        cancelled.future.then<Map>((_) => throw Exception('已停止生成')),
+      ]).timeout(const Duration(seconds: 180));
+      final reply = _parsePersonalReply(data);
+      if (conversationId > 0 && !cancelled.isCompleted && !reply.routeToChat) {
+        final handled = switch (reply.capability) {
+          NovaPersonalCapability.tasks => 'tasks',
+          NovaPersonalCapability.lighthouse => 'lighthouse',
+          null => capability,
+        };
+        final preview = reply.preview ?? pendingPreview;
+        final userPayload = <String, dynamic>{
+          'nova_personal_capability': handled,
+          if (preview != null)
+            novaTaskPreviewPayloadKey: {
+              'kind': preview.kind,
+              'summary': preview.summary,
+              'taskId': preview.taskId,
+              'body': preview.body,
+            },
+          if (reply.state != null) novaLighthouseStatePayloadKey: reply.state,
+          if (reply.suggestions.isNotEmpty) ...{
+            novaSuggestionsPayloadKey: reply.suggestions,
+            novaSuggestionsCapabilityPayloadKey: handled,
+          },
+          if (reply.chart != null) novaChartPayloadKey: reply.chart,
+        };
+        await persistNovaStreamDraftState(
+          userId: session.userId,
+          conversationId: conversationId,
+          status: '',
+          afterMessageId: userMessageId,
+          userText: trimmed,
+          text: reply.text,
+          streaming: false,
+        );
+        final completedRows = [
+          for (final message in existingMessages)
+            if (message.role == 'user' && message.id == userMessageId)
+              message.copyWith(payload: {...?message.payload, ...userPayload})
+            else
+              message,
+        ];
+        await persistSession(conversationId, completedRows);
+        await commitAssistantReplyToSession(
+          conversationId,
+          replyText: reply.text,
+        );
+        unawaited(
+          persistAssistantTurn(
+            conversationId: conversationId,
+            messageId: userMessageId,
+            userMessage: trimmed,
+            assistantMessage: reply.text,
+            userPayload: userPayload,
+            existingMessages: completedRows,
+          ),
+        );
+        await clearNovaGeneratingState(
+          userId: session.userId,
+          conversationId: conversationId,
+        );
+      }
+      return reply;
+    } finally {
+      _personalCancellations.remove(cancelled);
+      if (!cancelled.isCompleted) cancelled.complete();
+      _personalRequestsInFlight--;
+      final remaining = (_personalQueryConversations[conversationId] ?? 1) - 1;
+      if (remaining <= 0) {
+        _personalQueryConversations.remove(conversationId);
+      } else {
+        _personalQueryConversations[conversationId] = remaining;
+      }
     }
-    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
-    if (decoded is! Map) {
-      throw Exception('小饕没有返回查询结果');
+  }
+
+  /// 服务端支持时按 SSE 推进度，最后一条 done 带结果；旧服务端直接返回 JSON。
+  Future<Map> _sendPersonalRequest(
+    http.Request req,
+    void Function(String status)? onProgress,
+  ) async {
+    final streamed = await _client.send(req);
+    final contentType = streamed.headers['content-type'] ?? '';
+    if (!contentType.contains('text/event-stream')) {
+      final resp = await http.Response.fromStream(streamed);
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        throw Exception(_parseApiError(resp, fallback: '小饕这次没有完成查询'));
+      }
+      final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+      final data = decoded is Map ? decoded['data'] : null;
+      if (data is! Map) throw Exception('小饕没有返回查询结果');
+      return data;
     }
-    final data = decoded['data'];
-    if (data is! Map) {
-      throw Exception('小饕没有返回查询结果');
+    var buffer = '';
+    await for (final chunk in streamed.stream.transform(utf8.decoder)) {
+      buffer += chunk.replaceAll('\r\n', '\n');
+      var split = buffer.indexOf('\n\n');
+      while (split >= 0) {
+        final event = _parseSseBlock(buffer.substring(0, split));
+        buffer = buffer.substring(split + 2);
+        split = buffer.indexOf('\n\n');
+        if (event == null) continue;
+        switch (event['type']) {
+          case 'progress':
+            final status = '${event['text'] ?? ''}'.trim();
+            if (status.isNotEmpty) onProgress?.call(status);
+          case 'done':
+            final data = event['data'];
+            if (data is Map) return data;
+            throw Exception('小饕没有返回查询结果');
+          case 'error':
+            throw Exception('${event['message'] ?? '小饕这次没有完成查询'}');
+        }
+      }
+    }
+    throw Exception('小饕这次没有完成查询，请稍后再试');
+  }
+
+  NovaPersonalReply _parsePersonalReply(Map data) {
+    if ('${data['route'] ?? ''}' == 'chat') {
+      return const NovaPersonalReply('', route: 'chat');
     }
     final replyText = '${data['text'] ?? ''}'.trim();
     if (replyText.isEmpty) {
@@ -1118,7 +1446,59 @@ class NativeNovaService {
             : const <String, dynamic>{},
       );
     }
-    return NovaPersonalReply(replyText, preview: preview);
+    final rawState = data['state'];
+    final rawSuggestions = data['suggestions'];
+    final rawChart = data['chart'];
+    return NovaPersonalReply(
+      replyText,
+      preview: preview,
+      capability: novaPersonalCapabilityFromName('${data['capability'] ?? ''}'),
+      state: rawState is Map ? Map<String, dynamic>.from(rawState) : null,
+      suggestions: rawSuggestions is List
+          ? [
+              for (final item in rawSuggestions)
+                if ('$item'.trim().isNotEmpty) '$item'.trim(),
+            ]
+          : const <String>[],
+      chart: rawChart is Map && NovaChart.fromJson(rawChart) != null
+          ? Map<String, dynamic>.from(rawChart)
+          : null,
+    );
+  }
+
+  static const _insightSeenKey = 'dunes_nova_insight_seen';
+
+  /// 今天还没看过的经营提醒。没有异常的日子直接记为已看，同一天不再请求。
+  Future<NovaInsight?> dailyInsight() async {
+    final today = novaShanghaiDay(DateTime.now());
+    final storage = await NovaWebStorage.load(session.userId);
+    if (storage[_insightSeenKey] == today) return null;
+    final insight = await fetchInsight();
+    if (insight == null) return null;
+    if (insight.isEmpty) {
+      await markInsightSeen();
+      return null;
+    }
+    return insight;
+  }
+
+  Future<void> markInsightSeen() => NovaWebStorage.merge(session.userId, {
+    _insightSeenKey: novaShanghaiDay(DateTime.now()),
+  });
+
+  /// 打开小饕时的经营提醒。没有灯塔权限、没有异常或请求失败时返回 null，不打扰用户。
+  Future<NovaInsight?> fetchInsight() async {
+    try {
+      final resp = await _client
+          .get(_dunesUri('/ai/assistant/insight'), headers: _dunesHeaders)
+          .timeout(const Duration(seconds: 25));
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+      final data = decoded is Map ? decoded['data'] : null;
+      return data is Map ? NovaInsight.fromJson(data) : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   Map<String, String> get _dunesHeaders => <String, String>{
@@ -1357,13 +1737,13 @@ class NativeNovaService {
     final patch = <String, dynamic>{'dunes_nova_conv_id': newId.toString()};
 
     final oldMsgsKey = 'dunes_nova_msgs_$oldId';
-    final newMsgsKey = 'dunes_nova_msgs_$newId';
     final oldMsgs = storage[oldMsgsKey];
     if (oldMsgs != null && oldMsgs.isNotEmpty) {
-      final newMsgs = storage[newMsgsKey];
-      if (newMsgs == null || newMsgs.isEmpty) {
-        patch[newMsgsKey] = oldMsgs;
-      }
+      // 新 ID 下已有 "[]" 或旧快照时，也要合并旧 ID 的正文，再删除旧键。
+      final oldRows = await _loadPersistedSessionMessages(oldId);
+      final newRows = await _loadPersistedSessionMessages(newId);
+      final merged = mergeNovaHistoryCopies(newRows, oldRows);
+      if (merged.isNotEmpty) await _persistSessionMessages(newId, merged);
     }
 
     final oldGenKey = novaGeneratingStorageKey(oldId);
@@ -1525,7 +1905,24 @@ class NativeNovaService {
   }
 
   Future<NovaReadiness> checkReadiness() async {
-    return _refreshNovaCredentials();
+    final readiness = await _refreshNovaCredentials();
+    _readyCheckedAt = readiness.ready ? DateTime.now() : null;
+    return readiness;
+  }
+
+  /// 最近一次就绪检查成功的时间。发送前在有效期内复用，避免每条消息都多一次往返；
+  /// 检查失败从不缓存，进入页面时仍会刷新。
+  DateTime? _readyCheckedAt;
+  static const _readinessReuseWindow = Duration(minutes: 3);
+
+  Future<NovaReadiness> _readinessForSend() async {
+    final at = _readyCheckedAt;
+    if (at != null &&
+        novaApiKey.isNotEmpty &&
+        DateTime.now().difference(at) < _readinessReuseWindow) {
+      return const NovaReadiness(ready: true);
+    }
+    return checkReadiness();
   }
 
   bool _isHttpUrl(String value) {
@@ -1977,9 +2374,11 @@ class NativeNovaService {
     }
 
     NovaConversationSnapshot server;
+    var serverStateKnown = true;
     try {
       server = await fetchConversationAll(conversationId);
     } catch (_) {
+      serverStateKnown = false;
       server = NovaConversationSnapshot(conversationId: conversationId);
     }
     final effectiveConvId = server.conversationId > 0
@@ -2018,7 +2417,7 @@ class NativeNovaService {
     final preserveGeneratingSnapshot = shouldPersistNovaGenerating(
       localGen: localGen,
       draft: streamDraft,
-      streamInFlight: isStreamInFlight,
+      streamInFlight: isReplyInFlightFor(effectiveConvId),
     );
     // 始终拉取 flow-go `/ai/history/turns`：附件与多模态轮次写在 userPayload，
     // IM 快照通常只有正文。此前仅在 server.messages 为空时才请求，导致回看
@@ -2062,26 +2461,41 @@ class NativeNovaService {
         ? await _applyViewSinceFilter(msgs)
         : msgs;
 
-    if (!isStreamInFlight && !preserveGeneratingSnapshot) {
+    if (!isReplyInFlightFor(effectiveConvId) &&
+        !generating &&
+        !preserveGeneratingSnapshot) {
       msgs = _stripIncompleteStreamingMessages(msgs);
     }
 
-    final hasReplyAfter = localGen != null && localGen.afterMessageId > 0
-        ? _novaHasAiReplyAfter(msgs, localGen.afterMessageId)
-        : false;
+    final hasReplyAfter = novaHasReplyForDraft(
+      msgs,
+      afterMessageId: genAfter > 0
+          ? genAfter
+          : localGen?.afterMessageId ?? streamDraft?.afterMessageId ?? 0,
+      draft: streamDraft,
+    );
 
+    if (!serverStateKnown &&
+        localGen != null &&
+        !isNovaStoppedGeneratingStatus(localGen.status) &&
+        !hasReplyAfter) {
+      generating = true;
+      genStatus = '正在恢复回复…';
+      genAfter = localGen.afterMessageId;
+    }
     if (!generating) {
       if (shouldPersistNovaGenerating(
         localGen: localGen,
         draft: streamDraft,
-        streamInFlight: isStreamInFlight,
+        streamInFlight: isReplyInFlightFor(effectiveConvId),
         hasAiReplyAfter: hasReplyAfter,
       )) {
         generating = true;
         genStatus = (localGen?.status ?? streamDraft?.status ?? '').trim();
         if (genStatus.isEmpty) genStatus = '正在生成…';
         genAfter = localGen?.afterMessageId ?? streamDraft?.afterMessageId ?? 0;
-      } else if (localGen != null) {
+      } else if (localGen != null &&
+          !isNovaStoppedGeneratingStatus(localGen.status)) {
         unawaited(
           clearNovaGeneratingState(
             userId: session.userId,
@@ -2099,12 +2513,20 @@ class NativeNovaService {
       );
     }
 
-    if (msgs.isNotEmpty && !generating) {
-      unawaited(_persistSessionMessages(effectiveConvId, msgs));
+    if (serverStateKnown &&
+        !generating &&
+        !isReplyInFlightFor(effectiveConvId)) {
+      msgs = recoverNovaInterruptedDraft(
+        msgs,
+        draft: streamDraft,
+        afterMessageId:
+            localGen?.afterMessageId ?? streamDraft?.afterMessageId ?? 0,
+      );
     }
     return NovaHistoryLoadResult(
       messages: sortNovaMessages(_dedupeNovaHistory(msgs)),
       assistantGenerating: generating,
+      serverStateKnown: serverStateKnown,
       generatingStatus: genStatus,
       generatingAfterMessageId: genAfter,
     );
@@ -2605,6 +3027,10 @@ class NativeNovaService {
     return matched;
   }
 
+  Future<List<NativeNovaMessage>> loadPersistedConversation(
+    int conversationId,
+  ) => _loadPersistedSessionMessages(conversationId);
+
   Future<void> persistSession(
     int conversationId,
     List<NativeNovaMessage> messages,
@@ -2696,6 +3122,20 @@ class NativeNovaService {
       );
     }
     await _persistSessionMessages(conversationId, rows);
+    final storage = await NovaWebStorage.load(session.userId);
+    final draft = readNovaStreamDraftFromStorage(storage, conversationId);
+    if (draft != null) {
+      await persistNovaStreamDraftState(
+        userId: session.userId,
+        conversationId: conversationId,
+        status: userStoppedStream ? '已停止生成' : '',
+        afterMessageId: draft.afterMessageId,
+        userText: draft.userText,
+        text: text,
+        thinkText: thinkText,
+        streaming: false,
+      );
+    }
     await flushConvToLocalHistory(conversationId, rows);
   }
 
@@ -3519,7 +3959,48 @@ class NativeNovaService {
     );
   }
 
+  /// 通知服务端取消该会话正在进行的生成（im-svc `/ai/assistant/stop`）。
+  /// 服务端生成不随 SSE 断开而停止，只关闭本地连接时回复仍会在后台写完。
+  /// [partialText] 为气泡里已展示的正文，服务端停止成功后按原文落库，
+  /// 与本地缓存一致，重进会话不会丢失也不会重复。失败静默：本地停止不依赖它。
+  Future<({bool stopped, int assistantMessageId})> requestServerStop(
+    int conversationId, {
+    String partialText = '',
+  }) async {
+    const none = (stopped: false, assistantMessageId: 0);
+    if (conversationId <= 0) return none;
+    final partial = partialText.trim();
+    try {
+      final resp = await _client
+          .post(
+            _dunesUri('/ai/assistant/stop'),
+            headers: _dunesHeaders,
+            body: jsonEncode(<String, Object>{
+              'conversationId': conversationId,
+              if (partial.isNotEmpty) 'partialText': partial,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return none;
+      final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+      final data = decoded is Map ? decoded['data'] : null;
+      if (data is! Map || data['stopped'] != true) return none;
+      return (
+        stopped: true,
+        assistantMessageId: (data['assistantMessageId'] as num?)?.toInt() ?? 0,
+      );
+    } catch (_) {
+      return none;
+    }
+  }
+
   void cancelActiveStream() {
+    _streamEpoch++;
+    _lastStoppedConversationId =
+        _personalQueryConversations.keys.lastOrNull ?? _streamConversationId;
+    for (final cancelled in _personalCancellations.toList()) {
+      if (!cancelled.isCompleted) cancelled.complete();
+    }
     userStoppedStream = true;
     _streamClient?.close();
     _streamClient = null;
@@ -3998,8 +4479,12 @@ class NativeNovaService {
     bool stream = true,
     required void Function(NovaStreamUpdate update) onUpdate,
     void Function(int conversationId)? onConversationId,
+    void Function(int userMessageId, int assistantMessageId)?
+    onServerMessageIds,
   }) async {
-    final readiness = await checkReadiness();
+    final requestEpoch = ++_streamEpoch;
+    final readiness = await _readinessForSend();
+    if (requestEpoch != _streamEpoch) throw Exception('已停止生成');
     if (!readiness.ready) {
       throw Exception(readiness.message ?? 'NOVA账号尚未开通，请稍后再试');
     }
@@ -4009,11 +4494,39 @@ class NativeNovaService {
     final userPrompt = _withNovaReplyFormat(
       _extractUserPromptText(userContent, displayText: contentLabel.toString()),
     );
+    final notifyUpdate = onUpdate;
+    var lastDraftWrite = 0;
+    // 最近一次草稿写入；完成时先等它落盘再清草稿，避免迟到的写入把草稿写回来。
+    Future<void>? pendingDraftWrite;
+    onUpdate = (update) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (!userStoppedStream &&
+          requestEpoch == _streamEpoch &&
+          now - lastDraftWrite >= 200) {
+        lastDraftWrite = now;
+        unawaited(
+          pendingDraftWrite = persistNovaStreamDraftState(
+            userId: session.userId,
+            conversationId: activeConvId,
+            status: update.thinkStatus.isNotEmpty
+                ? update.thinkStatus
+                : '正在生成…',
+            afterMessageId: userMessageId ?? 0,
+            userText: contentLabel.toString(),
+            thinkText: update.thinkText,
+            text: update.replyText,
+            streaming: true,
+          ),
+        );
+      }
+      notifyUpdate(update);
+    };
     final skipEchoCheck = userContent is List;
     userStoppedStream = false;
 
     _streamClient?.close();
     _streamClient = http.Client();
+    _streamConversationId = activeConvId;
     final streamClient = _streamClient!;
 
     final model = resolveModelForContent(
@@ -4027,15 +4540,41 @@ class NativeNovaService {
     var thinkBuffer = '';
     var hadOutput = false;
     String? streamError;
+    // im-svc 在 user_message / done 事件里回传的真实消息 ID 与最终正文。
+    var serverUserMessageId = 0;
+    var serverAssistantMessageId = 0;
+    var serverFinalText = '';
+
+    Future<void> clearDraftAfterSuccess() async {
+      try {
+        await pendingDraftWrite;
+      } catch (_) {}
+      // 回复已完整落库：草稿只是中断恢复缓存，留着会在之后加载时被误判为「回复已中断」。
+      await clearNovaStreamDraftState(
+        userId: session.userId,
+        conversationId: activeConvId,
+      );
+    }
 
     void applySseEvent(NovaOpenAiSseEvent event) {
       if (event.error != null && event.error!.isNotEmpty) {
         streamError = event.error;
         return;
       }
+      if (event.userMessageId > 0 || event.assistantMessageId > 0) {
+        if (event.userMessageId > 0) {
+          serverUserMessageId = event.userMessageId;
+        }
+        if (event.assistantMessageId > 0) {
+          serverAssistantMessageId = event.assistantMessageId;
+          serverFinalText = event.finalText;
+        }
+        onServerMessageIds?.call(serverUserMessageId, serverAssistantMessageId);
+      }
       if (event.conversationId > 0 && event.conversationId != activeConvId) {
         final previous = activeConvId;
         activeConvId = event.conversationId;
+        _streamConversationId = activeConvId;
         unawaited(remapConversationId(previous, activeConvId));
         onConversationId?.call(activeConvId);
       }
@@ -4082,7 +4621,7 @@ class NativeNovaService {
           .where((e) => e.isNotEmpty)
           .toList(growable: false);
       if (userContent is List || novaAttachmentIds.isNotEmpty) {
-        return await _streamMultimodalViaNovaCompletions(
+        final multimodalReply = await _streamMultimodalViaNovaCompletions(
           conversationId: activeConvId,
           userContent: userContent is String && userContent.trim().isEmpty
               ? contentLabel.toString()
@@ -4095,7 +4634,14 @@ class NativeNovaService {
           onUpdate: onUpdate,
           onConversationId: onConversationId,
           streamClient: streamClient,
+          requestEpoch: requestEpoch,
         );
+        if (!userStoppedStream &&
+            requestEpoch == _streamEpoch &&
+            multimodalReply.trim().isNotEmpty) {
+          await clearDraftAfterSuccess();
+        }
+        return multimodalReply;
       }
 
       // 通过 im-svc 执行生成并持久化完整问答。服务端使用不随客户端断开的
@@ -4152,7 +4698,10 @@ class NativeNovaService {
         }
         onUpdate(NovaStreamUpdate(replyText: reply, thinkStatus: ''));
         await commitAssistantReplyToSession(activeConvId, replyText: reply);
-        await _clearGeneratingMarkersForConversation(activeConvId);
+        await _clearGeneratingMarkersForConversation(
+          activeConvId,
+          streamEpoch: requestEpoch,
+        );
         return reply;
       }
 
@@ -4163,15 +4712,28 @@ class NativeNovaService {
       }
 
       final sseAcc = NovaOpenAiSseAccumulator();
+      // 服务端生成期间每 15 秒发一次心跳注释行；超过该时长没有任何数据，
+      // 说明连接已静默断开（切后台、弱网、网关回收）。按断网处理：关闭连接，
+      // 让页面和后台轮询向服务端确认结果，而不是一直卡在「生成中」。
+      final idleGuarded = streamed.stream
+          .transform(utf8.decoder)
+          .timeout(
+            _sseIdleTimeout,
+            onTimeout: (sink) =>
+                sink.addError(http.ClientException('NOVA 连接长时间无响应')),
+          );
       try {
-        await for (final chunk in streamed.stream.transform(utf8.decoder)) {
-          if (userStoppedStream) break;
+        await for (final chunk in idleGuarded) {
+          if (userStoppedStream || requestEpoch != _streamEpoch) break;
           sseAcc.feed(chunk, applySseEvent);
           if (streamError != null) break;
         }
-        if (!userStoppedStream) sseAcc.flush(applySseEvent);
+        if (!userStoppedStream && requestEpoch == _streamEpoch)
+          sseAcc.flush(applySseEvent);
       } on http.ClientException {
-        if (!userStoppedStream) {
+        // 释放可能仍挂着的连接（空闲超时时底层 socket 尚未关闭）。
+        streamClient.close();
+        if (!userStoppedStream && requestEpoch == _streamEpoch) {
           // 后台/断网时保留 generating 与草稿，由页面 resume 或后台轮询恢复。
           await stripStreamingFromSession(activeConvId);
           rethrow;
@@ -4182,6 +4744,7 @@ class NativeNovaService {
         throw Exception(streamError);
       }
 
+      if (requestEpoch != _streamEpoch) return '';
       if (userStoppedStream) {
         final partial = novaFinalReplyText(
           replyBuffer,
@@ -4205,7 +4768,10 @@ class NativeNovaService {
             thinkText: thinkBuffer.trim(),
           );
         }
-        await _clearGeneratingMarkersForConversation(activeConvId);
+        await _clearGeneratingMarkersForConversation(
+          activeConvId,
+          streamEpoch: requestEpoch,
+        );
         return partial;
       }
 
@@ -4224,6 +4790,12 @@ class NativeNovaService {
       if (reply.isEmpty && finalParts.thinking.trim().isNotEmpty) {
         reply = finalParts.thinking.trim();
       }
+      // 以服务端落库的正文为准：本地缓存与服务端内容一致，重进会话时才能对上。
+      final serverReply = stripHermesProgressLines(serverFinalText.trim());
+      if (serverReply.isNotEmpty) {
+        reply = serverReply;
+        hadOutput = true;
+      }
       if (!hadOutput || reply.isEmpty) {
         if (kDebugMode) {
           debugPrint(
@@ -4241,12 +4813,19 @@ class NativeNovaService {
         replyText: reply,
         thinkText: thinkBuffer.trim(),
       );
-      await _clearGeneratingMarkersForConversation(activeConvId);
+      await _clearGeneratingMarkersForConversation(
+        activeConvId,
+        streamEpoch: requestEpoch,
+      );
+      if (requestEpoch == _streamEpoch) await clearDraftAfterSuccess();
       return reply;
     } finally {
       if (_streamClient == streamClient) _streamClient = null;
     }
   }
+
+  /// SSE 空闲超时：需大于服务端心跳间隔（15 秒）的两倍以上。
+  static const _sseIdleTimeout = Duration(seconds: 45);
 
   /// 多模态附件：直接走云枢 `/v1/chat/completions`（与 admin-web 一致），
   /// 避免 im-svc 纯文本通道丢掉 image_url / file parts。
@@ -4261,6 +4840,7 @@ class NativeNovaService {
     required void Function(NovaStreamUpdate update) onUpdate,
     required void Function(int conversationId)? onConversationId,
     required http.Client streamClient,
+    required int requestEpoch,
   }) async {
     if (novaApiKey.isEmpty) {
       throw Exception('NOVA账号尚未就绪，请重新登录后再试');
@@ -4311,6 +4891,7 @@ class NativeNovaService {
       if (event.conversationId > 0 && event.conversationId != activeConvId) {
         final previous = activeConvId;
         activeConvId = event.conversationId;
+        _streamConversationId = activeConvId;
         unawaited(remapConversationId(previous, activeConvId));
         onConversationId?.call(activeConvId);
       }
@@ -4393,13 +4974,14 @@ class NativeNovaService {
     final sseAcc = NovaOpenAiSseAccumulator();
     try {
       await for (final chunk in streamed.stream.transform(utf8.decoder)) {
-        if (userStoppedStream) break;
+        if (userStoppedStream || requestEpoch != _streamEpoch) break;
         sseAcc.feed(chunk, applySseEvent);
         if (streamError != null) break;
       }
-      if (!userStoppedStream) sseAcc.flush(applySseEvent);
+      if (!userStoppedStream && requestEpoch == _streamEpoch)
+        sseAcc.flush(applySseEvent);
     } on http.ClientException {
-      if (!userStoppedStream) {
+      if (!userStoppedStream && requestEpoch == _streamEpoch) {
         await stripStreamingFromSession(activeConvId);
         rethrow;
       }
@@ -4409,6 +4991,7 @@ class NativeNovaService {
       throw Exception(streamError);
     }
 
+    if (requestEpoch != _streamEpoch) return '';
     if (userStoppedStream) {
       final partial = novaFinalReplyText(
         replyBuffer,
@@ -4432,7 +5015,10 @@ class NativeNovaService {
           userPayload: userMetadata,
         );
       }
-      await _clearGeneratingMarkersForConversation(activeConvId);
+      await _clearGeneratingMarkersForConversation(
+        activeConvId,
+        streamEpoch: requestEpoch,
+      );
       return partial;
     }
 
@@ -4467,7 +5053,10 @@ class NativeNovaService {
       thinkText: thinkBuffer.trim(),
       userPayload: userMetadata,
     );
-    await _clearGeneratingMarkersForConversation(activeConvId);
+    await _clearGeneratingMarkersForConversation(
+      activeConvId,
+      streamEpoch: requestEpoch,
+    );
     return reply;
   }
 
@@ -4620,11 +5209,24 @@ class NativeNovaService {
   }
 
   Future<void> _clearGeneratingMarkersForConversation(
-    int conversationId,
-  ) async {
+    int conversationId, {
+    int? streamEpoch,
+  }) async {
+    if (streamEpoch != null && streamEpoch != _streamEpoch) return;
     final uid = session.userId;
     if (uid <= 0 || conversationId <= 0) return;
-    await clearNovaGeneratingState(userId: uid, conversationId: conversationId);
+    if (userStoppedStream) {
+      await persistNovaGeneratingState(
+        userId: uid,
+        conversationId: conversationId,
+        status: '已停止生成',
+      );
+    } else {
+      await clearNovaGeneratingState(
+        userId: uid,
+        conversationId: conversationId,
+      );
+    }
   }
 
   /// 对齐 WebView `saveNovaServerMessage`：优先保留当前会话，避免失败时切走 convId。

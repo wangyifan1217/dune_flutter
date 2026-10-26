@@ -703,6 +703,7 @@ int kpiPersonScoreCompare(WorkProfileKpiPerson a, WorkProfileKpiPerson b) {
 
 const kKpiSkipReasons = [
   MapEntry('probation', '试用期'),
+  MapEntry('other', '不考核'),
   MapEntry('resigned', '离职'),
   MapEntry('absent', '未出勤'),
 ];

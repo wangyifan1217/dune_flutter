@@ -385,7 +385,7 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
                     decoration:
                         xfInputDecoration(
                           context: context,
-                          hint: '我方主体、对方主体、周期或账单号',
+                          hint: '我方主体、对方主体、省份、周期或账单号',
                         ).copyWith(
                           suffixIcon: IconButton(
                             tooltip: '搜索',

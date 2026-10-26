@@ -604,7 +604,12 @@ class ChannelProductSettlementItem {
     final code = settleMethod;
     if (code == null) return null;
     final name = catalogSettleMethodName(code);
-    return CatalogRef(code: '$code', name: name.isEmpty ? '$code' : name);
+    final key = '$code';
+    return CatalogRef(
+      code: key,
+      name: name.isEmpty ? key : name,
+      settleMethod: key,
+    );
   }
 
   CatalogRef? get formulaRef {
@@ -1065,9 +1070,11 @@ class SettlementCatalogService {
       (item) {
         if (item is! Map) return CatalogRef.empty;
         final map = Map<String, dynamic>.from(item);
+        final code = '${map['code'] ?? ''}'.trim();
         return CatalogRef(
-          code: '${map['code'] ?? ''}'.trim(),
+          code: code,
           name: '${map['name'] ?? ''}'.trim(),
+          settleMethod: code,
         );
       },
       query: {
@@ -1076,6 +1083,16 @@ class SettlementCatalogService {
           'productSource': productSource.trim(),
       },
     );
+  }
+
+  /// 发票字典。查询接口的 `invoiceType` 必须是这里的 `code`。
+  Future<List<CatalogRef>> fetchInvoiceTypes() async {
+    return _mapList('/out/shaqiu/catalog/invoice-type', CatalogRef.fromJson);
+  }
+
+  /// 税率字典。查询接口的 `taxRate` 必须是这里的 `code`。
+  Future<List<CatalogRef>> fetchTaxRates() async {
+    return _mapList('/out/shaqiu/catalog/tax-rate', CatalogRef.fromJson);
   }
 
   Future<List<CatalogRef>> fetchFormulas({
@@ -1164,7 +1181,7 @@ class SettlementCatalogService {
   }
 }
 
-/// 资管结算字典不含票种/税率，协作提案用常用开票选项。
+/// 销售合同、采购发票种类。产品结算不要用这份，结算发票和税率必须写资管字典 code。
 const kProposalInvoiceTypes = <String>[
   '增值税专用发票',
   '增值税普通发票',
@@ -1180,6 +1197,44 @@ bool proposalInvoiceDeductible(String invoiceType) =>
     invoiceType.contains('专用');
 
 const kProposalTaxRates = <String>['0%', '1%', '3%', '5%', '6%', '9%', '13%'];
+
+/// 资管发票字典还没拉到时的 code。与 `/out/shaqiu/catalog/invoice-type` 一致。
+const kProposalAssetInvoiceTypeCodes = <String>[
+  '专票',
+  '普票',
+  '无',
+  '增值税普通发票',
+  '增值税专用发票',
+  '增值税发票',
+];
+
+/// 资管税率字典还没拉到时的 code。与 `/out/shaqiu/catalog/tax-rate` 一致。
+const kProposalAssetTaxRateCodes = <String>[
+  '0',
+  '0%',
+  '0.06',
+  '0.13',
+  '5%',
+  '6%',
+  '9%',
+  '11%',
+  '13%',
+  '无',
+];
+
+List<CatalogRef> proposalAssetCodeOptions(
+  List<CatalogRef> catalog,
+  List<String> fallbackCodes,
+) {
+  final fromCatalog = [
+    for (final item in catalog)
+      if (item.code.trim().isNotEmpty) item,
+  ];
+  if (fromCatalog.isNotEmpty) return fromCatalog;
+  return [
+    for (final code in fallbackCodes) CatalogRef(code: code, name: code),
+  ];
+}
 
 /// 财务板块默认结算模式；后台「提案录入选项」未配置时使用。
 const kProposalPreSettleModes = <String>['预付款', '分期', '按月对账'];

@@ -217,6 +217,9 @@ class NovaOpenAiSseEvent {
     this.status = '',
     this.conversationId = 0,
     this.error,
+    this.userMessageId = 0,
+    this.assistantMessageId = 0,
+    this.finalText = '',
   });
 
   final String text;
@@ -224,6 +227,15 @@ class NovaOpenAiSseEvent {
   final String status;
   final int conversationId;
   final String? error;
+
+  /// im-svc `user_message`：服务端为本轮提问分配的真实消息 ID。
+  final int userMessageId;
+
+  /// im-svc `done`：服务端落库的回复消息 ID（被停止时为 0）。
+  final int assistantMessageId;
+
+  /// im-svc `done`：服务端落库的完整回复正文（已通过 delta 推送过，不再追加）。
+  final String finalText;
 }
 
 NovaOpenAiSseEvent? parseNovaOpenAiSseJson(Map<String, dynamic> json) {
@@ -238,7 +250,10 @@ NovaOpenAiSseEvent? parseNovaOpenAiSseJson(Map<String, dynamic> json) {
     final conversationId = (data['conversationId'] as num?)?.toInt() ?? 0;
     switch (wrappedEvent) {
       case 'user_message':
-        return NovaOpenAiSseEvent(conversationId: conversationId);
+        return NovaOpenAiSseEvent(
+          conversationId: conversationId,
+          userMessageId: (data['messageId'] as num?)?.toInt() ?? 0,
+        );
       case 'delta':
         return text.isEmpty
             ? null
@@ -263,7 +278,14 @@ NovaOpenAiSseEvent? parseNovaOpenAiSseJson(Map<String, dynamic> json) {
         return NovaOpenAiSseEvent(error: message);
       case 'done':
         // `text` is the complete reply, already delivered through delta events.
-        return null;
+        // 只带回服务端 ID 与最终正文，用于把本地临时消息对齐到服务端，不追加正文。
+        final assistantMessageId = (data['messageId'] as num?)?.toInt() ?? 0;
+        if (assistantMessageId <= 0) return null;
+        return NovaOpenAiSseEvent(
+          conversationId: conversationId,
+          assistantMessageId: assistantMessageId,
+          finalText: text,
+        );
     }
   }
 

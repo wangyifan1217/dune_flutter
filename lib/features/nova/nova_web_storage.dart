@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,9 +8,33 @@ import 'package:shared_preferences/shared_preferences.dart';
 abstract final class NovaWebStorage {
   static const _keyPrefix = 'dunes_nova_web_state_v1_';
 
-  static String _storageKey(int userId) => '$_keyPrefix$userId';
+  // 流式草稿、生成标记和历史共用同一份 JSON，必须串行读改写。
+  static final Map<int, Future<void>> _writes = {};
+
+  static Future<T> _mutate<T>(int userId, Future<T> Function() action) {
+    final previous = _writes[userId] ?? Future<void>.value();
+    final operation = previous.then((_) => action());
+    final tail = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    _writes[userId] = tail;
+    unawaited(
+      tail.then((_) {
+        if (identical(_writes[userId], tail)) _writes.remove(userId);
+      }),
+    );
+    return operation;
+  }
 
   static Future<Map<String, String>> load(int userId) async {
+    await _writes[userId];
+    return _load(userId);
+  }
+
+  static String _storageKey(int userId) => '$_keyPrefix$userId';
+
+  static Future<Map<String, String>> _load(int userId) async {
     if (userId <= 0) return const {};
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -29,8 +54,11 @@ abstract final class NovaWebStorage {
     }
   }
 
-  static Future<void> save(int userId, Map<String, dynamic> data) async {
-    if (userId <= 0 || data.isEmpty) return;
+  static Future<void> save(int userId, Map<String, dynamic> data) =>
+      _mutate(userId, () => _save(userId, data));
+
+  static Future<void> _save(int userId, Map<String, dynamic> data) async {
+    if (userId <= 0) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final out = <String, String>{};
@@ -40,7 +68,10 @@ abstract final class NovaWebStorage {
         if (text.isEmpty) return;
         if (_shouldPersistKey(key.toString())) out[key.toString()] = text;
       });
-      if (out.isEmpty) return;
+      if (out.isEmpty) {
+        await prefs.remove(_storageKey(userId));
+        return;
+      }
       await prefs.setString(_storageKey(userId), jsonEncode(out));
     } catch (_) {}
   }
@@ -49,9 +80,9 @@ abstract final class NovaWebStorage {
   static Future<Map<String, String>> merge(
     int userId,
     Map<String, dynamic> patch,
-  ) async {
-    if (userId <= 0 || patch.isEmpty) return load(userId);
-    final existing = await load(userId);
+  ) => _mutate(userId, () async {
+    if (userId <= 0 || patch.isEmpty) return _load(userId);
+    final existing = await _load(userId);
     final merged = Map<String, String>.from(existing);
     patch.forEach((key, value) {
       if (value == null) return;
@@ -63,32 +94,32 @@ abstract final class NovaWebStorage {
       }
       merged[key] = text;
     });
-    await save(userId, Map<String, dynamic>.from(merged));
+    await _save(userId, Map<String, dynamic>.from(merged));
     return merged;
-  }
+  });
 
   /// 删除指定键，对齐 WebView `localStorage.removeItem`。
   static Future<Map<String, String>> removeKeys(
     int userId,
     Iterable<String> keys,
-  ) async {
-    if (userId <= 0) return load(userId);
-    final existing = await load(userId);
+  ) => _mutate(userId, () async {
+    if (userId <= 0) return _load(userId);
+    final existing = await _load(userId);
     final merged = Map<String, String>.from(existing);
     var changed = false;
     for (final key in keys) {
       if (merged.remove(key) != null) changed = true;
     }
     if (!changed) return merged;
-    await save(userId, Map<String, dynamic>.from(merged));
+    await _save(userId, Map<String, dynamic>.from(merged));
     return merged;
-  }
+  });
 
-  static Future<void> clear(int userId) async {
+  static Future<void> clear(int userId) => _mutate(userId, () async {
     if (userId <= 0) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_storageKey(userId));
-  }
+  });
 
   static bool _shouldPersistKey(String key) {
     if (_exactKeys.contains(key)) return true;
@@ -107,6 +138,7 @@ abstract final class NovaWebStorage {
     'dunes_nova_chat_model',
     'dunes_nova_view_since',
     'dunes_nova_history_sync_queue',
+    'dunes_nova_insight_seen',
     'dunes_ai_local_purge_v',
     'dunes_kb_local_history',
     'dunes_kb_conv_id',

@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../nova/presence/nova_presence_host.dart';
+import '../nova/nova_background_coordinator.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/platform/desktop_features.dart';
@@ -328,7 +329,10 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     required VoidCallback? settingsTap,
   }) {
     final tabs = _tabs;
-    final screens = ['C1', if (!_hideWorkbenchTabs) ...['QJ', 'LH', 'QJA']];
+    final screens = [
+      'C1',
+      if (!_hideWorkbenchTabs) ...['QJ', 'LH', 'QJA'],
+    ];
     final index = screens.indexOf(widget.activeScreen);
     final showRailNova = !widget.chatOnlyMode;
     final novaSlot = showRailNova ? 64.0 : 0.0;
@@ -430,13 +434,55 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ClipOval(
-                  child: Image.asset(
-                    'assets/images/ai_tab_avatar.png',
-                    width: 28,
-                    height: 28,
-                    fit: BoxFit.cover,
-                  ),
+                ListenableBuilder(
+                  listenable: NovaBackgroundCoordinator.instance,
+                  builder: (context, _) {
+                    final unread =
+                        NovaBackgroundCoordinator.instance.hasUnreadReply;
+                    return Semantics(
+                      label: unread ? '小饕，有未读回复' : '小饕',
+                      child: SizedBox(
+                        width: 34,
+                        height: 30,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Align(
+                              alignment: Alignment.bottomCenter,
+                              child: ClipOval(
+                                child: Image.asset(
+                                  'assets/images/ai_tab_avatar.png',
+                                  width: 28,
+                                  height: 28,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                            if (unread)
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: Container(
+                                  key: const ValueKey('nova-rail-unread-dot'),
+                                  width: 9,
+                                  height: 9,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF5B61),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.surface,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 2),
                 Text(

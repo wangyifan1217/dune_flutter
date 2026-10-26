@@ -934,4 +934,71 @@ void main() {
     expect(data?.items, hasLength(1));
     expect(data?.items.single.billTypeRef?.displayPath, '应付账单 / 采购款 / 电子券采购款');
   });
+
+  test('settle mode snapshot keeps the dictionary key 资管 queries', () {
+    final item = ChannelProductSettlementItem.fromJson({
+      'settleMethod': 1,
+      'billTypeL3Code': 'ar_XSK_DZQXSK',
+      'billTypeL3Name': '电子券销售款',
+    });
+    expect(item.billTypeRef?.code, 'ar_XSK_DZQXSK');
+    expect(item.settleModeRef?.toJson(), {
+      'code': '1',
+      'name': '按结算比例结算',
+      'settleMethod': '1',
+    });
+  });
+
+  test('fetchSettleMethods stores settle method code as the lookup key', () async {
+    final client = MockClient((request) async {
+      expect(request.url.path, contains('/out/shaqiu/catalog/settle-method'));
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'data': [
+            {'code': 1, 'name': '按结算比例结算'},
+            {'code': 2, 'name': '按结算单价'},
+          ],
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final rows = await catalog.fetchSettleMethods(
+      syncSource: 'DIGITALG',
+      productSource: 'CHANNEL',
+    );
+    expect(rows.map((item) => item.toJson()).toList(), [
+      {'code': '1', 'name': '按结算比例结算', 'settleMethod': '1'},
+      {'code': '2', 'name': '按结算单价', 'settleMethod': '2'},
+    ]);
+  });
+
+  test('invoice and tax catalogs keep the dictionary code', () async {
+    final client = MockClient((request) async {
+      final path = request.url.path;
+      final data = path.endsWith('/invoice-type')
+          ? [
+              {'code': '专票', 'name': '专票'},
+              {'code': '增值税专用发票', 'name': '增值税专用发票'},
+            ]
+          : [
+              {'code': '6%', 'name': '6%'},
+              {'code': '0.06', 'name': '0.06'},
+            ];
+      return http.Response(
+        jsonEncode({'code': 200, 'data': data}),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final invoices = await catalog.fetchInvoiceTypes();
+    final taxes = await catalog.fetchTaxRates();
+    expect(invoices.map((item) => item.code).toList(), ['专票', '增值税专用发票']);
+    expect(taxes.map((item) => item.code).toList(), ['6%', '0.06']);
+  });
 }

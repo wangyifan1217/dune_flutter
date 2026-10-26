@@ -1918,7 +1918,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (widget.session.isExternalUser) return;
     NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
     setState(() {
-      _novaFocusConversationId = null;
+      _novaFocusConversationId = prompt.trim().isEmpty
+          ? NovaBackgroundCoordinator.instance.latestUnreadConversationId : null;
       _novaFocusMessageId = null;
       _novaInitialPrompt = prompt.trim();
     });
@@ -2607,16 +2608,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         setState(_clearContactsGroupPickState);
         widget.navigation.go('C3');
       },
-      onOpenNova: () {
-        if (widget.session.isExternalUser) return;
-        NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
-        setState(() {
-          _novaFocusConversationId = null;
-          _novaFocusMessageId = null;
-          _novaInitialPrompt = null;
-        });
-        widget.navigation.go('C4');
-      },
+      onOpenNova: () => _openNovaWithPrompt(''),
       onOpenNotifications: (tab) {
         if (widget.session.isExternalUser) return;
         setState(() {
@@ -3739,6 +3731,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         qianjiAdminAccess: widget.session.effectiveQianjiAdminAccess,
         chatOnlyMode: widget.session.isExternalUser,
         onSwitchMainTab: _switchMainTab,
+        onOpenAi: () => _openNovaWithPrompt(''),
         onDesktopSettingsTap: _openDesktopSettings,
       ),
     );
@@ -5107,6 +5100,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeNovaPage(
           session: widget.session,
           initialPrompt: _novaInitialPrompt,
+          onInitialPromptConsumed: () {
+            if (mounted) setState(() => _novaInitialPrompt = null);
+          },
           onBack: () {
             NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
             setState(() {
@@ -5215,12 +5211,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           navigation: widget.navigation,
           onBack: widget.navigation.leaveMeetingCreate,
           onCreated: (meetingId, {required isDraft}) {
-            if (meetingId <= 0) return;
+            if (meetingId == 0) return;
             // 新建后列表必须重新拉取，避免缓存漏掉新会议。
+            // 负数 id 是尚未创建到服务器的本机草稿。
             MeetingListCache.instance.invalidate();
-            setState(() => _meetingId = meetingId);
+            final savedLocally = meetingId < 0;
+            setState(() => _meetingId = savedLocally ? 0 : meetingId);
             final nav = widget.navigation;
-            if (isDraft) {
+            if (isDraft || savedLocally) {
               if (nav.history.contains('MM-L')) {
                 nav.popTo('MM-L');
               } else {
@@ -5967,6 +5965,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       qianjiAdminAccess: widget.session.effectiveQianjiAdminAccess,
       chatOnlyMode: widget.session.isExternalUser,
       onSwitchMainTab: _switchMainTab,
+      onOpenAi: () => _openNovaWithPrompt(''),
       onDesktopSettingsTap: isDesktopCommOnly ? _openDesktopSettings : null,
     );
 

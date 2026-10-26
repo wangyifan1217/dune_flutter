@@ -7,6 +7,19 @@ import 'nova_personal_plan.dart';
 /// 欢迎页和浮层的两个入口。普通聊天不走这里。
 enum NovaPersonalCapability { tasks, lighthouse }
 
+/// Resolve the capability recorded on a historical message.
+/// Unknown or absent values must stay in general chat, never inherit the
+/// currently selected composer mode.
+NovaPersonalCapability? novaPersonalCapabilityFromMessagePayload(
+  Map<String, dynamic>? payload,
+) {
+  return switch (payload?['nova_personal_capability']) {
+    'tasks' => NovaPersonalCapability.tasks,
+    'lighthouse' => NovaPersonalCapability.lighthouse,
+    _ => null,
+  };
+}
+
 class NovaPersonalPrompt {
   const NovaPersonalPrompt({
     required this.capability,
@@ -38,11 +51,131 @@ const novaPersonalPrompts = <NovaPersonalPrompt>[
 
 /// 用现有任务、灯塔接口取数。不调用模型，也不改普通对话。
 class NovaPersonalReply {
-  const NovaPersonalReply(this.text, {this.preview});
+  const NovaPersonalReply(
+    this.text, {
+    this.preview,
+    this.route = '',
+    this.capability,
+    this.state,
+    this.suggestions = const <String>[],
+    this.chart,
+  });
 
   final String text;
   final NovaTaskPreview? preview;
+
+  /// 后端随回答下发的小图（原样的 JSON），由 `NovaChart.fromJson` 解析。
+  final Map<String, dynamic>? chart;
+
+  /// 可以直接点选发送的完整问句：回答后的追问，或者有歧义时的选项。
+  final List<String> suggestions;
+
+  /// 后端判断这句话不属于任务或灯塔时为 `chat`，调用方改走普通对话。
+  final String route;
+
+  /// 后端实际处理这句话的能力；选定灯塔时说了任务，会切到任务。
+  final NovaPersonalCapability? capability;
+
+  /// 这次灯塔查询用到的条件，下一轮作为 lastQuery 带回去接住省略。
+  final Map<String, dynamic>? state;
+
+  bool get routeToChat => route == 'chat';
 }
+
+/// 用户消息 payload 里保存灯塔查询条件的键。
+const novaLighthouseStatePayloadKey = 'nova_lighthouse_state';
+
+/// 可点追问、以及点了以后交给哪个能力。
+/// 同时写在用户消息 payload 上：用户消息的 payload 会进历史记录，重新打开会话后还能点。
+const novaSuggestionsPayloadKey = 'nova_suggestions';
+const novaSuggestionsCapabilityPayloadKey = 'nova_suggestions_capability';
+
+/// 回答附带的小图，和追问一样存在用户消息 payload 上。
+const novaChartPayloadKey = 'nova_chart';
+
+/// 灯塔回答后这段时间内，没有明确意图的短句按灯塔追问路由。
+const novaLighthouseFollowUpWindow = Duration(minutes: 10);
+
+/// 回答附带的小图。bar 是横向条形（可以有负值），line 是折线（可以多条）；
+/// 数值单位是元，缺数的点是 null。
+class NovaChart {
+  const NovaChart({
+    required this.kind,
+    required this.title,
+    required this.labels,
+    required this.series,
+  });
+
+  final String kind;
+  final String title;
+  final List<String> labels;
+  final List<({String name, List<double?> values})> series;
+
+  bool get isLine => kind == 'line';
+
+  /// 结构不完整时返回 null，调用方不画图。
+  static NovaChart? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final kind = '${raw['kind'] ?? ''}';
+    if (kind != 'bar' && kind != 'line') return null;
+    final rawLabels = raw['labels'];
+    final rawSeries = raw['series'];
+    if (rawLabels is! List || rawSeries is! List) return null;
+    final labels = [for (final label in rawLabels) '$label'];
+    final series = <({String name, List<double?> values})>[];
+    for (final item in rawSeries) {
+      if (item is! Map || item['values'] is! List) continue;
+      final values = [
+        for (final value in item['values'] as List)
+          value is num ? value.toDouble() : null,
+      ];
+      if (values.length != labels.length) return null;
+      series.add((name: '${item['name'] ?? ''}', values: values));
+    }
+    if (labels.length < 2 || series.isEmpty) return null;
+    return NovaChart(
+      kind: kind,
+      title: '${raw['title'] ?? ''}',
+      labels: labels,
+      series: series,
+    );
+  }
+}
+
+/// 打开小饕时的经营提醒，只在昨天有明显变化时才有内容。
+class NovaInsight {
+  const NovaInsight({
+    required this.date,
+    required this.title,
+    required this.lines,
+    required this.suggestions,
+  });
+
+  final String date;
+  final String title;
+  final List<String> lines;
+  final List<String> suggestions;
+
+  bool get isEmpty => lines.isEmpty;
+
+  static NovaInsight fromJson(Map raw) {
+    List<String> texts(Object? value) => value is List
+        ? [
+            for (final item in value)
+              if ('$item'.trim().isNotEmpty) '$item'.trim(),
+          ]
+        : const <String>[];
+    return NovaInsight(
+      date: '${raw['date'] ?? ''}',
+      title: '${raw['title'] ?? ''}'.trim(),
+      lines: texts(raw['lines']),
+      suggestions: texts(raw['suggestions']),
+    );
+  }
+}
+
+/// 金额按万/亿显示，和灯塔回答里的写法一致。
+String novaChartAmount(double value) => _amount(value);
 
 /// Bounds client-provided context before it crosses the API boundary.
 List<({String role, String text})> novaPersonalContextTurns(
@@ -65,6 +198,20 @@ List<({String role, String text})> novaPersonalContextTurns(
             : turn.text.trim(),
       ),
   ];
+}
+
+const novaTaskPreviewPayloadKey = 'nova_task_preview';
+
+NovaTaskPreview? novaTaskPreviewFromPayload(Object? raw) {
+  if (raw is! Map || raw['body'] is! Map) return null;
+  final kind = '${raw['kind'] ?? ''}';
+  if (!const {'create', 'progress', 'complete'}.contains(kind)) return null;
+  return NovaTaskPreview(
+    kind: kind,
+    summary: '${raw['summary'] ?? ''}',
+    taskId: (raw['taskId'] as num?)?.toInt(),
+    body: Map<String, dynamic>.from(raw['body'] as Map),
+  );
 }
 
 class NovaTaskPreview {
@@ -128,7 +275,7 @@ class NovaPersonalQuery {
     if (previewPending) {
       return const NovaPersonalReply('还有一条变更没确认。点确认执行或取消后，再继续说别的。');
     }
-    final effective = mode ?? novaPersonalCapabilityFor(value);
+    final effective = mode;
     if (effective == NovaPersonalCapability.tasks) {
       if (_isTaskList(value) && !_looksLikeTaskWrite(value)) {
         return _tasks(session);
@@ -700,22 +847,12 @@ class NovaTaskIntent {
   final NovaTaskPreview? preview;
 }
 
-NovaPersonalCapability? novaPersonalCapabilityFor(String text) {
-  final value = text.trim();
-  if (value.isEmpty) return null;
-  if (value.contains('灯塔') ||
-      value.contains('前十') ||
-      value.contains('排名') ||
-      value.contains('比上周')) {
-    return NovaPersonalCapability.lighthouse;
-  }
-  if (value.contains('任务') || value.contains('办结') || value.contains('完成任务')) {
-    return NovaPersonalCapability.tasks;
-  }
-  if (value.contains('进度') && RegExp(r'改成|调到|设为|到\s*\d').hasMatch(value)) {
-    return NovaPersonalCapability.tasks;
-  }
-  return null;
+NovaPersonalCapability? novaPersonalCapabilityFromName(String? name) {
+  return switch (name?.trim()) {
+    'tasks' => NovaPersonalCapability.tasks,
+    'lighthouse' => NovaPersonalCapability.lighthouse,
+    _ => null,
+  };
 }
 
 String normalizeNovaTaskCommand(String text) {

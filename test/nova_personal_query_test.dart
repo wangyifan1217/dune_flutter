@@ -39,17 +39,14 @@ void main() {
     expect(ready?.preview?.body['title'], '周报');
   });
 
-  test('任务和灯塔的入口句能识别能力，普通聊天不会误入', () {
+  test('后端返回的能力名只认任务和灯塔', () {
+    expect(novaPersonalCapabilityFromName('tasks'), NovaPersonalCapability.tasks);
     expect(
-      novaPersonalCapabilityFor('帮我看看和我相关的任务'),
-      NovaPersonalCapability.tasks,
-    );
-    expect(
-      novaPersonalCapabilityFor('今天灯塔整体怎么样？'),
+      novaPersonalCapabilityFromName('lighthouse'),
       NovaPersonalCapability.lighthouse,
     );
-    expect(novaPersonalCapabilityFor('今天天气怎么样'), isNull);
-    expect(novaPersonalCapabilityFor('确认'), isNull);
+    expect(novaPersonalCapabilityFromName(''), isNull);
+    expect(novaPersonalCapabilityFromName(null), isNull);
   });
 
   test('选中任务或灯塔后，对不上的话留在该能力里', () {
@@ -159,5 +156,28 @@ void main() {
     expect(text, contains('本周对比上周'));
     expect(text, contains('差额'));
     expect(text, contains('没有另行归因'));
+  });
+
+  test('重新发送只按原消息记录的能力路由', () {
+    expect(
+      novaPersonalCapabilityFromMessagePayload({
+        'nova_personal_capability': 'tasks',
+      }),
+      NovaPersonalCapability.tasks,
+    );
+    expect(
+      novaPersonalCapabilityFromMessagePayload({
+        'nova_personal_capability': 'lighthouse',
+      }),
+      NovaPersonalCapability.lighthouse,
+    );
+    expect(novaPersonalCapabilityFromMessagePayload(null), isNull);
+    expect(novaPersonalCapabilityFromMessagePayload({}), isNull);
+    expect(
+      novaPersonalCapabilityFromMessagePayload({
+        'nova_personal_capability': 'unknown',
+      }),
+      isNull,
+    );
   });
 }

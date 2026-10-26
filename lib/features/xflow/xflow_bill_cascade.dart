@@ -135,6 +135,48 @@ List<String> xflowBillAmountLabels(
   return const ['默认金额', '已付', '剩余应付'];
 }
 
+String xflowBillText(dynamic raw) {
+  if (raw == null) return '';
+  if (raw is List) {
+    return raw.map(xflowBillText).where((e) => e.isNotEmpty).join('、');
+  }
+  if (raw is Map) {
+    for (final key in const ['provinceName', 'name', 'label', 'province']) {
+      final text = xflowBillText(raw[key]);
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+  final text = '$raw'.trim();
+  if (text.isEmpty || text == 'null' || text == '<nil>') return '';
+  return text;
+}
+
+/// 资管账单上的业务省份。同一渠道、同一个月会按省拆成多张账单。
+String xflowBillProvinceOf(Map row) {
+  const keys = [
+    'provinceName',
+    'province',
+    'provinceNames',
+    'areaName',
+    'regionName',
+    'bizProvince',
+    'bizProvinceName',
+    'coverageProvince',
+  ];
+  for (final key in keys) {
+    final text = xflowBillText(row[key]);
+    if (text.isNotEmpty && text.length <= 64) return text;
+  }
+  for (final entry in row.entries) {
+    final key = entry.key.toString().toLowerCase();
+    if (!key.contains('province')) continue;
+    final text = xflowBillText(entry.value);
+    if (text.isNotEmpty && text.length <= 64) return text;
+  }
+  return '';
+}
+
 String xflowBillTypeNameOf(Map row) {
   final name = '${row['billTypeName'] ?? ''}'.trim();
   if (name.isNotEmpty) return name;
@@ -152,15 +194,21 @@ String xflowBillTypeProjectLine(Map row) {
 
 String xflowBillLabelOf(Map row) {
   final period = xflowBillCompactPeriod('${row['billPeriod'] ?? ''}');
-  final composed = [
+  final parts = [
     '${row['ourEntityName'] ?? ''}'.trim(),
     '${row['counterpartyName'] ?? ''}'.trim(),
     period,
-  ].where((e) => e.isNotEmpty).join(' - ');
+  ].where((e) => e.isNotEmpty).toList();
+  final province = xflowBillProvinceOf(row);
+  var composed = parts.join(' - ');
+  if (province.isNotEmpty && !parts.contains(province)) {
+    composed = composed.isEmpty ? province : '$composed · $province';
+  }
+  if (composed.isNotEmpty) return composed;
   final label = '${row['label'] ?? ''}'.trim();
-  if (label.isEmpty) return composed;
-  if (RegExp(r'\d{2}:\d{2}:\d{2}').hasMatch(label)) return composed;
-  return label;
+  if (label.isEmpty) return '';
+  if (province.isEmpty || label.contains(province)) return label;
+  return '$label · $province';
 }
 
 String xflowBillMoney(dynamic raw) {
@@ -252,6 +300,7 @@ Map<String, dynamic> xflowBillSnapshot(
     'billStartDate': '${src['billStartDate'] ?? ''}'.trim(),
     'billEndDate': '${src['billEndDate'] ?? ''}'.trim(),
     'projectName': '${src['projectName'] ?? ''}'.trim(),
+    'provinceName': xflowBillProvinceOf(src),
     'billTypeCode': '${src['billTypeCode'] ?? ''}'.trim(),
     'billTypeName': '${src['billTypeName'] ?? ''}'.trim(),
     'billAmount': xflowBillNum(src['billAmount']) ?? 0,

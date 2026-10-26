@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:dunes_app/core/theme/dunes_theme.dart';
 
+import 'proposal_intake_models.dart';
 import 'proposal_intake_ui.dart';
 
 /// 科技部、财务部共用的「产品卡」：一个产品一张卡，两个板块里编号、顺序、版式完全一样。
@@ -765,17 +766,17 @@ class ProposalSettleLineTile extends StatelessWidget {
       color: c(color),
     );
     final ratio = line.ratio.trim();
-    // 「0」「0.98」这种没写百分号的比例补上 %，和填写时的写法一致。
+    // 小数系数补成百分数：`0.98` → 98%，`1.0333333` → 103.33%。`4` 这种旧写法本身就是百分数。
     final parsedRatio = double.tryParse(ratio);
     final ratioText =
         ratio.isEmpty || ratio.endsWith('%') || parsedRatio == null
         ? ratio
-        : '${parsedRatio <= 1 && parsedRatio != 0 ? _trimNumber(parsedRatio * 100) : _trimNumber(parsedRatio)}%';
+        : '${_trimNumber(proposalRatioDisplayPercent(parsedRatio))}%';
     final rateRaw = line.redemptionRate.trim();
     final parsedRate = double.tryParse(rateRaw);
     final rateText = rateRaw.isEmpty || rateRaw.endsWith('%') || parsedRate == null
         ? rateRaw
-        : '${parsedRate <= 1 && parsedRate != 0 ? _trimNumber(parsedRate * 100) : _trimNumber(parsedRate)}%';
+        : '${_trimNumber(proposalRatioDisplayPercent(parsedRate))}%';
     final valueBase = ratioText.isNotEmpty
         ? '比例 $ratioText'
         : (line.perUnit.trim().isNotEmpty

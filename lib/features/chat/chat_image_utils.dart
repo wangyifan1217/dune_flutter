@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:image/image.dart' as img;
@@ -133,6 +135,102 @@ Uint8List? _encodePreview(_PreviewRequest req) {
   return Uint8List.fromList(img.encodeJpg(resized, quality: req.quality));
 }
 
+class _RgbaJpegRequest {
+  const _RgbaJpegRequest(this.pixels, this.width, this.height, this.quality);
+
+  final Uint8List pixels;
+  final int width;
+  final int height;
+  final int quality;
+}
+
+Uint8List _encodeRgbaJpeg(_RgbaJpegRequest req) {
+  final image = img.Image.fromBytes(
+    width: req.width,
+    height: req.height,
+    bytes: req.pixels.buffer,
+    bytesOffset: req.pixels.offsetInBytes,
+    numChannels: 4,
+    order: img.ChannelOrder.rgba,
+  );
+  return Uint8List.fromList(img.encodeJpg(image, quality: req.quality));
+}
+
+/// 用引擎解码并缩到最长边，再在后台线程压成 JPEG。
+///
+/// `package:image` 的纯 Dart 解码在大图、PNG 截图上会占住界面十几秒。
+/// 引擎解码走系统图像库，界面可以继续响应。
+Future<Uint8List?> _jpegFromEngine(
+  Uint8List bytes,
+  int maxDim,
+  int quality,
+) async {
+  ui.ImmutableBuffer? buffer;
+  ui.ImageDescriptor? descriptor;
+  ui.Codec? codec;
+  ui.Image? image;
+  try {
+    buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+    descriptor = await ui.ImageDescriptor.encoded(buffer);
+    final w = descriptor.width;
+    final h = descriptor.height;
+    if (w <= 0 || h <= 0) return null;
+    final codecFuture = descriptor.instantiateCodec(
+      targetWidth: w >= h && (w > maxDim || h > maxDim) ? maxDim : null,
+      targetHeight: h > w && (w > maxDim || h > maxDim) ? maxDim : null,
+    );
+    codec = await codecFuture;
+    final frame = await codec.getNextFrame();
+    image = frame.image;
+    final rgba = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (rgba == null) return null;
+    final pixels = Uint8List.fromList(
+      rgba.buffer.asUint8List(rgba.offsetInBytes, rgba.lengthInBytes),
+    );
+    return compute(
+      _encodeRgbaJpeg,
+      _RgbaJpegRequest(pixels, image.width, image.height, quality),
+    );
+  } finally {
+    image?.dispose();
+    codec?.dispose();
+    descriptor?.dispose();
+    buffer?.dispose();
+  }
+}
+
+Future<Uint8List?> _jpegFromEncoded(
+  Uint8List bytes,
+  int maxDim,
+  int quality,
+) async {
+  if (!kIsWeb) {
+    try {
+      final native = await _jpegFromEngine(bytes, maxDim, quality);
+      if (native != null && native.isNotEmpty) return native;
+    } catch (error, stack) {
+      debugPrint('[Chat] native image encode failed: $error\n$stack');
+    }
+  }
+  return compute(_encodePreview, _PreviewRequest(bytes, maxDim, quality));
+}
+
+Future<(int, int)?> _encodedPixelSize(Uint8List bytes) async {
+  ui.ImmutableBuffer? buffer;
+  ui.ImageDescriptor? descriptor;
+  try {
+    buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+    descriptor = await ui.ImageDescriptor.encoded(buffer);
+    final w = descriptor.width;
+    final h = descriptor.height;
+    if (w <= 0 || h <= 0) return null;
+    return (w, h);
+  } finally {
+    descriptor?.dispose();
+    buffer?.dispose();
+  }
+}
+
 /// 非「原图」发送时的默认压缩：最长边 [kChatImagePickMaxEdge]，质量 [kChatImagePickQuality]。
 /// 返回 null 表示无需压缩（已更小或无法解码），调用方应回退源文件。
 Future<Uint8List?> compressChatImageForSend(
@@ -144,7 +242,7 @@ Future<Uint8List?> compressChatImageForSend(
   final dim = maxDim > 0 ? maxDim : kChatImagePickMaxEdge.round();
   final q = quality > 0 ? quality : kChatImagePickQuality;
   try {
-    final jpeg = await compute(_encodePreview, _PreviewRequest(bytes, dim, q));
+    final jpeg = await _jpegFromEncoded(bytes, dim, q);
     if (jpeg == null || jpeg.isEmpty) return null;
     if (jpeg.length >= bytes.length) return null;
     return jpeg;
@@ -166,7 +264,7 @@ bool _bytesLookLikeGif(Uint8List bytes) {
 /// 生成用于会话内展示的压缩预览图（最长边 [maxDim]px，JPEG [quality]% 质量）。
 ///
 /// 返回 null 表示无需/无法生成（GIF、解码失败，或压缩后体积反而更大），
-/// 调用方应回退为直接使用原图展示。解码/编码在后台 isolate 执行，避免卡顿。
+/// 调用方应回退为直接使用原图展示。解码走系统图像库，JPEG 编码在后台线程。
 Future<ChatImagePreview?> buildChatImagePreview(
   Uint8List bytes, {
   String fileName = 'image.jpg',
@@ -178,10 +276,7 @@ Future<ChatImagePreview?> buildChatImagePreview(
     return null;
   }
   try {
-    final jpeg = await compute(
-      _encodePreview,
-      _PreviewRequest(bytes, maxDim, quality),
-    );
+    final jpeg = await _jpegFromEncoded(bytes, maxDim, quality);
     if (jpeg == null || jpeg.isEmpty) return null;
     // 压缩后没有更小（例如本身就是很小的图）就不生成预览，避免无意义的二次上传。
     if (jpeg.length >= bytes.length) return null;
@@ -225,7 +320,20 @@ Future<Uint8List> prepareChatImageForEditor(
   Uint8List bytes, {
   int maxDim = kChatImageEditorMaxOutputEdge,
   int quality = kChatImageEditorJpegQuality,
-}) {
+}) async {
+  if (!kIsWeb) {
+    try {
+      final size = await _encodedPixelSize(bytes);
+      if (size != null) {
+        final longest = size.$1 > size.$2 ? size.$1 : size.$2;
+        if (longest <= maxDim) return bytes;
+        final jpeg = await _jpegFromEngine(bytes, maxDim, quality);
+        if (jpeg != null && jpeg.isNotEmpty) return jpeg;
+      }
+    } catch (error) {
+      debugPrint('[Chat] prepare editor image failed: $error');
+    }
+  }
   return compute(
     _prepareForEditor,
     _EditorPrepareRequest(bytes, maxDim, quality),

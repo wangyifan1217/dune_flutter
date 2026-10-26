@@ -13,6 +13,13 @@ import 'nova_web_storage.dart';
 class NovaBackgroundCoordinator extends ChangeNotifier {
   NovaBackgroundCoordinator._();
 
+  @visibleForTesting
+  NovaBackgroundCoordinator.forTesting(
+    AuthSession session,
+    NativeNovaService service,
+  ) : _session = session,
+      _service = service;
+
   static final NovaBackgroundCoordinator instance =
       NovaBackgroundCoordinator._();
 
@@ -20,20 +27,27 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
   NativeNovaService? _service;
   Timer? _pollTimer;
   int _pollConvId = 0;
+  int _pollEpoch = 0;
+  final Set<int> _pollConversations = {};
+  final Set<int> _pollsInFlight = {};
+  bool _pollStarting = false;
   bool _pendingCommBadgeBump = false;
   bool _novaPageActive = false;
+  int _visibleConversationId = 0;
   final Set<int> _finalizedConvIds = <int>{};
   final Set<int> _seenReplyConversationIds = <int>{};
   final Set<int> _unreadReplyConversationIds = <int>{};
 
   /// C4 页面可见时为 true；用于区分「用户已在 NOVA 内看到回复」与「后台完成需通知」。
-  void setNovaPageActive(bool active) {
-    if (_novaPageActive == active) return;
+  void setNovaPageActive(bool active, {int conversationId = 0}) {
     _novaPageActive = active;
-    if (active) {
-      _pendingCommBadgeBump = false;
-    }
+    _visibleConversationId = active ? conversationId : 0;
   }
+
+  bool isConversationVisible(int conversationId) =>
+      _novaPageActive &&
+      conversationId > 0 &&
+      _visibleConversationId == conversationId;
 
   void clearFinalizedConversation(int conversationId) {
     if (conversationId > 0) {
@@ -49,6 +63,7 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
       _unreadReplyConversationIds.contains(conversationId);
 
   bool get hasUnreadReply => _unreadReplyConversationIds.isNotEmpty;
+  int? get latestUnreadConversationId => _unreadReplyConversationIds.lastOrNull;
 
   bool get isNovaPageActive => _novaPageActive;
 
@@ -61,11 +76,13 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
   void markPendingCommBadgeBump({int conversationId = 0}) {
     // 已读只针对上一轮已完成回复。不能因为用户看过同一会话的旧消息，
     // 就抑制下一轮在后台完成时的提醒。
-    if (_novaPageActive) return;
+    if (isConversationVisible(conversationId)) return;
+    var changed = !_pendingCommBadgeBump;
     _pendingCommBadgeBump = true;
     if (conversationId > 0) {
-      _unreadReplyConversationIds.add(conversationId);
+      changed = _unreadReplyConversationIds.add(conversationId) || changed;
     }
+    if (changed) notifyListeners();
   }
 
   void clearPendingCommBadgeBump() {
@@ -77,16 +94,21 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     if (conversationId > 0) {
       _seenReplyConversationIds.add(conversationId);
     }
-    // 通讯列表的 IM 会话 ID 与原生 NOVA 的历史会话 ID 曾经来自不同
-    // 服务；用户只要进入 NOVA，就应视为已查看所有 NOVA 完成提醒。
-    _unreadReplyConversationIds.clear();
-    _pendingCommBadgeBump = false;
+    _unreadReplyConversationIds.remove(conversationId);
+    _pendingCommBadgeBump = _unreadReplyConversationIds.isNotEmpty;
     notifyListeners();
   }
 
   NativeNovaService serviceFor(AuthSession session) {
-    if (_session?.userId != session.userId) {
+    if (_session?.userId != session.userId ||
+        _session?.token != session.token ||
+        _session?.apiBase != session.apiBase) {
       stopPoll();
+      _service?.cancelActiveStream();
+      _finalizedConvIds.clear();
+      _seenReplyConversationIds.clear();
+      _unreadReplyConversationIds.clear();
+      _pendingCommBadgeBump = false;
       _service = NativeNovaService(session: session);
       _session = session;
     }
@@ -101,176 +123,116 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     required bool generating,
     int afterMessageId = 0,
   }) {
-    if (conversationId > 0) _pollConvId = conversationId;
     if (!generating || conversationId <= 0) return;
     ensurePoll(session, conversationId: conversationId);
   }
 
   void ensurePoll(AuthSession session, {int conversationId = 0}) {
-    if (conversationId > 0) _pollConvId = conversationId;
-    if (_pollTimer != null) return;
-    unawaited(_startPoll(session));
+    final svc = serviceFor(session);
+    if (conversationId > 0) {
+      _pollConvId = conversationId;
+      _pollConversations.add(conversationId);
+    }
+    if (_pollTimer != null) {
+      if (conversationId > 0)
+        unawaited(_pollTick(svc, session, conversationId, _pollEpoch));
+      return;
+    }
+    if (!_pollStarting) unawaited(_startPoll(session));
   }
 
   bool get isThinking =>
-      _pollTimer != null || (_service?.isStreamInFlight ?? false);
+      _pollTimer != null ||
+      (_service?.isStreamInFlight ?? false) ||
+      (_service?.isPersonalQueryInFlight ?? false);
 
   Future<void> _startPoll(AuthSession session) async {
-    if (_pollTimer != null) return;
-    var convId = _pollConvId;
-    if (convId <= 0) {
-      final storage = await NovaWebStorage.load(session.userId);
-      convId = novaActiveConvIdFromStorage(storage);
-    }
-    if (convId <= 0) return;
-    _pollConvId = convId;
+    if (_pollTimer != null || _pollStarting) return;
+    // serviceFor 可能切换账号，先处理，防止旧账号的启动覆盖新账号。
     final svc = serviceFor(session);
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) {
-      unawaited(_pollTick(svc, session, convId));
-    });
-    notifyListeners();
-    unawaited(_pollTick(svc, session, convId));
+    final epoch = _pollEpoch;
+    _pollStarting = true;
+    try {
+      var convId = _pollConvId;
+      if (convId <= 0) {
+        final storage = await NovaWebStorage.load(session.userId);
+        convId = novaActiveConvIdFromStorage(storage);
+      }
+      if (convId <= 0 || epoch != _pollEpoch) return;
+      _pollConvId = convId;
+      _pollConversations.add(convId);
+      _pollTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) {
+        for (final target in _pollConversations.toList()) {
+          unawaited(_pollTick(svc, session, target, epoch));
+        }
+      });
+      notifyListeners();
+      unawaited(_pollTick(svc, session, convId, epoch));
+    } finally {
+      if (epoch == _pollEpoch) _pollStarting = false;
+    }
   }
 
   Future<void> _pollTick(
     NativeNovaService svc,
     AuthSession session,
     int convId,
+    int epoch,
   ) async {
-    final storage = await NovaWebStorage.load(session.userId);
-    final localGen = readNovaGeneratingFromStorage(
-      storage,
-      convId: convId,
-      activeConvId: convId,
-    );
-    final draft = readNovaStreamDraftFromStorage(storage, convId);
-    if (!shouldPersistNovaGenerating(
-      localGen: localGen,
-      draft: draft,
-      streamInFlight: svc.isStreamInFlight,
-    )) {
-      if (localGen != null) {
-        await clearNovaGeneratingState(
-          userId: session.userId,
-          conversationId: convId,
-        );
-        await clearNovaStreamDraftState(
-          userId: session.userId,
-          conversationId: convId,
-        );
-      }
-      try {
-        final history = await svc.fetchFullHistory(convId);
-        if (!history.assistantGenerating) {
-          stopPoll();
-        }
-      } catch (_) {}
-      notifyListeners();
+    if (_pollsInFlight.contains(convId) ||
+        epoch != _pollEpoch ||
+        !_pollConversations.contains(convId))
       return;
-    }
-    if (localGen == null) {
-      if (draft != null && novaStreamDraftHasContent(draft)) {
-        try {
-          final history = await svc.fetchFullHistory(convId);
-          if (!svc.isStreamInFlight) {
-            await onGenerationComplete(
-              session: session,
-              conversationId: convId,
-              messages: history.messages,
-            );
-          }
-        } catch (_) {}
-      } else {
-        try {
-          final history = await svc.fetchFullHistory(convId);
-          if (!history.assistantGenerating) {
-            stopPoll();
-          }
-        } catch (_) {}
-      }
-      notifyListeners();
-      return;
-    }
-    if (_isStoppedStatus(localGen.status)) {
-      await clearNovaGeneratingState(
-        userId: session.userId,
-        conversationId: convId,
-      );
-      await clearNovaStreamDraftState(
-        userId: session.userId,
-        conversationId: convId,
-      );
-      stopPoll();
-      notifyListeners();
-      return;
-    }
-
+    _pollsInFlight.add(convId);
+    bool current() =>
+        epoch == _pollEpoch &&
+        _session?.userId == session.userId &&
+        _pollConversations.contains(convId);
     try {
+      // 本地流（含灯塔/任务）由原请求负责落盘，不能被历史快照提前判为结束。
+      if (svc.isReplyInFlightFor(convId)) return;
       final history = await svc.fetchFullHistory(convId);
-      final after = localGen.afterMessageId;
-      if (history.assistantGenerating &&
-          !_hasAiReplyAfter(history.messages, after)) {
+      if (!current() ||
+          svc.isReplyInFlightFor(convId) ||
+          !history.serverStateKnown)
+        return;
+      if (history.assistantGenerating) {
         notifyListeners();
         return;
       }
-      if (_hasAiReplyAfter(history.messages, after)) {
-        if (svc.isStreamInFlight) {
-          notifyListeners();
-          return;
-        }
+      final storage = await NovaWebStorage.load(session.userId);
+      if (!current() || svc.isReplyInFlightFor(convId)) return;
+      final draft = readNovaStreamDraftFromStorage(storage, convId);
+      final local = readNovaGeneratingFromStorage(storage, convId: convId);
+      if (local != null && isNovaStoppedGeneratingStatus(local.status)) {
+        stopPoll(conversationId: convId);
+        return;
+      }
+      final hasReply = novaHasReplyForDraft(
+        history.messages,
+        afterMessageId: local?.afterMessageId ?? draft?.afterMessageId ?? 0,
+        draft: draft,
+      );
+      if (hasReply || (draft != null && !draft.streaming)) {
         await onGenerationComplete(
           session: session,
           conversationId: convId,
           messages: history.messages,
         );
-        return;
-      }
-      if (!history.assistantGenerating) {
-        if (svc.isStreamInFlight) {
-          notifyListeners();
-          return;
-        }
-        if ((draft?.text ?? '').trim().isNotEmpty) {
-          if (kDebugMode) {
-            debugPrint(
-              '[NovaBackground] finalize from draft-only conv=$convId',
-            );
-          }
-          await onGenerationComplete(
-            session: session,
-            conversationId: convId,
-            messages: history.messages,
-          );
-          return;
-        }
-        if (history.messages.any(
-          (m) =>
-              m.role == 'assistant' && !m.streaming && m.text.trim().isNotEmpty,
-        )) {
-          if (svc.isStreamInFlight) {
-            notifyListeners();
-            return;
-          }
-          await onGenerationComplete(
-            session: session,
-            conversationId: convId,
-            messages: history.messages,
-          );
-        } else {
-          await clearNovaGeneratingState(
-            userId: session.userId,
-            conversationId: convId,
-          );
-          await clearNovaStreamDraftState(
-            userId: session.userId,
-            conversationId: convId,
-          );
-          stopPoll();
-          notifyListeners();
-        }
+      } else {
+        // 保留断线草稿供页面显示“已中断”，不要把半截正文落库成完整回答。
+        await clearNovaGeneratingState(
+          userId: session.userId,
+          conversationId: convId,
+        );
+        if (!current()) return;
+        stopPoll(conversationId: convId);
+        notifyListeners();
       }
     } catch (_) {
-      notifyListeners();
+      // 离线时保留缓存，后续轮询/恢复继续确认；不凭网络失败清空任务状态。
+    } finally {
+      if (epoch == _pollEpoch) _pollsInFlight.remove(convId);
     }
   }
 
@@ -282,16 +244,36 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     if (conversationId <= 0) return;
     if (_finalizedConvIds.contains(conversationId)) return;
     final svc = serviceFor(session);
-    if (svc.isStreamInFlight) return;
+    if (svc.isReplyInFlightFor(conversationId)) return;
     final storage = await NovaWebStorage.load(session.userId);
     final draft = readNovaStreamDraftFromStorage(storage, conversationId);
+    final localGen = readNovaGeneratingFromStorage(
+      storage,
+      convId: conversationId,
+    );
+    if (localGen != null && isNovaStoppedGeneratingStatus(localGen.status))
+      return;
+    final after =
+        localGen?.afterMessageId ??
+        draft?.afterMessageId ??
+        messages.where((m) => m.role == 'user').lastOrNull?.id ??
+        0;
     final draftUserText = (draft?.userText ?? '').trim();
-    final draftReplyText = (draft?.text ?? '').trim();
+    final draftReplyText = draft?.streaming == false
+        ? (draft?.text ?? '').trim()
+        : '';
     final draftThinkText = (draft?.thinkText ?? '').trim();
 
     final initialRows = messages
         .where((m) => !m.isWelcome)
         .toList(growable: false);
+    if (!novaHasReplyForDraft(
+          initialRows,
+          afterMessageId: after,
+          draft: draft,
+        ) &&
+        draftReplyText.isEmpty)
+      return;
     final needsFinalize =
         (draftReplyText.isNotEmpty &&
             !initialRows.any(
@@ -337,6 +319,8 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
       draftUserText: draftUserText,
       draftReplyText: draftReplyText,
       draftThinkText: draftThinkText,
+      draftAfterMessageId: after,
+      completedDraft: draft,
     );
 
     if (draftReplyText.isNotEmpty) {
@@ -373,20 +357,24 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
       }
     }
 
+    final rows = resolvedRows;
+    if (!novaHasReplyForDraft(rows, afterMessageId: after, draft: draft) ||
+        svc.isReplyInFlightFor(conversationId))
+      return;
+    await svc.persistSession(conversationId, rows);
+    final savedRows = await svc.loadPersistedConversation(conversationId);
+    if (!novaHasReplyForDraft(savedRows, afterMessageId: after, draft: draft))
+      return;
     await clearNovaGeneratingState(
       userId: session.userId,
       conversationId: conversationId,
     );
-    final rows = resolvedRows;
-    if (rows.isNotEmpty) {
-      await svc.persistSession(conversationId, rows);
-      await svc.flushConvToLocalHistory(conversationId, rows);
-      await svc.flushHistorySyncQueue();
-    }
+    await svc.flushConvToLocalHistory(conversationId, savedRows);
+    unawaited(svc.flushHistorySyncQueue());
     await NovaWebStorage.removeKeys(session.userId, [
       novaStreamDraftStorageKey(conversationId),
     ]);
-    stopPoll();
+    stopPoll(conversationId: conversationId);
     _finalizedConvIds.add(conversationId);
     markPendingCommBadgeBump(conversationId: conversationId);
     notifyListeners();
@@ -520,19 +508,32 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     String draftUserText = '',
     String draftReplyText = '',
     String draftThinkText = '',
+    int draftAfterMessageId = 0,
+    NovaStreamDraft? completedDraft,
   }) async {
     final out = [...rows];
-    final hasUser = out.any(
-      (m) => m.role == 'user' && m.text.trim().isNotEmpty,
+    final hasUser = novaHasMatchingUserMessage(
+      out,
+      afterMessageId: draftAfterMessageId,
+      userText: draftUserText,
     );
-    final hasAssistant = out.any(
-      (m) => m.role == 'assistant' && m.text.trim().isNotEmpty,
+    final hasAssistant = novaHasReplyForDraft(
+      out,
+      afterMessageId: draftAfterMessageId,
+      draft: completedDraft,
     );
     if (!hasUser) {
-      final recovered = await svc.resolveLatestUserMessage(
-        conversationId,
-        fallbackText: draftUserText,
-      );
+      final recovered = draftUserText.isNotEmpty && draftAfterMessageId > 0
+          ? NativeNovaMessage(
+              id: draftAfterMessageId,
+              role: 'user',
+              text: draftUserText,
+              createdAt: DateTime.now(),
+            )
+          : await svc.resolveLatestUserMessage(
+              conversationId,
+              fallbackText: draftUserText,
+            );
       if (recovered != null) {
         if (kDebugMode) {
           debugPrint(
@@ -566,27 +567,21 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     return out;
   }
 
-  bool _hasAiReplyAfter(List<NativeNovaMessage> rows, int afterMessageId) {
-    if (afterMessageId <= 0) return false;
-    var seen = false;
-    for (final m in rows) {
-      if (m.isWelcome) continue;
-      if (m.id == afterMessageId) {
-        seen = true;
-        continue;
-      }
-      if (!seen) continue;
-      if (m.streaming) continue;
-      if (m.role == 'assistant' && m.text.trim().isNotEmpty) return true;
-    }
-    return false;
-  }
-
-  bool _isStoppedStatus(String status) => status.trim().contains('停止');
-
   void notifyInboxRefresh() => notifyListeners();
 
-  void stopPoll() {
+  void stopPoll({int? conversationId}) {
+    if (conversationId != null) {
+      _pollConversations.remove(conversationId);
+      _pollsInFlight.remove(conversationId);
+      if (_pollConversations.isNotEmpty) {
+        notifyListeners();
+        return;
+      }
+    }
+    _pollConversations.clear();
+    _pollsInFlight.clear();
+    _pollEpoch++;
+    _pollStarting = false;
     final wasPolling = _pollTimer != null;
     _pollTimer?.cancel();
     _pollTimer = null;
@@ -596,6 +591,11 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
   void resetForUser(int userId) {
     if (_session?.userId != userId) return;
     stopPoll();
+    _service?.cancelActiveStream();
+    _service = null;
+    _session = null;
+    _novaPageActive = false;
+    _pendingCommBadgeBump = false;
     _pollConvId = 0;
     _finalizedConvIds.clear();
     _seenReplyConversationIds.clear();

@@ -236,6 +236,22 @@ class _FakeKpiService extends WorkbenchKpiService {
 
   int publishCount = 0;
   List<int>? lastPublishIds;
+  int skipCount = 0;
+  int lastSkipUserId = 0;
+  String lastSkipReason = '';
+
+  @override
+  Future<WorkProfileKpiScore> saveSkip({
+    required String month,
+    required int userId,
+    required String reason,
+    String note = '',
+  }) async {
+    skipCount++;
+    lastSkipUserId = userId;
+    lastSkipReason = reason;
+    return _personScore(month);
+  }
 
   @override
   Future<WorkbenchKpiRubricPublishResult> publishRubricScore({
@@ -428,6 +444,41 @@ void main() {
       expect(find.byTooltip('编辑'), findsNothing);
     },
   );
+
+  testWidgets('roster mark waits for confirmation before saving', (tester) async {
+    tester.view.physicalSize = const Size(1600, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _FakeKpiService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeWorkbenchKpiPage(
+            session: _session,
+            service: service,
+            now: DateTime(2026, 9, 3),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final mark = find.byKey(const Key('kpi-mark-9'));
+    await tester.ensureVisible(mark);
+    await tester.tap(mark);
+    await tester.pumpAndSettle();
+    expect(find.text('标记本月考核'), findsOneWidget);
+    expect(service.skipCount, 0);
+    expect(find.text('中石油'), findsNothing);
+    await tester.tap(find.byKey(const Key('kpi-mark-reason-probation')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('kpi-mark-ok')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    expect(service.skipCount, 1);
+    expect(service.lastSkipUserId, 9);
+    expect(service.lastSkipReason, 'probation');
+  });
 
   testWidgets('rerun and export require confirmation', (tester) async {
     final service = _FakeKpiService();

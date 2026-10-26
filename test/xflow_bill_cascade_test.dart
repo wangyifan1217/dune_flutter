@@ -356,6 +356,19 @@ void main() {
       }),
       '广州亿力 - 深圳万里通 - 2026-09-03',
     );
+    expect(
+      xflowBillLabelOf({
+        'ourEntityName': '北海星和',
+        'counterpartyName': '广东车旺科技有限公司',
+        'billPeriod': '2026.01',
+        'provinceName': '云南',
+        'billTypeName': '能源saas',
+        'projectName': '中交车旺',
+        'label': '北海星和 - 广东车旺科技有限公司 - 2026.01',
+      }),
+      '北海星和 - 广东车旺科技有限公司 - 2026.01 · 云南',
+    );
+    expect(xflowBillProvinceOf({'province': '四川省'}), '四川省');
   });
 
   testWidgets('selected cards stay on the form; picker opens as a dialog', (

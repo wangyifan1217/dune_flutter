@@ -2457,7 +2457,10 @@ void main() {
 
       await tester.pumpWidget(_harness(1440));
       await tester.pump();
-      final addProduct = find.text('新增');
+      await tester.tap(find.byKey(const ValueKey('proposal-nav-tech')));
+      await tester.pumpAndSettle();
+      await _scrollUntil(tester, '新建产品');
+      final addProduct = find.byKey(const ValueKey('proposal-new-product'));
       await tester.ensureVisible(addProduct);
       await tester.pump();
       expect(find.text('尚未添加$kProposalMainProductLabel'), findsNothing);
@@ -2485,6 +2488,20 @@ void main() {
         ),
         findsNothing,
       );
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('渠道'),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('请先在科技部选择业务平台'),
+        ),
+        findsNothing,
+      );
       expect(find.text('标签三-一级'), findsNothing);
       expect(find.text('标签三-二级'), findsNothing);
       expect(find.text('产品生效日期'), findsNothing);
@@ -2495,17 +2512,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('现金券').last);
       await tester.pumpAndSettle();
-      await tester.enterText(
-        find.descendant(of: dialog, matching: find.byType(TextFormField)).first,
-        '测试业务产品',
+      final fields = find.descendant(
+        of: dialog,
+        matching: find.byType(TextFormField),
       );
+      await tester.enterText(fields.at(0), '测试业务产品');
+      await tester.enterText(fields.at(4), 'SUP-1');
       await tester.tap(find.descendant(of: dialog, matching: find.text('确定')));
-      await tester.pump();
-      expect(find.text('尚未添加$kProposalMainProductLabel'), findsNothing);
-      expect(
-        find.text('$kProposalMainProductLabel 1 · 测试业务产品'),
-        findsOneWidget,
-      );
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.textContaining('测试业务产品'), findsWidgets);
     },
   );
 
@@ -5439,12 +5455,17 @@ void main() {
     await tester.pump();
     expect(find.text('尚未添加供给产品'), findsNothing);
     expect(find.text('供给产品 1'), findsOneWidget);
-    expect(find.text('业务平台'), findsWidgets);
-    expect(find.text('已建供给产品'), findsOneWidget);
     expect(
-      tester.widget<ProposalField>(_fieldOf('业务平台').first).required,
-      isTrue,
+      find.descendant(
+        of: find.ancestor(
+          of: find.text('供给产品 1'),
+          matching: find.byType(Column),
+        ).first,
+        matching: find.text('业务平台'),
+      ),
+      findsNothing,
     );
+    expect(find.text('已建供给产品'), findsOneWidget);
     expect(
       tester.widget<ProposalField>(_fieldOf('已建供给产品').first).required,
       isTrue,
@@ -5453,7 +5474,10 @@ void main() {
     expect(find.text('产品编码'), findsNothing);
     expect(find.text('返利模式'), findsNothing);
     expect(
-      find.descendant(of: _fieldOf('已建供给产品'), matching: find.text('请先选择业务平台')),
+      find.descendant(
+        of: _fieldOf('已建供给产品'),
+        matching: find.text('请先在科技部选择业务平台'),
+      ),
       findsOneWidget,
     );
   });

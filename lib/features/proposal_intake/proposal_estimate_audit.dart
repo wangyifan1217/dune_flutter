@@ -49,12 +49,10 @@ Future<void> showProposalEstimateAudit({
 /// 右上角「测算过程」整页透视先不露出（测算合计卡里的「算法」已经够用）；要再打开改成 true。
 const bool kProposalEstimateAuditButton = false;
 
-/// 和后端 peRatio 一样：带 % 或大于 1 的按百分数，其余是小数。
+/// 和结算比例同一条规则。空字符串按 0，不走「没填比例时按 1」的测算兜底。
 double _ratioOf(String raw) {
-  final text = raw.trim().replaceAll('％', '%');
-  if (text.isEmpty) return 0;
-  final n = double.tryParse(text.replaceAll('%', '').trim()) ?? 0;
-  return text.contains('%') || n > 1 ? n / 100 : n;
+  if (raw.trim().isEmpty) return 0;
+  return proposalParseSettleRatio(raw);
 }
 
 /// 测算合计「算法」用的简版步骤，按指标分开：点「收入」只看收入怎么算，点「成本」只看成本怎么算。

@@ -52,6 +52,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   final Set<int> _selectedMeetingIds = <int>{};
   Timer? _scrollRestoreRetry;
   Timer? _searchDebounce;
+  final Set<int> _seenLocalJobIds = <int>{};
 
   /// 新建等已 invalidate 时，dispose 勿再 put 旧快照把缓存「复活」。
   bool _suppressPersistOnDispose = false;
@@ -105,7 +106,19 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   }
 
   void _onUploadUpdate() {
-    if (mounted) setState(() {});
+    final now = MeetingUploadCoordinator.instance.jobs
+        .where((job) => job.meetingId < 0)
+        .map((job) => job.meetingId)
+        .toSet();
+    final promoted = _seenLocalJobIds.difference(now);
+    _seenLocalJobIds
+      ..clear()
+      ..addAll(now);
+    if (!mounted) return;
+    setState(() {});
+    if (promoted.isNotEmpty) {
+      unawaited(_load(reset: true, silent: true));
+    }
   }
 
   void _persistScrollNow() {
@@ -309,6 +322,40 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   }
 
   Future<void> _deleteMeeting(NativeMeetingSummary row) async {
+    if (row.meetingId < 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('删除本机录音'),
+          content: Text(
+            '「${row.title.isEmpty ? '未命名会议' : row.title}」还没上传。删除后本机录音无法恢复。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: DunesColors.resolve(
+                  ctx,
+                  DunesColors.coral,
+                  role: DunesColorRole.surface,
+                ),
+              ),
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      await MeetingUploadCoordinator.instance.discardOfflineDraft(
+        row.meetingId,
+      );
+      if (mounted) setState(() {});
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -499,7 +546,61 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   }
 
   List<NativeMeetingSummary> get _visibleRows {
-    return _rows;
+    final locals = _folderFilter.isAll
+        ? _localDraftRows()
+        : const <NativeMeetingSummary>[];
+    if (locals.isEmpty) return _rows;
+    final localIds = locals.map((row) => row.meetingId).toSet();
+    return <NativeMeetingSummary>[
+      ...locals,
+      ..._rows.where((row) => !localIds.contains(row.meetingId)),
+    ];
+  }
+
+  List<NativeMeetingSummary> _localDraftRows() {
+    final keyword = _search.text.trim();
+    final userId = widget.session.userId;
+    final rows = <NativeMeetingSummary>[];
+    for (final job in MeetingUploadCoordinator.instance.jobs) {
+      if (job.meetingId >= 0) continue;
+      if (job.userId > 0 && userId > 0 && job.userId != userId) continue;
+      if (keyword.isNotEmpty && !job.title.contains(keyword)) continue;
+      final created = DateTime.fromMillisecondsSinceEpoch(job.createdAtMs);
+      rows.add(
+        NativeMeetingSummary(
+          meetingId: job.meetingId,
+          title: job.title,
+          meetingDate: job.meetingDate,
+          createdAt: created.toIso8601String(),
+          updatedAt: created.toIso8601String(),
+          status: 'DRAFT',
+          asrProgress: 0,
+        ),
+      );
+    }
+    return rows;
+  }
+
+  Future<void> _openLocalDraft(NativeMeetingSummary row) async {
+    final retry = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(row.title.isEmpty ? '未命名会议' : row.title),
+        content: const Text('录音已保存在本机。联网后会自动上传，也可以现在重试。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('关闭'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('立即重试'),
+          ),
+        ],
+      ),
+    );
+    if (retry != true || !mounted) return;
+    await MeetingUploadCoordinator.instance.retry(row.meetingId);
   }
 
   Widget _buildSearchField() {
@@ -562,7 +663,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   String _uploadStatusLabel(MeetingUploadJob job) {
     return switch (job.phase) {
       MeetingUploadPhase.pending =>
-        job.error != null && job.error!.isNotEmpty ? '上传重试中' : '准备上传中',
+        job.meetingId < 0
+            ? '已保存在本机'
+            : job.error != null && job.error!.isNotEmpty
+            ? '上传重试中'
+            : '准备上传中',
       MeetingUploadPhase.uploading =>
         job.uploadProgressPercent <= 0
             ? '正在准备上传'
@@ -704,12 +809,12 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
           onDelete: (folder) => unawaited(_deleteFolder(folder)),
         ),
         const SizedBox(height: 14),
-        if (_loading && _rows.isEmpty)
+        if (_loading && _visibleRows.isEmpty)
           const Padding(
             padding: EdgeInsets.only(top: 80),
             child: Center(child: CircularProgressIndicator()),
           )
-        else if (_error != null && _rows.isEmpty)
+        else if (_error != null && _visibleRows.isEmpty)
           _buildMessageCard(
             icon: Icons.error_outline,
             title: '加载失败',
@@ -717,7 +822,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
             actionLabel: '重试',
             onAction: () => _load(reset: true),
           )
-        else if (_rows.isEmpty)
+        else if (_visibleRows.isEmpty)
           _buildMessageCard(
             icon: searching ? Icons.search_off_rounded : Icons.history_rounded,
             title: searching ? '未找到匹配会议' : '暂无会议记录',
@@ -954,12 +1059,14 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     final statusColor = uploadJob != null
         ? _uploadStatusColor(uploadJob)
         : _statusColor(row.status);
-    final enabled = row.meetingId > 0;
+    final isLocalDraft = row.meetingId < 0;
+    final enabled = row.meetingId != 0;
     final showUploadProgressBar =
         uploadJob != null &&
         uploadJob.phase == MeetingUploadPhase.uploading &&
         uploadJob.uploadProgressPercent < 100;
     final deletingDisabled =
+        !isLocalDraft &&
         uploadJob != null &&
         (uploadJob.phase == MeetingUploadPhase.pending ||
             uploadJob.phase == MeetingUploadPhase.uploading ||
@@ -978,6 +1085,10 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
           borderRadius: BorderRadius.circular(14),
           onTap: enabled
               ? () {
+                  if (isLocalDraft) {
+                    unawaited(_openLocalDraft(row));
+                    return;
+                  }
                   if (_selecting || desktopMultiSelectModifierHeld()) {
                     if (!_selecting) {
                       setState(() => _selecting = true);
@@ -988,13 +1099,13 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                   _openDetail(row.meetingId);
                 }
               : null,
-          onSecondaryTap: enabled
+          onSecondaryTap: enabled && !isLocalDraft
               ? () => setState(() {
                   _selecting = true;
                   _selectedMeetingIds.add(row.meetingId);
                 })
               : null,
-          onLongPress: enabled
+          onLongPress: enabled && !isLocalDraft
               ? () => setState(() {
                   _selecting = true;
                   _selectedMeetingIds.add(row.meetingId);

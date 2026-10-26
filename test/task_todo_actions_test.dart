@@ -69,6 +69,14 @@ void main() {
     expect(taskTodoConfirmCopy(item).body, isNot(contains('支付凭证')));
   });
 
+  test('urge only reminds the applicant', () {
+    final item = _item('URGE');
+    final copy = taskTodoConfirmCopy(item);
+    expect(copy.body, contains('提醒申请人'));
+    expect(copy.body, contains('不办结'));
+    expect(copy.body, isNot(contains('无法收回')));
+  });
+
   test('loan repay still asks for payment voucher', () {
     final item = XflowProposalItem(
       id: 730,

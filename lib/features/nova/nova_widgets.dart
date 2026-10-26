@@ -19,6 +19,7 @@ import 'nova_file_utils.dart';
 import 'nova_models_service.dart';
 import 'nova_personal_query.dart';
 import 'nova_reply_presentation.dart';
+import 'nova_reply_blocks.dart';
 
 const kNovaName = '小饕';
 const kNovaIdentityReply = '我是小饕';
@@ -1894,12 +1895,15 @@ class NovaC4MessageRow extends StatelessWidget {
                 ),
               ),
             ),
-          NovaMarkdownBody(
-            text: presentation?.body ?? text,
-            streaming: streaming,
-            mediaResolver: resolver,
-            manageSelection: false,
-          ),
+          if (presentation != null && !streaming)
+            NovaReplyBlocksView(body: presentation.body)
+          else
+            NovaMarkdownBody(
+              text: presentation?.body ?? text,
+              streaming: streaming,
+              mediaResolver: resolver,
+              manageSelection: false,
+            ),
           if (presentation != null)
             Container(
               margin: const EdgeInsets.only(top: 14),

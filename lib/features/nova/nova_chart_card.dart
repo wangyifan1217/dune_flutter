@@ -614,3 +614,208 @@ class _NovaLinePainter extends CustomPainter {
   bool shouldRepaint(_NovaLinePainter old) =>
       old.chart != chart || old.lo != lo || old.hi != hi || old.grid != grid;
 }
+
+/// 回答下面的图默认折叠成一行：点开再看，不把正文挤下去。
+class NovaCollapsibleChart extends StatelessWidget {
+  const NovaCollapsibleChart({
+    super.key,
+    required this.chart,
+    required this.expanded,
+    required this.onToggle,
+    this.dark = false,
+  });
+
+  final NovaChart chart;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    final ink = dark ? const Color(0xFFF5F2FA) : const Color(0xFF1C1C1E);
+    final muted = dark ? const Color(0xFF98989F) : const Color(0xFF8E8E93);
+    final title = chart.title.isEmpty
+        ? (chart.isLine ? '走势图' : '对比图')
+        : chart.title;
+    final header = Material(
+      color: dark ? const Color(0xFF1F1F22) : const Color(0xFFF8F7FB),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        key: const ValueKey('nova-chart-toggle'),
+        borderRadius: BorderRadius.circular(10),
+        onTap: onToggle,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                chart.isLine
+                    ? Icons.show_chart_rounded
+                    : Icons.bar_chart_rounded,
+                size: 16,
+                color: _novaChartPalette.first,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: ink,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                expanded ? '收起' : '展开',
+                style: TextStyle(fontSize: 12, color: muted),
+              ),
+              Icon(
+                expanded
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: 16,
+                color: muted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 520),
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        alignment: Alignment.topLeft,
+        child: expanded
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  header,
+                  const SizedBox(height: 6),
+                  NovaChartCard(chart: chart, dark: dark),
+                ],
+              )
+            : Align(alignment: Alignment.centerLeft, child: header),
+      ),
+    );
+  }
+}
+
+/// 回答下面的追问：一行一个，整行可点；最后可以带一个次要操作（如「改用通用问答」）。
+class NovaFollowUps extends StatelessWidget {
+  const NovaFollowUps({
+    super.key,
+    required this.suggestions,
+    required this.onAsk,
+    this.enabled = true,
+    this.secondaryLabel,
+    this.secondaryKey,
+    this.onSecondary,
+    this.maxVisible = 3,
+  });
+
+  final List<String> suggestions;
+  final ValueChanged<String> onAsk;
+  final bool enabled;
+  final String? secondaryLabel;
+  final Key? secondaryKey;
+  final VoidCallback? onSecondary;
+  final int maxVisible;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final ink = dark ? const Color(0xFFE8E4F2) : const Color(0xFF2C2540);
+    final muted = dark ? const Color(0xFF98989F) : const Color(0xFF8E8E93);
+    final border = dark ? const Color(0xFF34303E) : const Color(0xFFE6E1F2);
+    final fill = dark ? const Color(0xFF1F1D25) : Colors.white;
+    final accent = _novaChartPalette.first;
+    final shown = suggestions.take(maxVisible).toList();
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 520),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (shown.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 2, bottom: 6),
+              child: Text(
+                '接着问',
+                style: TextStyle(fontSize: 11.5, color: muted),
+              ),
+            ),
+          for (final suggestion in shown)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Material(
+                color: fill,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: border),
+                ),
+                child: InkWell(
+                  key: ValueKey('nova-suggestion-$suggestion'),
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: enabled ? () => onAsk(suggestion) : null,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 9,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.subdirectory_arrow_right_rounded,
+                          size: 15,
+                          color: enabled ? accent : muted,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            suggestion,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.35,
+                              color: enabled ? ink : muted,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 16,
+                          color: muted,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (secondaryLabel != null && onSecondary != null)
+            TextButton(
+              key: secondaryKey,
+              style: TextButton.styleFrom(
+                foregroundColor: muted,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                minimumSize: const Size(0, 28),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+              onPressed: enabled ? onSecondary : null,
+              child: Text(secondaryLabel!),
+            ),
+        ],
+      ),
+    );
+  }
+}

@@ -10,6 +10,7 @@ import 'package:dunes_app/features/auth/auth_session.dart';
 import 'package:dunes_app/features/nova/native_nova_service.dart';
 import 'package:dunes_app/features/nova/nova_chart_card.dart';
 import 'package:dunes_app/features/nova/nova_personal_query.dart';
+import 'package:dunes_app/features/nova/nova_reply_blocks.dart';
 
 const _session = AuthSession(
   token: 't',
@@ -239,6 +240,93 @@ void main() {
     expect(find.text('销售额'), findsOneWidget);
     expect(find.text('利润'), findsOneWidget);
     expect(find.text('(未分类)（平安）'), findsOneWidget);
+  });
+
+  test('lighthouse body is split into kpi tiles, sections and ranks', () {
+    const body = '销售额 500.0万（环比 +3.2%）\n'
+        '利润 7.0万（环比 -5.0%）\n'
+        '营收 12.0万\n'
+        '\n'
+        '按省份：\n'
+        '1. 广东省：销售额 300.0万，利润 4.0万\n'
+        '2. (未分类)（平安）：销售额 2.0万\n'
+        '金额和单位来自灯塔查询，没有另行估算。\n'
+        '还可以说：本月利润下降的原因。';
+    final blocks = novaReplyBlocks(body);
+    expect(blocks.first, isA<NovaReplyKpis>());
+    final kpis = (blocks.first as NovaReplyKpis).items;
+    expect(kpis.map((k) => k.label), ['销售额', '利润', '营收']);
+    expect(kpis[0].value, '500.0万');
+    expect(kpis[0].direction, 1);
+    expect(kpis[1].direction, -1);
+    expect(kpis[2].delta, isEmpty);
+    final text = (blocks.last as NovaReplyMarkdown).markdown;
+    expect(text, contains('**按省份**'));
+    expect(text, contains('1. **广东省**：销售额 300.0万'));
+    expect(text, isNot(contains('没有另行估算')));
+    expect(text, isNot(contains('还可以说')));
+    // 单独一行指标、表格保持原样。
+    final single = novaReplyBlocks('利润 7.0万\n| a | b |\n| --- | --- |');
+    expect(single.single, isA<NovaReplyMarkdown>());
+  });
+
+  testWidgets('kpi tiles render without overflow on a phone', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        const SizedBox(
+          width: 300,
+          child: NovaReplyBlocksView(
+            body: '销售额 500.0万（环比 +3.2%）\n利润 7.0万（环比 -5.0%）\n营收 12.0万\n核销额 480.0万',
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text('500.0万'), findsOneWidget);
+    expect(find.text('↑ 环比 +3.2%'), findsOneWidget);
+  });
+
+  testWidgets('reply chart is folded until tapped', (tester) async {
+    var expanded = false;
+    await tester.pumpWidget(
+      _host(
+        StatefulBuilder(
+          builder: (context, setState) => NovaCollapsibleChart(
+            chart: NovaChart.fromJson(_barChart)!,
+            expanded: expanded,
+            onToggle: () => setState(() => expanded = !expanded),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('展开'), findsOneWidget);
+    expect(find.byType(NovaChartCard), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('nova-chart-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.byType(NovaChartCard), findsOneWidget);
+    expect(find.text('收起'), findsOneWidget);
+  });
+
+  testWidgets('follow-ups show at most three rows and the secondary action', (
+    tester,
+  ) async {
+    final asked = <String>[];
+    var secondary = 0;
+    await tester.pumpWidget(
+      _host(
+        NovaFollowUps(
+          suggestions: const ['问题一', '问题二', '问题三', '问题四'],
+          onAsk: asked.add,
+          secondaryLabel: '改用通用问答',
+          onSecondary: () => secondary++,
+        ),
+      ),
+    );
+    expect(find.text('问题四'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('nova-suggestion-问题二')));
+    await tester.tap(find.text('改用通用问答'));
+    expect(asked, ['问题二']);
+    expect(secondary, 1);
   });
 
   testWidgets('insight card asks a suggestion and can be dismissed', (

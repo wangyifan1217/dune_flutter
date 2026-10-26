@@ -106,6 +106,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   bool _loading = true;
   bool _sending = false;
+  /// 已展开的回答图表（默认折叠）。
+  final Set<int> _expandedCharts = <int>{};
   bool _serverGenerating = false;
   bool _novaReady = true;
   bool _voiceMode = false;
@@ -5013,54 +5015,28 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         if (chart != null)
           Padding(
             padding: const EdgeInsets.only(left: 48, right: 16, bottom: 8),
-            child: NovaChartCard(
+            child: NovaCollapsibleChart(
               key: ValueKey('nova-chart-${m.id}'),
               chart: chart,
+              expanded: _expandedCharts.contains(m.id),
+              onToggle: () => setState(() {
+                if (!_expandedCharts.remove(m.id)) _expandedCharts.add(m.id);
+              }),
               dark: Theme.of(context).brightness == Brightness.dark,
             ),
           ),
-        if (suggestions.isNotEmpty)
+        if (suggestions.isNotEmpty || lighthouseQuestion != null)
           Padding(
-            padding: const EdgeInsets.only(left: 48, right: 16, bottom: 6),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                for (final suggestion in suggestions)
-                  ActionChip(
-                    key: ValueKey('nova-suggestion-$suggestion'),
-                    label: Text(
-                      suggestion,
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    onPressed: _sending
-                        ? null
-                        : () => unawaited(_askSuggestion(m, suggestion)),
-                  ),
-              ],
-            ),
-          ),
-        if (lighthouseQuestion != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 48, bottom: 8),
-            child: TextButton(
-              key: const ValueKey('nova-lighthouse-as-chat'),
-              style: TextButton.styleFrom(
-                foregroundColor: DunesColors.resolve(
-                  context,
-                  DunesColors.text3,
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: const Size(0, 28),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: const TextStyle(fontSize: 12),
-              ),
-              onPressed: _sending
+            padding: const EdgeInsets.only(left: 48, right: 16, bottom: 8),
+            child: NovaFollowUps(
+              suggestions: suggestions,
+              enabled: !_sending,
+              onAsk: (suggestion) => unawaited(_askSuggestion(m, suggestion)),
+              secondaryLabel: lighthouseQuestion == null ? null : '改用通用问答',
+              secondaryKey: const ValueKey('nova-lighthouse-as-chat'),
+              onSecondary: lighthouseQuestion == null
                   ? null
                   : () => unawaited(_answerAsChat(lighthouseQuestion)),
-              child: const Text('改用通用问答'),
             ),
           ),
         if (showPreview)

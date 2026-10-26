@@ -16,6 +16,8 @@ bool lighthouseProductUsesGmv(String? product) => const {
 /// 「点播（积分）」「民营加油（交易）」是线上现行名。
 bool lighthouseProductReplacesVerifiedHeroWithGmv(String? product) {
   if (lighthouseProductUsesGmv(product)) return true;
+  // 2026-10-26 · 渠道「抖音」：GMV 才是它的规模口径，挪到外面六个金刚位上。
+  if (lighthouseProductKey(product).contains('抖音')) return true;
   return const {
     '点播(积分)',
     '运营商点播(积分)',

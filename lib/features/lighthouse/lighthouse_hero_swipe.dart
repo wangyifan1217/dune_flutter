@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +16,15 @@ import 'package:flutter/services.dart';
 //   ② 大数卡左滑翻页：本日利润 ⇄ 资金与资产，同一张卡里翻，不再往下展开。
 //
 // 两件事用同一根弹簧，手感一致：轻微过冲、不晃第二下。
+//
+// 2026-10-26 · 手机适配：
+//   · 所有横拖都走 [LighthouseDirectionalHDrag]：横向位移要明显大于竖向
+//     （默认 1.4 倍）才接，斜着滚页面不会误触；阈值按设备取（iOS / 安卓 / 鼠标）。
+//   · 图里的横拖先翻历史，翻到最新还往左拖 → 剩下的位移经
+//     [LighthouseHeroWideScope] 交给拉宽（内层滚到头带动外层），不再两个手势抢。
+//   · 拉宽过程里 [LighthouseHeroWideHandoff.progress] 是连续的，图据此连续加点，
+//     松手不再从 7 点跳到 14 点。
+//   · ③ [LighthouseFoldSection]：规模 / 成本 / 利润上滑收起，高度跟手。
 // 只管手势和几何，不管内容 —— 内容全由 native_lighthouse_page 传进来，
 // 所以这里不依赖灯塔的私有类，也不认识任何指标。
 // ═════════════════════════════════════════════════════════════════════════════
@@ -38,6 +49,137 @@ const double _kFlingVelocity = 320;
 
 /// 出界后的阻尼：越往外拽越沉，最多拽出这么多。
 double _rubber(double over, double delta) => delta / (1 + over * 10);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 方向锁横拖
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// 横拖识别器，带方向锁：横向位移过了触摸阈值、并且 |dx| > ratio·|dy| 才接。
+/// 斜着划（多半是在滚页面）就不接，竖向滚动自然赢。
+class LighthouseDirectionalHDrag extends HorizontalDragGestureRecognizer {
+  LighthouseDirectionalHDrag({super.debugOwner, this.ratio = 1.4});
+
+  final double ratio;
+  double _sx = 0, _sy = 0;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    _sx = 0;
+    _sy = 0;
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void addAllowedPointerPanZoom(PointerPanZoomStartEvent event) {
+    _sx = 0;
+    _sy = 0;
+    super.addAllowedPointerPanZoom(event);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent) {
+      _sx += event.delta.dx;
+      _sy += event.delta.dy;
+    } else if (event is PointerPanZoomUpdateEvent) {
+      _sx += event.panDelta.dx;
+      _sy += event.panDelta.dy;
+    }
+    super.handleEvent(event);
+  }
+
+  @override
+  bool hasSufficientGlobalDistanceToAccept(
+    PointerDeviceKind pointerDeviceKind,
+    double? deviceTouchSlop,
+  ) =>
+      super.hasSufficientGlobalDistanceToAccept(
+        pointerDeviceKind,
+        deviceTouchSlop,
+      ) &&
+      _sx.abs() > ratio * _sy.abs();
+}
+
+/// [GestureDetector] 横拖那四个回调的方向锁版本。回调全空时原样返回 child。
+class LighthouseHDrag extends StatelessWidget {
+  const LighthouseHDrag({
+    super.key,
+    required this.child,
+    this.onStart,
+    this.onUpdate,
+    this.onEnd,
+    this.onCancel,
+    this.behavior,
+    this.ratio = 1.4,
+  });
+
+  final Widget child;
+  final GestureDragStartCallback? onStart;
+  final GestureDragUpdateCallback? onUpdate;
+  final GestureDragEndCallback? onEnd;
+  final GestureDragCancelCallback? onCancel;
+  final HitTestBehavior? behavior;
+  final double ratio;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onStart == null && onUpdate == null && onEnd == null) return child;
+    final settings = MediaQuery.maybeGestureSettingsOf(context);
+    return RawGestureDetector(
+      behavior: behavior,
+      gestures: <Type, GestureRecognizerFactory>{
+        LighthouseDirectionalHDrag:
+            GestureRecognizerFactoryWithHandlers<LighthouseDirectionalHDrag>(
+              () => LighthouseDirectionalHDrag(debugOwner: this, ratio: ratio),
+              (r) {
+                r
+                  ..gestureSettings = settings
+                  ..onStart = onStart
+                  ..onUpdate = onUpdate
+                  ..onEnd = onEnd
+                  ..onCancel = onCancel;
+              },
+            ),
+      },
+      child: child,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 拉宽接力：图翻到最新还往左拖，把剩下的位移交给外层
+// ─────────────────────────────────────────────────────────────────────────────
+
+abstract class LighthouseHeroWideHandoff {
+  /// 0 = 平常 · 1 = 拉宽（拖动 / 回弹中带小数，橡皮筋时会略出界）。
+  ValueListenable<double> get progress;
+  void begin();
+
+  /// 手指横向位移（px，往左为负）。
+  void update(double dx);
+
+  /// 松手时的横向速度（px/s）。
+  void end(double vx);
+  void cancel();
+}
+
+class LighthouseHeroWideScope extends InheritedWidget {
+  const LighthouseHeroWideScope({
+    super.key,
+    required this.handoff,
+    required super.child,
+  });
+
+  final LighthouseHeroWideHandoff handoff;
+
+  static LighthouseHeroWideHandoff? maybeOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<LighthouseHeroWideScope>()
+      ?.handoff;
+
+  @override
+  bool updateShouldNotify(LighthouseHeroWideScope oldWidget) =>
+      oldWidget.handoff != handoff;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ① 大数卡 | 走势卡 —— 左右拉伸
@@ -92,7 +234,8 @@ class LighthouseHeroWideRow extends StatefulWidget {
 }
 
 class _LighthouseHeroWideRowState extends State<LighthouseHeroWideRow>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin
+    implements LighthouseHeroWideHandoff {
   late final AnimationController _t = AnimationController.unbounded(
     vsync: this,
     value: widget.wide ? 1 : 0,
@@ -123,17 +266,37 @@ class _LighthouseHeroWideRowState extends State<LighthouseHeroWideRow>
     );
   }
 
-  void _onStart(DragStartDetails d) {
+  // ── 接力（图里翻到最新还往左拖）───────────────────────────────────────
+  @override
+  ValueListenable<double> get progress => _t;
+
+  @override
+  void begin() => _startDrag();
+
+  @override
+  void update(double dx) => _updateDrag(dx);
+
+  @override
+  void end(double vx) => _endDrag(vx);
+
+  @override
+  void cancel() => _onCancel();
+
+  void _onStart(DragStartDetails d) => _startDrag();
+  void _onUpdate(DragUpdateDetails d) => _updateDrag(d.delta.dx);
+  void _onEnd(DragEndDetails d) => _endDrag(d.velocity.pixelsPerSecond.dx);
+
+  void _startDrag() {
     _t.stop();
     _dragging = true;
     _lastSide = _t.value >= 0.5;
     setState(() {});
   }
 
-  void _onUpdate(DragUpdateDetails d) {
+  void _updateDrag(double dx) {
     if (!_dragging) return;
     final cur = _t.value;
-    final step = -d.delta.dx / _span;
+    final step = -dx / _span;
     final over = cur < 0 ? -cur : (cur > 1 ? cur - 1 : 0.0);
     final goingOut = (cur <= 0 && step < 0) || (cur >= 1 && step > 0);
     final next = (cur + (goingOut ? _rubber(over, step) : step))
@@ -153,10 +316,9 @@ class _LighthouseHeroWideRowState extends State<LighthouseHeroWideRow>
     _t.value = next;
   }
 
-  void _onEnd(DragEndDetails d) {
+  void _endDrag(double vx) {
     if (!_dragging) return;
     _dragging = false;
-    final vx = d.velocity.pixelsPerSecond.dx;
     final wide = vx.abs() > _kFlingVelocity ? vx < 0 : _t.value >= 0.5;
     final overpulled = _armed && wide;
     _armed = false;
@@ -174,19 +336,23 @@ class _LighthouseHeroWideRowState extends State<LighthouseHeroWideRow>
     setState(() {});
   }
 
-  GestureDetector _dragZone({required Widget child, HitTestBehavior? behavior}) {
-    return GestureDetector(
+  Widget _dragZone({required Widget child, HitTestBehavior? behavior}) {
+    return LighthouseHDrag(
       behavior: behavior,
-      onHorizontalDragStart: _onStart,
-      onHorizontalDragUpdate: _onUpdate,
-      onHorizontalDragEnd: _onEnd,
-      onHorizontalDragCancel: _onCancel,
+      onStart: _onStart,
+      onUpdate: _onUpdate,
+      onEnd: _onEnd,
+      onCancel: _onCancel,
       child: child,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    return LighthouseHeroWideScope(handoff: this, child: _buildRow());
+  }
+
+  Widget _buildRow() {
     return LayoutBuilder(
       builder: (context, box) {
         final w = box.maxWidth;
@@ -330,16 +496,27 @@ class LighthouseHeroCardPager extends StatefulWidget {
     this.tabs,
     this.tabStyle,
     this.tabActiveStyle,
+    this.tabThumbColor = Colors.white,
+    this.tabsAtTop = false,
+    this.tabHeight = 28,
     this.position,
   });
 
   final List<Widget> pages;
 
-  /// 非空时底部画一排文字页签（「利润 · 资金」）+ 一根跟手滑的短条，
-  /// 代替小圆点；页签可点。页面自己要在底部留 ~24 的空。
+  /// 非空时底部画一条通栏分段切换（「利润 | 资金」），白色滑块跟手走，
+  /// 代替小圆点；每半边整块可点。页面自己要在底部留 ~36 的空。
   final List<String>? tabs;
   final TextStyle? tabStyle;
   final TextStyle? tabActiveStyle;
+
+  /// 分段条滑块的底色（深色模式由外面传解析过的表面色）。
+  final Color tabThumbColor;
+
+  /// 分段条钉在顶上（[indicatorBottom] 这时当作离顶边的距离）。
+  /// 页面自己要在顶部留出 tabHeight + 间距。
+  final bool tabsAtTop;
+  final double tabHeight;
 
   /// 跟手的页位置（0…n-1，带小数）。外面可以拿它让别的东西跟着翻
   /// （主 Hero 右边的走势卡随左边换模式）。只在手势 / 动画里写，不在 build 里写。
@@ -460,11 +637,11 @@ class _LighthouseHeroCardPagerState extends State<LighthouseHeroCardPager>
     return LayoutBuilder(
       builder: (context, box) {
         _w = math.max(1.0, box.maxWidth);
-        return GestureDetector(
-          onHorizontalDragStart: _onStart,
-          onHorizontalDragUpdate: _onUpdate,
-          onHorizontalDragEnd: _onEnd,
-          onHorizontalDragCancel: _onCancel,
+        return LighthouseHDrag(
+          onStart: _onStart,
+          onUpdate: _onUpdate,
+          onEnd: _onEnd,
+          onCancel: _onCancel,
           child: AnimatedBuilder(
             animation: _pos,
             builder: (context, _) {
@@ -482,7 +659,12 @@ class _LighthouseHeroCardPagerState extends State<LighthouseHeroCardPager>
                   Positioned(
                     left: 0,
                     right: 0,
-                    bottom: widget.indicatorBottom,
+                    top: widget.tabs != null && widget.tabsAtTop
+                        ? widget.indicatorBottom
+                        : null,
+                    bottom: widget.tabs != null && widget.tabsAtTop
+                        ? null
+                        : widget.indicatorBottom,
                     child: widget.tabs == null
                         ? IgnorePointer(child: _indicator(pos))
                         : _tabBar(pos),
@@ -525,22 +707,52 @@ class _LighthouseHeroCardPagerState extends State<LighthouseHeroCardPager>
     );
   }
 
-  /// 文字页签：「利润 · 资金」，当前页加粗变紫，下面一根 18×2 的短条跟手滑。
+  /// 「利润 | 资金」分段切换条（2026-10-26）：原来是 10.5 号小字 + 18×2 短条，
+  /// 点不准。改成通栏 28 高的分段钮 —— 淡紫底槽里一块白色滑块跟手走，
+  /// 每半边都是整块热区；整条也可以横拖翻页（手势归外层 pager）。
   Widget _tabBar(double pos) {
     final tabs = widget.tabs!;
     final n = tabs.length;
     final active = pos.round().clamp(0, n - 1);
-    return SizedBox(
-      height: 20,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+    final h = widget.tabHeight;
+    const pad = 2.0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Container(
+        height: h,
+        padding: const EdgeInsets.all(pad),
+        decoration: BoxDecoration(
+          color: widget.accent.withAlpha(20),
+          borderRadius: BorderRadius.circular(h / 2.6),
+        ),
         child: LayoutBuilder(
           builder: (context, box) {
             final slot = box.maxWidth / n;
-            final x = pos.clamp(-0.15, n - 1 + 0.15) * slot;
+            final x = pos.clamp(0.0, (n - 1).toDouble()) * slot;
             return Stack(
               clipBehavior: Clip.none,
               children: [
+                Positioned(
+                  left: x,
+                  top: 0,
+                  bottom: 0,
+                  width: slot,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: widget.tabThumbColor,
+                        borderRadius: BorderRadius.circular(h / 2.6 - 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: widget.accent.withAlpha(38),
+                            blurRadius: 3,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
                 Row(
                   children: [
                     for (var i = 0; i < n; i++)
@@ -558,7 +770,7 @@ class _LighthouseHeroCardPagerState extends State<LighthouseHeroCardPager>
                                 style: (i == active
                                         ? widget.tabActiveStyle
                                         : widget.tabStyle) ??
-                                    const TextStyle(fontSize: 10.5),
+                                    const TextStyle(fontSize: 12),
                                 child: Text(tabs[i], maxLines: 1),
                               ),
                             ),
@@ -566,20 +778,6 @@ class _LighthouseHeroCardPagerState extends State<LighthouseHeroCardPager>
                         ),
                       ),
                   ],
-                ),
-                Positioned(
-                  left: x + (slot - 18) / 2,
-                  bottom: 0,
-                  child: IgnorePointer(
-                    child: Container(
-                      width: 18,
-                      height: 2,
-                      decoration: BoxDecoration(
-                        color: widget.accent,
-                        borderRadius: BorderRadius.circular(1),
-                      ),
-                    ),
-                  ),
                 ),
               ],
             );
@@ -613,6 +811,179 @@ class _LighthouseHeroCardPagerState extends State<LighthouseHeroCardPager>
           ),
         ],
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ③ 规模 / 成本 / 利润 —— 上滑收起（2026-10-26）
+// ─────────────────────────────────────────────────────────────────────────────
+//
+//   只收这一块；大数卡和走势卡不动。把手在这块下面：往上推，这块的高度跟着
+//   手指一格一格变矮（下面的列表跟着上来，不跳）；松手按位置 / 速度吸到收起或
+//   展开，带一点弹簧。往下拉、或点把手，展开。
+//   外层如果包着 AnimatedSize，拖动 / 回弹期间要让它让开（[onMovingChanged]），
+//   否则它会把每一帧的高度变化再补间一遍，手感就成了「拖着橡皮走」。
+
+class LighthouseFoldSection extends StatefulWidget {
+  const LighthouseFoldSection({
+    super.key,
+    required this.child,
+    required this.folded,
+    required this.onFoldedChanged,
+    required this.handleBuilder,
+    this.onMovingChanged,
+  });
+
+  final Widget child;
+  final bool folded;
+  final ValueChanged<bool> onFoldedChanged;
+
+  /// 把手。[progress]：0 展开 · 1 收起（拖动中带小数）。
+  final Widget Function(BuildContext context, double progress) handleBuilder;
+
+  /// 拖动或回弹开始 / 结束。
+  final ValueChanged<bool>? onMovingChanged;
+
+  @override
+  State<LighthouseFoldSection> createState() => _LighthouseFoldSectionState();
+}
+
+class _LighthouseFoldSectionState extends State<LighthouseFoldSection>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _t = AnimationController.unbounded(
+    vsync: this,
+    value: widget.folded ? 1 : 0,
+  );
+  final GlobalKey _childKey = GlobalKey();
+  late double _target = widget.folded ? 1 : 0;
+  bool _dragging = false;
+  bool _moving = false;
+  bool _lastSide = false;
+
+  /// 这块展开时的高度（拖动时把像素换成进度用）。
+  double get _h =>
+      math.max(40.0, _childKey.currentContext?.size?.height ?? 120.0);
+
+  @override
+  void didUpdateWidget(LighthouseFoldSection old) {
+    super.didUpdateWidget(old);
+    // 自己松手已经朝这个方向弹了（带着甩的速度）就别重开一根零速弹簧。
+    final want = widget.folded ? 1.0 : 0.0;
+    if (!_dragging && want != _target) _settle(want, 0);
+  }
+
+  @override
+  void dispose() {
+    _t.dispose();
+    super.dispose();
+  }
+
+  void _setMoving(bool m) {
+    if (_moving == m) return;
+    _moving = m;
+    widget.onMovingChanged?.call(m);
+  }
+
+  void _settle(double target, double velocity) {
+    _target = target;
+    _setMoving(true);
+    _t
+        .animateWith(
+          SpringSimulation(lighthouseHeroSwipeSpring, _t.value, target, velocity),
+        )
+        .whenCompleteOrCancel(() {
+          if (mounted && !_dragging) _setMoving(false);
+        });
+  }
+
+  void _commit(bool folded, double velocity) {
+    _settle(folded ? 1 : 0, velocity);
+    if (folded != widget.folded) widget.onFoldedChanged(folded);
+  }
+
+  void _toggle() {
+    HapticFeedback.selectionClick();
+    _commit(!widget.folded, 0);
+  }
+
+  void _onStart(DragStartDetails d) {
+    _t.stop();
+    _dragging = true;
+    _lastSide = _t.value >= 0.5;
+    _setMoving(true);
+  }
+
+  void _onUpdate(DragUpdateDetails d) {
+    if (!_dragging) return;
+    final cur = _t.value;
+    final step = -d.delta.dy / _h;
+    final over = cur < 0 ? -cur : (cur > 1 ? cur - 1 : 0.0);
+    final goingOut = (cur <= 0 && step < 0) || (cur >= 1 && step > 0);
+    final next = (cur + (goingOut ? _rubber(over, step) : step))
+        .clamp(-0.12, 1.12)
+        .toDouble();
+    final side = next >= 0.5;
+    if (side != _lastSide) {
+      _lastSide = side;
+      HapticFeedback.selectionClick();
+    }
+    _t.value = next;
+  }
+
+  void _onEnd(DragEndDetails d) {
+    if (!_dragging) return;
+    _dragging = false;
+    final vy = d.velocity.pixelsPerSecond.dy;
+    final folded = vy.abs() > _kFlingVelocity ? vy < 0 : _t.value >= 0.5;
+    _commit(folded, (-vy / _h).clamp(-10.0, 10.0).toDouble());
+  }
+
+  void _onCancel() {
+    if (!_dragging) return;
+    _dragging = false;
+    _settle(widget.folded ? 1 : 0, 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _t,
+      builder: (context, _) {
+        final t = _t.value;
+        final p = t.clamp(0.0, 1.0).toDouble();
+        // 往下拽出界时 heightFactor > 1：多出来的一点空白就是橡皮筋。
+        final factor = (1 - t).clamp(0.0, 1.06).toDouble();
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRect(
+              child: Align(
+                alignment: Alignment.topCenter,
+                heightFactor: factor,
+                child: IgnorePointer(
+                  ignoring: p > 0.5,
+                  child: Opacity(
+                    // 比高度先走一步淡掉：收到一半时内容已经看不见，不会半截压着。
+                    opacity: (1 - p * 1.5).clamp(0.0, 1.0).toDouble(),
+                    child: KeyedSubtree(key: _childKey, child: widget.child),
+                  ),
+                ),
+              ),
+            ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _toggle,
+              onVerticalDragStart: _onStart,
+              onVerticalDragUpdate: _onUpdate,
+              onVerticalDragEnd: _onEnd,
+              onVerticalDragCancel: _onCancel,
+              child: widget.handleBuilder(context, p),
+            ),
+          ],
+        );
+      },
     );
   }
 }

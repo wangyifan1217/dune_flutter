@@ -933,6 +933,21 @@ void main() {
         ['costTotal', 'revenue'],
       ],
     );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'channel',
+        product: '抖音生活服务',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(tab: 'channel', product: '好车主'),
+      lighthouseLedgerSummaryMetricRows,
+    );
   });
 
   test('ledger rows show four focused metrics in a neutral 2x2 grid', () {

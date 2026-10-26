@@ -33,7 +33,7 @@ abstract final class LhColors {
 
   // Domain tags（业务语义色，保留）
   static const cnpc = Color(0xFFA33A2A);
-  static const sinopec = Color(0xFF1F6B4A);
+  static const sinopec = Color(0xFF2A5DB0); // 2026-10-26 · 绿 → 蓝（绿留给「下跌 / 负数」）
   static const private = Color(0xFF4A8A7B);
   static const carrier = Color(0xFF7B5CD8);
   static const pingan = Color(0xFF7B5CD8);

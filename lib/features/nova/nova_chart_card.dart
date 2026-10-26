@@ -166,6 +166,9 @@ class _NovaBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (chart.series.length > 1) {
+      return _NovaMultiBarChart(chart: chart, ink: ink, muted: muted);
+    }
     final values = chart.series.first.values;
     var maxPos = 0.0;
     var maxNeg = 0.0;
@@ -175,36 +178,68 @@ class _NovaBarChart extends StatelessWidget {
       maxNeg = math.max(maxNeg, -value);
     }
     final span = maxPos + maxNeg;
+    // 名称常常带同一个前缀（如「河南中石油200元…」）：前缀单独显示一次，每行只留区分部分。
+    final prefix = novaChartCommonPrefix(chart.labels);
+    final labelStyle = TextStyle(fontSize: 12, height: 1.3, color: ink);
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (prefix.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '以下均为「$prefix」',
+              style: TextStyle(fontSize: 11.5, color: muted),
+            ),
+          ),
         for (var i = 0; i < chart.labels.length; i++)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 84,
-                  child: Text(
-                    chart.labels[i],
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: ink),
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Tooltip(
+              message: chart.labels[i],
+              triggerMode: TooltipTriggerMode.longPress,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _novaChartShortLabel(chart.labels[i], prefix),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: labelStyle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        values[i] == null ? '—' : novaChartAmount(values[i]!),
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.3,
+                          color: muted,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: LayoutBuilder(
+                  const SizedBox(height: 3),
+                  LayoutBuilder(
                     builder: (context, constraints) {
                       final value = values[i];
                       final width = constraints.maxWidth;
                       if (value == null || span <= 0) {
-                        return const SizedBox(height: 14);
+                        return const SizedBox(height: 8);
                       }
                       final zero = width * maxNeg / span;
                       final length = math.max(2.0, width * value.abs() / span);
                       return SizedBox(
-                        height: 14,
+                        height: 8,
                         child: Stack(
                           children: [
                             Positioned(
@@ -226,27 +261,194 @@ class _NovaBarChart extends StatelessWidget {
                       );
                     },
                   ),
-                ),
-                const SizedBox(width: 6),
-                SizedBox(
-                  width: 64,
-                  child: Text(
-                    values[i] == null ? '—' : novaChartAmount(values[i]!),
-                    textAlign: TextAlign.right,
-                    maxLines: 1,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: muted,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
       ],
     );
   }
+}
+
+/// 多指标对比：每个对象一组，每个指标一根条。各指标量级不同（销售额和利润差几十倍），
+/// 所以每个指标按自己的最大值缩放，条的长短只在同一指标内比较，数值写在右边。
+class _NovaMultiBarChart extends StatelessWidget {
+  const _NovaMultiBarChart({
+    required this.chart,
+    required this.ink,
+    required this.muted,
+  });
+
+  final NovaChart chart;
+  final Color ink;
+  final Color muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final series = chart.series;
+    final spans = [
+      for (final s in series)
+        s.values.nonNulls.fold<double>(0, (m, v) => math.max(m, v.abs())),
+    ];
+    final prefix = novaChartCommonPrefix(chart.labels);
+    final valueStyle = TextStyle(
+      fontSize: 11.5,
+      height: 1.2,
+      color: muted,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    Color colorOf(int i) => _novaChartPalette[i % _novaChartPalette.length];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              for (var i = 0; i < series.length; i++)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: colorOf(i),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      series[i].name,
+                      style: TextStyle(fontSize: 11, color: ink),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        if (prefix.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '以下均为「$prefix」',
+              style: TextStyle(fontSize: 11.5, color: muted),
+            ),
+          ),
+        for (var row = 0; row < chart.labels.length; row++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Tooltip(
+              message: chart.labels[row],
+              triggerMode: TooltipTriggerMode.longPress,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _novaChartShortLabel(chart.labels[row], prefix),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.3,
+                      fontWeight: FontWeight.w500,
+                      color: ink,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  for (var i = 0; i < series.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final value = series[i].values[row];
+                                if (value == null || spans[i] <= 0) {
+                                  return const SizedBox(height: 6);
+                                }
+                                final length = math.max(
+                                  2.0,
+                                  constraints.maxWidth * value.abs() / spans[i],
+                                );
+                                return Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    width: length,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: value < 0
+                                          ? _novaChartNegative
+                                          : colorOf(i),
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 64,
+                            child: Text(
+                              series[i].values[row] == null
+                                  ? '—'
+                                  : novaChartAmount(series[i].values[row]!),
+                              textAlign: TextAlign.right,
+                              maxLines: 1,
+                              style: valueStyle,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+String _novaChartShortLabel(String label, String prefix) {
+  if (prefix.isEmpty || !label.startsWith(prefix)) return label;
+  final rest = label.substring(prefix.length).trim();
+  return rest.isEmpty ? label : rest;
+}
+
+final _novaChartWordTail = RegExp(r'[0-9A-Za-z.]$');
+
+/// 柱状图各行名称的共同前缀；至少 3 行、前缀至少 3 个字才提取，
+/// 且不截断数字或英文（避免「河南中石油2」把「200元」拆成「00元」）。
+String novaChartCommonPrefix(List<String> labels) {
+  if (labels.length < 3) return '';
+  var prefix = labels.first.runes.toList();
+  for (final label in labels.skip(1)) {
+    final runes = label.runes.toList();
+    var n = 0;
+    while (n < prefix.length && n < runes.length && prefix[n] == runes[n]) {
+      n++;
+    }
+    prefix = prefix.sublist(0, n);
+    if (prefix.isEmpty) return '';
+  }
+  var text = String.fromCharCodes(prefix);
+  while (text.isNotEmpty && _novaChartWordTail.hasMatch(text)) {
+    text = text.substring(0, text.length - 1);
+  }
+  text = text.trimRight();
+  if (text.runes.length < 3) return '';
+  // 每一行去掉前缀后都要还剩内容，否则前缀就是某一行的全名，不提取。
+  for (final label in labels) {
+    if (label.substring(text.length).trim().isEmpty) return '';
+  }
+  return text;
 }
 
 class _NovaLineChart extends StatelessWidget {

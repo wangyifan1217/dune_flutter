@@ -129,6 +129,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   int _conversationId = 0;
   int _loadedSourceConversationId = 0;
   NovaPersonalCapability? _personalMode;
+
+  /// 未手动选定板块时，上一句自动路由实际走的板块（只用于输入框显示，不锁定）。
+  /// 下一句仍由服务端重新判断；问别的会回到「通用」。
+  NovaPersonalCapability? _autoPersonalMode;
   bool _resendPreparing = false;
   NovaTaskPreview? _taskPreview;
   int? _previewMessageId;
@@ -136,11 +140,6 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   int _loadToken = 0;
   bool _startingNewChat = false;
   bool _initialPromptConsumed = false;
-  bool _routing = false;
-  int _routeSeq = 0;
-
-  /// 意图路由期间先上屏的提问与思考占位；路由结束后移除，由真正的发送流程重新插入。
-  ({int userId, int assistantId, String text})? _routingPreview;
   bool _scrollJumpQueued = false;
 
   /// 当前发送轮次的「立即刷新节流中的流式内容」，停止时先刷新再取部分回复。
@@ -272,6 +271,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     final newMsg = widget.focusMessageId ?? 0;
     if (newConv > 0 && (oldConv != newConv || oldMsg != newMsg)) {
       _personalMode = null;
+      _autoPersonalMode = null;
       _taskPreview = null;
       _previewMessageId = null;
       unawaited(_load());
@@ -406,8 +406,6 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   Future<void> _onAppResumed() async {
     if (!mounted || _conversationId <= 0) return;
-    // 路由占位只在本地，期间用历史覆盖会把刚上屏的提问冲掉。
-    if (_routingPreview != null) return;
     // PC 切换窗口也会 resumed。活跃请求继续更新当前气泡，无需用旧历史恢复。
     if (_service.isPersonalQueryInFlight ||
         _service.isReplyInFlightFor(_conversationId))
@@ -958,18 +956,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     return false;
   }
 
-  /// 可落盘的消息：去掉欢迎语和路由期间的临时占位。
-  List<NativeNovaMessage> _persistableMessages() {
-    final preview = _routingPreview;
-    return _messages
-        .where(
-          (m) =>
-              !m.isWelcome &&
-              (preview == null ||
-                  (m.id != preview.userId && m.id != preview.assistantId)),
-        )
-        .toList(growable: false);
-  }
+  /// 可落盘的消息：去掉欢迎语。
+  List<NativeNovaMessage> _persistableMessages() =>
+      _messages.where((m) => !m.isWelcome).toList(growable: false);
 
   Future<void> _persistSessionNow() async {
     if (_conversationId <= 0) return;
@@ -1237,13 +1226,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         : user?.text ?? '';
     final status = _busyHint.isNotEmpty ? _busyHint : kNovaInputBusyHint;
     final stopped = _service.wasStoppedFor(convId) || _isStoppedStatus(status);
-    // 仅在意图路由（尚未真正发出）时离开，不能当成生成中写入恢复标记。
-    final routingOnly =
-        _routingPreview != null && !_sending && !_serverGenerating;
     final active =
-        !stopped &&
-        !routingOnly &&
-        (_isGenerating || _service.isReplyInFlightFor(convId));
+        !stopped && (_isGenerating || _service.isReplyInFlightFor(convId));
     final hadLocalRequest = _service.isReplyInFlightFor(convId);
     final prdSendStarted = _prdNovaSendStarted;
     try {
@@ -1836,33 +1820,43 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   }
 
   /// 任务和灯塔入口。查询由后端决定，结果写入当前小饕会话。
+  /// [capability] 为 null 表示未选定板块：服务端先判断走灯塔、任务还是普通对话。
   Future<void> _handlePersonalCapability(
     NovaPersonalCapability capability,
     String prompt,
   ) async => _runPersonalCapability(capability, prompt);
 
   Future<void> _runPersonalCapability(
-    NovaPersonalCapability capability,
+    NovaPersonalCapability? capability,
     String prompt, {
     NovaTaskPreview? pendingPreview,
   }) async {
     if (!_novaReady || _isGenerating) return;
     HapticFeedback.selectionClick();
+    final session = widget.session;
+    var turnConversationId = 0;
     final history = _personalContextHistory();
+    // 必须在插入本轮提问之前判断：上一轮是否刚由灯塔回答（短追问继续查灯塔）。
+    final afterLighthouse = capability == null && _lastTurnWasRecentLighthouse();
     final requestToken = ++_loadToken;
     final personalToken = ++_personalTurnToken;
     final userMsgId = DateTime.now().millisecondsSinceEpoch;
     final assistantMsgId = userMsgId + 1;
     final previousPreviewMessageId = _previewMessageId;
-    final status = capability == NovaPersonalCapability.tasks
-        ? '正在查询你的任务'
-        : '正在读取灯塔数据';
+    final status = switch (capability) {
+      null => '正在理解你的问题',
+      NovaPersonalCapability.tasks => '正在查询你的任务',
+      NovaPersonalCapability.lighthouse => '正在读取灯塔数据',
+    };
     _lastUserDisplayText = prompt;
     _genAfterMessageId = userMsgId;
     _inputController.clear();
     setState(() {
       _sending = true;
       _busyHint = status;
+      _quickActionsOpen = false;
+      _stickToBottom = true;
+      _showJumpToLatest = false;
       _messages = [
         ..._messages,
         NativeNovaMessage(
@@ -1870,12 +1864,15 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           role: 'user',
           text: prompt,
           createdAt: DateTime.now(),
-          payload: <String, dynamic>{
-            'nova_personal_capability':
-                capability == NovaPersonalCapability.tasks
-                ? 'tasks'
-                : 'lighthouse',
-          },
+          // 未选定板块时要等服务端判断后才知道走哪里，结果回来再写入。
+          payload: capability == null
+              ? null
+              : <String, dynamic>{
+                  'nova_personal_capability':
+                      capability == NovaPersonalCapability.tasks
+                      ? 'tasks'
+                      : 'lighthouse',
+                },
         ),
         NativeNovaMessage(
           id: assistantMsgId,
@@ -1897,49 +1894,84 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           personalToken != _personalTurnToken)
         return;
       if (_conversationId <= 0) throw Exception('无法创建小饕会话，请稍后重试');
+      turnConversationId = _conversationId;
       NovaBackgroundCoordinator.instance.clearFinalizedConversation(
         _conversationId,
       );
-      result = await _service.askPersonalCapability(
-        conversationId: _conversationId,
-        userMessageId: userMsgId,
-        existingMessages: List.of(_messages),
-        capability: capability == NovaPersonalCapability.tasks
-            ? 'tasks'
-            : 'lighthouse',
-        text: prompt,
-        history: novaPersonalContextTurns(history),
-        pendingPreview: pendingPreview,
-        lastQuery: _lastLighthouseState(),
-        onProgress: (status) {
-          if (!mounted ||
-              requestToken != _loadToken ||
-              personalToken != _personalTurnToken)
-            return;
-          setState(() {
-            _busyHint = status;
-            final index = _messages.indexWhere((m) => m.id == assistantMsgId);
-            if (index >= 0 && _messages[index].streaming) {
-              final copy = [..._messages];
-              copy[index] = copy[index].copyWith(thinkStatus: status);
-              _messages = copy;
-            }
-          });
-        },
-      );
+      void onProgress(String status) {
+        if (!mounted ||
+            requestToken != _loadToken ||
+            personalToken != _personalTurnToken)
+          return;
+        setState(() {
+          _busyHint = status;
+          final index = _messages.indexWhere((m) => m.id == assistantMsgId);
+          if (index >= 0 && _messages[index].streaming) {
+            final copy = [..._messages];
+            copy[index] = copy[index].copyWith(thinkStatus: status);
+            _messages = copy;
+          }
+        });
+      }
+
+      result = capability == null
+          ? await _service.askPersonalAuto(
+              conversationId: _conversationId,
+              userMessageId: userMsgId,
+              existingMessages: List.of(_messages),
+              text: prompt,
+              history: novaPersonalContextTurns(history),
+              lastQuery: _lastLighthouseState(),
+              afterLighthouse: afterLighthouse,
+              onProgress: onProgress,
+            )
+          : await _service.askPersonalCapability(
+              conversationId: _conversationId,
+              userMessageId: userMsgId,
+              existingMessages: List.of(_messages),
+              capability: capability == NovaPersonalCapability.tasks
+                  ? 'tasks'
+                  : 'lighthouse',
+              text: prompt,
+              history: novaPersonalContextTurns(history),
+              pendingPreview: pendingPreview,
+              lastQuery: _lastLighthouseState(),
+              onProgress: onProgress,
+            );
     } catch (error) {
       requestFailed = true;
       result = NovaPersonalReply(friendlyErrorText(error));
     }
     if (!mounted ||
         requestToken != _loadToken ||
-        personalToken != _personalTurnToken)
+        personalToken != _personalTurnToken) {
+      // 页面已切走（离开小饕、切到别的会话）：判定为普通对话的这一句在后台接着发出，
+      // 回来时按「生成中」恢复，完成后照常落库并提示未读。被停止或新建对话时不再发。
+      // 灯塔 / 任务的结果已由 service 自己落盘，这里不用处理。
+      if (result.routeToChat &&
+          !requestFailed &&
+          turnConversationId > 0 &&
+          !_service.userStoppedStream) {
+        NovaBackgroundCoordinator.instance.ensurePoll(
+          session,
+          conversationId: turnConversationId,
+        );
+        unawaited(
+          _service.sendChatInBackground(
+            conversationId: turnConversationId,
+            text: prompt,
+            userMessageId: userMsgId,
+          ),
+        );
+      }
       return;
+    }
     if (result.routeToChat) {
       await _continueAsChat(prompt, userMsgId, assistantMsgId);
       return;
     }
-    final handledBy = result.capability ?? capability;
+    final handledBy =
+        result.capability ?? capability ?? NovaPersonalCapability.lighthouse;
     final handledName = handledBy == NovaPersonalCapability.tasks
         ? 'tasks'
         : 'lighthouse';
@@ -1967,6 +1999,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       _busyHint = '';
       // 只有用户在输入框里选定能力才保持；自动路由的一句不锁定模式，追问靠 afterLighthouse 接上。
       if (_personalMode != null) _personalMode = handledBy;
+      // 自动路由：输入框显示这一句实际走的板块（灯塔 / 任务），但不锁定。
+      if (capability == null && !requestFailed) _autoPersonalMode = handledBy;
       _taskPreview = result.preview ?? pendingPreview;
       _previewMessageId = result.preview != null
           ? assistantMsgId
@@ -2026,6 +2060,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   ) async {
     setState(() {
       _personalMode = null;
+      _autoPersonalMode = null;
       final userIndex = _messages.indexWhere((m) => m.id == userMsgId);
       if (userIndex >= 0) {
         final copy = [..._messages];
@@ -2039,6 +2074,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       text: prompt,
       existingUserMsgId: userMsgId,
       existingAssistantMsgId: assistantMsgId,
+      markPrdSendStarted: false,
     );
   }
 
@@ -2163,7 +2199,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     if (_sending || !_novaReady) return;
     final text = question.text.trim();
     if (text.isEmpty) return;
-    setState(() => _personalMode = null);
+    setState(() {
+      _personalMode = null;
+      _autoPersonalMode = null;
+    });
     await _sendMessage(text: text);
   }
 
@@ -2288,32 +2327,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     }
 
     if (_drafts.isEmpty && _analysisSources.isEmpty && userText.isNotEmpty) {
-      if (_routing) return;
-      final routeSeq = ++_routeSeq;
-      _routing = true;
-      final routeToken = _loadToken;
-      final afterLighthouse = _lastTurnWasRecentLighthouse();
-      // 路由判断可能要几秒：先把提问上屏并清空输入框，让用户确认已经发出。
-      _showRoutingPreview(userText);
-      final routed = await _service.routePersonal(
-        userText,
-        afterLighthouse: afterLighthouse,
-      );
-      // 已被停止按钮取消，或被新一轮路由取代。
-      if (routeSeq != _routeSeq) return;
-      _routing = false;
-      final hadPreview = _clearRoutingPreview();
-      if (!mounted || routeToken != _loadToken) return;
-      if (_sending) {
-        if (hadPreview && _inputController.text.trim().isEmpty) {
-          _inputController.text = userText;
-        }
-        return;
-      }
-      if (routed != null) {
-        await _runPersonalCapability(routed, userText);
-        return;
-      }
+      // 未选定板块：服务端在同一个请求里判断走灯塔、任务还是普通对话并接着查询。
+      // 提问立即上屏；判断为普通对话时用这一轮继续走普通对话（_continueAsChat）。
+      await _runPersonalCapability(null, userText);
+      return;
     }
 
     final drafts = [..._drafts];
@@ -2322,6 +2339,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     HapticFeedback.lightImpact();
     _inputController.clear();
     setState(() {
+      _autoPersonalMode = null;
       _drafts = const <NovaDraftAttachment>[];
       _quickActionsOpen = false;
       _stickToBottom = true;
@@ -2334,67 +2352,6 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       ),
       drafts: drafts,
     );
-  }
-
-  void _showRoutingPreview(String text) {
-    final userId = DateTime.now().millisecondsSinceEpoch;
-    final preview = (userId: userId, assistantId: userId + 1, text: text);
-    final userAt = DateTime.fromMillisecondsSinceEpoch(userId);
-    _inputController.clear();
-    setState(() {
-      _routingPreview = preview;
-      _quickActionsOpen = false;
-      _stickToBottom = true;
-      _showJumpToLatest = false;
-      _messages = [
-        ..._messages,
-        NativeNovaMessage(
-          id: preview.userId,
-          role: 'user',
-          text: text,
-          createdAt: userAt,
-          kind: 'TEXT',
-        ),
-        NativeNovaMessage(
-          id: preview.assistantId,
-          role: 'assistant',
-          text: '',
-          createdAt: userAt.add(const Duration(milliseconds: 1)),
-          streaming: true,
-          thinkStatus: '正在理解你的问题',
-        ),
-      ];
-    });
-    _scrollBottom();
-  }
-
-  /// 移除路由占位。返回 true 表示占位仍在并已移除（未被停止或切换会话清掉）。
-  bool _clearRoutingPreview() {
-    final preview = _routingPreview;
-    if (preview == null) return false;
-    _routingPreview = null;
-    if (!mounted) return false;
-    final before = _messages.length;
-    setState(() {
-      _messages = _messages
-          .where((m) => m.id != preview.userId && m.id != preview.assistantId)
-          .toList(growable: false);
-    });
-    return _messages.length != before;
-  }
-
-  /// 路由期间点停止：撤回占位，把原话放回输入框。
-  void _cancelRouting() {
-    final preview = _routingPreview;
-    _routeSeq++;
-    _routing = false;
-    _clearRoutingPreview();
-    if (preview != null && _inputController.text.trim().isEmpty) {
-      _inputController.value = TextEditingValue(
-        text: preview.text,
-        selection: TextSelection.collapsed(offset: preview.text.length),
-      );
-    }
   }
 
   /// 选中任务或灯塔后，把原话交给后端。前端不决定查哪张表。
@@ -2788,6 +2745,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     String? assistantThinkStatus,
     int? existingUserMsgId,
     int? existingAssistantMsgId,
+    // 复用已显示的一轮时是否视为 PRD 续发。普通对话复用（_continueAsChat）传 false，
+    // 避免把待续发的 PRD 任务误标为「已发出」。
+    bool markPrdSendStarted = true,
   }) async {
     final reusingTurn =
         existingUserMsgId != null && existingAssistantMsgId != null;
@@ -2799,7 +2759,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     final sendToken = ++_loadToken;
     bool isCurrentSend() => mounted && sendToken == _loadToken;
 
-    if (reusingTurn) {
+    if (reusingTurn && markPrdSendStarted) {
       _prdNovaSendStarted = true;
       unawaited(_markPrdPendingSendStarted());
     }
@@ -3345,14 +3305,6 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   }
 
   void _stopGeneration() {
-    // 还在意图路由、尚未真正发出：撤回占位即可，不碰生成状态。
-    if (_routingPreview != null &&
-        !_sending &&
-        !_serverGenerating &&
-        !_service.isReplyInFlightFor(_conversationId)) {
-      _cancelRouting();
-      return;
-    }
     // 先把节流中尚未上屏的内容刷出来，停止后展示与服务端落库的是同一段文本。
     _flushPendingStreamUpdate?.call();
     final streamingIdx = _messages.indexWhere(
@@ -3447,6 +3399,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       _conversationId = targetConvId;
       _messages = const [];
       _personalMode = null;
+      _autoPersonalMode = null;
       _taskPreview = null;
       _previewMessageId = null;
       _analysisSources = const <NovaAnalysisSource>[];
@@ -3524,6 +3477,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           : <NovaAnalysisSource>[scopedSource];
       _conversationId = 0;
       _personalMode = null;
+      _autoPersonalMode = null;
       _taskPreview = null;
       _previewMessageId = null;
       _genAfterMessageId = 0;
@@ -4584,7 +4538,11 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         : switch (_personalMode) {
             NovaPersonalCapability.tasks => '只问任务...',
             NovaPersonalCapability.lighthouse => '只问灯塔...',
-            null => kNovaInputPlaceholder,
+            null => switch (_autoPersonalMode) {
+              NovaPersonalCapability.tasks => '继续问任务，或问其他问题...',
+              NovaPersonalCapability.lighthouse => '继续问灯塔，或问其他问题...',
+              null => kNovaInputPlaceholder,
+            },
           };
 
     return PopScope(
@@ -4676,7 +4634,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                       ),
                     ),
                     if (_isNovaChatTab) ...[
-                      NovaC4BusyHint(text: _busyHint),
+                      // 思考气泡里已经显示进度时不再在输入框上方重复一行。
+                      NovaC4BusyHint(
+                        text: _hasActiveAssistantStream() ? '' : _busyHint,
+                      ),
                       if (_insight != null && !_sending)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
@@ -4718,9 +4679,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                                 : () =>
                                       setState(() => _voiceMode = !_voiceMode),
                             onSend: _submitInput,
-                            capability: _personalMode,
+                            // 手动选定的板块优先；否则显示上一句自动路由走的板块。
+                            capability: _personalMode ?? _autoPersonalMode,
                             onCapabilityChanged: (mode) {
-                              setState(() => _personalMode = mode);
+                              setState(() {
+                                _personalMode = mode;
+                                _autoPersonalMode = null;
+                              });
                             },
                             onPickModel: _pickModel,
                             modelLabel: novaModelDisplayName(_selectedModel),
@@ -4948,9 +4913,11 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       await _avatarService.sendText(
         conversationId,
         value,
-        payload: const <String, dynamic>{
+        payload: <String, dynamic>{
           'forwardedFromNova': true,
-          'robotMarkdown': true,
+          // 纯文字按普通消息发（宽度自适应、可选取复制）；
+          // 只有确实含 Markdown 排版时才按富文本卡片渲染。
+          if (novaTextHasMarkdown(value)) 'robotMarkdown': true,
         },
       );
       if (mounted) showDunesToast(context, '已转发到会话');
@@ -4972,9 +4939,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         !mine &&
         m.text.isEmpty &&
         m.streaming &&
-        (_sending ||
-            _serverGenerating ||
-            m.id == _routingPreview?.assistantId);
+        (_sending || _serverGenerating);
     final key = m.id > 0 ? _messageKeys.putIfAbsent(m.id, GlobalKey.new) : null;
     return KeyedSubtree(
       key: ValueKey('nova-msg-${m.id}-${m.role}'),

@@ -160,7 +160,21 @@ class RobotMarkdown extends StatelessWidget {
       );
     }
 
-    if (fitToContent) return buildBody(imageMaxWidth: 480, fit: true);
+    if (fitToContent) {
+      // 宽度随内容收缩，最多到父级给的宽度；无界（如外层横向滚动）时图片回落到 480。
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final imageMaxW =
+              constraints.maxWidth.isFinite && constraints.maxWidth > 0
+              ? constraints.maxWidth
+              : 480.0;
+          return MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.25,
+            child: buildBody(imageMaxWidth: imageMaxW, fit: true),
+          );
+        },
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {

@@ -100,6 +100,16 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
   }
 
   NativeNovaService serviceFor(AuthSession session) {
+    // 只是登录 token 刷新（同一用户、同一服务地址）：沿用原 service，不打断进行中的回复。
+    final current = _service;
+    if (current != null &&
+        _session?.userId == session.userId &&
+        _session?.apiBase == session.apiBase &&
+        _session?.token != session.token &&
+        current.updateSession(session)) {
+      _session = session;
+      return current;
+    }
     if (_session?.userId != session.userId ||
         _session?.token != session.token ||
         _session?.apiBase != session.apiBase) {

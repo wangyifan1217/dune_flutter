@@ -1121,10 +1121,74 @@ class NovaHistoryTurn {
 }
 
 class NativeNovaService {
-  NativeNovaService({required this.session, http.Client? client})
-    : _client = client ?? http.Client();
+  NativeNovaService({required AuthSession session, http.Client? client})
+    : _session = session,
+      _client = client ?? http.Client();
 
-  final AuthSession session;
+  AuthSession _session;
+  AuthSession get session => _session;
+
+  /// 登录 token 刷新后沿用同一个 service：进行中的回复（SSE、灯塔查询）不被打断。
+  /// 只接受同一用户、同一服务地址；之后的请求使用新 token。
+  bool updateSession(AuthSession next) {
+    if (next.userId != _session.userId || next.apiBase != _session.apiBase) {
+      return false;
+    }
+    _session = next;
+    _historySync = null;
+    return true;
+  }
+
+  /// 页面已切走时，把已经判定为普通对话的一句在后台接着发出。
+  /// 生成标记和草稿先落盘：回到会话时按「生成中」恢复，完成后由服务端落库、本地缓存提交。
+  /// 失败时保留草稿，回到会话时显示「回复已中断」并可重试。
+  Future<void> sendChatInBackground({
+    required int conversationId,
+    required String text,
+    required int userMessageId,
+  }) async {
+    final prompt = text.trim();
+    if (conversationId <= 0 || prompt.isEmpty) return;
+    final epoch = _streamEpoch;
+    _backgroundChatConversations.add(conversationId);
+    try {
+      await persistNovaGeneratingState(
+        userId: session.userId,
+        conversationId: conversationId,
+        status: '正在生成…',
+        afterMessageId: userMessageId,
+      );
+      await persistNovaStreamDraftState(
+        userId: session.userId,
+        conversationId: conversationId,
+        status: '正在生成…',
+        afterMessageId: userMessageId,
+        userText: prompt,
+        streaming: true,
+      );
+      // 准备期间用户点了停止或开了新对话：不再发出。
+      if (epoch != _streamEpoch) {
+        await clearNovaGeneratingState(
+          userId: session.userId,
+          conversationId: conversationId,
+        );
+        return;
+      }
+      await sendAndReplyStream(
+        conversationId: conversationId,
+        userContent: prompt,
+        displayText: prompt,
+        userMessageId: userMessageId,
+        onUpdate: (_) {},
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[NativeNova] background chat conv=$conversationId failed: $error');
+      }
+    } finally {
+      _backgroundChatConversations.remove(conversationId);
+    }
+  }
   final http.Client _client;
   String? _cachedApiKey;
   String? _selectedModelOverride;
@@ -1148,7 +1212,12 @@ class NativeNovaService {
   bool isReplyInFlightFor(int conversationId) =>
       conversationId > 0 &&
       ((isStreamInFlight && _streamConversationId == conversationId) ||
-          (_personalQueryConversations[conversationId] ?? 0) > 0);
+          (_personalQueryConversations[conversationId] ?? 0) > 0 ||
+          _backgroundChatConversations.contains(conversationId));
+
+  /// [sendChatInBackground] 正在准备或进行中的会话。发出前就登记，避免页面在
+  /// 「查询结束 → 普通对话开始」的空档里误判回复已结束。
+  final Set<int> _backgroundChatConversations = <int>{};
 
   bool get isStreamInFlight => _streamClient != null && !userStoppedStream;
 
@@ -1227,6 +1296,50 @@ class NativeNovaService {
   bool get isPersonalQueryInFlight => _personalRequestsInFlight > 0;
 
   /// 任务或灯塔提问交给后端决定查什么。这里只提交原话并取回展示结果。
+  /// 未选定能力时的一句话：服务端先判断走灯塔、任务还是普通对话，并在同一个请求里
+  /// 接着查询（capability=auto），省掉单独的路由往返。请求从发出起就在本 service 中
+  /// 运行并落盘，页面切走再回来仍能看到思考状态和结果。
+  /// 服务端尚不支持 auto（旧版本返回参数错误）时，退回「先路由、再查询」两步。
+  Future<NovaPersonalReply> askPersonalAuto({
+    required String text,
+    int conversationId = 0,
+    int userMessageId = 0,
+    List<NativeNovaMessage> existingMessages = const [],
+    List<({String role, String text})> history = const [],
+    Map<String, dynamic>? lastQuery,
+    bool afterLighthouse = false,
+    void Function(String status)? onProgress,
+  }) async {
+    try {
+      return await askPersonalCapability(
+        capability: 'auto',
+        text: text,
+        conversationId: conversationId,
+        userMessageId: userMessageId,
+        existingMessages: existingMessages,
+        history: history,
+        lastQuery: lastQuery,
+        afterLighthouse: afterLighthouse,
+        onProgress: onProgress,
+      );
+    } catch (error) {
+      if (userStoppedStream || !'$error'.contains('capability')) rethrow;
+    }
+    final routed = await routePersonal(text, afterLighthouse: afterLighthouse);
+    if (userStoppedStream) throw Exception('已停止生成');
+    if (routed == null) return const NovaPersonalReply('', route: 'chat');
+    return askPersonalCapability(
+      capability: routed == NovaPersonalCapability.tasks ? 'tasks' : 'lighthouse',
+      text: text,
+      conversationId: conversationId,
+      userMessageId: userMessageId,
+      existingMessages: existingMessages,
+      history: history,
+      lastQuery: lastQuery,
+      onProgress: onProgress,
+    );
+  }
+
   Future<NovaPersonalReply> askPersonalCapability({
     required String capability,
     required String text,
@@ -1237,11 +1350,13 @@ class NativeNovaService {
     NovaTaskPreview? pendingPreview,
     Map<String, dynamic>? lastQuery,
     void Function(String status)? onProgress,
+    bool afterLighthouse = false,
   }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) {
       throw Exception('输入内容为空，无法查询');
     }
+    final initialStatus = capability == 'auto' ? '正在理解你的问题' : '正在查询…';
     userStoppedStream = false;
     final cancelled = Completer<void>();
     _personalCancellations.add(cancelled);
@@ -1256,13 +1371,13 @@ class NativeNovaService {
         await persistNovaGeneratingState(
           userId: session.userId,
           conversationId: conversationId,
-          status: '正在查询…',
+          status: initialStatus,
           afterMessageId: userMessageId,
         );
         await persistNovaStreamDraftState(
           userId: session.userId,
           conversationId: conversationId,
-          status: '正在查询…',
+          status: initialStatus,
           afterMessageId: userMessageId,
           userText: trimmed,
           streaming: true,
@@ -1275,6 +1390,7 @@ class NativeNovaService {
         ..body = jsonEncode(<String, dynamic>{
           'capability': capability,
           'text': trimmed,
+          if (capability == 'auto') 'afterLighthouse': afterLighthouse,
           'history': [
             for (final turn in novaPersonalContextTurns(history))
               {'role': turn.role, 'text': turn.text},
@@ -1314,7 +1430,7 @@ class NativeNovaService {
         final handled = switch (reply.capability) {
           NovaPersonalCapability.tasks => 'tasks',
           NovaPersonalCapability.lighthouse => 'lighthouse',
-          null => capability,
+          null => capability == 'auto' ? 'lighthouse' : capability,
         };
         final preview = reply.preview ?? pendingPreview;
         final userPayload = <String, dynamic>{

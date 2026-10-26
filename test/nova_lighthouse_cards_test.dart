@@ -164,6 +164,83 @@ void main() {
     expect(find.text('中石化'), findsOneWidget);
   });
 
+  test('bar chart labels share a prefix only when it is safe', () {
+    expect(
+      novaChartCommonPrefix([
+        '河南中石油200元加油券',
+        '河南中石油300元加油券',
+        '河南中石油满减券',
+      ]),
+      '河南中石油',
+    );
+    // 不把数字拆开。
+    expect(
+      novaChartCommonPrefix(['河南中石油200元', '河南中石油250元', '河南中石油210元']),
+      '河南中石油',
+    );
+    expect(novaChartCommonPrefix(['中石化销售', '中石油销售']), '');
+    expect(novaChartCommonPrefix(['平安', '滴滴', '高德']), '');
+    expect(novaChartCommonPrefix(['河南中石油', '河南中石油A', '河南中石油B']), '');
+  });
+
+  testWidgets('bar chart shows long sku names in full width', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        NovaChartCard(
+          chart: NovaChart.fromJson({
+            'kind': 'bar',
+            'title': 'SKU利润排名',
+            'labels': [
+              '河南中石油200元电子加油券（全省通用）',
+              '河南中石油300元电子加油券',
+              '河南中石油满200减10',
+            ],
+            'series': [
+              {
+                'name': '利润',
+                'values': [4233, 1755, 20],
+              },
+            ],
+          })!,
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text('以下均为「河南中石油」'), findsOneWidget);
+    expect(find.text('200元电子加油券（全省通用）'), findsOneWidget);
+    expect(find.text('满200减10'), findsOneWidget);
+  });
+
+  testWidgets('multi-metric bar chart shows every metric per row', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        NovaChartCard(
+          chart: NovaChart.fromJson({
+            'kind': 'bar',
+            'title': '本月渠道销售额、利润对比',
+            'labels': ['产险', '(未分类)（平安）', '银行'],
+            'series': [
+              {
+                'name': '销售额',
+                'values': [1000000, 3000000, 5000000],
+              },
+              {
+                'name': '利润',
+                'values': [70000, 25000, -755],
+              },
+            ],
+          })!,
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text('销售额'), findsOneWidget);
+    expect(find.text('利润'), findsOneWidget);
+    expect(find.text('(未分类)（平安）'), findsOneWidget);
+  });
+
   testWidgets('insight card asks a suggestion and can be dismissed', (
     tester,
   ) async {

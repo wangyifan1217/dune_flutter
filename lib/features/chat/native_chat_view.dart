@@ -7389,6 +7389,37 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
+  /// 机器人 / 小饕富文本消息：用一层 SelectionArea 支持跨段落拖选（PC 拖选、APP 长按），
+  /// 复制出来的是渲染后的文字，不带 Markdown 符号。菜单在系统「复制 / 全选」之外
+  /// 追加「更多」，打开与长按相同的消息操作菜单（转发、引用、收藏等）。
+  /// 多选模式下不包选区，保持点击选择消息。
+  Widget _robotMarkdownSelectable(
+    NativeChatMessage m,
+    bool mine,
+    Widget child,
+  ) {
+    if (_messageMultiSelectMode) return child;
+    return SelectionArea(
+      contextMenuBuilder: (menuContext, selectableRegionState) {
+        final anchor = selectableRegionState.contextMenuAnchors.primaryAnchor;
+        return AdaptiveTextSelectionToolbar.buttonItems(
+          anchors: selectableRegionState.contextMenuAnchors,
+          buttonItems: <ContextMenuButtonItem>[
+            ...selectableRegionState.contextMenuButtonItems,
+            ContextMenuButtonItem(
+              label: '更多',
+              onPressed: () {
+                selectableRegionState.hideToolbar();
+                unawaited(_onMessageActions(m, mine, anchor: anchor));
+              },
+            ),
+          ],
+        );
+      },
+      child: child,
+    );
+  }
+
   bool _isRobotMarkdownPayload(Map<String, dynamic>? payload) {
     final value = payload?['robotMarkdown'];
     return value == true || value.toString().toLowerCase() == 'true';
@@ -9786,7 +9817,8 @@ class _NativeChatViewState extends State<NativeChatView>
           return Align(
             alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
             child: Container(
-              width: maxW,
+              // 宽度随内容收缩，只限制最大宽度：短回复不再撑成一整条长气泡。
+              constraints: BoxConstraints(maxWidth: maxW),
               clipBehavior: Clip.hardEdge,
               padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
               decoration: BoxDecoration(
@@ -9816,7 +9848,15 @@ class _NativeChatViewState extends State<NativeChatView>
                 ),
               ),
               child: RepaintBoundary(
-                child: RobotMarkdown(markdown: m.bodyText, selectable: false),
+                child: _robotMarkdownSelectable(
+                  m,
+                  mine,
+                  RobotMarkdown(
+                    markdown: m.bodyText,
+                    selectable: false,
+                    fitToContent: true,
+                  ),
+                ),
               ),
             ),
           );

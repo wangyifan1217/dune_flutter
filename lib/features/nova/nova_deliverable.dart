@@ -125,6 +125,18 @@ String stripNovaToolCallLeak(String text) {
 }
 
 /// 复制/转发用的正文：去掉工具调用泄漏，与气泡里实际显示的文字一致。
+final _novaMarkdownSyntax = RegExp(
+  // 块级：标题、列表、引用、代码块、表格行
+  r'(^|\n)[ \t]{0,3}(#{1,6}[ \t]|[-*+][ \t]|\d+[.)][ \t]|>[ \t]?|```|\|.*\|)'
+  // 行内：加粗、行内代码、链接/图片、删除线、颜色标签
+  r'|\*\*[^*\n]+\*\*|__[^_\n]+__|`[^`\n]+`|!?\[[^\]\n]+\]\([^)\s]+\)|~~[^~\n]+~~|<color',
+);
+
+/// 回复是否真的带 Markdown 排版。纯文字转发到 IM 时按普通文字消息发送：
+/// 气泡宽度随内容自适应，并且可以像普通消息一样选取、复制。
+bool novaTextHasMarkdown(String text) =>
+    _novaMarkdownSyntax.hasMatch(text.trim());
+
 String novaAssistantCopyText(String body) {
   final prep = prepareNovaAssistantBody(body);
   final shown = prep.raw.trim();

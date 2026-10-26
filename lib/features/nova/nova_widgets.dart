@@ -35,6 +35,8 @@ String novaThinkingStatusLabel(String status) {
     return '正在查找相关资料';
   }
   if (value.contains('生成') || value.contains('组织回复')) return '正在整理回复';
+  // 灯塔查询读完数据后的分析阶段：不能映射回「整理你的问题」，否则状态看起来倒退了。
+  if (value.contains('分析数据')) return '正在分析数据';
   if (value.contains('分析') || value.contains('思考') || value.contains('理解')) {
     return '正在整理你的问题';
   }

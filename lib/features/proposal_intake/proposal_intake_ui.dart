@@ -381,6 +381,29 @@ class ProposalStatusChip extends StatelessWidget {
 
 enum ProposalChipKind { normal, purple, draft, warn, ok }
 
+/// 提案类型：新增 / 变更 / 延续。空的不显示。
+class ProposalTypeChip extends StatelessWidget {
+  const ProposalTypeChip(this.label, {super.key});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = label.trim();
+    if (text.isEmpty) return const SizedBox.shrink();
+    final kind = switch (text) {
+      '新增' => ProposalChipKind.purple,
+      '变更' => ProposalChipKind.draft,
+      '延续' => ProposalChipKind.ok,
+      _ => ProposalChipKind.normal,
+    };
+    return ProposalStatusChip(label: text, kind: kind);
+  }
+}
+
+String proposalIntakeProposalType(Map<String, dynamic> form) =>
+    '${form['proposalType'] ?? ''}'.trim();
+
 ProposalChipKind proposalSkuPlatformStatusChipKind(String raw) {
   return switch (normalizeProposalSkuPlatformStatus(raw)) {
     kProposalSkuPlatformStatusFailed => ProposalChipKind.warn,

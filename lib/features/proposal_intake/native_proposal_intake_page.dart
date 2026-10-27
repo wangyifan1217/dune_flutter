@@ -35,6 +35,7 @@ import 'proposal_estimate_summary.dart';
 import 'proposal_finance_formula.dart';
 import 'proposal_finance_formula_board.dart';
 import 'proposal_view_style.dart';
+import 'proposal_intake_change_page.dart';
 import 'proposal_intake_models.dart';
 import 'proposal_remote_finance.dart';
 import 'proposal_product_card.dart';
@@ -2670,8 +2671,8 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       name: title,
       chips: [
         if (sector.isNotEmpty) sector,
-        if (type.isNotEmpty) type,
       ],
+      proposalType: type,
       rating: rating,
       scale: scale,
       mid: [
@@ -2962,6 +2963,7 @@ class _ProposalListTile extends StatelessWidget {
         ],
       ],
     ];
+    final proposalType = proposalIntakeProposalType(row.form);
     final actionText = proposalIntakeListActionText(row, people: people);
     return Material(
       color: DunesColors.resolve(
@@ -3012,6 +3014,10 @@ class _ProposalListTile extends StatelessWidget {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (proposalType.isNotEmpty) ...[
+                          ProposalTypeChip(proposalType),
+                          const SizedBox(width: 6),
+                        ],
                         Flexible(
                           child: Text(
                             row.title.isEmpty
@@ -3267,6 +3273,7 @@ class ProposalIntakeForm extends StatefulWidget {
     this.catalog,
     this.chatConversationId = 0,
     this.chatMessageId = 0,
+    this.changeEdit,
   });
 
   final ProposalIntakeRow row;
@@ -3291,6 +3298,9 @@ class ProposalIntakeForm extends StatefulWidget {
   final SettlementCatalogService? catalog;
   final int chatConversationId;
   final int chatMessageId;
+
+  /// 非空时这份表单改的是变更草稿，保存不会覆盖生效提案。
+  final ProposalIntakeChangeEdit? changeEdit;
 
   @override
   State<ProposalIntakeForm> createState() => _ProposalIntakeFormState();
@@ -3533,16 +3543,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool get _isPurchase => proposalIntakeIsPurchase(_row.kind);
 
+  bool get _changeEditing => widget.changeEdit?.change.canEdit == true;
+
   bool get _isLocked =>
-      _row.status == 'pending_president' ||
-      (_row.status == 'done' && !_row.techRevisionOpen);
+      _changeEditing
+          ? false
+          : _row.status == 'pending_president' ||
+                (_row.status == 'done' && !_row.techRevisionOpen);
 
   /// 最终审核人、已通过提案只看已填结果，不铺开未选项。
   /// 复核中默认也只看已填结果（原型简单行），点「完整表单」才回到可改的表单。
   bool get _showSelectedAsText =>
-      _row.status == 'pending_president' ||
-      (_row.status == 'done' && !_row.isTechRevising) ||
-      _reviewSimpleRows;
+      _changeEditing
+          ? false
+          : _row.status == 'pending_president' ||
+                (_row.status == 'done' && !_row.isTechRevising) ||
+                _reviewSimpleRows;
 
   /// 复核中是否切回了完整表单（默认 false = 原型简单行）。
   bool _reviewFormMode = false;
@@ -3569,9 +3585,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   /// 待最终确认或已完成后整单只读；复核中提交人仍可改未复核内容。
   bool get _isContentFrozen =>
-      _row.status == 'pending_president' ||
-      (_row.status == 'done' && !_row.isTechRevising) ||
-      _isReviewing;
+      _changeEditing
+          ? false
+          : _row.status == 'pending_president' ||
+                (_row.status == 'done' && !_row.isTechRevising) ||
+                _isReviewing;
 
   int _ownerId(String key) => int.tryParse(_text('${key}UserId')) ?? 0;
 
@@ -3612,9 +3630,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   bool get _canEditAsSubmitter =>
-      !_isLocked &&
-      !_row.techRevisionOpen &&
-      (_isSubmitter || widget.session.proposalIntakeViewAll);
+      _changeEditing ||
+      (!_isLocked &&
+          !_row.techRevisionOpen &&
+          (_isSubmitter || widget.session.proposalIntakeViewAll));
 
   /// 科技板块复核人：已指定则只认科技部负责人；旧单未指定时回退提交人。
   bool get _isTechReviewer {
@@ -3661,6 +3680,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _canEditAsSubmitter && !_moduleReviewed('marketCompleted');
 
   bool get _canEditTech {
+    if (_changeEditing) return true;
     if (_isLocked || _showSelectedAsText) return false;
     if (!(_isSubmitter || widget.session.proposalIntakeViewAll)) return false;
     if (_row.isTechRevising) return true;
@@ -3669,6 +3689,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   bool get _canEditProducts {
+    if (_changeEditing) return true;
     if (_isLocked || _showSelectedAsText) return false;
     if (!(_isSubmitter || widget.session.proposalIntakeViewAll)) return false;
     if (_row.isTechRevising) return true;
@@ -3775,6 +3796,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       !_moduleReviewed('financeCompleted');
 
   bool get _canSave {
+    if (widget.changeEdit != null) return _changeEditing && !widget.saving;
     if (!proposalIntakeCanPatchDraft(
       _row,
       userId: _me,
@@ -3794,19 +3816,32 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         _canEditAsSubmitter;
   }
 
-  bool get _canStartTechRevision =>
+  bool get _canStartChange =>
+      widget.changeEdit == null &&
       _row.id > 0 &&
       _row.status == 'done' &&
+      !proposalIntakeIsPurchase(_row.kind) &&
       !_row.techRevisionOpen &&
-      _isTechFiller;
+      _row.change == null &&
+      (_isSubmitter || _isMarketOwner2);
+
+  bool get _canOpenChange =>
+      widget.changeEdit == null &&
+      _row.id > 0 &&
+      _row.status == 'done' &&
+      !proposalIntakeIsPurchase(_row.kind);
 
   bool get _canConfirmTechRevision =>
       _row.id > 0 && _row.isTechRevising && _isTechFiller;
 
   bool get _canDecidePresident =>
-      _row.id > 0 && _row.status == 'pending_president' && _isPresident;
+      widget.changeEdit == null &&
+      _row.id > 0 &&
+      _row.status == 'pending_president' &&
+      _isPresident;
 
   bool get _canNotifyTech =>
+      widget.changeEdit == null &&
       _row.id > 0 &&
       !_isLocked &&
       _isSubmitter &&
@@ -3814,9 +3849,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _review['reviewRejected'] != true;
 
   bool get _canNotifyMarket2 =>
-      _row.id > 0 && !_isLocked && _isSubmitter && _stage == 'awaiting_tech';
+      widget.changeEdit == null &&
+      _row.id > 0 &&
+      !_isLocked &&
+      _isSubmitter &&
+      _stage == 'awaiting_tech';
 
   bool get _canStartReview =>
+      widget.changeEdit == null &&
       _row.id > 0 &&
       !_isLocked &&
       _isSubmitter &&
@@ -3826,7 +3866,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               _review['presidentRejected'] != true));
 
   bool get _canSubmit =>
-      _row.id > 0 && !_isLocked && _isSubmitter && _stage == 'awaiting_submit';
+      widget.changeEdit == null &&
+      _row.id > 0 &&
+      !_isLocked &&
+      _isSubmitter &&
+      _stage == 'awaiting_submit';
 
   String _submitterBannerName() {
     final name = _row.initiatorDisplayName(widget.people).trim();
@@ -3835,7 +3879,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   bool get _canRemind {
-    if (_row.id <= 0) return false;
+    if (widget.changeEdit != null || _row.id <= 0) return false;
     return proposalIntakeRemindRecipients(
       row: _row,
       people: widget.people,
@@ -3843,7 +3887,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     ).isNotEmpty;
   }
 
-  bool get _canDelete => _row.id > 0 && _row.canDeleteBy(_me);
+  bool get _canDelete =>
+      widget.changeEdit == null && _row.id > 0 && _row.canDeleteBy(_me);
 
   void _markFormDirty([bool value = true]) {
     if (_dirty == value) return;
@@ -6093,6 +6138,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              if (_text('proposalType').trim().isNotEmpty)
+                ProposalTypeChip(_text('proposalType')),
               ProposalStatusPill(
                 status: _protoStatusTone,
                 label: status,
@@ -8658,6 +8705,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   bool _jumpToTask() {
+    if (_taskAction.startsWith('change_')) {
+      unawaited(_openChange());
+      return true;
+    }
     // 复核中的简单行只读；轮到你填写时先切回完整表单再定位。
     if (_reviewSimpleRows && proposalIntakeActionIsWrite(_taskAction)) {
       setState(() => _reviewFormMode = true);
@@ -8857,6 +8908,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   String get _taskAction {
     final fromRow = _row.myAction.trim();
     if (fromRow.isNotEmpty) return fromRow;
+    final changeAction = widget.changeEdit == null
+        ? (_row.change?.myAction ?? '').trim()
+        : '';
+    if (changeAction.isNotEmpty) return changeAction;
     if (!_isReviewing) return '';
     if (_moduleReviewEnabled('marketCompleted') &&
         !_moduleReviewed('marketCompleted')) {
@@ -9249,7 +9304,39 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return widget.service.saveResolvingConflict(row);
   }
 
+  Future<void> _submitChangeDraft() async {
+    final edit = widget.changeEdit;
+    if (edit == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('提交复核'),
+        content: const Text('只通知这次改动涉及的板块。全部通过前，现在生效的提案内容不变。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('提交')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      if (_dirty) {
+        final saved = await _saveChangeDraft();
+        if (!saved || !mounted) return;
+      }
+      await edit.onSubmit();
+      if (!mounted) return;
+      showProposalCenterToast(context, '已提交变更复核');
+    } catch (error) {
+      widget.onError(friendlyErrorText(error));
+    }
+  }
+
   Future<void> _saveDraft() async {
+    if (widget.changeEdit != null) {
+      await _saveChangeDraft();
+      return;
+    }
     if (!proposalIntakeHasMeaningfulContent(_row)) {
       widget.onError('请先填写提案信息后再保存草稿');
       return;
@@ -9478,6 +9565,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                               true ||
                                           _review['reviewRejected'] == true)
                                         _rejectBanner(),
+                                      if (_row.change != null &&
+                                          widget.changeEdit == null &&
+                                          !_taskAction.startsWith('change_'))
+                                        _changeBanner(),
                                       if (_stage == 'awaiting_submit')
                                         _awaitingSubmitBanner(),
                                       // 填写中、复核中、待最终确认、已完成都放同一套测算图和「流程」格子。
@@ -10511,10 +10602,76 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  Future<bool> _saveChangeDraft() async {
+    final edit = widget.changeEdit;
+    if (edit == null) return false;
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return false;
+    try {
+      final prepared = _row.copyWith(form: await _persistableForm(_form));
+      final saved = await edit.onSave(prepared.form);
+      if (!mounted) return false;
+      setState(() {
+        _row = _row.copyWith(form: Map<String, dynamic>.from(saved.proposedForm));
+        _serverForm = proposalIntakeCloneForm(saved.proposedForm);
+        _fieldEpoch++;
+        _markFormDirty(false);
+      });
+      widget.onSaved(_row);
+      showProposalCenterToast(context, '变更草稿已保存。生效版本不变。');
+      return true;
+    } catch (error) {
+      widget.onError(friendlyErrorText(error));
+      return false;
+    }
+  }
+
+  Future<void> _openChange({bool start = false}) async {
+    if (_row.id <= 0) return;
+    await showProposalIntakeChange(
+      context: context,
+      session: widget.session,
+      service: widget.service,
+      proposalId: _row.id,
+      changeId: start ? 0 : (_row.change?.id ?? 0),
+      startImmediately: start,
+      proposal: _row,
+      options: widget.options,
+      people: widget.people,
+      contracts: widget.contracts,
+    );
+    if (!mounted || _dirty || _row.id <= 0) return;
+    try {
+      final fresh = await widget.service.fetchDetail(
+        _row.id,
+        chatConversationId: widget.chatConversationId,
+        chatMessageId: widget.chatMessageId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _row = fresh;
+        _serverForm = proposalIntakeCloneForm(fresh.form);
+      });
+      widget.onChanged(fresh);
+    } catch (error) {
+      widget.onError(friendlyErrorText(error));
+    }
+  }
+
   /// 原型底部操作条里的主按钮：当前这一步要做的交接动作。
   /// 与「更多」菜单里的同名动作完全一样，只是按原型放到底部显眼位置。
   ({String label, VoidCallback onPressed, String hint})?
   get _protoPrimaryAction {
+    final edit = widget.changeEdit;
+    if (edit != null) {
+      if (!edit.change.canEdit) return null;
+      return (
+        label: '提交复核',
+        onPressed: () => unawaited(_submitChangeDraft()),
+        hint: '只复核这次改动的板块，通过前生效版本不变',
+      );
+    }
     if (_canNotifyTech) {
       return (
         label: '通知财务填写',
@@ -10978,11 +11135,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           onPressed: () => unawaited(_handoff('notify_market2')),
           danger: false,
         ),
-      if (_canStartTechRevision)
+      if (_canStartChange)
         (
-          label: '发起科技变更',
-          onPressed: () => unawaited(_handoff('start_tech_revision')),
+          label: '发起变更',
+          onPressed: () => unawaited(_openChange(start: true)),
           danger: false,
+        ),
+      if (_canOpenChange)
+        (
+          label: '变更记录',
+          onPressed: () => unawaited(_openChange()),
+          danger: false,
+        ),
+      if (widget.changeEdit?.onCancel != null)
+        (
+          label: '撤销变更',
+          onPressed: () => unawaited(widget.changeEdit!.onCancel!()),
+          danger: true,
         ),
       if (_canConfirmTechRevision)
         (
@@ -11138,6 +11307,47 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   ),
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _changeBanner() {
+    final change = _row.change;
+    if (change == null) return const SizedBox.shrink();
+    final label = proposalIntakeChangeStatusLabel(change.status);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: DunesColors.resolve(context, ProposalPalette.amberSoft, role: DunesColorRole.surface),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: () => unawaited(_openChange()),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '提案变更进行中 · $label。生效的仍是旧版本。',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: DunesColors.resolve(context, ProposalPalette.amber),
+                    ),
+                  ),
+                ),
+                Text(
+                  '查看',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.resolve(context, ProposalPalette.purpleDeep),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -12674,6 +12884,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         highlight: _anchor('salesScale', _kpiTriple()),
       ),
       children: [
+        _simpleLine(
+          '提案类型',
+          _text('proposalType'),
+          anchorKey: 'proposalType',
+          required: true,
+        ),
         _simpleLine(
           '产品（标签一）',
           _text('product'),
@@ -14422,7 +14638,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
         kProposalCostCategoryTax:
             editable &&
-            _isSubmitter &&
+            (_changeEditing || _isSubmitter) &&
             !_isLocked &&
             !_row.techRevisionOpen &&
             _financeFormulaEditable(owner, true, 'taxCost'),

@@ -176,6 +176,29 @@ T _childInField<T extends Widget>(WidgetTester tester, String label) {
 }
 
 void main() {
+  testWidgets('detail title shows the proposal type', (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '广西卡品',
+          'status': 'done',
+          'createdBy': 11,
+          'form': {'proposalType': '延续', 'proposalName': '广西卡品'},
+          'review': {'stage': 'done'},
+        }),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('延续'), findsWidgets);
+    expect(find.byType(ProposalTypeChip), findsWidgets);
+  });
+
   testWidgets('proposal workbench uses four state-preserving department tabs', (
     tester,
   ) async {
@@ -5220,7 +5243,7 @@ void main() {
     expect(find.text('计算公式'), findsNothing);
   });
 
-  testWidgets('done proposal shows start tech revision for tech owner', (
+  testWidgets('done proposal no longer offers a tech revision', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 1400);
@@ -5248,7 +5271,34 @@ void main() {
 
     expect(find.text('科技变更中'), findsNothing);
     await _openTopMore(tester);
-    expect(find.text('发起科技变更'), findsOneWidget);
+    expect(find.text('发起科技变更'), findsNothing);
+    expect(find.text('发起变更'), findsNothing);
+    expect(find.text('变更记录'), findsOneWidget);
+  });
+
+  testWidgets('done proposal lets the creator start a change', (tester) async {
+    tester.view.physicalSize = const Size(1440, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'status': 'done',
+          'kind': 'sales',
+          'createdBy': 11,
+          'form': {'proposalName': '广西卡品'},
+          'review': {'stage': 'done'},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _openTopMore(tester);
+    expect(find.text('发起变更'), findsOneWidget);
+    expect(find.text('发起科技变更'), findsNothing);
   });
 
   testWidgets('tech revising shows add-record and confirm actions', (

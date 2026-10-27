@@ -3,6 +3,47 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('each proposal row shows whether it is 新增, 变更 or 延续', (tester) async {
+    tester.view.physicalSize = const Size(800, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProposalTagGroupCard(
+            data: ProposalTagGroupData(
+              index: 0,
+              tag1: '广西卡品',
+              header: const ProposalListCardData(
+                index: 0,
+                tag1: '广西卡品',
+                nameLabel: '提案 1 份',
+                name: '1 进行中',
+              ),
+              entries: [
+                ProposalTagGroupEntry(
+                  id: 1,
+                  data: ProposalListCardData(
+                    index: 0,
+                    tag1: '广西卡品',
+                    name: '广西卡品提案',
+                    proposalType: '变更',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (find.text('广西卡品提案').evaluate().isEmpty) {
+      await tester.tap(find.byIcon(Icons.keyboard_arrow_down_rounded));
+      await tester.pump();
+    }
+    expect(find.text('广西卡品提案'), findsOneWidget);
+    expect(find.text('变更'), findsOneWidget);
+  });
+
   testWidgets('tag group merges proposals under one 标签一 and folds the rest', (tester) async {
     tester.view.physicalSize = const Size(460, 1600);
     tester.view.devicePixelRatio = 1;

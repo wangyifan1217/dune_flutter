@@ -297,6 +297,7 @@ class ProposalListCardData {
     required this.tag1,
     required this.name,
     this.chips = const [],
+    this.proposalType = '',
     this.rating = '',
     this.scale = '—',
     this.mid = const [],
@@ -320,6 +321,9 @@ class ProposalListCardData {
   final String tag1;
   final String name;
   final List<String> chips;
+
+  /// 新增 / 变更 / 延续。列表每一行单独标出来，不和板块混在小标签里。
+  final String proposalType;
   final String rating;
   final String scale;
   final List<ProposalListCardMetric> mid;
@@ -1019,6 +1023,10 @@ class _ProposalTagGroupCardState extends State<ProposalTagGroupCard> {
                     ),
                   ),
                 ),
+                if (d.proposalType.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  ProposalTypeChip(d.proposalType),
+                ],
                 if (d.rating.isNotEmpty) ...[
                   const SizedBox(width: 6),
                   ProposalRatingBadge(rating: d.rating, size: 16),

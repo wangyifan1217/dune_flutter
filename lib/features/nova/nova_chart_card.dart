@@ -59,6 +59,15 @@ class NovaChartCard extends StatelessWidget {
   }
 }
 
+/// 提醒条目前的小圆点：下降、亏损红色，上升绿色，其他用主色。
+Color _novaInsightTone(String line) {
+  if (line.contains('下降') || line.contains('亏损')) {
+    return const Color(0xFFE5484D);
+  }
+  if (line.contains('上升')) return const Color(0xFF1FA463);
+  return _novaChartPalette.first;
+}
+
 /// 打开小饕时的经营提醒卡片：几条变化 + 可以直接点的追问。
 class NovaInsightCard extends StatelessWidget {
   const NovaInsightCard({
@@ -121,30 +130,40 @@ class NovaInsightCard extends StatelessWidget {
           ),
           for (final line in insight.lines)
             Padding(
-              padding: const EdgeInsets.only(right: 8, bottom: 2),
-              child: Text(
-                '· $line',
-                style: TextStyle(fontSize: 12.5, height: 1.4, color: muted),
+              padding: const EdgeInsets.only(right: 8, bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    margin: const EdgeInsets.only(top: 7, right: 8),
+                    decoration: BoxDecoration(
+                      color: _novaInsightTone(line),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      line,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.5,
+                        color: muted,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           if (insight.suggestions.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 6, right: 8),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  for (final suggestion in insight.suggestions)
-                    ActionChip(
-                      label: Text(
-                        suggestion,
-                        style: const TextStyle(fontSize: 12.5),
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onPressed: enabled ? () => onAsk(suggestion) : null,
-                    ),
-                ],
+              padding: const EdgeInsets.only(top: 8, right: 8),
+              child: NovaFollowUps(
+                title: null,
+                suggestions: insight.suggestions,
+                enabled: enabled,
+                onAsk: onAsk,
               ),
             ),
         ],
@@ -719,7 +738,11 @@ class NovaFollowUps extends StatelessWidget {
     this.secondaryKey,
     this.onSecondary,
     this.maxVisible = 3,
+    this.title = '接着问',
   });
+
+  /// 列表上方的小字；null 不显示（放在已有标题的卡片里时）。
+  final String? title;
 
   final List<String> suggestions;
   final ValueChanged<String> onAsk;
@@ -744,11 +767,11 @@ class NovaFollowUps extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (shown.isNotEmpty)
+          if (shown.isNotEmpty && title != null)
             Padding(
               padding: const EdgeInsets.only(left: 2, bottom: 6),
               child: Text(
-                '接着问',
+                title!,
                 style: TextStyle(fontSize: 11.5, color: muted),
               ),
             ),

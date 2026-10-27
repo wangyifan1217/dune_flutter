@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 import 'proposal_finance_formula.dart';
+import 'proposal_intake_change_models.dart';
 import 'proposal_sla_models.dart';
 import 'settlement_catalog.dart';
 
+export 'proposal_intake_change_models.dart';
 export 'proposal_sla_models.dart';
 
 /// 提案归档 Excel 与生效版本快照。一期先关掉：没跑 V315 时读 revision 列会让提案页整体报错。
@@ -457,7 +459,11 @@ class ProposalIntakeRow {
     this.financeEstimate = const {},
     this.sla,
     this.revision = 0,
+    this.change,
   });
+
+  /// 进行中的提案变更；变更生效前 [form] 仍是旧版本。
+  final ProposalIntakeChangeSummary? change;
 
   /// 当前生效版本号：V1 = 总裁第一次确认通过，之后每次变更生效 +1；0 = 还没生效过。
   /// 归档 Excel / 版本快照屏蔽期间后端不返回此字段，前端按 0 处理。
@@ -521,6 +527,7 @@ class ProposalIntakeRow {
       financeEstimate: _map(json['financeEstimate']),
       sla: ProposalSlaSummary.tryParse(json['sla']),
       revision: (json['revision'] as num?)?.toInt() ?? 0,
+      change: ProposalIntakeChangeSummary.tryParse(json['change']),
     );
   }
 
@@ -575,6 +582,7 @@ class ProposalIntakeRow {
     financeEstimate: financeEstimate,
     sla: sla,
     revision: revision,
+    change: change,
   );
 
   String initiatorDisplayName(List<ProposalPerson> people) {
@@ -2371,6 +2379,15 @@ String proposalIntakeActionLabel(
     'start_tech_revision' => '待发起科技变更',
     'revise' => '最终人已驳回请从头填写',
     'revise_module' => '板块已驳回请修改',
+    'change_fill' => '待填写变更',
+    'change_revise' => '变更已驳回请修改',
+    'change_notify_final' => '变更待通知最终人',
+    'change_president_confirm' => '变更待最终确认',
+    'change_review_market' => '待复核变更（市场部）',
+    'change_review_tech' => '待复核变更（科技部）',
+    'change_review_finance' => '待逐条复核变更（财务）',
+    'change_review_finance_module' => '待确认变更（财务部）',
+    'change_review_contract' => '待审核变更（合同）',
     _ => '',
   };
 }
@@ -2739,6 +2756,15 @@ String proposalIntakeTaskBannerTitle(
     'review_finance_interface' => '待你逐条复核财务技术接口',
     'review_contract' => '待你复核合同',
     'president_confirm' => '待你最终确认',
+    'change_fill' => '待你填写提案变更',
+    'change_revise' => '提案变更已驳回，请修改',
+    'change_notify_final' => '提案变更已复核完，请通知最终人',
+    'change_president_confirm' => '待你最终确认提案变更',
+    'change_review_market' => '待你复核提案变更（市场部）',
+    'change_review_tech' => '待你复核提案变更（科技部）',
+    'change_review_finance' => '待你逐条复核提案变更（财务）',
+    'change_review_finance_module' => '待你确认提案变更（财务部）',
+    'change_review_contract' => '待你审核提案变更（合同）',
     _ => '',
   };
 }
@@ -2772,6 +2798,14 @@ String proposalIntakeTaskBannerBody(
     'start_review' => '内容改完后点右上角重新提交复核。',
     'start_tech_revision' => '如需改科技内容，点右上角发起科技变更。',
     'submit_president' => '各板块已复核完。到页面底部通知最终人。',
+    'change_fill' || 'change_revise' => '打开变更后修改内容。审核通过前，现在生效的版本不变。',
+    'change_notify_final' => '打开变更，通知最终人。',
+    'change_president_confirm' => '打开变更，对照新旧内容后确认或驳回。',
+    'change_review_market' ||
+    'change_review_tech' ||
+    'change_review_finance' ||
+    'change_review_finance_module' ||
+    'change_review_contract' => '打开变更，只看这次改动的内容，通过或驳回。',
     _ => '',
   };
 }
@@ -2780,6 +2814,7 @@ String proposalIntakeNavJumpLabel(
   String action, {
   bool awaitingModuleConfirm = false,
 }) {
+  if (action.startsWith('change_')) return '打开变更';
   if (awaitingModuleConfirm ||
       proposalIntakeActionIsModuleReview(action) ||
       action == 'president_confirm' ||

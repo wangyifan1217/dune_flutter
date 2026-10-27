@@ -440,6 +440,109 @@ class ProposalIntakeService {
     );
   }
 
+  // ---- 提案变更：独立存储，审核期间原提案保持旧版本 ----
+
+  Future<ProposalIntakeChangeList> fetchChanges(int proposalId) async {
+    final data = _unwrap(
+      await http.get(
+        _uri('/proposal-intake-changes', {'proposalId': '$proposalId'}),
+        headers: _headers,
+      ),
+    );
+    return ProposalIntakeChangeList.fromJson(_asMap(data));
+  }
+
+  Future<ProposalIntakeChange> fetchChange(int changeId) async {
+    final data = _unwrap(
+      await http.get(_uri('/proposal-intake-changes/$changeId'), headers: _headers),
+    );
+    return ProposalIntakeChange.fromJson(_asMap(data));
+  }
+
+  Future<ProposalIntakeChange> createChange({
+    required int proposalId,
+    required String reason,
+  }) async {
+    final data = _unwrap(
+      await http.post(
+        _uri('/proposal-intake-changes'),
+        headers: _headers,
+        body: jsonEncode({'proposalId': proposalId, 'reason': reason}),
+      ),
+    );
+    return ProposalIntakeChange.fromJson(_asMap(data));
+  }
+
+  Future<ProposalIntakeChange> saveChange({
+    required int changeId,
+    required int version,
+    String reason = '',
+    Map<String, dynamic>? form,
+  }) async {
+    final data = _unwrap(
+      await http.patch(
+        _uri('/proposal-intake-changes/$changeId'),
+        headers: _headers,
+        body: jsonEncode({
+          'version': version,
+          'reason': ? (reason.trim().isEmpty ? null : reason.trim()),
+          'form': ?form,
+        }),
+      ),
+    );
+    return ProposalIntakeChange.fromJson(_asMap(data));
+  }
+
+  Future<ProposalIntakeChange> _changeAction(
+    int changeId,
+    String action,
+    Map<String, dynamic> body,
+  ) async {
+    final data = _unwrap(
+      await http.post(
+        _uri('/proposal-intake-changes/$changeId/$action'),
+        headers: _headers,
+        body: jsonEncode(body),
+      ),
+    );
+    return ProposalIntakeChange.fromJson(_asMap(data));
+  }
+
+  Future<ProposalIntakeChange> submitChange(int changeId, int version) =>
+      _changeAction(changeId, 'submit', {'version': version});
+
+  Future<ProposalIntakeChange> reviewChange({
+    required int changeId,
+    required int version,
+    required String section,
+    required bool approved,
+    String comment = '',
+    List<String> itemKeys = const [],
+  }) => _changeAction(changeId, 'review', {
+    'version': version,
+    'section': section,
+    'approved': approved,
+    'comment': comment,
+    'itemKeys': itemKeys,
+  });
+
+  Future<ProposalIntakeChange> notifyFinalChange(int changeId, int version) =>
+      _changeAction(changeId, 'notify-final', {'version': version});
+
+  Future<ProposalIntakeChange> decideChange({
+    required int changeId,
+    required int version,
+    required bool approved,
+    String comment = '',
+  }) => _changeAction(changeId, 'decide', {
+    'version': version,
+    'approved': approved,
+    'comment': comment,
+  });
+
+  Future<ProposalIntakeChange> cancelChange(int changeId, int version) =>
+      _changeAction(changeId, 'cancel', {'version': version});
+
   Object? _unwrap(http.Response response) {
     Object? decoded;
     try {

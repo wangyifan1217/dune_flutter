@@ -3387,6 +3387,24 @@ class ConversationService {
     throw lastError ?? Exception('媒体地址解析失败');
   }
 
+  /// 表情包走公网地址下载。`/storage/download` 会按对象存储签名，表情文件不在那里。
+  Future<Uint8List> loadStickerImageBytes(String objectKey) async {
+    final url = await resolveMediaUrl(objectKey, bucket: 'im-stickers');
+    final client = http.Client();
+    try {
+      final resp = await client
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 20));
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        throw Exception('表情下载失败: HTTP ${resp.statusCode}');
+      }
+      if (resp.bodyBytes.isEmpty) throw Exception('表情内容为空');
+      return resp.bodyBytes;
+    } finally {
+      client.close();
+    }
+  }
+
   String mediaProxyUrl(String source, {String bucket = 'im-attachments'}) {
     final raw = source.trim();
     if (raw.isEmpty) return raw;

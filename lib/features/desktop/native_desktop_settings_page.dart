@@ -11,12 +11,15 @@ import '../chat/file_download.dart' as file_dl;
 import '../chat/im_file_save_dir.dart';
 import '../shell/dunes_toast.dart';
 import '../update/app_update_service.dart';
+import '../auth/auth_session.dart';
+import 'desktop_network_settings_section.dart';
 
 /// PC 端企微/微信风格设置页，侧栏「设置」入口。
 class NativeDesktopSettingsPage extends StatefulWidget {
   const NativeDesktopSettingsPage({
     super.key,
     required this.onBack,
+    this.session,
     this.onOpenTextScale,
     this.onCheckForUpdates,
     this.onOpenReleaseHistory,
@@ -27,6 +30,7 @@ class NativeDesktopSettingsPage extends StatefulWidget {
   });
 
   final VoidCallback onBack;
+  final AuthSession? session;
   final VoidCallback? onOpenTextScale;
   final VoidCallback? onCheckForUpdates;
   final VoidCallback? onOpenReleaseHistory;
@@ -259,6 +263,11 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
           ),
         ],
       ),
+      if (isDesktopCommOnly)
+        _buildCardGroup(
+          title: '网络连接',
+          children: [DesktopNetworkSettingsSection(session: widget.session)],
+        ),
       if (widget.onCheckForUpdates != null ||
           widget.onOpenReleaseHistory != null ||
           widget.onScanWorkstation != null ||

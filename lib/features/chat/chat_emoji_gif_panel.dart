@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/conversation_service.dart';
+import 'sticker_disk_cache.dart';
 
 /// 聊天表情面板高度（与键盘区域接近，便于顶起消息列表）。
 const kChatEmojiGifPanelHeight = 280.0;
@@ -27,7 +28,6 @@ class ChatEmojiGifPanel extends StatefulWidget {
 class _ChatEmojiGifPanelState extends State<ChatEmojiGifPanel> {
   late Future<List<Map<String, dynamic>>> _packsFuture;
   String? _activePackId;
-  final Map<String, Future<String>> _stickerUrlFutures = {};
   final Map<String, Future<Uint8List>> _stickerBytesFutures = {};
   final Map<String, List<Map<String, dynamic>>> _packAssets = {};
   final Map<String, bool> _packHasMore = {};
@@ -497,26 +497,31 @@ class _ChatEmojiGifPanelState extends State<ChatEmojiGifPanel> {
             'fileName': 'sticker-thumbnail.png',
             'mimeType': 'image/png',
           };
-    final objectKey = (displayAsset['objectKey'] ?? '').toString();
-    final cacheKey = 'im-stickers:$objectKey';
-    final urlFuture = _stickerUrlFutures.putIfAbsent(
-      cacheKey,
-      () => widget.service.resolveMediaUrl(objectKey, bucket: 'im-stickers'),
+    final objectKey = (displayAsset['objectKey'] ?? '').toString().trim();
+    if (objectKey.isEmpty) {
+      return const Center(child: Icon(Icons.emoji_emotions_outlined));
+    }
+    final bytesFuture = _stickerBytesFutures.putIfAbsent(
+      'im-stickers:$objectKey',
+      () => loadStickerBytes(
+        objectKey,
+        () => widget.service.loadStickerImageBytes(objectKey),
+      ),
     );
-    return FutureBuilder<String>(
-      future: urlFuture,
+    return FutureBuilder<Uint8List>(
+      future: bytesFuture,
       builder: (context, snapshot) {
         if (snapshot.hasData) {
-          return Image.network(
+          return Image.memory(
             snapshot.data!,
             fit: BoxFit.contain,
             cacheWidth: 96,
             cacheHeight: 96,
-            errorBuilder: (context, error, stack) => _fallback(displayAsset),
+            gaplessPlayback: true,
           );
         }
         if (snapshot.hasError) {
-          return _fallback(displayAsset);
+          return const Center(child: Icon(Icons.emoji_emotions_outlined));
         }
         return const Center(
           child: SizedBox(
@@ -526,29 +531,6 @@ class _ChatEmojiGifPanelState extends State<ChatEmojiGifPanel> {
           ),
         );
       },
-    );
-  }
-
-  Widget _fallback(Map<String, dynamic> asset) {
-    final objectKey = (asset['objectKey'] ?? '').toString();
-    final cacheKey = 'im-stickers:$objectKey';
-    final bytesFuture = _stickerBytesFutures.putIfAbsent(
-      cacheKey,
-      () => widget.service.loadCachedChatMediaBytes({
-        ...asset,
-        'mediaBucket': 'im-stickers',
-      }),
-    );
-    return FutureBuilder<Uint8List>(
-      future: bytesFuture,
-      builder: (context, snapshot) => snapshot.hasData
-          ? Image.memory(
-              snapshot.data!,
-              fit: BoxFit.contain,
-              cacheWidth: 96,
-              cacheHeight: 96,
-            )
-          : const Center(child: Icon(Icons.emoji_emotions_outlined)),
     );
   }
 }

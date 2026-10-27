@@ -179,6 +179,36 @@ void main() {
       expect(sorted[1].role, 'assistant');
     });
 
+    test('reply with delayed timestamp remains paired before next question', () {
+      final t0 = DateTime(2026, 10, 27, 13, 50);
+      final u1 = NativeNovaMessage(
+        id: 100,
+        role: 'user',
+        text: '有没有说过30天后到期',
+        createdAt: t0,
+      );
+      final u2 = NativeNovaMessage(
+        id: 101,
+        role: 'user',
+        text: '或者更改提案',
+        createdAt: t0.add(const Duration(seconds: 20)),
+      );
+      // 服务端回复时间晚于第二个问题，且在同步列表里先于用户消息返回。
+      final a1 = NativeNovaMessage(
+        id: 102,
+        role: 'assistant',
+        text: '没有找到30天后到期的明确表述。',
+        createdAt: t0.add(const Duration(seconds: 25)),
+      );
+
+      final sorted = sortNovaMessages([a1, u2, u1]);
+      expect(sorted.map((m) => m.text).toList(), [
+        '有没有说过30天后到期',
+        '没有找到30天后到期的明确表述。',
+        '或者更改提案',
+      ]);
+    });
+
     test('Streaming empty message stays below user question', () {
       final now = DateTime.now();
       final u = NativeNovaMessage(

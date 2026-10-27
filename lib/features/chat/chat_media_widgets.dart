@@ -15,6 +15,7 @@ import 'chat_image_preview_window_stub.dart'
     if (dart.library.io) 'chat_image_preview_window.dart';
 import 'chat_image_utils.dart';
 import 'desktop_image_preview_pref.dart';
+import 'sticker_disk_cache.dart';
 
 export 'chat_image_preview_models.dart';
 import 'cors_safe_image.dart';
@@ -99,6 +100,17 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
     _useBytesFallback = false;
     _authUrlFuture = null;
     _bytesFuture = null;
+    _publicUrl = null;
+
+    final stickerKey = _stickerObjectKey();
+    if (stickerKey != null) {
+      _useBytesFallback = true;
+      _bytesFuture = loadStickerBytes(
+        stickerKey,
+        () => widget.service.loadStickerImageBytes(stickerKey),
+      );
+      return;
+    }
 
     _publicUrl =
         widget.service.publicImageUrlForPayload(_previewPayload) ??
@@ -117,6 +129,17 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
     }
     // Prevent stale async updates if bind called again quickly.
     if (gen != _loadGeneration) return;
+  }
+
+  String? _stickerObjectKey() {
+    if ((widget.payload?['mediaBucket'] ?? '').toString() != 'im-stickers') {
+      return null;
+    }
+    final source = _isGif
+        ? widget.payload
+        : (_previewPayload ?? widget.payload);
+    final key = ConversationService.mediaAuthObjectKey(source);
+    return key.isEmpty ? null : key;
   }
 
   void _fallbackToBytes() {

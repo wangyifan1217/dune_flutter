@@ -22,6 +22,7 @@ import '../approval/native_approval_page.dart';
 import '../approval_assistant/native_approval_assistant_page.dart';
 import '../approval_assistant/native_approval_assistant_pending_page.dart';
 import '../approval_assistant/native_approval_assistant_proposal_page.dart';
+import '../proposal_intake/proposal_intake_change_page.dart';
 import '../proposal_intake/proposal_intake_overlay.dart';
 import '../task_assistant/native_task_assistant_page.dart';
 import '../kpi_assistant/native_kpi_assistant_page.dart';
@@ -5410,6 +5411,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (isDesktopCommOnly && _desktopSettingsOpen) {
       return _wrapWithMainNavigation(
         NativeDesktopSettingsPage(
+          session: widget.session,
           onBack: () {
             if (!mounted) return;
             setState(() {
@@ -6342,6 +6344,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     required String from,
   }) {
     if (share.businessType.toUpperCase() == 'PROPOSAL_INTAKE') {
+      if (share.changeId > 0) {
+        return showProposalIntakeChange(
+          context: context,
+          session: widget.session,
+          proposalId: share.businessId,
+          changeId: share.changeId,
+        );
+      }
       return showProposalIntakeOverlay(
         context: context,
         session: widget.session,

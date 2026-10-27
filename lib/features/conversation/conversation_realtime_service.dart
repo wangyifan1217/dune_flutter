@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/http/session_http.dart';
+import '../../core/network/desktop_network_settings.dart';
 import '../auth/auth_session_coordinator.dart';
 import '../auth/auth_session.dart';
 import '../desktop/windows_desktop_tray.dart';
@@ -25,9 +26,10 @@ class ConversationRealtimeEvent {
 }
 
 class ConversationRealtimeService {
-  ConversationRealtimeService({
-    required AuthSession session,
-  }) : _session = session;
+  ConversationRealtimeService({required AuthSession session})
+    : _session = session {
+    DesktopNetworkSettings.instance.addListener(_onNetworkModeChanged);
+  }
 
   final AuthSession _session;
   final StreamController<ConversationRealtimeEvent> _events =
@@ -46,6 +48,8 @@ class ConversationRealtimeService {
   centrifuge.Client? _ws;
   bool _connecting = false;
   bool _closed = false;
+  bool _networkReconnectRunning = false;
+  bool _networkReconnectPending = false;
   bool _presenceDenied = false;
   Set<int> _onlineUsers = <int>{};
   Timer? _presenceTimer;
@@ -59,7 +63,9 @@ class ConversationRealtimeService {
   Set<int> get currentOnlineUsers => Set<int>.from(_onlineUsers);
 
   /// 订阅在线用户；会立刻推送当前快照（broadcast stream 不保留历史）。
-  StreamSubscription<Set<int>> trackOnlineUsers(void Function(Set<int>) onData) {
+  StreamSubscription<Set<int>> trackOnlineUsers(
+    void Function(Set<int>) onData,
+  ) {
     scheduleMicrotask(() {
       if (!_onlineUsersController.isClosed) {
         onData(Set<int>.from(_onlineUsers));
@@ -71,6 +77,32 @@ class ConversationRealtimeService {
   Completer<void>? _connectCompleter;
 
   bool get isConnected => _ws?.state == centrifuge.State.connected;
+
+  void _onNetworkModeChanged() {
+    if (_closed || (_ws == null && !_connecting)) return;
+    _networkReconnectPending = true;
+    unawaited(_reconnectForNetworkMode());
+  }
+
+  Future<void> _reconnectForNetworkMode() async {
+    if (_networkReconnectRunning) return;
+    _networkReconnectRunning = true;
+    try {
+      while (_networkReconnectPending && !_closed) {
+        _networkReconnectPending = false;
+        final connecting = _connectCompleter;
+        if (_connecting && connecting != null) await connecting.future;
+        if (_closed) return;
+        await disconnect();
+        if (_closed) return;
+        await connect();
+      }
+    } catch (_) {
+      _scheduleReconnect();
+    } finally {
+      _networkReconnectRunning = false;
+    }
+  }
 
   Future<void> connect() async {
     if (_closed) return;
@@ -95,10 +127,11 @@ class ConversationRealtimeService {
         shouldReconnect = true;
         return;
       }
-      final channels = (payload['channels'] as List<dynamic>? ?? const <dynamic>[])
-          .map((e) => e.toString())
-          .where((e) => e.isNotEmpty)
-          .toSet();
+      final channels =
+          (payload['channels'] as List<dynamic>? ?? const <dynamic>[])
+              .map((e) => e.toString())
+              .where((e) => e.isNotEmpty)
+              .toSet();
       _serverChannels
         ..clear()
         ..addAll(channels);
@@ -111,9 +144,9 @@ class ConversationRealtimeService {
       await disconnect();
 
       final wsUrl = _resolveWsUrl((payload['wsUrl'] ?? '').toString());
-      final data = utf8.encode(jsonEncode(<String, dynamic>{
-        'userId': _session.userId,
-      }));
+      final data = utf8.encode(
+        jsonEncode(<String, dynamic>{'userId': _session.userId}),
+      );
       final ws = centrifuge.createClient(
         wsUrl,
         centrifuge.ClientConfig(
@@ -231,7 +264,9 @@ class ConversationRealtimeService {
     }
     if (_presenceConvId > 0 && _presencePeerUserId > 0) {
       try {
-        final convOnline = await _presenceFromChannel(_conversationChannel(_presenceConvId));
+        final convOnline = await _presenceFromChannel(
+          _conversationChannel(_presenceConvId),
+        );
         if (convOnline.contains(_presencePeerUserId)) {
           ids.add(_presencePeerUserId);
         }
@@ -263,6 +298,7 @@ class ConversationRealtimeService {
   }
 
   Future<void> close() async {
+    DesktopNetworkSettings.instance.removeListener(_onNetworkModeChanged);
     _closed = true;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
@@ -358,7 +394,9 @@ class ConversationRealtimeService {
   }
 
   void _subscribeChannel(String channel) {
-    if (channel.isEmpty || _subs.containsKey(channel) || _serverChannels.contains(channel)) {
+    if (channel.isEmpty ||
+        _subs.containsKey(channel) ||
+        _serverChannels.contains(channel)) {
       return;
     }
     final ws = _ws;

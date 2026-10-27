@@ -1315,9 +1315,16 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       if (assistant == null &&
           m.role == 'assistant' &&
           !m.streaming &&
-          m.text.trim().isNotEmpty) {
+          m.text.trim().isNotEmpty &&
+          (m.id == afterMessageId + 1 || m.text.trim() == fallbackAssistantText.trim())) {
         assistant = m;
-      } else if (user == null && m.role == 'user') {
+      } else if (user == null &&
+          m.role == 'user' &&
+          (m.id == afterMessageId ||
+              (fallbackUserText.trim().isNotEmpty &&
+                  m.text.trim() == fallbackUserText.trim()) ||
+              (lastUserText.trim().isNotEmpty &&
+                  m.text.trim() == lastUserText.trim()))) {
         user = m;
       }
       if (assistant != null && user != null) break;

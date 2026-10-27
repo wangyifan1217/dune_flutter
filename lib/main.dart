@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/layout/mobile_viewport_shell.dart';
 import 'core/platform/desktop_features.dart';
+import 'core/network/desktop_network_settings.dart';
 import 'core/theme/app_text_scale.dart';
 import 'core/theme/dunes_theme.dart';
 import 'core/widgets/app_watermark.dart';
@@ -149,6 +150,7 @@ Future<void> _initializeDesktopRuntime() async {
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDesktopNetworking();
   enableAndroidPhotoPicker();
 
   // 桌面图片预览：desktop_multi_window 0.3 以独立 Engine 再进 main。

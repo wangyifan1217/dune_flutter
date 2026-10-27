@@ -15,6 +15,8 @@ class ApprovalChatShare {
     this.kind = '',
     this.chatConversationId = 0,
     this.chatMessageId = 0,
+    this.changeId = 0,
+    this.tag = '',
   });
 
   final String businessType;
@@ -29,6 +31,10 @@ class ApprovalChatShare {
   final String kind;
   final int chatConversationId;
   final int chatMessageId;
+
+  /// 提案变更待办：点名片打开这次变更，而不是只打开生效提案。
+  final int changeId;
+  final String tag;
 
   ApprovalChatShare withChatAnchor({
     required int conversationId,
@@ -47,6 +53,8 @@ class ApprovalChatShare {
       kind: kind,
       chatConversationId: conversationId,
       chatMessageId: messageId,
+      changeId: changeId,
+      tag: tag,
     );
   }
 
@@ -107,6 +115,10 @@ class ApprovalChatShare {
 
   /// 协作提案名片副标题：谁提交的 + 需要填写/复核/最终确认。
   String get proposalCardLine {
+    if (changeId > 0) {
+      final action = actionLabel.trim();
+      return action.isEmpty ? '提案变更' : '提案变更 · $action';
+    }
     final parts = <String>[
       if (submitterName.trim().isNotEmpty) '${submitterName.trim()} 提交',
       if (actionLabel.trim().isNotEmpty) actionLabel.trim(),
@@ -139,6 +151,8 @@ class ApprovalChatShare {
         if (actionLabel.trim().isNotEmpty) 'actionLabel': actionLabel.trim(),
         if (todoId > 0) 'todoId': todoId,
         if (kind.trim().isNotEmpty) 'kind': kind.trim(),
+        if (changeId > 0) 'changeId': changeId,
+        if (tag.trim().isNotEmpty) 'tag': tag.trim(),
       },
     };
   }
@@ -237,6 +251,10 @@ class ApprovalChatShare {
       actionLabel: (map['actionLabel'] ?? '').toString().trim(),
       todoId: todoId,
       kind: (map['kind'] ?? '').toString().trim(),
+      changeId: (map['changeId'] as num?)?.toInt() ??
+          int.tryParse('${map['changeId'] ?? ''}') ??
+          0,
+      tag: (map['tag'] ?? '').toString().trim(),
     );
   }
 }

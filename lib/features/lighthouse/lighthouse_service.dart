@@ -40,11 +40,35 @@ class LighthouseService {
     return _session.apiBase.replaceAll(RegExp(r'/$'), '');
   }
 
+  /// 专题 key（如 `jinke`），空 = 全盘。见 lighthouse_topic.dart。
+  ///
+  /// 只给账本口径的接口带：资金池 / 净TA / 经营成本 / 折扣 / 预警不走账本宽表，
+  /// 带了也筛不动，只会把后端缓存拆碎。
+  String topic = '';
+
+  static const Set<String> _topicPaths = <String>{
+    '/lighthouse/overview',
+    '/lighthouse/summary',
+    '/lighthouse/hero-history',
+    '/lighthouse/dimension',
+    '/lighthouse/detail',
+    '/lighthouse/trend',
+    '/lighthouse/row-trend-history',
+    '/lighthouse/analysis/cube',
+    '/lighthouse/people',
+    '/lighthouse/export',
+  };
+
   Uri _uri(String path, [Map<String, String>? query]) {
     final base = Uri.parse('$_apiBase$path');
-    if (query == null || query.isEmpty) return base;
+    final t = topic.trim();
+    final merged = <String, String>{
+      ...?query,
+      if (t.isNotEmpty && _topicPaths.contains(path)) 'topic': t,
+    };
+    if (merged.isEmpty) return base;
     return base.replace(
-      queryParameters: <String, String>{...base.queryParameters, ...query},
+      queryParameters: <String, String>{...base.queryParameters, ...merged},
     );
   }
 
@@ -514,6 +538,15 @@ class LighthouseService {
       if (caliber != null && caliber.isNotEmpty) 'caliber': caliber,
     }, '人效数据加载失败');
     return LhPeopleBundle.fromJson(data);
+  }
+
+  /// 资管未结账款快照（应收未回款 / 应付未付款）。不跟期间、不带专题。
+  Future<Map<String, dynamic>> fetchBillOutstanding() {
+    return _getData(
+      '/lighthouse/bill-outstanding',
+      const <String, String>{},
+      '未结账款加载失败',
+    );
   }
 
   Future<Map<String, dynamic>> _getData(

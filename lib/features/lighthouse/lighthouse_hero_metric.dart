@@ -1620,7 +1620,17 @@ const int lighthousePeriodAnimationMs = 180;
 
 /// 期间条到 Hero 卡、顶栏到期间条的竖向间距。
 const double lighthousePeriodGapAbove = 4;
-const double lighthouseAppBarTitleFontSize = 18;
+const double lighthouseAppBarTitleFontSize = 20;
+
+/// 2026-10-27 · 顶栏只留像素灯塔一个标识：「灯塔」前的紫色方块图标不再显示。
+const bool lighthouseAppBarShowsBrandMark = false;
+
+/// 2026-10-27 · 「产品汇总」标题旁的日期章不再显示：顶栏周期浮岛已经写了日期。
+const bool lighthouseHeroShowsDateStamp = false;
+
+/// 2026-10-27 · 下面账本卡向上面产品汇总看齐：去掉深紫实心（编号牌、选中的分类），
+/// 指标面板统一用产品汇总「规模 / 成本 / 利润」那一种浅底。改回 false 即恢复旧样式。
+const bool lighthouseLedgerMatchesHeroStyle = true;
 const int lighthouseAppBarTitleColorValue = 0xFF7C5CE6;
 const double lighthouseAppBarEnglishFontSize = 8.5;
 const double lighthouseAppBarToolbarHeight = 30;

@@ -34,7 +34,8 @@ abstract final class LhColors {
   // Domain tags（业务语义色，保留）
   static const cnpc = Color(0xFFA33A2A);
   static const sinopec = Color(0xFF2A5DB0); // 2026-10-26 · 绿 → 蓝（绿留给「下跌 / 负数」）
-  static const private = Color(0xFF4A8A7B);
+  // 2026-10-27 · 青绿 → 梅紫（绿只留给「下跌 / 负数」，见 sinopec 同理）。
+  static const private = Color(0xFF8C4F86);
   static const carrier = Color(0xFF7B5CD8);
   static const pingan = Color(0xFF7B5CD8);
   static const dict = DunesColors.amber;
@@ -105,8 +106,9 @@ abstract final class LhTypography {
 
 Color lhGroupColor(String group) {
   // 产品 Tab：sync_source 映射分类
+  // 2026-10-27 · 绿 → 靛蓝：绿只留给「下跌 / 负数」，卡片边框、细分条、子行底色不再带绿。
   if (group == '能源' || group.contains('能源积分返费')) {
-    return const Color(0xFF3D7A5A);
+    return const Color(0xFF5C6FB5);
   }
   if (group.contains('公共出行') || group == '出行') return LhColors.product;
   if (group.contains('中石油')) return LhColors.cnpc;

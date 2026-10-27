@@ -564,6 +564,7 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
     final range = panned
         ? '${widget.labels[_start]}–${widget.labels[math.min(_len - 1, _start + _n - 1)]}'
         : null;
+    final showPeriodChip = _periodChipVisible(panned);
     return SizedBox(
       height: 20,
       child: Row(
@@ -573,6 +574,14 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
             maxLines: 1,
             style: _sans(11.5, FontWeight.w700, _kInk),
           ),
+          if (showPeriodChip) ...[
+            const SizedBox(width: 6),
+            Flexible(
+              child: LayoutBuilder(
+                builder: (context, box) => _periodChip(box.maxWidth),
+              ),
+            ),
+          ],
           if (range != null) ...[
             const SizedBox(width: 6),
             Expanded(
@@ -611,6 +620,85 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
           if (range != null) const SizedBox(width: 4),
           if (widget.trailing != null) widget.trailing!,
         ],
+      ),
+    );
+  }
+
+  /// 「本期合计」旁的小日期（2026-10-27）。
+  ///   · 没点任何一格：写当期（最后一格；今天 / 本月还没过完就带「进行中」），淡紫底。
+  ///   · 手指点到别的日期 / 月份：写那一格，紫色实底 + ×，点一下回到当期。
+  ///   · 往前翻页且没选中：标题旁已经写了区间，这里不再重复。
+  bool _periodChipVisible(bool panned) {
+    if (widget.body != null || _len == 0) return false;
+    return !(_sel == null && panned);
+  }
+
+  /// [maxWidth] 放不下「· 进行中」时只写日期（窄屏 Hero 右卡只有 ~70pt）。
+  Widget _periodChip(double maxWidth) {
+    final sel = _sel;
+    final i = sel ?? _len - 1;
+    final active = sel != null && sel != _len - 1;
+    final partial = widget.lastIsPartial && i == _len - 1;
+    final date = widget.labels[i].trim();
+    final textStyle = active
+        ? LhTypography.mono(
+            size: 9.5,
+            color: Colors.white,
+            weight: FontWeight.w700,
+            height: 1.15,
+            context: context,
+          )
+        : _mono(9.5, FontWeight.w700, _kDeep);
+    var text = partial ? '$date · 进行中' : date;
+    if (partial) {
+      final tp = TextPainter(
+        text: TextSpan(text: text, style: textStyle),
+        maxLines: 1,
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      final chrome = 12.0 + (active ? 12 : 0);
+      if (tp.width + chrome > maxWidth) text = date;
+      tp.dispose();
+    }
+    final chip = AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      height: 18,
+      padding: EdgeInsets.fromLTRB(6, 0, active ? 4 : 6, 0),
+      // 不设 alignment：设了会在 Flexible 里撑满整格，标签就不贴着文字了。
+      decoration: BoxDecoration(
+        color: active
+            ? _c(_kPlum, DunesColorRole.surface)
+            : _c(_kChipFocusFill, DunesColorRole.surface),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: textStyle,
+            ),
+          ),
+          if (active) ...[
+            const SizedBox(width: 2),
+            const Icon(Icons.close_rounded, size: 10, color: Colors.white),
+          ],
+        ],
+      ),
+    );
+    if (!active) return chip;
+    return Semantics(
+      button: true,
+      label: '回到当期',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _select(null),
+        child: chip,
       ),
     );
   }
@@ -769,13 +857,12 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
     return (bar: bar, line: line);
   }
 
-  /// 读数行默认读哪一天：停在最新 → 最近一个整天（今天没过完就退一天）；
-  /// 往前翻了 → 视窗最右那天。
+  /// 读数行默认读哪一天：停在最新 → 当期（今天 / 本月，没过完也读，读数带「进行中」，
+  /// 和左边大数、标题旁的日期标签同一格）；往前翻了 → 视窗最右那天。
+  /// 2026-10-27：原来今天没过完就退一天，结果默认高亮昨天、读数也是昨天，跟左边对不上。
   int? _comboReadIndex() {
     if (_len == 0) return null;
-    var i = _back.abs() < 0.5 ? _len - 1 : math.min(_len - 1, _start + _n - 1);
-    if (widget.lastIsPartial && i == _len - 1 && _len >= 2) i -= 1;
-    return i;
+    return _back.abs() < 0.5 ? _len - 1 : math.min(_len - 1, _start + _n - 1);
   }
 
   /// 「柱 · 核销额 ▾」「线 · 利润 ▾」：和图例胶囊同一套外形，点开换指标。
@@ -959,13 +1046,9 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
   /// 一排分段按钮：淡紫底槽 + 白色选中块（同资金页「利润 | 资金」那条）。
   /// 指标多、手机卡窄时整排横滑（Clamping：放得下时不接横拖，不抢拉宽手势）。
   Widget _segmentTabs(List<LhHeroLine> available, String? focus) {
-    return Container(
-      height: 26,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: _c(const Color(0xFFF3F0FA), DunesColorRole.surface),
-        borderRadius: BorderRadius.circular(9),
-      ),
+    // 2026-10-27 · 去掉托盘：每段一颗圆角小胶囊，选中那颗铺一层自己颜色的淡底。
+    return SizedBox(
+      height: 24,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         physics: const ClampingScrollPhysics(),
@@ -987,32 +1070,24 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 160),
                     height: 22,
+                    margin: const EdgeInsets.only(right: 4),
                     padding: const EdgeInsets.symmetric(horizontal: 9),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: l.key == focus
-                          ? _c(const Color(0xFFFFFFFF), DunesColorRole.surface)
-                          : const Color(0x00FFFFFF),
-                      borderRadius: BorderRadius.circular(7),
-                      boxShadow: l.key == focus
-                          ? const [
-                              BoxShadow(
-                                color: Color(0x2E4A3A7A),
-                                blurRadius: 2,
-                                offset: Offset(0, 1),
-                              ),
-                            ]
-                          : null,
+                          ? _c(l.color, DunesColorRole.surface).withAlpha(26)
+                          : _c(const Color(0xFFF6F4FA), DunesColorRole.surface),
+                      borderRadius: BorderRadius.circular(11),
                     ),
-                    // 2026-10-26 · 每段前面一颗小色块，和图里那根线 / 点开的小卡片同色。
+                    // 每段前面一小段线（和图里那根线同色），比色块更像图例。
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          width: 6,
-                          height: 6,
+                          width: 10,
+                          height: 3,
                           decoration: BoxDecoration(
-                            color: _c(l.color),
+                            color: _c(l.color).withAlpha(l.key == focus ? 255 : 128),
                             borderRadius: BorderRadius.circular(1.5),
                           ),
                         ),
@@ -1165,7 +1240,7 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
     // 没点任何一天、且停在最新时，默认标出最后一列（今天）：列高光 + 每根线
     // 一个圆点，但不出读数卡。往前翻了就不标 —— 那一列已经不在屏上了。
     final sel = _sel;
-    // 柱 + 线：没点哪天时读数行和高亮都停在「最近一个整天」（今天没过完不拿来读）。
+    // 没点哪天时读数行和高亮都停在当期（见 _comboReadIndex）。
     final readIdx = (pair == null && !seg) ? null : _comboReadIndex();
     final markAbs =
         sel ??
@@ -1569,34 +1644,58 @@ class _HeroTrendPainter extends CustomPainter {
     // 2026-10-26 · 两个区上下分好：线区（上）/ 柱区（下），共用横轴。
     //   原来线挤在上半、柱沉在 80% 那根基线上，中间空一条带，两样东西各说各的。
     //   刻度字（1.94亿 / 4.28亿）压线又读不清，去掉了；量级看读数。
-    final lineTop = h * (barsOverlay ? 0.08 : 0.10);
-    final lineBot = h * (barsOverlay ? 0.70 : (hasBars ? 0.56 : 0.86));
+    // 2026-10-27 · 线不再顶满：上下各留一口气，渐变面才有地方淡出去。
+    final lineTop = h * (barsOverlay ? 0.08 : 0.14);
+    final lineBot = h * (barsOverlay ? 0.70 : (hasBars ? 0.56 : 0.80));
     final barTop = h * 0.70;
     final barBot = h * 0.98;
 
-    // 网格：hairline（虚线留给「进行中」这种有含义的东西）。柱 + 线只留顶上一条。
+    // 网格：2026-10-27 · 三条很淡的点线（原来两根实发丝线）。柱 + 线只留顶上一条。
     final gridPaint = Paint()
-      ..color = grid.withAlpha(150)
-      ..strokeWidth = 0.6;
-    for (final y0 in barsOverlay ? [lineTop] : [lineTop, lineBot]) {
+      ..color = grid.withAlpha(170)
+      ..strokeWidth = 0.8
+      ..strokeCap = StrokeCap.round;
+    final gridYs = barsOverlay
+        ? [lineTop]
+        : [
+            lineTop,
+            (lineTop + lineBot) / 2,
+            hasBars ? lineBot : lineBot + (h - lineBot) * 0.5,
+          ];
+    for (final y0 in gridYs) {
       final y = y0.roundToDouble() + 0.5;
-      canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
+      for (var x = 0.0; x < w; x += 5) {
+        canvas.drawLine(Offset(x, y), Offset(x + 1, y), gridPaint);
+      }
     }
 
-    // 选中列的淡紫高光
+    // 「进行中」那一格垫一块很淡的竖条：这一格还没过完。
     final colW = n <= 1 ? w * 0.3 : w * 0.90 / (n - 1);
-    if (selJ != null) {
-      final cx = _x(selJ!, w);
-      final r = Rect.fromLTWH(cx - colW / 2, 0, colW, h);
+    if (partialK != null) {
+      final cx = _x(partialK!, w);
+      final bw = math.min(colW * 0.8, 40.0);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(r, const Radius.circular(4)),
-        Paint()
-          ..shader = ui.Gradient.linear(
-            r.topCenter,
-            r.bottomCenter,
-            [plum.withAlpha(0), plum.withAlpha(26)],
-          ),
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(cx - bw / 2, 4, bw, h - 8),
+          const Radius.circular(8),
+        ),
+        Paint()..color = plum.withAlpha(12),
       );
+    }
+
+    // 选中：一根细虚线竖线（原来是一整列渐变色块，太重）。颜色跟主线走。
+    if (selJ != null) {
+      final cx = _x(selJ!, w).roundToDouble() + 0.5;
+      _PaintLine? focusLine;
+      for (final l in lines) {
+        if (l.focus) focusLine = l;
+      }
+      final guide = Paint()
+        ..color = (focusLine?.color ?? plum).withAlpha(92)
+        ..strokeWidth = 1;
+      for (var y = 6.0; y < h - 6; y += 5) {
+        canvas.drawLine(Offset(cx, y), Offset(cx, math.min(y + 2, h - 6)), guide);
+      }
     }
 
     // 柱 + 线的柱：从底边 0 起（面积 / 高度编码的是量，必须从 0），按视窗里最大的
@@ -1724,53 +1823,74 @@ class _HeroTrendPainter extends CustomPainter {
       double y(double v) => (hi - lo).abs() < 1e-12
           ? (lineTop + lineBot) / 2
           : lineTop + (1 - (v - lo) / span) * (lineBot - lineTop);
-      final offs = [for (final p in pts) Offset(_x(p.j, w), y(p.v))];
-      final path = _smooth(offs);
+      // 「进行中」那一点超出值域时（今天还没过完，数小）钳在图里，不往下砸出去。
+      final yMin = 4.0, yMax = h - 4;
+      final offs = [
+        for (final p in pts)
+          Offset(_x(p.j, w), y(p.v).clamp(yMin, yMax).toDouble()),
+      ];
+      // 2026-10-27 · 线只画到最后一个整天；进行中那一格单独一个虚线空心圈（只给主线）。
+      final tailPartial =
+          partialK != null && offs.length >= 2 && pts.last.j == partialK;
+      final bodyOffs = tailPartial ? offs.sublist(0, offs.length - 1) : offs;
+      final path = _smooth(bodyOffs);
 
       // 柱 + 线不铺渐变面：底下已经有柱，再铺一层就糊了。
-      if (l.focus && offs.length >= 2 && !barsOverlay) {
+      if (l.focus && bodyOffs.length >= 2 && !barsOverlay) {
+        final floor = hasBars ? lineBot : h;
         final area = Path.from(path)
-          ..lineTo(offs.last.dx, hasBars ? lineBot : h)
-          ..lineTo(offs.first.dx, hasBars ? lineBot : h)
+          ..lineTo(bodyOffs.last.dx, floor)
+          ..lineTo(bodyOffs.first.dx, floor)
           ..close();
         canvas.drawPath(
           area,
           Paint()
             ..shader = ui.Gradient.linear(
               Offset(0, lineTop),
-              Offset(0, hasBars ? lineBot : h),
-              [l.color.withAlpha(40), l.color.withAlpha(0)],
+              Offset(0, floor),
+              [l.color.withAlpha(60), l.color.withAlpha(10), l.color.withAlpha(0)],
+              const [0.0, 0.7, 1.0],
             ),
         );
-        // 原来这里压一道模糊光晕，叠上线宽看着像 4px 粗线 —— 去掉了。
       }
+      // 主线 2.4 + 一层淡淡的同色光晕；配线 1.3、三成色，只当背景看形状。
       final stroke = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = l.focus ? 1.6 : 0.9
+        ..strokeWidth = l.focus ? 2.4 : 1.3
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
-        // 2026-10-26 · 配线退半步（色相不变，只淡一点），主线一眼跳出来，不再拧成一团。
-        ..color = l.focus ? l.color : l.color.withAlpha(165);
-      final tailPartial =
-          partialK != null && offs.length >= 2 && pts.last.j == partialK;
-      if (offs.length == 1) {
-        canvas.drawCircle(offs.first, l.focus ? 2.2 : 1.5, Paint()..color = l.color);
-      } else {
-        final body = tailPartial
-            ? _smoothRange(offs, 0, offs.length - 2)
-            : path;
-        canvas.drawPath(l.dash == null ? body : _dashPath(body, l.dash!), stroke);
-        if (tailPartial) {
-          final tail = _smoothRange(offs, offs.length - 2, offs.length - 1);
+        ..color = l.focus ? l.color : l.color.withAlpha(82);
+      if (bodyOffs.length == 1) {
+        canvas.drawCircle(bodyOffs.first, l.focus ? 2.4 : 1.5, Paint()..color = stroke.color);
+      } else if (bodyOffs.length >= 2) {
+        final body = l.dash == null ? path : _dashPath(path, l.dash!);
+        if (l.focus) {
           canvas.drawPath(
-            _dashPath(tail, const [3, 3]),
+            body,
             Paint()
               ..style = PaintingStyle.stroke
-              ..strokeWidth = stroke.strokeWidth
+              ..strokeWidth = 5
               ..strokeCap = StrokeCap.round
-              ..color = stroke.color.withValues(alpha: stroke.color.a * 0.6),
+              ..strokeJoin = StrokeJoin.round
+              ..color = l.color.withAlpha(46)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
           );
         }
+        canvas.drawPath(body, stroke);
+      }
+      if (tailPartial && l.focus) {
+        final at = offs.last;
+        canvas.drawCircle(at, 4.2, Paint()..color = dotFill);
+        canvas.drawPath(
+          _dashPath(
+            Path()..addOval(Rect.fromCircle(center: at, radius: 4.2)),
+            const [2.4, 2],
+          ),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.8
+            ..color = l.color,
+        );
       }
       if (selJ != null) {
         for (var k = 0; k < pts.length; k++) {
@@ -1781,21 +1901,23 @@ class _HeroTrendPainter extends CustomPainter {
       }
     }
 
-    // 选中点：主线大圈 + 外圈光环，其它小圈
+    // 选中点：主线实心圈 + 同色光环；配线小空心圈、淡一档。
     for (final d in dots) {
-      final r = d.focus ? 4.0 : 2.8;
       if (d.focus) {
-        canvas.drawCircle(d.at, r + 3, Paint()..color = plum.withAlpha(36));
+        canvas.drawCircle(d.at, 9, Paint()..color = d.color.withAlpha(36));
+        canvas.drawCircle(d.at, 4.6, Paint()..color = dotFill);
+        canvas.drawCircle(d.at, 3.4, Paint()..color = d.color);
+      } else {
+        canvas.drawCircle(d.at, 2.4, Paint()..color = dotFill);
+        canvas.drawCircle(
+          d.at,
+          2.4,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2
+            ..color = d.color.withAlpha(150),
+        );
       }
-      canvas.drawCircle(d.at, r, Paint()..color = dotFill);
-      canvas.drawCircle(
-        d.at,
-        r - 0.7,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.4
-          ..color = d.color,
-      );
     }
   }
 
@@ -1811,12 +1933,20 @@ class _HeroTrendPainter extends CustomPainter {
       final l = lines[i];
       final all = <double>[];
       final inView = <double>[];
+      double? partialV;
       for (var j = 0; j < l.values.length; j++) {
         final v = l.values[j];
         if (v == null) continue;
+        // 今天还没过完：不拿它定值域，否则整条线被压扁到上半截。
+        if (j == partialK && !l.stock) {
+          partialV = v;
+          continue;
+        }
         all.add(v);
         if (j >= normFrom && j <= normTo) inView.add(v);
       }
+      // 整条线只有今天这一个点：只能拿它定值域。
+      if (all.isEmpty && partialV != null) all.add(partialV);
       final ref = inView.isNotEmpty ? inView : all;
       if (ref.isEmpty) continue;
       var lo = ref.first, hi = ref.first;

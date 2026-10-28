@@ -104,7 +104,8 @@ class LighthousePixelController {
     var glow = false;
     for (final e in _events) {
       final a = t - e.t0;
-      if (e.type == LighthousePixelEvent.sync && a >= 20 && a <= 32) {
+      // 数据包按场景宽度调速，第一颗总在第 12 帧到达右沿，最后一颗第 21 帧。
+      if (e.type == LighthousePixelEvent.sync && a >= 12 && a <= 28) {
         glow = true;
       }
       if (e.type == LighthousePixelEvent.date && a >= 10 && a <= 20) {
@@ -1138,7 +1139,9 @@ class _LhPixelScene {
     for (var i = 0; i < 4; i++) {
       final pa = a - (2 + i * 3);
       if (pa < 0) continue;
-      final x = 8 + pa * 3;
+      // 按场景宽度调速：窄屏、宽屏都是 10 帧飞到右沿，浮岛发光对得上。
+      final sp = math.max(3.0, (_w - 8) / 10);
+      final x = 8 + pa * sp;
       if (x < _w) {
         _px(x, 2, pal.spark);
         _px(x - 1, 2, pal.beam, 0.85);
@@ -1146,8 +1149,8 @@ class _LhPixelScene {
         _px(x - 3, 2, pal.beam, 0.3);
         _px(x, 1, pal.beam, 0.3);
         _px(x, 3, pal.beam, 0.3);
-      } else if (x < _w + 9) {
-        final k = (x - _w) ~/ 3;
+      } else if (x < _w + sp * 3) {
+        final k = ((x - _w) / sp).floor().clamp(0, 2);
         _px(_w - 2, 2, pal.spark);
         for (var d = 1; d <= k + 1; d++) {
           final al = 0.75 - 0.2 * d;

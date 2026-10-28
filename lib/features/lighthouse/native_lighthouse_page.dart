@@ -14998,6 +14998,17 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   bool _billsLoading = false;
   DateTime? _billsFetchedAt;
 
+  /// 资金页「账款」面板里选中的一侧：'AR' 应收 / 'AP' 应付 / null = 看总资产。
+  /// 选中时左边大数卡换成这一侧 + 迷你天平，右边图表卡换成按对方的构成。
+  String? _billFocus;
+
+  /// 账款数据在、且选中了一侧（受限 / 没拉到时一律当没选）。
+  bool get _billFocusActive =>
+      lighthouseBillOutstandingEnabled &&
+      _billFocus != null &&
+      (_bills?.visible ?? false) &&
+      _heroKpiPage == 1;
+
   /// 资金模式右卡：'trend' 走势（线 = 资产，柱 = 预收净增）/ 'mix' 构成。
   String _heroFundsView = 'trend';
   bool _heroFundsBars = true;
@@ -20069,35 +20080,22 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       // brand 里的标题是 Flexible，这里按自身宽度占位，不参与分空间。
                       IntrinsicWidth(child: brand(showEn: false)),
                       const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: LighthousePixelMark(controller: _pixelCtl),
+                      // 像素场景保留原高度，横向长度缩至原可用空间的 70%。
+                      Flexible(
+                        fit: FlexFit.loose,
+                        child: FractionallySizedBox(
+                          widthFactor: 0.7,
+                          alignment: Alignment.centerLeft,
+                          child: LighthousePixelMark(controller: _pixelCtl),
+                        ),
                       ),
                       const SizedBox(width: 8),
-                      Flexible(
-                        flex: 5,
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: _buildTopIslands(),
-                        ),
-                      ),
+                      Expanded(child: _buildTopIslands()),
                     ]
                   : [
-                      Expanded(
-                        flex: 2,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: brand(showEn: c.maxWidth >= 640),
-                        ),
-                      ),
+                      brand(showEn: c.maxWidth >= 640),
                       const SizedBox(width: 10),
-                      Flexible(
-                        flex: 5,
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: _buildTopIslands(),
-                        ),
-                      ),
+                      Expanded(child: _buildTopIslands()),
                     ],
             ),
           );
@@ -20456,11 +20454,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   static const Color _kIslandIcon = Color(0xFF5A458F);
 
   Widget _buildTopIslands() {
+    // 周期浮岛贴在标题 / 像素灯塔后面；⋯ 永远顶到屏幕最右边（手机、电脑一样）。
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        if (_hasAccess) ...[
+        if (_hasAccess)
           Flexible(
+            fit: FlexFit.loose,
             // 同步完成 / 切换日期时，像素光束「照到」浮岛的那一下亮一圈金光。
             child: ValueListenableBuilder<bool>(
               valueListenable: _pixelCtl.islandGlow,
@@ -20483,11 +20482,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 ),
                 child: child,
               ),
-              child: _buildPeriodIsland(),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _buildPeriodIsland(),
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-        ],
+        const Spacer(),
         _buildMoreIsland(),
       ],
     );
@@ -25247,27 +25248,203 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     );
   }
 
-  Widget _buildBillOutstandingCard() {
+  /// 资金页：规模 / 成本 / 利润下面的「账款」面板（同一套面板样式）。
+  Widget _buildBillPanel() {
     final bills = _bills;
     if (!lighthouseBillOutstandingEnabled || bills == null || !bills.visible) {
       return const SizedBox.shrink();
     }
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: LighthouseBillOutstandingCard(
+      padding: const EdgeInsets.only(top: lighthouseHeroCardGap),
+      child: LhBillPanel(
         data: bills,
+        focus: _billFocusActive ? _billFocus : null,
+        // 再点一次已选的那格：回到总资产。
+        onPick: (side) => _setBillFocus(_billFocus == side ? null : side),
+        panelColor: DunesColors.resolve(
+          context,
+          const Color(lighthouseLedgerSummaryNeutralPanelValue),
+          role: DunesColorRole.surface,
+        ),
+        edgeColor: DunesColors.resolve(
+          context,
+          const Color(lighthouseHeroPanelNeutralEdgeValue),
+          role: DunesColorRole.border,
+        ),
         radius: lighthouseLedgerSummaryPanelRadius,
-        onTap: () {
-          LighthouseFeedback.instance.play(LighthouseFeedbackKind.expand);
-          unawaited(showLighthouseBillOutstandingSheet(context, bills));
-        },
+      ),
+    );
+  }
+
+  void _setBillFocus(String? side) {
+    if (_billFocus == side) return;
+    LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
+    setState(() {
+      _billFocus = side;
+      _heroPointIndex = null;
+    });
+  }
+
+  void _openBillSheet([String? side]) {
+    final bills = _bills;
+    if (bills == null || !bills.visible) return;
+    LighthouseFeedback.instance.play(LighthouseFeedbackKind.expand);
+    unawaited(
+      showLighthouseBillOutstandingSheet(context, bills, initialSide: side),
+    );
+  }
+
+  /// 大数卡第二页选中账款时：和总资产页同一副骨架 ——
+  ///
+  ///     [🧾 应付未付款]  统计日 10-27       ← 同一颗口径胶囊
+  ///     2.29 亿                              ← 同字号
+  ///     4,532 张 · 其中结束日超 7 天 63%
+  ///     ↺ 回总资产
+  ///     ───────────────
+  ///     应收 1284万  ⟍▲⟋  应付 2.29亿        ← 迷你天平（点开按对方明细）
+  ///     净应付 2.16亿 · 按对方查看 ›
+  Widget _buildBillMasthead(LhBillOutstanding bills, String side) {
+    final mute2 = DunesColors.resolve(context, LhColors.mute2);
+    final ink2 = DunesColors.resolve(context, LhColors.ink2);
+    final plum = DunesColors.resolve(context, _LhPlum.primary);
+    final t = bills.totalOf(side);
+    final label = side == 'AR' ? '应收未回款' : '应付未付款';
+    final sub = t == null
+        ? '这一侧没查'
+        : '${t.unpaidCount} 张 · 其中结束日超 ${bills.graceDays} 天 '
+              '${(t.overdueShare * 100).round()}%';
+    return Padding(
+      // 顶部留 38 给「利润 | 资金」切换条（和总资产页同一个内边距）。
+      padding: const EdgeInsets.fromLTRB(8, 38, 8, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, box) => FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: box.maxWidth,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 3,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          _heroPageChip(Icons.receipt_long_outlined, label),
+                          if (bills.asOfShort.isNotEmpty)
+                            Text(
+                              '统计日 ${bills.asOfShort}',
+                              maxLines: 1,
+                              style: LhTypography.mono(
+                                size: 9,
+                                color: mute2,
+                                height: 1.0,
+                                context: context,
+                              ),
+                            ),
+                          if (bills.fixture)
+                            Text(
+                              '样例',
+                              style: LhTypography.sans(
+                                size: 9,
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF8A6A12),
+                                ),
+                                height: 1.0,
+                                context: context,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: _heroSplitWan(
+                          t?.unpaidAmount,
+                          size: lighthouseHeroMastheadFontSize,
+                          unitSize: 10.5,
+                          color: DunesColors.resolve(context, _LhPlum.heroNum),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        sub,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: LhTypography.sans(
+                          size: 10,
+                          color: ink2,
+                          height: 1.25,
+                          context: context,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Semantics(
+                        button: true,
+                        label: '回到总资产',
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _setBillFocus(null),
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(6, 3, 8, 3),
+                            decoration: BoxDecoration(
+                              color: DunesColors.resolve(
+                                context,
+                                _LhPlum.primary,
+                                role: DunesColorRole.surface,
+                              ).withAlpha(14),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.replay_rounded, size: 11, color: plum),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '回总资产',
+                                  style: LhTypography.sans(
+                                    size: 9.5,
+                                    color: plum,
+                                    weight: FontWeight.w600,
+                                    height: 1.0,
+                                    context: context,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          LhBillMiniBalance(
+            data: bills,
+            onTap: () => _openBillSheet(side),
+          ),
+        ],
       ),
     );
   }
 
   void _setHeroKpiPage(int page) {
     if (_heroKpiPage == page) return;
-    setState(() => _heroKpiPage = page);
+    setState(() {
+      _heroKpiPage = page;
+      // 翻回利润页再回来，从总资产看起。
+      _billFocus = null;
+    });
     if (page == 1) _ensureBillOutstanding();
   }
 
@@ -26174,6 +26351,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     _ensureHeroFundPool();
     _primeHeroAssetTrends();
     if (_heroKpiPage == 1) _ensureBillOutstanding();
+    if (_billFocusActive) return _buildBillMasthead(_bills!, _billFocus!);
     final mute2 = DunesColors.resolve(context, LhColors.mute2);
     final deep = DunesColors.resolve(context, _LhPlum.deep);
     final snapshotTotal = _heroAssetLine('total')?.amounts?.totalAssets;
@@ -26642,6 +26820,24 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   Widget _buildHeroFundsTrendCard(List<String> labels) {
     _ensureHeroFundPool();
     _primeHeroAssetTrends();
+    if (_billFocusActive) {
+      final bills = _bills!;
+      return LighthouseHeroTrendCard(
+        key: const ValueKey('hero-trend-bills'),
+        title: '未结账款',
+        subtitle: '${bills.asOfShort} 快照 · 按对方',
+        labels: const <String>[],
+        lines: const <LhHeroLine>[],
+        // 资管只给当天快照：「走势」置灰，等灯塔自己每天存档后再点亮。
+        trailing: const LhBillSnapshotSegment(),
+        body: LhBillMix(
+          data: bills,
+          side: _billFocus!,
+          onSideChanged: (s) => _setBillFocus(s),
+          onOpenAll: () => _openBillSheet(_billFocus),
+        ),
+      );
+    }
     final seg = LighthouseHeroSegment(
       labels: const ['走势', '构成'],
       index: _heroFundsView == 'mix' ? 1 : 0,
@@ -29234,11 +29430,14 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       kpi: kpiCard,
                       rail: heroPaged && _heroKpiPage == 1
                           ? _buildHeroWideRail(
-                              label: '总资产',
+                              label: _billFocusActive
+                                  ? (_billFocus == 'AR' ? '应收未回款' : '应付未付款')
+                                  : '总资产',
                               mastheadKey: 'totalAssets',
-                              value:
-                                  _heroAssetLine('total')?.amounts?.totalAssets ??
-                                  0,
+                              value: _billFocusActive
+                                  ? (_bills!.totalOf(_billFocus!)?.unpaidAmount ?? 0)
+                                  : (_heroAssetLine('total')?.amounts?.totalAssets ??
+                                        0),
                               isRate: false,
                               isNeg: false,
                               delta: null,
@@ -29309,9 +29508,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           // 已经是一条足够强的界线，再加线就成了两道。
           // 跟手折叠必须放在外层 AnimatedSize 外面：高度每帧在变，套进去会
           // 在自己的 performLayout 里重启动画，触发 RenderAnimatedSize 断言。
-          // 2026-10-27 · 资金页：未结账款（资管账单）。利润页、专题、二级页都不出。
-          if (totalsOverride == null && _heroAssetsEligible && _heroKpiPage == 1)
-            _buildBillOutstandingCard(),
           if (lighthouseHeroUsesFlatLayout && totalsOverride == null)
             const SizedBox(height: 14),
           if (totalsOverride == null)
@@ -29319,7 +29515,18 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               folded: _heroFolded,
               onFoldedChanged: _setHeroFolded,
               handleBuilder: (context, t) => _buildHeroFoldHandle(t),
-              child: _buildHeroStatRail(heroTotals),
+              // 2026-10-28 · 资金页：规模 / 成本 / 利润下面多一块「账款」（资管账单）。
+              // 利润页、专题、二级页都不出；和分区表一起折叠。
+              child: (_heroAssetsEligible && _heroKpiPage == 1)
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildHeroStatRail(heroTotals),
+                        _buildBillPanel(),
+                      ],
+                    )
+                  : _buildHeroStatRail(heroTotals),
             )
           else
             _buildHeroStatRail(heroTotals),
@@ -57375,12 +57582,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: _buildTopIslands(),
-                    ),
-                  ),
+                  Expanded(child: _buildTopIslands()),
                 ],
               ),
             ],
@@ -57675,12 +57877,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: _buildTopIslands(),
-                ),
-              ),
+              Expanded(child: _buildTopIslands()),
             ],
           ),
         ),

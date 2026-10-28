@@ -460,6 +460,16 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         ]);
       }
       if (!mounted) return;
+      if (!_isEditing && template.raw['proposalLinkRequired'] == true &&
+          parseLinkedProposalId(_values['linkedProposal']) <= 0) {
+        final selected = await showCompletedProposalPicker(context, _service);
+        if (!mounted) return;
+        if (selected == null) {
+          widget.navigation.back();
+          return;
+        }
+        _values['linkedProposal'] = selected;
+      }
       setState(() {
         _template = template;
         _editingDetail = detail;

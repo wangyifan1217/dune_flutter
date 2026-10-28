@@ -11,6 +11,7 @@ import '../shell/dunes_toast.dart';
 import 'approval_chat_forward.dart';
 import 'approval_chat_share.dart';
 import 'approval_pending_nav.dart';
+import 'native_xflow_submission_page.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_detail_renderer.dart';
 import 'xflow_detail_widgets.dart';
@@ -24,6 +25,7 @@ Future<void> openLinkedProposalDetail({
   required AuthSession session,
   required int proposalId,
   String source = '',
+  String businessType = '',
 }) async {
   if (proposalId <= 0 || !context.mounted) return;
 
@@ -33,6 +35,39 @@ Future<void> openLinkedProposalDetail({
       session: session,
       proposalId: proposalId,
       linkedFromApproval: true,
+    );
+    return;
+  }
+
+  if (linkedProposalOpensSubmission(businessType)) {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (ctx) {
+          void close() {
+            if (Navigator.of(ctx).canPop()) {
+              Navigator.of(ctx).pop();
+            }
+          }
+
+          return Material(
+            color: DunesColors.resolve(
+              ctx,
+              DunesColors.bgApp,
+              role: DunesColorRole.surface,
+            ),
+            child: NativeXflowSubmissionPage(
+              session: session,
+              navigation: _LinkedProposalBackNav(onClose: close),
+              businessType: businessType.trim(),
+              businessId: proposalId,
+              backScreen: 'linked-proposal',
+              onEdit: () {
+                showDunesToast(ctx, '请从审批列表重新编辑');
+              },
+            ),
+          );
+        },
+      ),
     );
     return;
   }
@@ -579,12 +614,14 @@ class _NativeB10PageState extends State<NativeB10Page> {
                                 onVoid: _voidProposal,
                                 onWithdraw: _withdrawProposal,
                                 onReturn: _return,
-                                onOpenLinkedProposal: (proposalId, source) {
+                                onOpenLinkedProposal:
+                                    (proposalId, source, businessType) {
                                   openLinkedProposalDetail(
                                     context: context,
                                     session: widget.session,
                                     proposalId: proposalId,
                                     source: source,
+                                    businessType: businessType,
                                   );
                                 },
                               ),

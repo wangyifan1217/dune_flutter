@@ -656,12 +656,14 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                                   bundle!.detail,
                                 ),
                                 service: _service,
-                                onOpenLinkedProposal: (proposalId, source) {
+                                onOpenLinkedProposal:
+                                    (proposalId, source, businessType) {
                                   openLinkedProposalDetail(
                                     context: context,
                                     session: widget.session,
                                     proposalId: proposalId,
                                     source: source,
+                                    businessType: businessType,
                                   );
                                 },
                               ),

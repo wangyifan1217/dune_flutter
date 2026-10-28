@@ -308,10 +308,12 @@ class ProposalListCardData {
     this.daysWarn = false,
     this.sla,
     this.nameLabel = '提案名称',
+    this.approvalCount,
   });
 
   /// 左下角那行的小标题：单份提案是「提案名称」，标签一分组卡是「提案」。
   final String nameLabel;
+  final int? approvalCount;
 
   /// 时限管理摘要；有时，底栏右侧用时限胶囊替换「停 N 天」。
   final ProposalSlaSummary? sla;
@@ -472,6 +474,8 @@ class ProposalListCard extends StatelessWidget {
             const Spacer(),
             // 左下：提案名称（原来年化规模的位置），深紫加粗、最多两行，比标签少一级但一眼能看到。
             Text(data.nameLabel, style: sans(10.5, color: _text3)),
+            if (data.approvalCount != null)
+              Text('关联审批 ${data.approvalCount} 个', style: sans(10.5, color: _text2)),
             const SizedBox(height: 1),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -1023,6 +1027,10 @@ class _ProposalTagGroupCardState extends State<ProposalTagGroupCard> {
                     ),
                   ),
                 ),
+                if (d.approvalCount != null) ...[
+                  const SizedBox(width: 6),
+                  Text('审批 ${d.approvalCount}', style: sans(10.5, color: _text2)),
+                ],
                 if (d.proposalType.isNotEmpty) ...[
                   const SizedBox(width: 6),
                   ProposalTypeChip(d.proposalType),

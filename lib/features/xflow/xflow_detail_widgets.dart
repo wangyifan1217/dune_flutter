@@ -1293,6 +1293,7 @@ class _SectionBlockState extends State<_SectionBlock> {
                             ? () => widget.onOpenLinkedProposal!(
                                 linkedId,
                                 parseLinkedProposalSource(item.rawValue),
+                                parseLinkedProposalBusinessType(item.rawValue),
                               )
                             : null,
                       );

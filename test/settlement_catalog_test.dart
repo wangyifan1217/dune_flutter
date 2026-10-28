@@ -117,6 +117,29 @@ void main() {
       'CASH_RECEIVABLE',
     ]);
     expect(rows.every((e) => e.name.contains('服务费') == false), isTrue);
+    final income = receivableBillTypeLeaves([
+      ...rows,
+      const CatalogRef(
+        code: 'ap_TGF_TGF',
+        name: '推广费',
+        displayPath: '应付账单 / 产品推广费 / 推广费',
+      ),
+    ]);
+    expect(income.map((e) => e.code).toList(), [
+      'SUBSIDY_RECEIVABLE',
+      'CASH_RECEIVABLE',
+    ]);
+    expect(income.singleWhere((e) => e.code == 'SUBSIDY_RECEIVABLE').name, '电子券补贴销售款');
+    final costs = payableBillTypeLeaves([
+      ...rows,
+      const CatalogRef(
+        code: 'ap_TGF_TGF',
+        name: '推广费',
+        displayPath: '应付账单 / 产品推广费 / 推广费',
+      ),
+    ]);
+    expect(costs.map((e) => e.code).toList(), ['ap_TGF_TGF']);
+    expect(costs.single.name, '推广费');
   });
 
   test('bill type tree without level still keeps unlabeled leaves', () {

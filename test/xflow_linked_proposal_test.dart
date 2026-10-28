@@ -73,6 +73,26 @@ void main() {
     expect(linkedProposalOpensIntake('proposal_intake'), isTrue);
   });
 
+  test('approved entertainment approval opens as a submission', () {
+    final payload = {
+      'proposalId': 947,
+      'businessId': 947,
+      'code': '#947',
+      'title': '万青 - 招待费申请',
+      'businessType': 'ENTERTAINMENT',
+      'source': 'approved_mine',
+    };
+    expect(parseLinkedProposalId(payload), 947);
+    expect(linkedProposalOpensIntake(parseLinkedProposalSource(payload)), isFalse);
+    expect(
+      linkedProposalOpensSubmission(parseLinkedProposalBusinessType(payload)),
+      isTrue,
+    );
+    expect(linkedProposalOpensSubmission('PROPOSAL'), isFalse);
+    expect(linkedProposalOpensSubmission('PROPOSAL_INTAKE'), isFalse);
+    expect(linkedProposalOpensSubmission(''), isFalse);
+  });
+
   test('approval linked intake is treated as collaboration proposal', () {
     final payload = linkedProposalIntakePayload(
       id: 37,

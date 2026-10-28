@@ -31,6 +31,31 @@ http.Response ok(Object data) => http.Response(
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  testWidgets('new configured approval asks for a proposal before the form', (tester) async {
+    final service = XflowService(session: session, client: MockClient((r) async {
+      if (r.url.path.endsWith('/templates/finance-prepayment')) {
+        return ok({'template': {'templateKey': 'finance-prepayment', 'title': '预付款', 'businessType': 'PREPAYMENT'}, 'proposalLinkRequired': true, 'fields': [{'key': 'linkedProposal', 'label': '关联提案', 'type': 'proposal', 'required': true}], 'stages': []});
+      }
+      if (r.url.path.endsWith('/intake-done')) {
+        return ok({'items': [{'id': 22, 'code': 'PI-22', 'title': '采购项目', 'kind': 'purchase'}], 'total': 1});
+      }
+      if (r.url.path.endsWith('/cc-rules')) return ok([]);
+      return ok({});
+    }));
+    final nav = DunesNavigationController(initialScreen: 'B3');
+    addTearDown(nav.dispose);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: NativeXflowFormPage(session: session, service: service, navigation: nav, templateKey: 'finance-prepayment', editProposalId: null, onSubmitted: (_, _) {}))));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('采购项目'), findsOneWidget);
+    await tester.tap(find.text('采购项目'));
+    await tester.pumpAndSettle();
+    final renderer = tester.widgetList<XflowFormRenderer>(find.byType(XflowFormRenderer)).first;
+    expect((renderer.values['linkedProposal'] as Map)['proposalId'], 22);
+    expect(find.text('业务审批依据 · 已完成提案'), findsOneWidget);
+  });
+
   testWidgets(
     'enabling while form is open keeps input and asks for a proposal',
     (tester) async {
@@ -176,6 +201,14 @@ void main() {
         expect(find.text('发起业务审批'), enabled ? findsOneWidget : findsNothing);
         expect(find.text('预付款 · PAY-10'), findsOneWidget);
         expect(tester.takeException(), isNull);
+        expect(find.byTooltip('审批状态'), findsNothing);
+        await tester.tap(find.byTooltip('审批类型'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('预付款').last);
+        await tester.pumpAndSettle();
+        expect(requests.any((u) => u.path.endsWith('/related-approvals') &&
+            u.queryParameters['templateKey'] == 'finance-prepayment' &&
+            (u.queryParameters['status'] ?? '').isEmpty), isTrue);
         await tester.tap(find.byTooltip('查看审批发起历史'));
         await tester.pumpAndSettle();
         expect(find.textContaining('提案第 3 版'), findsOneWidget);

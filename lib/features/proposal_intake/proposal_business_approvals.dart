@@ -22,10 +22,12 @@ class ProposalBusinessApprovals extends StatefulWidget {
     required this.session,
     required this.proposal,
     this.service,
+    this.allowLaunch = true,
   });
   final AuthSession session;
   final ProposalIntakeRow proposal;
   final XflowService? service;
+  final bool allowLaunch;
 
   @override
   State<ProposalBusinessApprovals> createState() =>
@@ -38,7 +40,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
   bool _enabled = false, _busy = false, _launching = false;
   String? _error, _policyError;
   int _page = 1, _request = 0;
-  String _status = '', _templateKey = '';
+  String _templateKey = '';
   List<XflowTemplateCard> _templates = const [];
 
   @override
@@ -46,6 +48,24 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
     super.initState();
     unawaited(_load());
     unawaited(_loadTemplates());
+  }
+
+  Future<void> _loadTemplates() async {
+    final results = await Future.wait(['biz', 'adm'].map((category) async {
+      try {
+        return await _service.fetchTemplatesByCategory(category);
+      } catch (_) {
+        return <XflowTemplateCard>[];
+      }
+    }));
+    if (!mounted) return;
+    final unique = <String, XflowTemplateCard>{};
+    for (final template in results.expand((items) => items)) {
+      if (template.templateKey != XflowService.salesTemplateKey) {
+        unique[template.templateKey] = template;
+      }
+    }
+    setState(() => _templates = unique.values.toList());
   }
 
   @override
@@ -59,20 +79,6 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
     }
   }
 
-  Future<void> _loadTemplates() async {
-    try {
-      final all = await _service.fetchTemplatesByCategory('biz');
-      if (!mounted) return;
-      setState(
-        () => _templates = all
-            .where((t) => t.templateKey != XflowService.salesTemplateKey)
-            .toList(),
-      );
-    } catch (_) {
-      // Existing records and status filters remain available.
-    }
-  }
-
   Future<void> _load() async {
     final request = ++_request;
     setState(() {
@@ -80,7 +86,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
       _error = null;
     });
     // Independent reads: a configuration failure must not erase existing records.
-    final policy = _service
+    final policy = !widget.allowLaunch ? Future<void>.value() : _service
         .fetchProposalLinkEnabled()
         .then((enabled) {
           if (!mounted || request != _request) return;
@@ -100,7 +106,6 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
       final data = await _service.fetchProposalRelatedApprovals(
         widget.proposal.id,
         page: _page,
-        status: _status,
         templateKey: _templateKey,
       );
       if (!mounted || request != _request) return;
@@ -130,7 +135,6 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
           )
           .toList();
       if (!mounted) return;
-      setState(() => _templates = templates);
       final selected = await showDialog<XflowTemplateCard>(
         context: context,
         builder: (ctx) => SimpleDialog(
@@ -236,7 +240,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
                       onPressed: _busy ? null : _load,
                       icon: const Icon(Icons.refresh, size: 20),
                     ),
-                    if (_enabled &&
+                    if (widget.allowLaunch && _enabled &&
                         _data['canLaunch'] == true &&
                         widget.proposal.status == 'done')
                       FilledButton.icon(
@@ -256,58 +260,43 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
               ),
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                DropdownButton<String>(
-                  value: _status,
-                  hint: const Text('审批状态'),
-                  isDense: true,
-                  items:
-                      const {
-                            '': '全部状态',
-                            'PENDING': '审批中',
-                            'APPROVED': '已通过',
-                            'REJECTED': '已驳回',
-                            'WITHDRAWN': '已撤回',
-                            'VOIDED': '已作废',
-                          }.entries
-                          .map(
-                            (e) => DropdownMenuItem(
-                              value: e.key,
-                              child: Text(e.value),
-                            ),
-                          )
-                          .toList(),
-                  onChanged: _busy
-                      ? null
-                      : (v) {
-                          _status = v ?? '';
-                          _page = 1;
-                          unawaited(_load());
-                        },
+            Align(
+              alignment: Alignment.centerLeft,
+              child: PopupMenuButton<String>(
+                key: const ValueKey('related-approval-type-filter'),
+                tooltip: '审批类型',
+                enabled: !_busy,
+                position: PopupMenuPosition.under,
+                onSelected: (value) {
+                  setState(() { _templateKey = value; _page = 1; });
+                  unawaited(_load());
+                },
+                itemBuilder: (context) => {
+                  '': '全部',
+                  for (final template in _templates) template.templateKey: template.title,
+                }.entries.map((entry) => PopupMenuItem<String>(
+                  value: entry.key,
+                  height: 38,
+                  child: Row(children: [
+                    SizedBox(width: 20, child: entry.key == _templateKey
+                        ? Icon(Icons.check_rounded, size: 16, color: DunesColors.resolve(context, const Color(0xFF4A3A9A))) : null),
+                    Text(entry.value, style: TextStyle(fontSize: 13, fontWeight: entry.key == _templateKey ? FontWeight.w700 : FontWeight.w500)),
+                  ]),
+                )).toList(),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(10, 4, 6, 4),
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolve(context, _templateKey.isEmpty ? const Color(0xFFF1EFF8) : const Color(0xFFECE8FA), role: DunesColorRole.surface),
+                    border: Border.all(color: DunesColors.resolve(context, _templateKey.isEmpty ? Colors.transparent : const Color(0xFFB9ACEB), role: DunesColorRole.border)),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text('类型 ', style: TextStyle(fontSize: 11.5, color: DunesColors.resolve(context, const Color(0xFF6B6680)))),
+                    Text(_templateKey.isEmpty ? '全部' : _templates.where((t) => t.templateKey == _templateKey).map((t) => t.title).firstOrNull ?? '全部', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: DunesColors.resolve(context, const Color(0xFF4A3A9A)))),
+                    Icon(Icons.arrow_drop_down_rounded, size: 18, color: DunesColors.resolve(context, const Color(0xFF6B6680))),
+                  ]),
                 ),
-                DropdownButton<String>(
-                  value: _templateKey,
-                  isDense: true,
-                  items: [
-                    const DropdownMenuItem(value: '', child: Text('全部类型')),
-                    for (final t in _templates)
-                      DropdownMenuItem(
-                        value: t.templateKey,
-                        child: Text(t.title),
-                      ),
-                  ],
-                  onChanged: _busy
-                      ? null
-                      : (v) {
-                          _templateKey = v ?? '';
-                          _page = 1;
-                          unawaited(_load());
-                        },
-                ),
-              ],
+              ),
             ),
             if (_busy)
               const Padding(

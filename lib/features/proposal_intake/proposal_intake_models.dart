@@ -460,6 +460,7 @@ class ProposalIntakeRow {
     this.sla,
     this.revision = 0,
     this.change,
+    this.relatedApprovalCount,
   });
 
   /// 进行中的提案变更；变更生效前 [form] 仍是旧版本。
@@ -470,6 +471,7 @@ class ProposalIntakeRow {
   final int revision;
 
   final int id;
+  final int? relatedApprovalCount;
   final String code;
   final String title;
   final String kind;
@@ -512,6 +514,7 @@ class ProposalIntakeRow {
     final review = _map(json['review']);
     return ProposalIntakeRow(
       id: (json['id'] as num?)?.toInt() ?? 0,
+      relatedApprovalCount: (json['relatedApprovalCount'] as num?)?.toInt(),
       code: '${json['code'] ?? ''}'.trim(),
       title: '${json['title'] ?? ''}'.trim(),
       kind: normalizeProposalIntakeKind('${json['kind'] ?? ''}'),
@@ -567,6 +570,7 @@ class ProposalIntakeRow {
     String? myAction,
   }) => ProposalIntakeRow(
     id: id,
+    relatedApprovalCount: relatedApprovalCount,
     code: code,
     title: title ?? this.title,
     kind: kind == null ? this.kind : normalizeProposalIntakeKind(kind),

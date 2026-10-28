@@ -212,6 +212,29 @@ List<CatalogRef> flattenBillTypeTree(Object? raw, {String prefix = ''}) {
   return out;
 }
 
+/// 账单路径的一级名。三级叶子的 [CatalogRef.displayPath] 形如「应收账单 / 销售款 / 电子券销售款」。
+String billTypeRootName(CatalogRef row) {
+  final path = row.displayPath.trim();
+  if (path.isEmpty) return '';
+  return path.split('/').first.trim();
+}
+
+/// 收入类型只要「应收账单」下的三级。应付、预收、预付不进这个下拉。
+List<CatalogRef> receivableBillTypeLeaves(List<CatalogRef> rows) {
+  return [
+    for (final row in rows)
+      if (billTypeRootName(row) == '应收账单') row,
+  ];
+}
+
+/// 成本类型只要「应付账单」下的三级。应收、预收、预付不进这个下拉。
+List<CatalogRef> payableBillTypeLeaves(List<CatalogRef> rows) {
+  return [
+    for (final row in rows)
+      if (billTypeRootName(row) == '应付账单') row,
+  ];
+}
+
 int? catalogInt(Object? value) {
   if (value is num) return value.toInt();
   return int.tryParse('${value ?? ''}'.trim());

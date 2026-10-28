@@ -6,6 +6,13 @@ import '../../core/util/friendly_error.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_service.dart';
 
+Future<Map<String, dynamic>?> showCompletedProposalPicker(
+  BuildContext context, XflowService service,
+) => showDialog<Map<String, dynamic>>(
+  context: context,
+  builder: (_) => _CompletedProposalDialog(service: service),
+);
+
 class ProposalReferencePicker extends StatelessWidget {
   const ProposalReferencePicker({
     super.key,
@@ -37,10 +44,7 @@ class ProposalReferencePicker extends StatelessWidget {
               : null,
           trailing: const Icon(Icons.search),
           onTap: () async {
-            final picked = await showDialog<Map<String, dynamic>>(
-              context: context,
-              builder: (ctx) => _CompletedProposalDialog(service: service),
-            );
+            final picked = await showCompletedProposalPicker(context, service);
             if (picked != null) onChanged(picked);
           },
         ),

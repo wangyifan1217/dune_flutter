@@ -155,8 +155,20 @@ String parseLinkedProposalSource(dynamic val) {
   return '';
 }
 
+/// 关联单据上的业务类型。我的已通过审批会带上，用来打开动态审批而不是提案。
+String parseLinkedProposalBusinessType(dynamic val) {
+  if (val is! Map) return '';
+  return '${val['businessType'] ?? ''}'.trim();
+}
+
 bool linkedProposalOpensIntake(String source) =>
     source.trim().toLowerCase() == linkedProposalSourceIntake;
+
+/// 电子报销关联的招待费、借款等是动态审批，不能按销售提案打开。
+bool linkedProposalOpensSubmission(String businessType) {
+  final kind = businessType.trim().toUpperCase();
+  return kind.isNotEmpty && kind != 'PROPOSAL' && kind != 'PROPOSAL_INTAKE';
+}
 
 Map<String, dynamic> linkedProposalIntakePayload({
   required int id,
@@ -174,7 +186,11 @@ Map<String, dynamic> linkedProposalIntakePayload({
   };
 }
 
-typedef OpenLinkedProposalCallback = void Function(int proposalId, String source);
+typedef OpenLinkedProposalCallback = void Function(
+  int proposalId,
+  String source,
+  String businessType,
+);
 
 String formatUserDisplay(dynamic val) {
   if (val == null || val == '') return '';

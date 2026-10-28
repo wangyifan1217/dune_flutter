@@ -30,6 +30,7 @@ import 'flow_panorama/flow_ctx_mapper.dart';
 import 'flow_panorama/flow_lane_section.dart';
 import 'flow_panorama/flow_lanes.dart';
 import 'proposal_cost_estimate.dart';
+import 'proposal_business_approvals.dart';
 import 'proposal_estimate_audit.dart';
 import 'proposal_estimate_summary.dart';
 import 'proposal_finance_formula.dart';
@@ -2669,6 +2670,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       // 主标题是标签一（没填用提案名称）；提案名称放在左下角原来年化规模的位置。
       tag1: tag1.isNotEmpty ? tag1 : title,
       name: title,
+      approvalCount: row.relatedApprovalCount,
       chips: [
         if (sector.isNotEmpty) sector,
       ],
@@ -3042,6 +3044,8 @@ class _ProposalListTile extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
+                    if (row.relatedApprovalCount != null)
+                      Text('关联审批 ${row.relatedApprovalCount} 个', style: metaStyle),
                     if (compact) ...[
                       Text.rich(
                         TextSpan(
@@ -5858,6 +5862,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       // 测算合计右上角「算法」：一步步怎么算，数据和柱状图同一份。
       calcSteps: proposalEstimateCalcSteps(_remoteFinance.result!, _form),
       rating: rating,
+      responsibleName: _row.stakeholderLines(people: widget.people, options: widget.options)
+          .firstWhere((line) => line.role == '市场部负责人二').name,
       ratingRule: ratingRule,
       scale: _remoteFinance.result!.main.salesScale,
       revenue: revenue,
@@ -9668,6 +9674,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                                 ),
                                             ],
                                           ),
+                                        ),
+                                      if (_row.id > 0)
+                                        ProposalBusinessApprovals(
+                                          session: widget.session,
+                                          proposal: _row,
+                                          allowLaunch: false,
                                         ),
                                       if (widget.enableComments &&
                                           _row.id > 0 &&
@@ -18268,15 +18280,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             final coupon = _isCouponCostOf(ordered[i], items);
             final side = cost ? '应付' : '应收';
             final label = labels[i];
-            var name = label.startsWith('$side · ')
-                ? label.substring(side.length + 3)
-                : label;
-            if (!cost && name.startsWith('应收')) name = '渠道结算款';
+            final picked = label.startsWith('$side · ');
+            var name = picked ? label.substring(side.length + 3) : label;
+            // 没选类型时仍写「渠道结算款」。已选的三级名原样保留，包括「应收返利」。
+            if (!cost && !picked && name.startsWith('应收')) name = '渠道结算款';
             // 产品卡里统一叫「收入 / 项目成本」：没选类型的「应付一」写成「项目成本一」。
-            if (cost && name.startsWith('应付')) {
+            if (cost && !picked && name.startsWith('应付')) {
               name = '项目成本${name.substring(2)}';
             }
-            if (!cost && name.startsWith('应收')) {
+            if (!cost && !picked && name.startsWith('应收')) {
               name = '收入${name.substring(2)}';
             }
             if (coupon) name = '用券成本';
@@ -22441,6 +22453,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             scaleOnly: simplified ? false : scaleOnly,
             includeSalesFields: !simplified,
             includeSchedule: !simplified,
+            includeIncomeType: simplified && !settle.isCost,
             includeCostType: simplified && settle.isCost,
             choosePriceMode: simplified && settle.isCost,
             syncSource: syncSource,
@@ -22612,6 +22625,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String syncSource = '',
     String productSource = 'CHANNEL',
     bool requireSchedule = false,
+    bool includeIncomeType = false,
     bool includeCostType = false,
     bool choosePriceMode = false,
     bool includeRedemptionRate = false,
@@ -22680,6 +22694,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       required List<CatalogRef> options,
       required ProposalFinanceSettleTerms Function(CatalogRef?) write,
       String? Function(CatalogRef item)? metaOf,
+      String Function(CatalogRef item)? labelOf,
       String? hint,
       String? emptyText,
     }) {
@@ -22687,10 +22702,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           _selectedCatalog(current, options) ??
           ((current != null && current.isNotEmpty) ? current : null);
       final values = _withCurrent(options, selected);
+      final shown = selected == null
+          ? ''
+          : (labelOf?.call(selected) ?? selected.label);
       return ProposalField(
         label: label,
         child: !enabled
-            ? _readonlySelectedText(selected?.label ?? current?.label ?? '')
+            ? _readonlySelectedText(
+                shown.isNotEmpty ? shown : (current?.label ?? ''),
+              )
             : ProposalSelectField<CatalogRef>(
                 key: ValueKey('settle-$keyPrefix-$label'),
                 value: selected == null || selected.isEmpty ? null : selected,
@@ -22702,7 +22722,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   for (final item in values)
                     ProposalSelectOption(
                       value: item,
-                      label: item.label,
+                      label: labelOf?.call(item) ?? item.label,
                       meta:
                           metaOf?.call(item) ??
                           (item.code.isEmpty || item.code == item.name
@@ -22868,25 +22888,33 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       );
     }
 
-    final costTypeField = _settleStringSelectField(
+    final costTypeField = catalogField(
       label: '成本类型',
-      value: terms.billType,
-      options: _projectCostItemNames,
-      enabled: enabled,
-      fieldKey: 'settle-$keyPrefix-cost-type',
-      onSelected: (value) => onChanged(
-        terms.copyWith(
-          billType: value ?? '',
-          billTypeRef: value == null || value.trim().isEmpty
+      current:
+          terms.billTypeRef ??
+          (terms.billType.trim().isEmpty
               ? null
-              : CatalogRef.fromName(value),
-        ),
-      ),
+              : CatalogRef.fromName(terms.billType)),
+      options: payableBillTypeLeaves(bundle.billTypes),
+      labelOf: (item) {
+        final leaf = item.name.trim();
+        return leaf.isNotEmpty ? leaf : item.label;
+      },
+      emptyText: noPlatform
+          ? '请先在科技部选择业务平台'
+          : (loading ? '字典加载中…' : '该业务平台暂无应付类型'),
+      write: (value) {
+        final name = value?.name ?? '';
+        var next = terms.copyWith(billType: name, billTypeRef: value);
+        if (name != '推广费' && terms.settleByTier) {
+          next = next.copyWith(priceMode: kProposalSettlePriceModeDirect);
+        }
+        return next;
+      },
     );
 
-    final costName = terms.billType.trim().isEmpty
-        ? '成本'
-        : terms.billType.trim();
+    final pickedCost = _settleBillName(terms);
+    final costName = pickedCost.isEmpty ? '成本' : pickedCost;
     final isPromotionCost = costName == '推广费';
     // 只填了单价、比例空着：这就是按面值，即使旧数据还标着固定比例。
     final faceMode =
@@ -23132,6 +23160,27 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ),
             ),
           ],
+          if (includeIncomeType)
+            catalogField(
+              label: '收入类型',
+              current:
+                  terms.billTypeRef ??
+                  (terms.billType.trim().isEmpty
+                      ? null
+                      : CatalogRef.fromName(terms.billType)),
+              options: receivableBillTypeLeaves(bundle.billTypes),
+              labelOf: (item) {
+                final leaf = item.name.trim();
+                return leaf.isNotEmpty ? leaf : item.label;
+              },
+              emptyText: noPlatform
+                  ? '请先在科技部选择业务平台'
+                  : (loading ? '字典加载中…' : '该业务平台暂无应收类型'),
+              write: (value) => terms.copyWith(
+                billType: value?.name ?? '',
+                billTypeRef: value,
+              ),
+            ),
           if (includeCostType) costTypeField,
           if (choosePriceMode)
             _FullWidthField(child: priceModeBlock)

@@ -19,6 +19,9 @@ void main() {
         onTap: () => opens++, onCopy: () => copies++, onDeleteDraft: () => deletes++)]))));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    expect(find.text('电子报销审批'), findsWidgets);
+    expect(find.text('王奕凡 - 电子报销审批'), findsNothing);
+    expect(find.text('发起人 王奕凡'), findsOneWidget);
     expect(tester.getSize(find.byType(XflowProposalListCard)).height, lessThan(100));
     await tester.tap(find.text('复制'));
     await tester.tap(find.text('删除草稿'));

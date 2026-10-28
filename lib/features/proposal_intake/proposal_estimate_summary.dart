@@ -127,12 +127,12 @@ class ProposalEstimateSummaryData {
     this.remoteSummary,
     this.calcSteps = const {},
     this.businessCostHidden = false,
-    this.responsibleName = '',
+    this.stakeholders = const [],
   });
 
   /// 业务成本仅财务部负责人一和总裁可见；其他人看到「仅授权可见」。
   final bool businessCostHidden;
-  final String responsibleName;
+  final List<ProposalStakeholderLine> stakeholders;
 
   /// 科技部「τ-标签一」的简称（如 三桶油），放在年化利润下面。
   final String platform;
@@ -1821,10 +1821,22 @@ class _CompactEstimateState extends State<_CompactEstimate> {
             ),
           ],
           if (stretch) const Spacer() else const SizedBox(height: 8),
-          if (d.responsibleName.isNotEmpty) ...[
-            _t('责任人', size: _compact ? 10 : 11, color: _C.grey),
-            const SizedBox(height: 3),
-            _t(d.responsibleName, size: _compact ? 11 : 12, weight: FontWeight.w700, maxLines: 2),
+          if (d.stakeholders.isNotEmpty) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 7),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: _ln(_C.heroBorder))),
+              ),
+            ),
+            for (final person in d.stakeholders)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: _t(
+                  '${person.role}：${person.name}',
+                  size: _compact ? 10 : 11,
+                  maxLines: 3,
+                ),
+              ),
             const SizedBox(height: 8),
           ],
           Container(

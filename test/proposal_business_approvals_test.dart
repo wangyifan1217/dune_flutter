@@ -8,6 +8,7 @@ import 'package:dunes_app/features/xflow/proposal_reference_picker.dart';
 import 'package:dunes_app/features/xflow/native_xflow_form_page.dart';
 import 'package:dunes_app/features/xflow/xflow_form_renderer.dart';
 import 'package:dunes_app/features/xflow/xflow_service.dart';
+import 'package:dunes_app/features/chat/user_avatar_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -30,6 +31,55 @@ http.Response ok(Object data) => http.Response(
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('linked proposal card shows available details', (tester) async {
+    final service = XflowService(session: session, client: MockClient((r) async => ok({
+      'id': 22, 'form': {'marketOwner2': '李明', 'product': '权益产品', 'salesScale': '120'},
+    })));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ProposalReferencePicker(
+      service: service,
+      value: {'proposalId': 22, 'source': 'proposal_intake', 'kind': 'sales', 'title': '测试提案', 'code': 'PI-22'},
+      onChanged: (_) {},
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.text('测试提案'), findsOneWidget);
+    expect(find.text('责任人  李明'), findsOneWidget);
+    expect(find.text('产品  权益产品'), findsOneWidget);
+    expect(find.text('年化规模  120 万'), findsOneWidget);
+    expect(find.text('更换提案'), findsOneWidget);
+  });
+
+  testWidgets('launcher picker shows avatars and removal saves remaining users', (tester) async {
+    var ids = <int>[11, 12];
+    final service = XflowService(session: session, client: MockClient((request) async {
+      if (request.url.path.endsWith('/approval-launchers')) {
+        ids = (jsonDecode(request.body)['userIds'] as List).cast<int>();
+        return ok({});
+      }
+      if (request.url.path.endsWith('/related-approvals')) {
+        return ok({'items': [], 'total': 0, 'canManageLaunchers': true, 'launchers': [
+          if (ids.contains(11)) {'userId': 11, 'name': '张三'},
+          if (ids.contains(12)) {'userId': 12, 'name': '李四'},
+        ]});
+      }
+      if (request.url.path.endsWith('/templates') || request.url.path.endsWith('/approval-groups')) return ok([]);
+      return ok({});
+    }));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(child: ProposalBusinessApprovals(
+      session: session, service: service, proposal: ProposalIntakeRow.fromJson({'id': 1, 'status': 'done'}),
+      people: const [ProposalPerson(userId: 11, name: '张三', positionName: ''), ProposalPerson(userId: 12, name: '李四', positionName: '')],
+    )))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('proposal-approval-launchers-edit')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ImUserAvatar), findsNWidgets(2));
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('proposal-approval-launcher-remove-11')));
+    await tester.pumpAndSettle();
+    expect(ids, [12]);
+    expect(find.byKey(const ValueKey('proposal-approval-launcher-remove-11')), findsNothing);
+  });
 
   testWidgets('new configured approval asks for a proposal before the form', (tester) async {
     final service = XflowService(session: session, client: MockClient((r) async {

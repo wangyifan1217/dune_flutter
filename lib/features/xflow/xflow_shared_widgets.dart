@@ -925,7 +925,7 @@ class XflowProposalListCard extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                item.title,
+                                _compactApprovalTitle(item, _compactProposalKindLabel(item)),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: DunesTypography.sans(
@@ -2760,8 +2760,7 @@ _ProgressFoot _progressFoot(XflowProposalItem item) {
 }
 
 String _compactApprovalTitle(XflowProposalItem item, String kindLabel) {
-  final rawTitle = normalizeDuplicatedInitiatorTitle(item.title.trim());
-  // “我审批的”标题以服务端业务标题为准，不再在客户端拼接提交人或种类。
+  final rawTitle = stripInitiatorTitlePrefix(item.title, [item.createdByName]);
   if (rawTitle.isNotEmpty) return rawTitle;
   return kindLabel.trim().isEmpty ? '审批单' : kindLabel.trim();
 }

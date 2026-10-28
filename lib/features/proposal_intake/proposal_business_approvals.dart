@@ -7,6 +7,8 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../chat/user_avatar_widget.dart';
+import '../conversation/conversation_service.dart';
 import '../xflow/approval_chat_share.dart';
 import '../xflow/approval_detail_dialog.dart';
 import '../xflow/xflow_approval_catalog.dart';
@@ -76,6 +78,8 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
   Map<String, dynamic> _data = const {};
   Map<String, dynamic> _costs = const {};
   bool _busy = false, _launching = false;
+  bool _savingLaunchers = false;
+  late final _avatarService = ConversationService(session: widget.session);
   String? _error, _costError;
   int _page = 1, _request = 0;
   String _templateKey = '';
@@ -1223,15 +1227,29 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
                 ),
                 borderRadius: BorderRadius.circular(999),
               ),
-              child: Text(
-                item.name.isEmpty ? '用户 ${item.userId}' : item.name,
-                style: const TextStyle(fontSize: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(item.name.isEmpty ? '用户 ${item.userId}' : item.name,
+                    style: const TextStyle(fontSize: 12)),
+                  if (canManage) ...[
+                    const SizedBox(width: 4),
+                    InkWell(
+                      key: ValueKey('proposal-approval-launcher-remove-${item.userId}'),
+                      onTap: _busy || _savingLaunchers ? null : () => unawaited(
+                        _saveLaunchers(launchers.where((p) => p.userId != item.userId).map((p) => p.userId).toSet()),
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(padding: const EdgeInsets.all(3), child: Icon(Icons.close_rounded, size: 14, color: DunesColors.resolve(context, DunesColors.text3))),
+                    ),
+                  ],
+                ],
               ),
             ),
           if (canManage)
             TextButton(
               key: const ValueKey('proposal-approval-launchers-edit'),
-              onPressed: _busy ? null : _editLaunchers,
+              onPressed: _busy || _savingLaunchers ? null : _editLaunchers,
               style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1262,6 +1280,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
                     )
                     .toList();
           return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
             title: const Text('可发起人'),
             content: SizedBox(
               width: 460,
@@ -1279,10 +1298,13 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
                   ),
                   const SizedBox(height: 8),
                   TextField(
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       isDense: true,
-                      prefixIcon: Icon(Icons.search, size: 18),
+                      prefixIcon: Icon(Icons.search, size: 18, color: DunesColors.resolve(ctx, _kAccent)),
                       hintText: '搜索姓名、部门',
+                      filled: true,
+                      fillColor: DunesColors.resolve(ctx, _kSoft, role: DunesColorRole.surface),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                     ),
                     onChanged: (v) => setLocal(() => query = v),
                   ),
@@ -1295,6 +1317,16 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
                               for (final p in shown)
                                 CheckboxListTile(
                                   dense: true,
+                                  activeColor: DunesColors.resolve(ctx, _kAccent),
+                                  secondary: ImUserAvatar(
+                                    initial: p.name.isEmpty ? '?' : p.name.characters.first,
+                                    seed: p.userId,
+                                    size: 38,
+                                    avatarUrl: p.avatarUrl,
+                                    avatarObjectKey: p.avatarObjectKey,
+                                    avatarPreset: p.avatarPreset,
+                                    avatarService: _avatarService,
+                                  ),
                                   value: selected.contains(p.userId),
                                   title: Text(p.name),
                                   subtitle: Text(
@@ -1330,6 +1362,12 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
       ),
     );
     if (result == null || !mounted) return;
+    await _saveLaunchers(result);
+  }
+
+  Future<void> _saveLaunchers(Set<int> result) async {
+    if (_savingLaunchers) return;
+    setState(() { _savingLaunchers = true; _error = null; });
     try {
       await _service.saveProposalApprovalLaunchers(
         widget.proposal.id,
@@ -1338,6 +1376,8 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
       if (mounted) await _load();
     } catch (e) {
       if (mounted) setState(() => _error = friendlyErrorText(e));
+    } finally {
+      if (mounted) setState(() => _savingLaunchers = false);
     }
   }
 

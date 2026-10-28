@@ -835,6 +835,9 @@ class XflowService {
     '/xflow/proposals/intake-done?${Uri(queryParameters: {'q': query.trim(), 'kind': kind, 'page': '$page', 'pageSize': '20'}).query}',
   );
 
+  Future<Map<String, dynamic>> fetchLinkedProposalIntake(int id) =>
+      _request('/proposal-intakes/$id');
+
   Future<Map<String, dynamic>> fetchProposalRelatedApprovals(
     int proposalId, {
     int page = 1,

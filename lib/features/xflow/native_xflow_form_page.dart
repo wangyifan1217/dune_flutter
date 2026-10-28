@@ -1352,6 +1352,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                     context: context,
                     session: widget.session,
                     proposalId: id,
+                    linkedFromApproval: true,
                   ),
                   child: const Text('查看提案'),
                 ),

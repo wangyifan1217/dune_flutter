@@ -330,7 +330,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       _listScrollOffset = 0;
       if (_listScroll.hasClients) _listScroll.jumpTo(0);
     }
-    if (!quiet || _rows.isEmpty) {
+    if (!quiet) {
       setState(() {
         _loading = true;
         _error = null;
@@ -375,7 +375,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = friendlyErrorText(error));
+      if (quiet) {
+        _toast('列表更新失败：${friendlyErrorText(error)}', error: true);
+      } else {
+        setState(() => _error = friendlyErrorText(error));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -730,8 +734,12 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     try {
       await _service.delete(row.id);
       if (!mounted) return;
+      setState(() {
+        _rows = _rows.where((item) => item.id != row.id).toList();
+        _error = null;
+      });
       _toast('已删除');
-      await _load();
+      await _load(quiet: true);
     } catch (error) {
       _toast(friendlyErrorText(error), error: true);
     }
@@ -2295,6 +2303,13 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(top: 2, bottom: 12),
       itemCount: groups.length,
+      findChildIndexCallback: (key) {
+        if (key is! ValueKey<String>) return null;
+        final index = groups.indexWhere(
+          (group) => key.value == 'proposal-tag-group-card-${group.tag1}',
+        );
+        return index < 0 ? null : index;
+      },
       itemBuilder: (_, index) => ProposalTagGroupCard(
         key: ValueKey('proposal-tag-group-card-${groups[index].tag1}'),
         data: groups[index],
@@ -4227,18 +4242,28 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     if (_itemReviewed('technologyItem:syncSourceRef')) return;
     final previousPlatform = proposalIntakeFormSyncSourceCode(_form);
+    final nextPlatform = (value?.code ?? '').trim();
     var form = proposalIntakeApplyFormSyncSource(
-      _form,
+      previousPlatform != nextPlatform
+          ? proposalIntakeResetPlatformBillTypes(_form)
+          : _form,
       value,
       overwriteSkus: !kProposalSkuChannelSettingsEnabled,
     );
-    final nextPlatform = (value?.code ?? '').trim();
     if (previousPlatform != nextPlatform) {
       form.remove('channelRef');
     }
     form = _keepUnreviewed(form);
     final review = Map<String, dynamic>.from(_review)
       ..['technologyCompleted'] = false;
+    if (previousPlatform != nextPlatform && !_isPurchase) {
+      review['financeCompleted'] = false;
+      final financeItems = review['financeItems'];
+      if (financeItems is Map) {
+        review['financeItems'] = Map<String, dynamic>.from(financeItems)
+          ..remove(kProposalSkuSettlementsReviewKey);
+      }
+    }
     final items = review['technologyItems'];
     if (items is Map) {
       final nextItems = Map<String, dynamic>.from(items)..remove('syncSourceRef');
@@ -5889,8 +5914,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       // 测算合计右上角「算法」：一步步怎么算，数据和柱状图同一份。
       calcSteps: proposalEstimateCalcSteps(_remoteFinance.result!, _form),
       rating: rating,
-      responsibleName: _row.stakeholderLines(people: widget.people, options: widget.options)
-          .firstWhere((line) => line.role == '市场部负责人二').name,
+      stakeholders: _row
+          .stakeholderLines(people: widget.people, options: widget.options)
+          .where((line) => const {
+            '创建人',
+            '市场部负责人一',
+            '市场部负责人二',
+            '科技部负责人',
+            '财务部负责人一',
+            '财务部负责人二',
+          }.contains(line.role))
+          .map((line) => line.role == '创建人'
+              ? ProposalStakeholderLine(role: '填写人', name: line.name)
+              : line)
+          .toList(),
       ratingRule: ratingRule,
       scale: _remoteFinance.result!.main.salesScale,
       revenue: revenue,
@@ -17207,11 +17244,26 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         _itemReviewed('technologyItem:$kProposalChildTechReviewPrefix$key')) {
       return;
     }
-    final snap = proposalIntakeChildTechnology(_form)..[key] = value;
-    var form = Map<String, dynamic>.from(_form)..['childTechnology'] = snap;
+    final snap = proposalIntakeChildTechnology(_form);
+    final previousSource = catalogRefOrNull(snap['syncSourceRef'])?.code.trim() ?? '';
+    final nextSource = catalogRefOrNull(value)?.code.trim() ?? '';
+    final platformChanged = key == 'syncSourceRef' && previousSource != nextSource;
+    snap[key] = value;
+    var form = platformChanged
+        ? proposalIntakeResetPlatformBillTypes(_form, childOnly: true)
+        : Map<String, dynamic>.from(_form);
+    form['childTechnology'] = snap;
     form = _keepUnreviewed(form);
     final review = Map<String, dynamic>.from(_review)
       ..['technologyCompleted'] = false;
+    if (platformChanged && !_isPurchase) {
+      review['financeCompleted'] = false;
+      final financeItems = review['financeItems'];
+      if (financeItems is Map) {
+        review['financeItems'] = Map<String, dynamic>.from(financeItems)
+          ..remove(kProposalSkuSettlementsReviewKey);
+      }
+    }
     if (key == 'financeInterfaces') {
       review['financeInterfaceCompleted'] = false;
     }

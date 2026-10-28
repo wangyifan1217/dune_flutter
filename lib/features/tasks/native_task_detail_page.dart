@@ -483,6 +483,12 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
 
   bool get _canChangeFields => _canPostpone;
 
+  bool get _canAddParticipant {
+    final task = _detail?.task;
+    if (!_canPostpone || task == null || !task.isMain) return false;
+    return task.ownerUserId == widget.session.userId || task.creatorUserId == widget.session.userId;
+  }
+
   bool get _canAssign => _canPostpone;
 
   bool get _canDecideChange {
@@ -607,6 +613,28 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       });
       await _reload();
       if (mounted) showDunesCenterToast(context, '协助人已更新');
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _addParticipants() async {
+    final task = _detail?.task;
+    if (task == null || _busy) return;
+    final picked = await showTaskHelperPicker(
+      context, api: _api, title: '添加主任务参与人',
+      selectedIds: const {}, excludeUserId: 0, scope: 'participants',
+    );
+    if (picked == null || !mounted) return;
+    final ids = picked.map((p) => p.id).where((id) => !task.participantUserIds.contains(id)).toList();
+    if (ids.isEmpty) { showDunesCenterToast(context, '没有新增参与人'); return; }
+    setState(() => _busy = true);
+    try {
+      await _api.patchTask(task.id, {'addParticipantUserIds': ids});
+      await _reload();
+      if (mounted) showDunesCenterToast(context, '参与人已添加');
     } catch (e) {
       if (mounted) showDunesCenterToast(context, '$e');
     } finally {
@@ -1154,6 +1182,13 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
             label: const Text('协助'),
           ),
         );
+      }
+      if (_canAddParticipant) {
+        actions.add(OutlinedButton.icon(
+          onPressed: _busy ? null : _addParticipants,
+          icon: const Icon(Icons.group_add_outlined, size: 17),
+          label: const Text('添加参与人'),
+        ));
       }
       if (_canAssign && _canAssignTeam) {
         actions.add(

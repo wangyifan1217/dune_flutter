@@ -20068,7 +20068,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             padding: const EdgeInsets.fromLTRB(
               lighthouseAppBarPaddingH,
               10,
-              lighthouseAppBarPaddingH,
+              8,
               10,
             ),
             child: Row(
@@ -20080,17 +20080,20 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       // brand 里的标题是 Flexible，这里按自身宽度占位，不参与分空间。
                       IntrinsicWidth(child: brand(showEn: false)),
                       const SizedBox(width: 8),
-                      // 像素场景保留原高度，横向长度缩至原可用空间的 70%。
-                      Flexible(
-                        fit: FlexFit.loose,
-                        child: FractionallySizedBox(
-                          widthFactor: 0.7,
+                      // 像素场景占品牌和浮岛之间的空隙，长度是这段的 70%，靠左。
+                      // 浮岛本身不参与伸缩，这样多余空白留在光束和浮岛之间，整组贴在最右侧。
+                      Expanded(
+                        child: Align(
                           alignment: Alignment.centerLeft,
-                          child: LighthousePixelMark(controller: _pixelCtl),
+                          child: FractionallySizedBox(
+                            widthFactor: 0.7,
+                            alignment: Alignment.centerLeft,
+                            child: LighthousePixelMark(controller: _pixelCtl),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Expanded(child: _buildTopIslands()),
+                      _buildTopIslands(),
                     ]
                   : [
                       brand(showEn: c.maxWidth >= 640),
@@ -20454,43 +20457,56 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   static const Color _kIslandIcon = Color(0xFF5A458F);
 
   Widget _buildTopIslands() {
-    // 周期浮岛贴在标题 / 像素灯塔后面；⋯ 永远顶到屏幕最右边（手机、电脑一样）。
-    return Row(
-      children: [
-        if (_hasAccess)
-          Flexible(
-            fit: FlexFit.loose,
-            // 同步完成 / 切换日期时，像素光束「照到」浮岛的那一下亮一圈金光。
-            child: ValueListenableBuilder<bool>(
-              valueListenable: _pixelCtl.islandGlow,
-              builder: (context, glow, child) => AnimatedContainer(
-                duration: _islandDur(300),
-                curve: Curves.easeOut,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(_kIslandH / 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFFC450).withAlpha(glow ? 140 : 0),
-                      blurRadius: 16,
-                      spreadRadius: glow ? 1 : 0,
-                    ),
-                    BoxShadow(
-                      color: const Color(0xFFFFD66B).withAlpha(glow ? 115 : 0),
-                      spreadRadius: glow ? 3 : 0,
-                    ),
-                  ],
-                ),
-                child: child,
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _buildPeriodIsland(),
-              ),
+    // 周期和更多浮岛作为一组靠右。父级给了有限宽度时，周期岛可收缩；
+    // 顶栏把本组放在最右侧、宽度不限时，按内容宽度排，避免把空白顶到组后面。
+    final period = _hasAccess ? _buildGlowingPeriodIsland() : null;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bounded = constraints.maxWidth.isFinite;
+        return Row(
+          mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
+          children: [
+            if (period != null)
+              bounded
+                  ? Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: period,
+                      ),
+                    )
+                  : period,
+            if (_hasAccess) const SizedBox(width: 8),
+            _buildMoreIsland(),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 同步完成 / 切换日期时，像素光束照到周期浮岛，亮一圈金光。
+  Widget _buildGlowingPeriodIsland() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _pixelCtl.islandGlow,
+      builder: (context, glow, child) => AnimatedContainer(
+        duration: _islandDur(300),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(_kIslandH / 2),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFFC450).withAlpha(glow ? 140 : 0),
+              blurRadius: 16,
+              spreadRadius: glow ? 1 : 0,
             ),
-          ),
-        const Spacer(),
-        _buildMoreIsland(),
-      ],
+            BoxShadow(
+              color: const Color(0xFFFFD66B).withAlpha(glow ? 115 : 0),
+              spreadRadius: glow ? 3 : 0,
+            ),
+          ],
+        ),
+        child: child,
+      ),
+      child: _buildPeriodIsland(),
     );
   }
 
@@ -20503,6 +20519,29 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   Duration _islandDur(int ms) => MediaQuery.disableAnimationsOf(context)
       ? Duration.zero
       : Duration(milliseconds: ms);
+
+  Widget _buildIslandRangeLabel(String range) {
+    return AnimatedSwitcher(
+      duration: _islandDur(220),
+      child: Text(
+        range,
+        key: ValueKey('island-range-$range'),
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        style: _tabular(
+          LhTypography.mono(
+            size: 11.5,
+            weight: FontWeight.w700,
+            color: _kIslandInk,
+            letterSpacing: 0.2,
+            height: 1.0,
+            context: context,
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildPeriodIsland() {
     final name = _islandName;
@@ -20527,7 +20566,11 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 context,
                 radius: _kIslandH / 2,
               ),
-              child: Row(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final bounded = constraints.maxWidth.isFinite;
+                  final rangeLabel = _buildIslandRangeLabel(range);
+                  return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // 切期时这颗字块从下往上翻过来（老的往下淡出）。
@@ -20576,28 +20619,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                     ),
                   ),
                   const SizedBox(width: 9),
-                  Flexible(
-                    child: AnimatedSwitcher(
-                      duration: _islandDur(220),
-                      child: Text(
-                        range,
-                        key: ValueKey('island-range-$range'),
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
-                        style: _tabular(
-                          LhTypography.mono(
-                            size: 11.5,
-                            weight: FontWeight.w700,
-                            color: _kIslandInk,
-                            letterSpacing: 0.2,
-                            height: 1.0,
-                            context: context,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                  if (bounded) Flexible(child: rangeLabel) else rangeLabel,
                   const SizedBox(width: 2),
                   AnimatedRotation(
                     turns: _periodSheetOpen ? 0.5 : 0,
@@ -20610,6 +20632,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                     ),
                   ),
                 ],
+              );
+                },
               ),
             ),
           ),
@@ -57551,7 +57575,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           padding: const EdgeInsets.fromLTRB(
             lighthouseHeroShellMarginH,
             10,
-            lighthouseHeroShellMarginH,
+            8,
             8,
           ),
           child: Column(
@@ -57846,7 +57870,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           padding: const EdgeInsets.fromLTRB(
             lighthouseHeroShellMarginH,
             10,
-            lighthouseHeroShellMarginH,
+            8,
             6,
           ),
           child: Row(

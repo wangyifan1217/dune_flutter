@@ -257,6 +257,9 @@ class ProposalPerson {
     required this.positionName,
     this.username = '',
     this.departmentName = '',
+    this.avatarUrl = '',
+    this.avatarObjectKey = '',
+    this.avatarPreset = '',
   });
 
   final int userId;
@@ -264,6 +267,9 @@ class ProposalPerson {
   final String positionName;
   final String username;
   final String departmentName;
+  final String avatarUrl;
+  final String avatarObjectKey;
+  final String avatarPreset;
 
   factory ProposalPerson.fromJson(Map<String, dynamic> json) {
     final name =
@@ -278,6 +284,9 @@ class ProposalPerson {
       positionName: '${json['positionName'] ?? json['title'] ?? ''}'.trim(),
       username: '${json['username'] ?? ''}'.trim(),
       departmentName: '${json['departmentName'] ?? ''}'.trim(),
+      avatarUrl: '${json['avatarUrl'] ?? json['avatarFullUrl'] ?? ''}'.trim(),
+      avatarObjectKey: '${json['avatarObjectKey'] ?? ''}'.trim(),
+      avatarPreset: '${json['avatarPreset'] ?? ''}'.trim(),
     );
   }
 }
@@ -4582,6 +4591,39 @@ CatalogRef? proposalIntakeFormSyncSourceRef(Map<String, dynamic> form) =>
 
 String proposalIntakeFormSyncSourceCode(Map<String, dynamic> form) =>
     (proposalIntakeFormSyncSourceRef(form)?.code ?? '').trim();
+
+/// 平台字典不通用：切换平台时只清除结算行的收入/成本类型。
+Map<String, dynamic> proposalIntakeResetPlatformBillTypes(
+  Map<String, dynamic> form, {bool childOnly = false}
+) {
+  Object? clearRows(Object? value, {bool settlement = false}) {
+    if (value is List) {
+      return [for (final item in value) clearRows(item, settlement: settlement)];
+    }
+    if (value is! Map) return value;
+    final result = <String, dynamic>{};
+    for (final entry in value.entries) {
+      final key = '${entry.key}';
+      if (settlement && key == 'billType') {
+        result[key] = '';
+      } else if (settlement && key == 'billTypeRef') {
+        result[key] = null;
+      } else {
+        result[key] = clearRows(entry.value, settlement: settlement || key == 'settlements' || key == 'sharedSettlements');
+      }
+    }
+    return result;
+  }
+  final next = Map<String, dynamic>.from(form);
+  for (final key in childOnly
+      ? const ['childProducts']
+      : const ['skuDetails', 'channelSkus', 'childProducts', 'supplyProducts', 'products', 'sharedSettlements']) {
+    if (next.containsKey(key)) {
+      next[key] = clearRows(next[key], settlement: key == 'sharedSettlements');
+    }
+  }
+  return next;
+}
 
 /// 销售提案科技部选的渠道。产品弹窗不再单独选，结算行仍保留自己的渠道。
 CatalogRef? proposalIntakeFormChannelRef(Map<String, dynamic> form) =>

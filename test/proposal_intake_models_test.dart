@@ -390,6 +390,30 @@ void main() {
     );
   });
 
+  test('platform change clears income and cost types without clearing amounts', () {
+    final original = <String, dynamic>{
+      'skuDetails': [{'id': 's1', 'settlements': [
+        {'id': 'i1', 'kind': 'income', 'billType': '收入类型', 'billTypeRef': {'code': 'I', 'name': '收入类型'}, 'settleRatio': '0.2'},
+        {'id': 'c1', 'kind': 'cost', 'billType': '成本类型', 'billTypeRef': {'code': 'C', 'name': '成本类型'}, 'settleUnitPrice': '2'},
+      ]}],
+      'childProducts': [{'id': 's2', 'settlements': [{'id': 'c2', 'billType': '子产品成本'}]}],
+      'supplyProducts': [{'id': 'p1', 'settlements': [{'id': 'c3', 'billType': '供给成本'}]}],
+      'sharedSettlements': [{'id': 'shared', 'billType': '共用收入'}],
+    };
+    final reset = proposalIntakeResetPlatformBillTypes(original);
+    final settlements = ((reset['skuDetails'] as List).first as Map)['settlements'] as List;
+    expect(settlements.map((row) => row['billType']), ['', '']);
+    expect(settlements.first['billTypeRef'], isNull);
+    expect(settlements.first['settleRatio'], '0.2');
+    expect(settlements.last['settleUnitPrice'], '2');
+    expect(((reset['supplyProducts'] as List).first['settlements'] as List).first['billType'], '');
+    expect((reset['sharedSettlements'] as List).first['billType'], '');
+    final child = proposalIntakeResetPlatformBillTypes(original, childOnly: true);
+    expect(((child['childProducts'] as List).first['settlements'] as List).first['billType'], '');
+    expect(((child['skuDetails'] as List).first['settlements'] as List).first['billType'], '收入类型');
+    expect(((original['skuDetails'] as List).first['settlements'] as List).first['billType'], '收入类型');
+  });
+
   test('legacy sku platform yields to the tech platform shown on screen', () {
     final form = <String, dynamic>{
       'syncSourceRef': {'code': 'YD', 'name': '移动运营商'},

@@ -206,7 +206,11 @@ const _proposalStatusFilters = <(String, String)>[
   ('reviewing', '复核中'),
   ('pending_president', '待最终确认'),
   ('done', '已完成'),
+  (_kMineFilter, '我发起的'),
 ];
+
+/// 「我发起的」：我创建的提案，所有状态都算，和「已完成」可以重叠。
+const _kMineFilter = 'mine';
 
 /// 总裁许正阳的列表视角，与后端写死的范围一致。
 const _presidentDeskName = '许正阳';
@@ -216,6 +220,7 @@ const _presidentDeskFilters = <(String, String)>[
   ('reviewing', '复核中'),
   ('pending_president', '待最终确认'),
   ('done', '已完成'),
+  (_kMineFilter, '我发起的'),
 ];
 
 const _showTechnologyHandoffRecords = false;
@@ -345,6 +350,12 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
             .where((row) => _presidentDeskStatuses.contains(row.status))
             .toList(growable: false);
       }
+      if (!widget.assistantMode && _statusFilter == _kMineFilter) {
+        final me = widget.session.userId;
+        items = items
+            .where((row) => me > 0 && row.createdBy == me)
+            .toList(growable: false);
+      }
       if (widget.assistantMode) {
         final q = _search.text.trim().toLowerCase();
         if (q.isNotEmpty) {
@@ -379,7 +390,10 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         page: page,
         pageSize: pageSize,
         keyword: widget.assistantMode ? '' : _search.text,
-        status: widget.assistantMode ? '' : _statusFilter,
+        // 「我发起的」不是服务端状态：拉全部状态，再按创建人筛。
+        status: widget.assistantMode || _statusFilter == _kMineFilter
+            ? ''
+            : _statusFilter,
         kind: widget.kind,
         sector: widget.assistantMode ? '' : _sectorFilter,
         period: widget.assistantMode ? '' : _periodFilter,
@@ -3344,6 +3358,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   final _estimateTick = ValueNotifier<int>(0);
   final _scroll = ScrollController();
   final _tocKey = GlobalKey();
+
+  /// 页面底部「业务审批」卡片，顶部按钮滚动到这里。
+  final _bizApprovalKey = GlobalKey();
   final _marketKey = GlobalKey();
   final _techKey = GlobalKey();
   final _financeKey = GlobalKey();
@@ -3411,6 +3428,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   int _formChannelSeq = 0;
   List<CatalogRef> _assetInvoiceTypes = const [];
   List<CatalogRef> _assetTaxRates = const [];
+
+  /// 资管我方主体 / 对方主体字典，结算每条收入、成本选主体用。
+  List<CatalogRef> _ourEntityCatalog = const [];
+  List<CatalogRef> _counterpartyEntityCatalog = const [];
+  List<CatalogRef> _ourEntityExtras = const [];
+  List<CatalogRef> _counterpartyEntityExtras = const [];
   List<CatalogRef> _liveChannelFormulas = const [];
   bool _liveChannelFormulasLoading = false;
   List<CatalogRef> _channelCategoryL1 = const [];
@@ -5128,6 +5151,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _catalog.fetchSyncSources(),
       _catalog.fetchInvoiceTypes(),
       _catalog.fetchTaxRates(),
+      _catalog.fetchOurEntities(),
+      _catalog.fetchCounterpartyEntities(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -5138,6 +5163,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _syncSourceCatalog = results[4];
       _assetInvoiceTypes = results[5];
       _assetTaxRates = results[6];
+      _ourEntityCatalog = results[7];
+      _counterpartyEntityCatalog = results[8];
     });
     _prefetchLiveChannelFormulas();
     unawaited(
@@ -5998,6 +6025,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         _scrollToContentBox();
       }
     });
+  }
+
+  /// 滚到页面底部的「业务审批」卡片。
+  void _scrollToBizApprovals() {
+    final target = _bizApprovalKey.currentContext?.findRenderObject();
+    if (target == null || !target.attached || !_scroll.hasClients) return;
+    unawaited(
+      _scroll.position.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeOut,
+        alignment: .02,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+      ),
+    );
   }
 
   /// 把「填报内容」框头滚到视野顶部。
@@ -9675,11 +9717,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                             ],
                                           ),
                                         ),
+                                      // 业务审批放在填报内容下面；顶部「业务审批」按钮可直接跳到这里。
+                                      // 审批、发票和成本归集都从当前提案进入。
                                       if (_row.id > 0)
-                                        ProposalBusinessApprovals(
-                                          session: widget.session,
-                                          proposal: _row,
-                                          allowLaunch: false,
+                                        KeyedSubtree(
+                                          key: _bizApprovalKey,
+                                          child: Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 14,
+                                            ),
+                                            child: ProposalBusinessApprovals(
+                                              session: widget.session,
+                                              proposal: _row,
+                                              people: widget.people,
+                                              allowLaunch: true,
+                                            ),
+                                          ),
                                         ),
                                       if (widget.enableComments &&
                                           _row.id > 0 &&
@@ -9841,6 +9894,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ],
           _progressToggle(compact: compact),
           const SizedBox(width: 6),
+          if (_row.id > 0) ...[
+            DecoratedBox(
+              decoration: _topToolDecoration,
+              child: _topToolSlot(
+                key: const ValueKey('proposal-top-biz-approvals'),
+                label: '业务审批',
+                onPressed: _scrollToBizApprovals,
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
           _topPrimaryTools(),
           if (_topOverflowItems().isNotEmpty) ...[
             const SizedBox(width: 6),
@@ -15606,27 +15670,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               reviewSection: 'contractItem:$prefix.SignDate',
               reviewLabel: _financeReviewLabel,
             ),
-            _textField(
-              '我方签约主体',
-              '${prefix}OurParty',
-              required: true,
-              maxLines: 3,
-              minLines: 1,
+            _entityPartyFormField(
+              label: '我方签约主体',
+              fieldKey: '${prefix}OurParty',
+              ourSide: true,
               source: grabSource,
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.OurParty',
-              reviewLabel: _financeReviewLabel,
             ),
-            _textField(
-              '对方签约主体',
-              '${prefix}Counterparty',
-              required: true,
-              maxLines: 3,
-              minLines: 1,
+            _entityPartyFormField(
+              label: '对方签约主体',
+              fieldKey: '${prefix}Counterparty',
+              ourSide: false,
               source: grabSource,
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.Counterparty',
-              reviewLabel: _financeReviewLabel,
             ),
             _textField(
               '有效期',
@@ -17681,7 +17739,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             keyPrefix: 'sharedSettle-${group.id}',
             terms: group.terms,
             enabled: canEdit,
-            includeParties: false,
+            includeParties: true,
             includeChannel: false,
             includeScale: false,
             syncSource: _primarySyncSource(),
@@ -18291,7 +18349,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             if (!cost && !picked && name.startsWith('应收')) {
               name = '收入${name.substring(2)}';
             }
-            if (coupon) name = '用券成本';
+            if (coupon) name = '电子券采购款';
             // 按当前结算方式当场算。切换方式后不再显示上一种方式留下的数。
             final line = proposalSettleLineView(
               t,
@@ -18304,7 +18362,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               name: prefix.isEmpty
                   ? name
                   : '$prefix · ${cost ? '项目成本' : '收入'} $name',
-              tag: coupon ? '用券成本' : '',
+              tag: coupon ? '电子券采购款' : '',
               minus: coupon,
               ratio: line.ratioText,
               redemptionRate: coupon ? t.expectedRedemptionRate : '',
@@ -22192,7 +22250,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
-                  '是否有用券成本',
+                  '是否有电子券采购款',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -22232,7 +22290,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
                     child: Text(
-                      '用券成本',
+                      '电子券采购款',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -22245,7 +22303,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     keyPrefix: '$reviewPrefix-$skuId-${coupon.id}',
                     terms: coupon.terms,
                     enabled: enabled,
-                    includeParties: false,
+                    includeParties: true,
                     includeChannel: false,
                     includeScale: false,
                     scaleOnly: false,
@@ -22447,7 +22505,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   )
                 : settle.terms,
             enabled: enabled,
-            includeParties: false,
+            includeParties: true,
             includeChannel: false,
             includeScale: simplified ? false : includeScale,
             scaleOnly: simplified ? false : scaleOnly,
@@ -22697,6 +22755,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       String Function(CatalogRef item)? labelOf,
       String? hint,
       String? emptyText,
+      bool required = false,
+      String? addLabel,
+      ValueChanged<CatalogRef>? onCreated,
     }) {
       final selected =
           _selectedCatalog(current, options) ??
@@ -22707,6 +22768,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           : (labelOf?.call(selected) ?? selected.label);
       return ProposalField(
         label: label,
+        required: required,
         child: !enabled
             ? _readonlySelectedText(
                 shown.isNotEmpty ? shown : (current?.label ?? ''),
@@ -22718,6 +22780,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 hint: hint ?? catalogHint,
                 searchable: true,
                 emptyText: emptyText ?? catalogEmptyText,
+                addLabel: addLabel,
+                onAdd: addLabel == null
+                    ? null
+                    : () async {
+                        final added = await _promptAddedOption(addLabel);
+                        if (added == null || added.isEmpty) return;
+                        final ref = CatalogRef(code: added, name: added);
+                        onCreated?.call(ref);
+                        onChanged(write(ref));
+                      },
                 options: [
                   for (final item in values)
                     ProposalSelectOption(
@@ -22890,6 +22962,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
     final costTypeField = catalogField(
       label: '成本类型',
+      required: true,
       current:
           terms.billTypeRef ??
           (terms.billType.trim().isEmpty
@@ -23163,6 +23236,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           if (includeIncomeType)
             catalogField(
               label: '收入类型',
+              required: true,
               current:
                   terms.billTypeRef ??
                   (terms.billType.trim().isEmpty
@@ -23236,15 +23310,49 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           if (includeParties)
             _FullWidthField(
               child: _settleSplitPair(
-                field(
-                  '我方主体',
-                  terms.ourParty,
-                  (value) => terms.copyWith(ourParty: value),
+                // 取资管 /our-entity：选项显示全称，存简称（code）。
+                catalogField(
+                  label: '我方主体',
+                  current: terms.ourParty.trim().isEmpty
+                      ? null
+                      : CatalogRef(
+                          code: terms.ourParty.trim(),
+                          name: terms.ourParty.trim(),
+                        ),
+                  options: _mergedEntities(
+                    _ourEntityCatalog,
+                    _ourEntityExtras,
+                  ),
+                  hint: '请选择或新增我方主体',
+                  emptyText: '暂无我方主体，可新增',
+                  required: true,
+                  addLabel: '新增我方主体',
+                  onCreated: (ref) => _rememberEntity(ref, ourSide: true),
+                  write: (value) => terms.copyWith(
+                    ourParty: _entityStoredCode(value),
+                  ),
                 ),
-                field(
-                  '对方主体',
-                  terms.counterparty,
-                  (value) => terms.copyWith(counterparty: value),
+                // 取资管 /counterparty-entity：选项显示简称，存全称（code）。
+                catalogField(
+                  label: '对方主体',
+                  current: terms.counterparty.trim().isEmpty
+                      ? null
+                      : CatalogRef(
+                          code: terms.counterparty.trim(),
+                          name: terms.counterparty.trim(),
+                        ),
+                  options: _mergedEntities(
+                    _counterpartyEntityCatalog,
+                    _counterpartyEntityExtras,
+                  ),
+                  hint: '请选择或新增对方主体',
+                  emptyText: '暂无对方主体，可新增',
+                  required: true,
+                  addLabel: '新增对方主体',
+                  onCreated: (ref) => _rememberEntity(ref, ourSide: false),
+                  write: (value) => terms.copyWith(
+                    counterparty: _entityStoredCode(value),
+                  ),
                 ),
                 stack: stackPairs,
               ),
@@ -25740,6 +25848,92 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  List<CatalogRef> _mergedEntities(
+    List<CatalogRef> catalog,
+    List<CatalogRef> extras,
+  ) {
+    final seen = <String>{};
+    final out = <CatalogRef>[];
+    void add(CatalogRef item) {
+      if (item.isEmpty) return;
+      final key = '${item.code.trim()}|${item.name.trim()}';
+      if (!seen.add(key)) return;
+      out.add(item);
+    }
+
+    for (final item in catalog) {
+      add(item);
+    }
+    for (final item in extras) {
+      add(item);
+    }
+    return out;
+  }
+
+  String _entityStoredCode(CatalogRef? value) {
+    if (value == null || value.isEmpty) return '';
+    final code = value.code.trim();
+    if (code.isNotEmpty) return code;
+    return value.name.trim();
+  }
+
+  void _rememberEntity(CatalogRef ref, {required bool ourSide}) {
+    if (ref.isEmpty) return;
+    final stored = _entityStoredCode(ref);
+    if (stored.isEmpty) return;
+    bool same(CatalogRef item) =>
+        _entityStoredCode(item) == stored || item.name.trim() == stored;
+    final catalog = ourSide ? _ourEntityCatalog : _counterpartyEntityCatalog;
+    final extras = ourSide ? _ourEntityExtras : _counterpartyEntityExtras;
+    if (catalog.any(same) || extras.any(same)) return;
+    setState(() {
+      if (ourSide) {
+        _ourEntityExtras = [..._ourEntityExtras, ref];
+      } else {
+        _counterpartyEntityExtras = [..._counterpartyEntityExtras, ref];
+      }
+    });
+  }
+
+  Widget _entityPartyFormField({
+    required String label,
+    required String fieldKey,
+    required bool ourSide,
+    String? source,
+    String? resetReview,
+    String? reviewSection,
+  }) {
+    final currentText = _text(fieldKey).trim();
+    final current = currentText.isEmpty
+        ? null
+        : CatalogRef(code: currentText, name: currentText);
+    return _catalogDropdownField(
+      label,
+      current: current,
+      options: _mergedEntities(
+        ourSide ? _ourEntityCatalog : _counterpartyEntityCatalog,
+        ourSide ? _ourEntityExtras : _counterpartyEntityExtras,
+      ),
+      required: true,
+      source: source,
+      hint: ourSide ? '请选择或新增我方主体' : '请选择或新增对方主体',
+      emptyText: ourSide ? '暂无我方主体，可新增' : '暂无对方主体，可新增',
+      addLabel: ourSide ? '新增我方主体' : '新增对方主体',
+      createAdded: (text) => CatalogRef(code: text, name: text),
+      resetReview: resetReview,
+      reviewSection: reviewSection,
+      reviewLabel: _financeReviewLabel,
+      fieldKey: fieldKey,
+      footer: _contractEditFooter(fieldKey),
+      onSelected: (value) {
+        if (value != null && value.isNotEmpty) {
+          _rememberEntity(value, ourSide: ourSide);
+        }
+        _set(fieldKey, _entityStoredCode(value), resetReview: resetReview);
+      },
+    );
+  }
+
   Widget _catalogDropdownField(
     String label, {
     required CatalogRef? current,
@@ -25756,6 +25950,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String reviewLabel = '复核',
     ValueChanged<String>? onQueryChanged,
     String? addLabel,
+    CatalogRef Function(String text)? createAdded,
+    String? source,
+    String? fieldKey,
+    Widget? footer,
   }) {
     final canEdit =
         _fillEnabled(
@@ -25764,26 +25962,30 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           reviewSection: reviewSection,
         ) &&
         enabled;
-    final tone = proposalFieldTone(enabled: canEdit);
+    final tone = proposalFieldTone(enabled: canEdit, source: source);
     final selected =
         _selectedCatalog(current, options) ??
         ((current != null && current.isNotEmpty) ? current : null);
     final values = _withCurrent(options, selected);
-    if (_readValuesOnly(canEdit)) {
-      return ProposalField(
+    final shown = selected?.label ?? current?.label ?? '';
+    Widget wrap(Widget child) {
+      final field = ProposalField(
         label: label,
         required: required,
+        source: source,
         tone: tone,
+        footer: footer,
         trailing: _rowReviewToggle(reviewSection, reviewLabel),
-        child: _readonlySelectedText(selected?.label ?? current?.label ?? ''),
+        child: child,
       );
+      return fieldKey == null ? field : _anchor(fieldKey, field);
     }
-    return ProposalField(
-      label: label,
-      required: required,
-      tone: tone,
-      trailing: _rowReviewToggle(reviewSection, reviewLabel),
-      child: ProposalSelectField<CatalogRef>(
+
+    if (_readValuesOnly(canEdit)) {
+      return wrap(_readonlySelectedText(shown));
+    }
+    return wrap(
+      ProposalSelectField<CatalogRef>(
         value: selected == null || selected.isEmpty ? null : selected,
         title: label,
         hint: hint ?? (values.isEmpty ? '暂无选项' : '请选择或输入搜索'),
@@ -25807,7 +26009,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             : () async {
                 final added = await _promptAddedOption(addLabel);
                 if (added == null || added.isEmpty) return;
-                onSelected(CatalogRef.fromName(added));
+                onSelected(
+                  createAdded?.call(added) ?? CatalogRef.fromName(added),
+                );
               },
         onSelected: canEdit ? onSelected : null,
       ),

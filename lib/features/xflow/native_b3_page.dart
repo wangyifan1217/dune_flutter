@@ -48,6 +48,9 @@ class _NativeB3PageState extends State<NativeB3Page> {
   List<XflowTemplateCard> _admTemplates = const <XflowTemplateCard>[];
   List<XflowApprovalGroup>? _approvalCatalog;
 
+  /// 业务审批是否已强制从提案内发起（后端 proposal-link-feature 的 enforced）。
+  bool _bizProposalOnly = false;
+
   @override
   void initState() {
     super.initState();
@@ -90,11 +93,18 @@ class _NativeB3PageState extends State<NativeB3Page> {
       } catch (_) {
         catalog = _approvalCatalog;
       }
+      var bizProposalOnly = _bizProposalOnly;
+      try {
+        bizProposalOnly = (await _service.fetchProposalLinkPolicy()).enforced;
+      } catch (_) {
+        // 读不到策略时不拦前端，后端仍会强制校验。
+      }
       if (!mounted) return;
       setState(() {
         _bizTemplates = results[0];
         _admTemplates = results[1];
         _approvalCatalog = catalog;
+        _bizProposalOnly = bizProposalOnly;
         _loading = false;
       });
     } catch (e) {
@@ -154,8 +164,35 @@ class _NativeB3PageState extends State<NativeB3Page> {
   }
 
   void _openTemplate(XflowTemplateCard template) {
+    if (_bizProposalOnly &&
+        template.category == 'biz' &&
+        template.templateKey != XflowService.salesTemplateKey) {
+      _showProposalOnlyNotice(template);
+      return;
+    }
     widget.onCategoryChanged?.call(_category);
     widget.onOpenForm(template.templateKey);
+  }
+
+  /// 业务审批不能脱离提案单独发起：引导到工作台的提案里发起，系统自动关联提案。
+  void _showProposalOnlyNotice(XflowTemplateCard template) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('请在提案内发起'),
+        content: Text(
+          '「${template.title}」属于业务审批，需要在已完成的销售提案或采购提案里发起，'
+          '系统会自动关联该提案。\n\n请到工作台打开对应提案，在「业务审批」中点「发起审批」。',
+          style: const TextStyle(height: 1.6),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

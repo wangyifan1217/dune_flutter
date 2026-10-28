@@ -5105,7 +5105,26 @@ class ProposalFinanceSettleTerms {
         resolvedPrice.isNotEmpty;
   }
 
-  bool get isSkuComplete => promotionPromoterReady && isSettleAmountComplete;
+  bool get isSkuComplete =>
+      promotionPromoterReady &&
+      isSettleAmountComplete &&
+      partiesReady &&
+      billTypeReady;
+
+  /// 产品结算的收入类型 / 成本类型已选（必填）。
+  bool get billTypeReady =>
+      billType.trim().isNotEmpty ||
+      (billTypeRef != null && billTypeRef!.isNotEmpty);
+
+  /// 我方主体、对方主体都已选（资管字典 code）。每条收入、成本必填。
+  bool get partiesReady =>
+      ourParty.trim().isNotEmpty && counterparty.trim().isNotEmpty;
+
+  /// 还没选的主体，用于提示文案，如「我方主体、对方主体」。
+  String get partiesGapText => [
+    if (ourParty.trim().isEmpty) '我方主体',
+    if (counterparty.trim().isEmpty) '对方主体',
+  ].join('、');
 
   String get fingerprint => [
     billTypeRef?.identity ?? billType,
@@ -6495,6 +6514,9 @@ List<String> proposalIntakeSkuSettleIssues(
       if (group.terms.isPromotionFee && !group.terms.promotionPromoterReady) {
         issues.add('共用结算请选择推广商');
       }
+      if (!group.terms.partiesReady) {
+        issues.add('共用结算请选择${group.terms.partiesGapText}');
+      }
     }
   }
   return issues;
@@ -6554,6 +6576,14 @@ List<String> _proposalIntakeSkuGroupIssues({
       }
       if (terms.isPromotionFee && !terms.promotionPromoterReady) {
         issues.add('$name$label请选择推广商');
+      }
+      if (!terms.billTypeReady) {
+        issues.add(
+          '$name$label请选择${settlements[j].isCost ? '成本类型' : '收入类型'}',
+        );
+      }
+      if (!terms.partiesReady) {
+        issues.add('$name$label请选择${terms.partiesGapText}');
       }
     }
   }

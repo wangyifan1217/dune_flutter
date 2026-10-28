@@ -2665,6 +2665,16 @@ void main() {
     expect(promo.promotionPromoterReady, isFalse);
     expect(promo.isSkuComplete, isFalse);
     expect(promo.copyWith(promoter: '吉林推广').promotionPromoterReady, isTrue);
+    expect(
+      promo
+          .copyWith(
+            promoter: '吉林推广',
+            ourParty: '沙丘',
+            counterparty: '中石油',
+          )
+          .isSkuComplete,
+      isTrue,
+    );
 
     final ratio = proposalIntakeApplySettleXor(priced, settleRatio: '0.08');
     expect(ratio.displayRatio, '0.08');
@@ -4144,6 +4154,56 @@ void main() {
                 'settleRatio': '8%',
                 'formula': '销售额*比例',
                 'taxRate': '6%',
+                'ourParty': '沙丘',
+                'counterparty': '中石油',
+              },
+            ],
+          },
+        ],
+      }),
+      contains('渠道产品「中石油100元」收入一请选择收入类型'),
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'skuDetails': [
+          {
+            'id': 'sku-1',
+            'productName': '中石油100元',
+            'supplierCodes': 'SUP-1',
+            'settlements': [
+              {
+                'id': 'st-1',
+                'kind': 'cost',
+                'settleMode': '按结算比例',
+                'settleRatio': '8%',
+                'formula': '销售额*比例',
+                'taxRate': '6%',
+                'ourParty': '沙丘',
+                'counterparty': '中石油',
+              },
+            ],
+          },
+        ],
+      }),
+      contains('渠道产品「中石油100元」成本一请选择成本类型'),
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'skuDetails': [
+          {
+            'id': 'sku-1',
+            'productName': '中石油100元',
+            'supplierCodes': 'SUP-1',
+            'settlements': [
+              {
+                'id': 'st-1',
+                'billType': '电子券销售款',
+                'settleMode': '按结算比例',
+                'settleRatio': '8%',
+                'formula': '销售额*比例',
+                'taxRate': '6%',
+                'ourParty': '沙丘',
+                'counterparty': '中石油',
               },
             ],
           },

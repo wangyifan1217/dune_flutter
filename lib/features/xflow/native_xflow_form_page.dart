@@ -71,8 +71,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   String? _ccError;
   bool _submitting = false;
   bool _checkingPolicy = false;
+  /// 模板要求关联提案，或者是从提案内发起（带着当前提案）时，都展示关联提案卡片。
   bool get _proposalLinkRequired =>
-      _template?.raw['proposalLinkRequired'] == true;
+      _template?.raw['proposalLinkRequired'] == true ||
+      (widget.initialLinkedProposal != null && !_isEditing);
   bool _submitSucceeded = false;
   int? _draftProposalId;
 

@@ -1118,6 +1118,21 @@ class SettlementCatalogService {
     return _mapList('/out/shaqiu/catalog/tax-rate', CatalogRef.fromJson);
   }
 
+  /// 我方主体字典。`code` 是公司简称，写入结算 `ourParty`（资管 `ourEntity`）时原样回传；
+  /// `name` 是全称，只用于展示。不要回传全称、税号或 dict_code。
+  Future<List<CatalogRef>> fetchOurEntities() async {
+    return _mapList('/out/shaqiu/catalog/our-entity', CatalogRef.fromJson);
+  }
+
+  /// 对方主体字典。`code` 是合作方全称，写入结算 `counterparty`（资管 `counterpartyEntity`）
+  /// 时原样回传；`name` 是简称，只用于展示。启用中的「无」也会返回。
+  Future<List<CatalogRef>> fetchCounterpartyEntities() async {
+    return _mapList(
+      '/out/shaqiu/catalog/counterparty-entity',
+      CatalogRef.fromJson,
+    );
+  }
+
   Future<List<CatalogRef>> fetchFormulas({
     required String syncSource,
     required String productSource,

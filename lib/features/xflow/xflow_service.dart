@@ -775,6 +775,58 @@ class XflowService {
     return data['enabled'] == true;
   }
 
+  /// 提案关联策略。`enforced` 为 true 时，业务审批只能在已完成提案内发起。
+  Future<({bool enabled, bool enforced, String enforceFrom})>
+  fetchProposalLinkPolicy() async {
+    final data = await _request('/xflow/proposal-link-feature');
+    return (
+      enabled: data['enabled'] == true,
+      enforced: data['enforced'] == true,
+      enforceFrom: '${data['enforceFrom'] ?? ''}',
+    );
+  }
+
+  /// 提案成本归集：按项目成本、业务成本、税务成本、经营成本、周转资金汇总来源审批。
+  Future<Map<String, dynamic>> fetchProposalCostCollection(int proposalId) =>
+      _request('/proposal-intakes/$proposalId/cost-collection');
+
+  /// 设置提案「可发起人」（整体替换）。只有提案负责人可以改。
+  Future<Map<String, dynamic>> saveProposalApprovalLaunchers(
+    int proposalId,
+    List<int> userIds,
+  ) => _request(
+    '/proposal-intakes/$proposalId/approval-launchers',
+    method: 'PUT',
+    body: {'userIds': userIds},
+  );
+
+  /// 我发起或参与、还没挂提案的历史业务审批，用于补挂到当前提案。
+  Future<List<Map<String, dynamic>>> fetchProposalLinkableApprovals(
+    int proposalId, {
+    String query = '',
+  }) async {
+    final q = query.trim();
+    final rows = await _requestList(
+      '/proposal-intakes/$proposalId/linkable-approvals'
+      '${q.isEmpty ? '' : '?q=${Uri.encodeQueryComponent(q)}'}',
+    );
+    return rows
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+  }
+
+  /// 把一张历史业务审批补挂到提案。
+  Future<Map<String, dynamic>> linkApprovalToProposal(
+    int proposalId, {
+    required String businessType,
+    required String businessId,
+  }) => _request(
+    '/proposal-intakes/$proposalId/link-approval',
+    method: 'POST',
+    body: {'businessType': businessType, 'businessId': businessId},
+  );
+
   Future<Map<String, dynamic>> fetchCompletedProposalIntakes({
     String query = '',
     String kind = '',
@@ -788,8 +840,9 @@ class XflowService {
     int page = 1,
     String status = '',
     String templateKey = '',
+    List<String> templateKeys = const [],
   }) => _request(
-    '/proposal-intakes/$proposalId/related-approvals?${Uri(queryParameters: {'page': '$page', 'pageSize': '20', 'status': status, 'templateKey': templateKey}).query}',
+    '/proposal-intakes/$proposalId/related-approvals?${Uri(queryParameters: {'page': '$page', 'pageSize': '20', 'status': status, 'templateKey': templateKey, if (templateKeys.isNotEmpty) 'templateKeys': templateKeys.join(',')}).query}',
   );
 
   Future<Map<String, dynamic>?> fetchOrgUser(int userId) async {

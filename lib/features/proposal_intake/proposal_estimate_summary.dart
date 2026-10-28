@@ -96,7 +96,7 @@ class ProposalEstimateCalcStep {
   /// 明细行（每条结算、每项成本）缩进一格。
   final bool sub;
 
-  /// 可疑的行标红（如用券成本把收入扣没了）。
+  /// 可疑的行标红（如电子券采购款把收入扣没了）。
   final bool warn;
 }
 
@@ -161,18 +161,18 @@ class ProposalEstimateSummaryData {
   final String ratingRule;
   final double? scale;
 
-  /// 收入（按财务部所选收入公式测算，已扣掉收入下面挂的用券成本）。
+  /// 收入（按财务部所选收入公式测算，已扣掉收入下面挂的电子券采购款）。
   final double? revenue;
 
-  /// 用券成本：挂在收入下面，直接从收入里扣，不算项目成本、不进成本合计。
-  /// （字段名沿用旧的 procurement，后端 evaluation.procurement 现在就是用券成本。）
+  /// 电子券采购款：挂在收入下面，直接从收入里扣，不算项目成本、不进成本合计。
+  /// （字段名沿用旧的 procurement，后端 evaluation.procurement 现在就是电子券采购款。）
   final double? procurement;
 
-  /// 用券成本（同 [procurement]），0 视为没有。
+  /// 电子券采购款（同 [procurement]），0 视为没有。
   double? get couponCost =>
       procurement == null || procurement == 0 ? null : procurement;
 
-  /// 结算收入 = 收入 + 用券成本（扣券之前）。
+  /// 结算收入 = 收入 + 电子券采购款（扣券之前）。
   double? get grossRevenue {
     final remote = (remoteSummary?['grossRevenue'] as num?)?.toDouble();
     if (remote != null) return remote;
@@ -184,7 +184,7 @@ class ProposalEstimateSummaryData {
   final double? operatingCost;
   final double? taxCost;
 
-  /// 利润 = 收入（已扣用券成本） − 项目成本 − 业务成本 − 税务成本（与财务部一致）。
+  /// 利润 = 收入（已扣电子券采购款） − 项目成本 − 业务成本 − 税务成本（与财务部一致）。
   final double? profit;
 
   /// 毛利率（%）= 利润 ÷ 规模。
@@ -237,7 +237,7 @@ class ProposalEstimateSummaryData {
 
   double? get costTotal {
     if (remoteSummary != null) return (remoteSummary!['costTotal'] as num?)?.toDouble();
-    // 用券成本已从收入里扣掉，这里不再算；经营成本只选类型不计金额。
+    // 电子券采购款已从收入里扣掉，这里不再算；经营成本只选类型不计金额。
     final parts = [projectCost, businessCost, taxCost];
     if (parts.every((v) => v == null)) return null;
     return parts.fold<double>(0, (sum, v) => sum + (v ?? 0));
@@ -514,7 +514,7 @@ class ProposalEstimateSummary extends StatelessWidget {
           [
             if (data.rating != '—') '评级 ${data.rating}',
             if (data.couponCost != null)
-              '已扣用券成本 ${proposalEstimateWan(data.couponCost)}',
+              '已扣电子券采购款 ${proposalEstimateWan(data.couponCost)}',
             '来自 财务测算',
           ].join(' · '),
           '',
@@ -1899,25 +1899,8 @@ class _CompactEstimateState extends State<_CompactEstimate> {
     final profit = d.profit;
     switch (metric) {
       case '收入':
-        // 运营商、能源用同一套组成：结算收入 − 用券成本 = 收入。
-        // 没有用券时用券成本为 0，柱子仍留着，避免两套图来回变。
-        final coupon = d.procurement ?? 0;
-        return (
-          [
-            _Bar('结算收入', d.grossRevenue, _C.purpleLight),
-            _Bar(
-              '用券成本',
-              coupon,
-              _C.purpleLight,
-              minus: true,
-              lift: d.couponCost != null && (d.revenue ?? 0) > 0
-                  ? d.revenue!
-                  : 0.0,
-            ),
-            _Bar('收入', d.revenue, _C.purple),
-          ],
-          '收入 = 结算收入 − 用券成本 · 年化',
-        );
+        // 只画一根「收入」柱：结算收入、电子券采购款不再单独画。
+        return ([_Bar('收入', d.revenue, _C.purple)], '收入 · 年化');
       case '年化规模':
         if (!kProposalFinanceShowEstimates) {
           return (
@@ -1975,7 +1958,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
             ],
             d.businessCostHidden
                 ? '成本构成 · 年化 · 业务成本仅财务部负责人一、总裁可见'
-                : '成本构成 · 年化 · 用券成本已从收入里扣',
+                : '成本构成 · 年化 · 电子券采购款已从收入里扣',
           );
         }
         final profitLift = profit != null && profit > 0 ? profit : 0.0;

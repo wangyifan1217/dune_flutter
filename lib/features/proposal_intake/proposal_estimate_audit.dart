@@ -96,7 +96,7 @@ class _SettleAudit {
     this.promotion = false,
   });
 
-  /// 用券成本的预计核销率（空 = 不折算）。
+  /// 电子券采购款的预计核销率（空 = 不折算）。
   final String redemption;
 
   /// 后端结算表里的金额（核销率折算前）。
@@ -112,7 +112,7 @@ class _SettleAudit {
 
   final String product;
   final String owner;
-  final String kind; // 收入 / 项目成本 / 用券成本
+  final String kind; // 收入 / 项目成本 / 电子券采购款
   final String bill;
   final String price;
   final String formula;
@@ -200,7 +200,7 @@ class ProposalEstimateAudit extends StatelessWidget {
             ratio = '';
             unit = '';
         }
-        // 用券成本填了预计核销率：年测算再乘核销率（后端 peApplyCouponRedemption）。
+        // 电子券采购款填了预计核销率：年测算再乘核销率（后端 peApplyCouponRedemption）。
         final redemption = coupon ? t.expectedRedemptionRate.trim() : '';
         var amount = (hit['amount'] as num?)?.toDouble() ?? 0;
         if (redemption.isNotEmpty) amount = amount * _ratioOf(redemption);
@@ -208,7 +208,7 @@ class ProposalEstimateAudit extends StatelessWidget {
           _SettleAudit(
             product: name,
             owner: owner,
-            kind: coupon ? '用券成本' : (row.isCost ? '项目成本' : '收入'),
+            kind: coupon ? '电子券采购款' : (row.isCost ? '项目成本' : '收入'),
             bill: bill.isEmpty ? (row.isCost ? '未选成本类型' : '渠道结算款') : bill,
             price: t.settleByTier
                 ? '按阶梯'
@@ -302,18 +302,18 @@ class ProposalEstimateAudit extends StatelessWidget {
       }
     }
 
-    // 4. 用券成本
+    // 4. 电子券采购款
     if (coupon > 0) {
       final ratio = gross > 0 ? coupon / gross : 1.0;
       checks.add(
         ratio >= 0.5
             ? _Check(
                 _CheckLevel.error,
-                '用券成本占结算收入 ${_pct(ratio)}，收入只剩 ${_n(revenue)} 万',
-                '用券成本是挂在收入下面、从收入里扣的那部分。比例这么高，'
+                '电子券采购款占结算收入 ${_pct(ratio)}，收入只剩 ${_n(revenue)} 万',
+                '电子券采购款是挂在收入下面、从收入里扣的那部分。比例这么高，'
                     '像是把电子券采购款（如 97%）填成了「券使用成本」。请到产品结算里核对下面标出的几条。',
               )
-            : _Check(_CheckLevel.ok, '用券成本已从收入里扣', '结算收入 ${_n(gross)} − 用券成本 ${_n(coupon)} = ${_n(revenue)} 万'),
+            : _Check(_CheckLevel.ok, '电子券采购款已从收入里扣', '结算收入 ${_n(gross)} − 电子券采购款 ${_n(coupon)} = ${_n(revenue)} 万'),
       );
     }
     if (revenue <= 0 && total.salesScale > 0) {
@@ -404,7 +404,7 @@ class ProposalEstimateAudit extends StatelessWidget {
       checks.add(_Check(_CheckLevel.error, '利差为负：${_n(spread)} 万', '收入不够覆盖成本，核对收入比例和各项成本。'));
     }
     if (tax > revenue && revenue > 0) {
-      checks.add(_Check(_CheckLevel.warn, '税务成本 ${_n(tax)} 万比收入还高', '多半是收入被用券成本扣得太多，或者税率填错。'));
+      checks.add(_Check(_CheckLevel.warn, '税务成本 ${_n(tax)} 万比收入还高', '多半是收入被电子券采购款扣得太多，或者税率填错。'));
     }
     return checks;
   }
@@ -555,7 +555,7 @@ class ProposalEstimateAudit extends StatelessWidget {
       ),
     ];
 
-    // ---- 收入：按产品（和后端每个产品的收入公式一致）→ 结算收入 → 扣用券成本 ----
+    // ---- 收入：按产品（和后端每个产品的收入公式一致）→ 结算收入 → 扣电子券采购款 ----
     final revenueSteps = <ProposalEstimateCalcStep>[];
     for (final p in products) {
       final e = p.evaluation;
@@ -576,7 +576,7 @@ class ProposalEstimateAudit extends StatelessWidget {
           if (incomes.isEmpty) '这个产品没有收入结算，收入按 0。',
           if (f != null) '收入公式：${f.name}${f.expression.trim().isNotEmpty && f.expression.trim() != f.name ? '（${f.expression.trim()}）' : ''}',
           if (e.revenue.substitution.isNotEmpty) '后端代入：${e.revenue.substitution}',
-          if (e.procurement.amount > 0) '扣用券成本之前：${_n(productGross)} 万',
+          if (e.procurement.amount > 0) '扣电子券采购款之前：${_n(productGross)} 万',
           if (e.revenue.missing.isNotEmpty) '缺：${e.revenue.missing.join('、')}',
         ].join('\n'),
       ));
@@ -588,37 +588,37 @@ class ProposalEstimateAudit extends StatelessWidget {
       strong: coupon == 0,
       warn: gross <= 0 && scale > 0,
       detail: [
-        '结算收入 = 各产品收入公式算出来的合计（扣用券成本之前）。',
+        '结算收入 = 各产品收入公式算出来的合计（扣电子券采购款之前）。',
         if (gross == 0) '为什么是 0：${scale == 0 ? '规模是 0' : '收入结算的比例 / 单价没填，或收入公式没选'}',
       ].join('\n'),
     ));
     if (coupon > 0) {
-      for (final s in settles.where((s) => s.kind == '用券成本')) {
+      for (final s in settles.where((s) => s.kind == '电子券采购款')) {
         revenueSteps.add(ProposalEstimateCalcStep(
-          '${s.product} · 用券成本',
+          '${s.product} · 电子券采购款',
           s.redemption.isNotEmpty
               ? '${_n(s.scale)} × ${_pct(s.share)} × 核销率 ${s.redemption}'
               : (s.found ? '${_n(s.scale)} × ${_pct(s.share)}' : '没参与测算'),
           s.found ? '−${_n(s.amount)}' : '—',
           sub: true,
           warn: !s.found,
-          detail: '${_settleDetail(s)}\n用券成本挂在收入下面，直接从收入里扣，不算项目成本。',
+          detail: '${_settleDetail(s)}\n电子券采购款挂在收入下面，直接从收入里扣，不算项目成本。',
         ));
       }
-      final listed = settles.where((s) => s.kind == '用券成本').fold<double>(0, (sum, s) => sum + s.amount);
+      final listed = settles.where((s) => s.kind == '电子券采购款').fold<double>(0, (sum, s) => sum + s.amount);
       final couponHeavy = gross > 0 && coupon / gross >= 0.5;
       revenueSteps.add(ProposalEstimateCalcStep(
         '收入',
-        '结算收入 ${_n(gross)} − 用券成本 ${_n(coupon)}',
+        '结算收入 ${_n(gross)} − 电子券采购款 ${_n(coupon)}',
         _n(revenue),
         strong: true,
         warn: couponHeavy,
         detail: [
-          '收入 = 结算收入 ${_n(gross)} − 用券成本 ${_n(coupon)} = ${_n(revenue)} 万',
+          '收入 = 结算收入 ${_n(gross)} − 电子券采购款 ${_n(coupon)} = ${_n(revenue)} 万',
           if (!_same(listed, coupon))
-            '上面各条用券成本加起来 ${_n(listed)}，后端扣的是 ${_n(coupon)}（共用结算里的用券成本也算在内）。',
+            '上面各条电子券采购款加起来 ${_n(listed)}，后端扣的是 ${_n(coupon)}（共用结算里的电子券采购款也算在内）。',
           if (couponHeavy)
-            '用券成本占结算收入 ${_pct(coupon / gross)}，像是把采购款填成了「券使用成本」，核对上面几条用券成本。',
+            '电子券采购款占结算收入 ${_pct(coupon / gross)}，像是把采购款填成了「券使用成本」，核对上面几条电子券采购款。',
         ].join('\n'),
       ));
     }
@@ -628,7 +628,7 @@ class ProposalEstimateAudit extends StatelessWidget {
         total.ratingRule.isEmpty ? '按收入档位' : total.ratingRule,
         '',
         sub: true,
-        detail: '评级按收入（已扣用券成本）${_n(revenue)} 万落在哪一档定。',
+        detail: '评级按收入（已扣电子券采购款）${_n(revenue)} 万落在哪一档定。',
       ));
     }
 
@@ -683,7 +683,7 @@ class ProposalEstimateAudit extends StatelessWidget {
           : '项目 ${_n(project)} + 业务 ${_n(business)} + 税务 ${_n(tax)}',
       _n(costTotal),
       strong: true,
-      detail: '成本 = 项目成本 + 业务成本 + 税务成本。\n用券成本已经从收入里扣掉，不在这里重复算。',
+      detail: '成本 = 项目成本 + 业务成本 + 税务成本。\n电子券采购款已经从收入里扣掉，不在这里重复算。',
     ));
 
     // ---- 利润（利差） ----
@@ -833,7 +833,7 @@ class ProposalEstimateAudit extends StatelessWidget {
                 _Section(
                   no: '3',
                   title: '收入',
-                  hint: '每个产品按所选收入公式算出结算收入，再扣掉挂在收入下面的用券成本。',
+                  hint: '每个产品按所选收入公式算出结算收入，再扣掉挂在收入下面的电子券采购款。',
                   child: _revenueTable(),
                 ),
                 _Section(
@@ -905,12 +905,12 @@ class ProposalEstimateAudit extends StatelessWidget {
               s.formula.isEmpty ? '—' : s.formula,
               s.found ? _n(s.scale) : '—',
               s.found ? _pct(s.share) : '—',
-              s.found ? (s.kind == '用券成本' ? '−${_n(s.amount)}' : _n(s.amount)) : '未参与',
+              s.found ? (s.kind == '电子券采购款' ? '−${_n(s.amount)}' : _n(s.amount)) : '未参与',
               s.substitution,
             ],
             tone: !s.found || s.price == '未填'
                 ? _Tone.warn
-                : (s.kind == '用券成本' ? _Tone.minus : _Tone.none),
+                : (s.kind == '电子券采购款' ? _Tone.minus : _Tone.none),
           ),
       ],
     );
@@ -946,7 +946,7 @@ class ProposalEstimateAudit extends StatelessWidget {
         _Col('收入公式', 4),
         _Col('代入', 5),
         _Col('结算收入', 2, numeric: true),
-        _Col('用券成本', 2, numeric: true),
+        _Col('电子券采购款', 2, numeric: true),
         _Col('收入', 2, numeric: true),
       ],
       rows: rows,
@@ -1028,7 +1028,7 @@ class ProposalEstimateAudit extends StatelessWidget {
       rows: [
         _Row(['年化规模', '各产品年化规模合计', _n(scale)]),
         _Row(['结算收入', '各产品收入公式算出来的合计（扣券前）', _n(revenue + coupon)]),
-        _Row(['用券成本', '收入下面挂的用券成本合计', coupon == 0 ? '0' : '−${_n(coupon)}']),
+        _Row(['电子券采购款', '收入下面挂的电子券采购款合计', coupon == 0 ? '0' : '−${_n(coupon)}']),
         _Row(['收入', '${_n(revenue + coupon)} − ${_n(coupon)}', _n(revenue)], strong: true),
         _Row(['项目成本', '产品结算里的项目成本合计', _n(project)]),
         _Row(['业务成本', _businessSealed ? '仅财务部负责人一、总裁可见' : '所选业务成本公式合计', _businessSealed ? '—' : _n(business)]),

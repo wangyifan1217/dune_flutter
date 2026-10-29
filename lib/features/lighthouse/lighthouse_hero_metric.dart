@@ -1593,6 +1593,10 @@ const bool lighthouseLedgerShowsPeopleTab = true;
 /// 人效跟工作台「月度绩效考评」同一张牌：有 kpiPerformanceAccess 才出入口。
 bool lighthousePeopleTabVisible({required bool kpiPerformanceAccess}) =>
     lighthouseLedgerShowsPeopleTab && kpiPerformanceAccess;
+
+/// 资金页（总资产 / 资金池 / 预收净增）。敏感财务名单上的账号不展示。
+bool lighthouseFundsHeroVisible({required bool hideSensitiveFinance}) =>
+    !hideSensitiveFinance;
 const bool lighthouseLedgerShowsDiscountBoard = false;
 const bool lighthouseLedgerPrimaryTabUsesPeriodSegment = true;
 const bool lighthouseLedgerUsesLavenderPanelFrame = true;

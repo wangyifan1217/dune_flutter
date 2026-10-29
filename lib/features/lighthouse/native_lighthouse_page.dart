@@ -17650,6 +17650,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   /// 内存里有就同步放回去（首帧就有数）。调用方负责 setState。
   bool _restoreFundPoolFromMemory() {
+    if (_hidesSensitiveFinance) return false;
     if (widget.sharedCard != null) return false;
     final cached = LighthouseFundPoolCache.memory(_fundPoolCacheKey);
     if (cached == null) return false;
@@ -17661,6 +17662,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// 或落盘（当天再开 App）—— 再按新鲜度决定要不要去后端：10 分钟内拉过就不拉
   /// （后端自己也缓存 10 分钟，拉了也是同一份）；手动刷新会先把缓存标旧。
   Future<void> _loadFundPool() async {
+    if (_hidesSensitiveFinance) return;
     if (_fundPoolLoading) return;
     _fundPoolLoading = true;
     final key = _fundPoolCacheKey;
@@ -17693,6 +17695,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   ///
   /// 供给列表是按「标签二 + 供给分类」分行的，一个省份会有多行，所以按省份加总。
   Future<void> _loadFundPoolProfit() async {
+    if (_hidesSensitiveFinance) return;
     if (_fundPoolProfitLoading) return;
     _fundPoolProfitLoading = true;
     try {
@@ -18771,6 +18774,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         rows,
         _fundPoolSnapshot,
         attachAssets:
+            !_hidesSensitiveFinance &&
             _supplyAssetScopeSupported &&
             _hunFilter == '全部' &&
             _tradeTypeFilter == '全部',
@@ -19364,6 +19368,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     // 标签二「全部」按省排序，默认按总资产；总资产不是一列，只在排序里出现。
     if (tab == 'supply' &&
         !_inTopic &&
+        !_hidesSensitiveFinance &&
         !sortable.contains(lighthouseTotalAssetsSortKey)) {
       sortable = [lighthouseTotalAssetsSortKey, ...sortable];
     }
@@ -19757,6 +19762,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   bool get _hasAccess => widget.session.effectiveLighthouseAccess;
   bool get _hasNetTaAccess => widget.session.effectiveNetTaAccess;
+  bool get _hidesSensitiveFinance => widget.session.hideSensitiveFinance;
 
   /// 冻结列点了折扣条之后，展开区那张「折扣档位」卡亮一下边框。
   /// 只可能有一张卡处于聚焦态。不要 `ensureVisible`：嵌套 ListView 在
@@ -25141,6 +25147,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// 主 Hero 能挂资产：一级的产品 / 供给 / 渠道（资产是公司级最新快照，
   /// 跟日周月与分类筛选无关，人效 / 净TA 不挂）。
   bool get _heroAssetsEligible =>
+      lighthouseFundsHeroVisible(
+        hideSensitiveFinance: _hidesSensitiveFinance,
+      ) &&
       const {'product', 'supply', 'channel'}.contains(_tab) &&
       _detailKey == null &&
       widget.sharedCard == null &&
@@ -25185,6 +25194,21 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     if (v == null || !v.isFinite) return '—';
     final p = lighthouseFormatFundPoolWanParts(v.abs());
     return '${v < 0 ? '−' : ''}${p.number}${p.unit}';
+  }
+
+  /// 当前板块没勾「经营性现金流」时，预收净增和经营性净现金流整块不出现。
+  /// 旧接口没有 cashFlowAccess 时照旧显示。行上 prepaidStatus=hidden 是服务端已经裁过的数。
+  bool _showOperatingCashFlow({Map<String, dynamic>? row}) {
+    if (row != null && row['prepaidStatus']?.toString() == 'hidden') {
+      return false;
+    }
+    final access = _bundle?.metrics['cashFlowAccess'];
+    if (access is Map) {
+      final key = _tab == 'netTa' ? 'netTa' : _tab;
+      final flag = access[key];
+      if (flag is bool) return flag;
+    }
+    return true;
   }
 
   /// 预收净增（本期流量）的读数：值 + 环比，点了主走势图切到预收净增。
@@ -26500,7 +26524,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               ),
             ),
           ),
-          if (pp.length >= 2)
+          if (pp.length >= 2 && _showOperatingCashFlow())
             Semantics(
               button: true,
               selected: ppActive,
@@ -27472,7 +27496,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         children: children,
       ),
     );
-    if (!hasAssets) return card([prepaidPart]);
 
     // 供给页选了中石油 / 中石化时，点开默认就看那一家。
     final assetKey = _tab == 'supply'
@@ -27542,6 +27565,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         ),
       ),
     );
+    final showCash = _showOperatingCashFlow();
+    if (!showCash && !hasAssets) return const SizedBox.shrink();
+    if (!showCash) return card([assetsPart]);
+    if (!hasAssets) return card([prepaidPart]);
     return card([
       prepaidPart,
       Container(height: 0.7, color: plum.withAlpha(30)),
@@ -29305,7 +29332,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                   ),
                                 ),
                               ),
-                              if (!flatHero && _tab != 'netTa' && !heroPaged) ...[
+                              if (!flatHero &&
+                                  _tab != 'netTa' &&
+                                  !heroPaged &&
+                                  !_hidesSensitiveFinance) ...[
                                 Container(
                                   height: 0.7,
                                   margin: const EdgeInsets.fromLTRB(2, 0, 2, 5),
@@ -29329,7 +29359,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                 ),
                               ],
                               // 翻页版：预收净增去了资金页，这里换成近 7 日利润迷你柱。
-                              if (heroPaged)
+                              // 敏感财务名单关掉资金页后，也走这根利润柱，避免退回「预收净增」小卡。
+                              if (heroPaged ||
+                                  (!flatHero &&
+                                      _tab != 'netTa' &&
+                                      _hidesSensitiveFinance &&
+                                      totalsOverride == null))
                                 _buildHeroProfitMiniBars(
                                   profitSeries,
                                   pickIndex: heroPointActive ? heroPointIdx : null,
@@ -33556,9 +33591,15 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             [
               cell('totalCost', '成本合计', totalCost.toDouble()),
               cell('projectCost', '项目成本', projectCost.toDouble()),
-              cell('cost', '业务成本', businessCost.toDouble()),
+              cell(
+                'cost',
+                '业务成本',
+                businessCost.toDouble(),
+                last: !_showOperatingCashFlow(row: entityRow),
+              ),
               // 预收净增挂在成本栏尾：它是「钱进来了没」，和成本同属现金侧。
-              cell('prepaid', '经营性净现金流', prepaid.toDouble(), last: true),
+              if (_showOperatingCashFlow(row: entityRow))
+                cell('prepaid', '经营性净现金流', prepaid.toDouble(), last: true),
             ],
             [
               cell('profit', '利润', profit.toDouble()),
@@ -33774,7 +33815,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         // 经营成本点开：就地展开在三块下面，跟账本行点开走势同一种动作。
         if (showOpCost && _opCostOpen) _buildOpCostPanel(),
         // 主 Hero 的现金流已放在大数卡内；账本行展开没有大数卡，保留横条。
-        if (whiteBackground || sectionOnly == 'cash') ...[
+        if ((whiteBackground || sectionOnly == 'cash') &&
+            _showOperatingCashFlow(row: entityRow)) ...[
           const SizedBox(height: lighthouseHeroCardGap),
           cashBanner(),
         ],
@@ -33971,6 +34013,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     String? traceKey,
     void Function(({String? focus, String? trace}))? onMetricActivate,
   }) {
+    if (keyId == 'prepaid' && !_showOperatingCashFlow(row: entityRow)) {
+      return const SizedBox.shrink();
+    }
     final activeKey = focusKey ?? _expandedTrendKey;
     final isActive =
         interactive &&
@@ -56615,7 +56660,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     // 2026-10-26 · 点开「经营性净现金流」：读数 + 现金怎么来的 + 利润→现金桥图，
     // 走势接在后面，不再套「本期合计 / 近 7 天」标题条；下面的规模 / 成本 / 利润三栏不再出。
     // 资管没算现金流（prepaidStatus = none）就照旧走单指标走势。
-    final cashFlowValue = focus == 'prepaid'
+    final cashFlowValue = focus == 'prepaid' && _showOperatingCashFlow(row: r)
         ? _rowMetricValueOrNull(r, 'prepaid')
         : null;
     Widget? cashFlowPanel;

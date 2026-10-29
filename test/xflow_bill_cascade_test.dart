@@ -22,8 +22,8 @@ void main() {
     expect(xflowBillAmountLabels('payable'), ['默认金额', '已付', '剩余应付']);
     expect(xflowBillAmountLabels('payable', billDirection: 'AR'), [
       '默认金额',
-      '已还',
-      '剩余应还',
+      '已收',
+      '剩余应收',
     ]);
     expect(xflowBillAmountLabels('invoice'), ['默认金额', '已开票', '剩余可开']);
   });
@@ -123,6 +123,10 @@ void main() {
       {'billAmount': 50, 'paidAmount': 50, 'remainingPayable': 0},
     ];
     expect(xflowBillSelectedRemainingSum(rows, 'payable'), 80);
+    expect(
+      xflowBillRemainingSummaryLabel('payable', billDirection: 'AR'),
+      '剩余应收合计',
+    );
     expect(
       xflowBillRemainingSummaryLabel('payable', billDirection: 'AP'),
       '剩余应付合计',

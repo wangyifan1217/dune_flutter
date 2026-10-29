@@ -126,9 +126,9 @@ void main() {
     expect(find.text('全部人员'), findsOneWidget);
     expect(find.text('工作情况'), findsOneWidget);
     expect(find.text('使用热力'), findsOneWidget);
-    expect(find.text('任务'), findsNothing);
-    expect(find.text('日报'), findsNothing);
-    expect(find.text('群响应'), findsNothing);
+    expect(find.text('任务'), findsOneWidget);
+    expect(find.text('日报'), findsOneWidget);
+    expect(find.text('群响应'), findsOneWidget);
     expect(find.text('提案时效'), findsNothing);
   });
 }

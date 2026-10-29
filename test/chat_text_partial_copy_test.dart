@@ -5,8 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dunes_app/features/chat/chat_widgets.dart';
 
 void main() {
-  testWidgets('APP 长按文字气泡先出复制/全选/更多，不立刻打开宫格', (tester) async {
+  testWidgets('APP 长按文字一次列出全部功能，不出更多', (tester) async {
     var menuOpened = 0;
+    final actions = <String>[];
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -15,9 +16,13 @@ void main() {
             mine: false,
             selectAllOnLongPress: true,
             preferPartialTextCopy: true,
+            showFavorite: true,
+            showPin: true,
+            showMulti: true,
             onActionsMenu: (_, _) {
               menuOpened += 1;
             },
+            onTextMenuAction: actions.add,
           ),
         ),
       ),
@@ -28,34 +33,17 @@ void main() {
 
     expect(find.text('复制'), findsOneWidget);
     expect(find.text('全选'), findsOneWidget);
-    expect(find.text('更多'), findsOneWidget);
+    expect(find.text('引用'), findsOneWidget);
+    expect(find.text('转发'), findsOneWidget);
+    expect(find.text('收藏'), findsOneWidget);
+    expect(find.text('置顶'), findsOneWidget);
+    expect(find.text('多选'), findsOneWidget);
+    expect(find.text('更多'), findsNothing);
     expect(menuOpened, 0);
-  });
 
-  testWidgets('更多不把长按选区带进宫格，按整条消息处理', (tester) async {
-    String? passed;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatTextBubble(
-            text: '你好世界可以截取一段',
-            mine: false,
-            selectAllOnLongPress: true,
-            preferPartialTextCopy: true,
-            onActionsMenu: (_, selected) {
-              passed = selected;
-            },
-          ),
-        ),
-      ),
-    );
-
-    await tester.longPress(find.byType(SelectableText));
+    await tester.tap(find.text('引用'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('更多'));
-    await tester.pumpAndSettle();
-
-    expect(passed, '');
+    expect(actions, ['quote']);
   });
 
   testWidgets('长按文字默认全选整段', (tester) async {

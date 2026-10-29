@@ -1920,7 +1920,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
     setState(() {
       _novaFocusConversationId = prompt.trim().isEmpty
-          ? NovaBackgroundCoordinator.instance.latestUnreadConversationId : null;
+          ? NovaBackgroundCoordinator.instance.latestUnreadConversationId
+          : null;
       _novaFocusMessageId = null;
       _novaInitialPrompt = prompt.trim();
     });

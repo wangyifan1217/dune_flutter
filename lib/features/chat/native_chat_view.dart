@@ -6119,64 +6119,73 @@ class _NativeChatViewState extends State<NativeChatView>
           ),
       ];
       final action = await _showMessageActionsMenu(actions, anchor: anchor);
-      switch (action) {
-        case 'popup_preview':
-          await _openChatImagePopupPreview(m);
-          break;
-        case 'open_file':
-          await _openFileAttachment(m.payload, attachmentName);
-          break;
-        case 'reveal_file':
-          await _revealFileOnDesktop(m.payload, attachmentName);
-          break;
-        case 'transcribe':
-          await _transcribeVoiceMessage(m);
-          break;
-        case 'quote':
-          _startQuote(m);
-          break;
-        case 'forward':
-          _forwardMessage(m);
-          break;
-        case 'favorite':
-          await _favoriteMessage(m);
-          break;
-        case 'pin':
-          await _pinMessage(m);
-          break;
-        case 'unpin':
-          await _unpinMessage(m.id);
-          break;
-        case 'save_to_kb':
-          await _saveChatAttachmentToKb(m.payload, attachmentName);
-          break;
-        case 'save_to_drive':
-          await _saveChatAttachmentToDrive(m.payload, attachmentName);
-          break;
-        case 'copy':
-          if (isImage) {
-            await _copyMessageImage(m);
-          } else if (isFile && desktop) {
-            await _copyMessageFile(m);
-          } else {
-            await _copyMessageText(_messageCopyText(m));
-          }
-          break;
-        case 'download':
-          await _downloadFile(m.payload, attachmentName);
-          break;
-        case 'redownload':
-          await _redownloadFile(m.payload, attachmentName);
-          break;
-        case 'multi_msg':
-          _enterMessageMultiSelect(initialMessageId: m.id);
-          break;
-        case 'recall':
-          await _tryRecallMessage(m);
-          break;
-      }
+      await _runMessageQuickAction(action, m);
     } finally {
       _messageActionsMenuOpen = false;
+    }
+  }
+
+  Future<void> _runMessageQuickAction(String? action, NativeChatMessage m) async {
+    final kind = m.kind.toUpperCase();
+    final isFile = kind == 'FILE';
+    final isImage = kind == 'IMAGE';
+    final desktop = isDesktopCommOnly;
+    final attachmentName = _mediaDownloadFileName(m);
+    switch (action) {
+      case 'popup_preview':
+        await _openChatImagePopupPreview(m);
+        break;
+      case 'open_file':
+        await _openFileAttachment(m.payload, attachmentName);
+        break;
+      case 'reveal_file':
+        await _revealFileOnDesktop(m.payload, attachmentName);
+        break;
+      case 'transcribe':
+        await _transcribeVoiceMessage(m);
+        break;
+      case 'quote':
+        _startQuote(m);
+        break;
+      case 'forward':
+        _forwardMessage(m);
+        break;
+      case 'favorite':
+        await _favoriteMessage(m);
+        break;
+      case 'pin':
+        await _pinMessage(m);
+        break;
+      case 'unpin':
+        await _unpinMessage(m.id);
+        break;
+      case 'save_to_kb':
+        await _saveChatAttachmentToKb(m.payload, attachmentName);
+        break;
+      case 'save_to_drive':
+        await _saveChatAttachmentToDrive(m.payload, attachmentName);
+        break;
+      case 'copy':
+        if (isImage) {
+          await _copyMessageImage(m);
+        } else if (isFile && desktop) {
+          await _copyMessageFile(m);
+        } else {
+          await _copyMessageText(_messageCopyText(m));
+        }
+        break;
+      case 'download':
+        await _downloadFile(m.payload, attachmentName);
+        break;
+      case 'redownload':
+        await _redownloadFile(m.payload, attachmentName);
+        break;
+      case 'multi_msg':
+        _enterMessageMultiSelect(initialMessageId: m.id);
+        break;
+      case 'recall':
+        await _tryRecallMessage(m);
+        break;
     }
   }
 
@@ -7390,8 +7399,8 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   /// 机器人 / 小饕富文本消息：用一层 SelectionArea 支持跨段落拖选（PC 拖选、APP 长按），
-  /// 复制出来的是渲染后的文字，不带 Markdown 符号。菜单在系统「复制 / 全选」之外
-  /// 追加「更多」，打开与长按相同的消息操作菜单（转发、引用、收藏等）。
+  /// 复制出来的是渲染后的文字，不带 Markdown 符号。APP 在系统「复制 / 全选」之外
+  /// 一次列出引用、转发等，不再经过「更多」。
   /// 多选模式下不包选区，保持点击选择消息。
   Widget _robotMarkdownSelectable(
     NativeChatMessage m,
@@ -7401,17 +7410,45 @@ class _NativeChatViewState extends State<NativeChatView>
     if (_messageMultiSelectMode) return child;
     return SelectionArea(
       contextMenuBuilder: (menuContext, selectableRegionState) {
-        final anchor = selectableRegionState.contextMenuAnchors.primaryAnchor;
+        VoidCallback run(String id) => () {
+          selectableRegionState.hideToolbar();
+          unawaited(_runMessageQuickAction(id, m));
+        };
+        if (isDesktopCommOnly) {
+          final anchor = selectableRegionState.contextMenuAnchors.primaryAnchor;
+          return AdaptiveTextSelectionToolbar.buttonItems(
+            anchors: selectableRegionState.contextMenuAnchors,
+            buttonItems: <ContextMenuButtonItem>[
+              ...selectableRegionState.contextMenuButtonItems,
+              ContextMenuButtonItem(
+                label: '更多',
+                onPressed: () {
+                  selectableRegionState.hideToolbar();
+                  unawaited(_onMessageActions(m, mine, anchor: anchor));
+                },
+              ),
+            ],
+          );
+        }
         return AdaptiveTextSelectionToolbar.buttonItems(
           anchors: selectableRegionState.contextMenuAnchors,
           buttonItems: <ContextMenuButtonItem>[
             ...selectableRegionState.contextMenuButtonItems,
-            ContextMenuButtonItem(
-              label: '更多',
-              onPressed: () {
-                selectableRegionState.hideToolbar();
-                unawaited(_onMessageActions(m, mine, anchor: anchor));
-              },
+            ...chatTextContextMenuButtonItems(
+              onCopy: () {},
+              onSelectAll: () {},
+              includeCopyAndSelectAll: false,
+              onQuote: run('quote'),
+              onForward: run('forward'),
+              onFavorite: m.id > 0 ? run('favorite') : null,
+              onPin: m.id > 0
+                  ? run(_isMessagePinned(m.id) ? 'unpin' : 'pin')
+                  : null,
+              isPinned: _isMessagePinned(m.id),
+              onMulti: _canSelectMessageForMulti(m) ? run('multi_msg') : null,
+              onRecall: mine && m.id > 0 && _canRecallMessage(m)
+                  ? run('recall')
+                  : null,
             ),
           ],
         );
@@ -9880,6 +9917,14 @@ class _NativeChatViewState extends State<NativeChatView>
           ),
         );
       },
+      onTextMenuAction: (action) {
+        unawaited(_runMessageQuickAction(action, m));
+      },
+      showFavorite: m.id > 0,
+      showPin: m.id > 0,
+      isPinned: _isMessagePinned(m.id),
+      showMulti: _canSelectMessageForMulti(m),
+      showRecall: mine && m.id > 0 && _canRecallMessage(m),
       enableSelection: !_messageMultiSelectMode,
       selectAllOnLongPress: true,
       preferPartialTextCopy: !isDesktopCommOnly,

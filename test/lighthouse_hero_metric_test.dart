@@ -2119,6 +2119,8 @@ void main() {
     expect(lighthouseLedgerShowsPeopleTab, isTrue);
     expect(lighthousePeopleTabVisible(kpiPerformanceAccess: true), isTrue);
     expect(lighthousePeopleTabVisible(kpiPerformanceAccess: false), isFalse);
+    expect(lighthouseFundsHeroVisible(hideSensitiveFinance: false), isTrue);
+    expect(lighthouseFundsHeroVisible(hideSensitiveFinance: true), isFalse);
     expect(lighthouseLedgerShowsDiscountBoard, isFalse);
     expect(lighthouseLedgerShowsDiscountUi, isFalse);
     expect(lighthouseLedgerPrimaryTabHeight, 44);

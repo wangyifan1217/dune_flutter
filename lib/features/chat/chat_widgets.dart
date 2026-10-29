@@ -1809,6 +1809,43 @@ class ChatMessageRow extends StatelessWidget {
   }
 }
 
+/// APP 长按文字菜单：复制跟当前选区；其余动作一次铺开，不再藏进「更多」。
+/// iOS / Android 都走 [AdaptiveTextSelectionToolbar]，超出一屏时用系统翻页箭头。
+List<ContextMenuButtonItem> chatTextContextMenuButtonItems({
+  required VoidCallback onCopy,
+  required VoidCallback onSelectAll,
+  VoidCallback? onQuote,
+  VoidCallback? onForward,
+  VoidCallback? onFavorite,
+  VoidCallback? onPin,
+  bool isPinned = false,
+  VoidCallback? onMulti,
+  VoidCallback? onRecall,
+  bool includeCopyAndSelectAll = true,
+}) {
+  return <ContextMenuButtonItem>[
+    if (includeCopyAndSelectAll) ...[
+      ContextMenuButtonItem(label: '复制', onPressed: onCopy),
+      ContextMenuButtonItem(label: '全选', onPressed: onSelectAll),
+    ],
+    if (onQuote != null)
+      ContextMenuButtonItem(label: '引用', onPressed: onQuote),
+    if (onForward != null)
+      ContextMenuButtonItem(label: '转发', onPressed: onForward),
+    if (onFavorite != null)
+      ContextMenuButtonItem(label: '收藏', onPressed: onFavorite),
+    if (onPin != null)
+      ContextMenuButtonItem(
+        label: isPinned ? '取消置顶' : '置顶',
+        onPressed: onPin,
+      ),
+    if (onMulti != null)
+      ContextMenuButtonItem(label: '多选', onPressed: onMulti),
+    if (onRecall != null)
+      ContextMenuButtonItem(label: '撤回', onPressed: onRecall),
+  ];
+}
+
 class ChatTextBubble extends StatelessWidget {
   const ChatTextBubble({
     super.key,
@@ -1822,6 +1859,12 @@ class ChatTextBubble extends StatelessWidget {
     this.onSelectionMulti,
     this.onSelectionRecall,
     this.onActionsMenu,
+    this.onTextMenuAction,
+    this.showFavorite = false,
+    this.showPin = false,
+    this.isPinned = false,
+    this.showMulti = false,
+    this.showRecall = false,
     this.onUrlTap,
     this.enableSelection = true,
     this.selectAllOnLongPress = false,
@@ -1839,13 +1882,21 @@ class ChatTextBubble extends StatelessWidget {
   final VoidCallback? onSelectionRecall;
 
   /// 与文件消息一致的操作菜单（深色图标宫格）。
-  /// 桌面仍拦截系统选区工具条；APP 在 [preferPartialTextCopy] 时先出复制/全选/更多。
+  /// 桌面仍拦截系统选区工具条；APP 在 [preferPartialTextCopy] 时出完整文字菜单。
   final void Function(Offset anchor, String selectedText)? onActionsMenu;
+
+  /// APP 文字长按菜单动作：`quote` / `forward` / `favorite` / `pin` / `unpin` / `multi_msg` / `recall`。
+  final ValueChanged<String>? onTextMenuAction;
+  final bool showFavorite;
+  final bool showPin;
+  final bool isPinned;
+  final bool showMulti;
+  final bool showRecall;
   final Future<void> Function(Uri uri)? onUrlTap;
   final bool enableSelection;
   final bool selectAllOnLongPress;
 
-  /// APP：长按先出选区手柄并默认全选；拖动手柄可截取。复制跟当前选区；「更多」打开宫格。
+  /// APP：长按先出选区手柄并默认全选；拖动手柄可截取。复制跟当前选区；其余功能直接列出。
   final bool preferPartialTextCopy;
 
   TextSpan _buildMentionTextSpan(BuildContext context) {
@@ -1981,6 +2032,12 @@ class ChatTextBubble extends StatelessWidget {
                   selectAllOnLongPress: selectAllOnLongPress,
                   preferPartialTextCopy: preferPartialTextCopy,
                   onActionsMenu: onActionsMenu,
+                  onTextMenuAction: onTextMenuAction,
+                  showFavorite: showFavorite,
+                  showPin: showPin,
+                  isPinned: isPinned,
+                  showMulti: showMulti,
+                  showRecall: showRecall,
                   onSelectionQuote: onSelectionQuote,
                   onSelectionForward: onSelectionForward,
                   onSelectionFavorite: onSelectionFavorite,
@@ -2010,6 +2067,12 @@ class _ChatSelectableRichText extends StatefulWidget {
     required this.selectAllOnLongPress,
     required this.preferPartialTextCopy,
     this.onActionsMenu,
+    this.onTextMenuAction,
+    this.showFavorite = false,
+    this.showPin = false,
+    this.isPinned = false,
+    this.showMulti = false,
+    this.showRecall = false,
     this.onSelectionQuote,
     this.onSelectionForward,
     this.onSelectionFavorite,
@@ -2023,6 +2086,12 @@ class _ChatSelectableRichText extends StatefulWidget {
   final bool selectAllOnLongPress;
   final bool preferPartialTextCopy;
   final void Function(Offset anchor, String selectedText)? onActionsMenu;
+  final ValueChanged<String>? onTextMenuAction;
+  final bool showFavorite;
+  final bool showPin;
+  final bool isPinned;
+  final bool showMulti;
+  final bool showRecall;
   final ValueChanged<String>? onSelectionQuote;
   final ValueChanged<String>? onSelectionForward;
   final VoidCallback? onSelectionFavorite;
@@ -2118,37 +2187,66 @@ class _ChatSelectableRichTextState extends State<_ChatSelectableRichText> {
           _didInitialSelectAll = true;
           _scheduleSelectAll();
         }
-        // APP：先出复制/全选/更多。复制跟当前选区；更多里仍按整条消息。
-        if (widget.preferPartialTextCopy && widget.onActionsMenu != null) {
-          final anchor = editableTextState.contextMenuAnchors.primaryAnchor;
+        // APP：复制跟当前选区；引用/转发等一次列出，不再经过「更多」。
+        if (widget.preferPartialTextCopy) {
+          VoidCallback? bindAction(String id, VoidCallback? fallback) {
+            if (widget.onTextMenuAction != null) {
+              return () {
+                editableTextState.hideToolbar();
+                widget.onTextMenuAction!(id);
+              };
+            }
+            if (fallback == null) return null;
+            return () {
+              editableTextState.hideToolbar();
+              fallback();
+            };
+          }
+
           return AdaptiveTextSelectionToolbar.buttonItems(
             anchors: editableTextState.contextMenuAnchors,
-            buttonItems: <ContextMenuButtonItem>[
-              ContextMenuButtonItem(
-                label: '复制',
-                onPressed: () async {
-                  final value = _copyText(editableTextState);
-                  if (value.isNotEmpty) {
-                    await Clipboard.setData(ClipboardData(text: value));
-                  }
-                  editableTextState.hideToolbar();
-                },
+            buttonItems: chatTextContextMenuButtonItems(
+              onCopy: () async {
+                final value = _copyText(editableTextState);
+                if (value.isNotEmpty) {
+                  await Clipboard.setData(ClipboardData(text: value));
+                }
+                editableTextState.hideToolbar();
+              },
+              onSelectAll: () {
+                editableTextState.selectAll(SelectionChangedCause.toolbar);
+              },
+              onQuote: bindAction(
+                'quote',
+                widget.onSelectionQuote == null
+                    ? null
+                    : () => widget.onSelectionQuote!(widget.text.trim()),
               ),
-              ContextMenuButtonItem(
-                label: '全选',
-                onPressed: () {
-                  editableTextState.selectAll(SelectionChangedCause.toolbar);
-                },
+              onForward: bindAction(
+                'forward',
+                widget.onSelectionForward == null
+                    ? null
+                    : () => widget.onSelectionForward!(widget.text.trim()),
               ),
-              ContextMenuButtonItem(
-                label: '更多',
-                onPressed: () {
-                  editableTextState.hideToolbar();
-                  // 宫格里的引用/复制/转发/多选按整条。
-                  widget.onActionsMenu!(anchor, '');
-                },
-              ),
-            ],
+              onFavorite: widget.showFavorite || widget.onSelectionFavorite != null
+                  ? bindAction('favorite', widget.onSelectionFavorite)
+                  : null,
+              onPin: widget.showPin
+                  ? bindAction(widget.isPinned ? 'unpin' : 'pin', null)
+                  : null,
+              isPinned: widget.isPinned,
+              onMulti: widget.showMulti || widget.onSelectionMulti != null
+                  ? bindAction(
+                      'multi_msg',
+                      widget.onSelectionMulti == null
+                          ? null
+                          : () => widget.onSelectionMulti!(''),
+                    )
+                  : null,
+              onRecall: widget.showRecall || widget.onSelectionRecall != null
+                  ? bindAction('recall', widget.onSelectionRecall)
+                  : null,
+            ),
           );
         }
         // 与文件消息共用深色宫格菜单：拦截系统选区工具条。

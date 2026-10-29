@@ -19,6 +19,7 @@ class AuthSession {
     this.novaLocalStorage,
     this.lighthouseAccess = false,
     this.netTaAccess = false,
+    this.hideSensitiveFinance = false,
     this.qianjiAccess = false,
     this.novaVoiceCallAccess = false,
     this.novaVoiceCallLang = 'zh',
@@ -67,6 +68,9 @@ class AuthSession {
   final String userType;
   final bool lighthouseAccess;
   final bool netTaAccess;
+
+  /// 灯塔隐藏账款 / 人效 / 净TA / 资金。按手机号在后端拦截，前端用来藏「资金」页签。
+  final bool hideSensitiveFinance;
   final bool qianjiAccess;
   final bool novaVoiceCallAccess;
   final String novaVoiceCallLang;
@@ -317,6 +321,7 @@ class AuthSession {
     Map<String, String>? novaLocalStorage,
     bool? lighthouseAccess,
     bool? netTaAccess,
+    bool? hideSensitiveFinance,
     bool? qianjiAccess,
     bool? novaVoiceCallAccess,
     String? novaVoiceCallLang,
@@ -366,6 +371,7 @@ class AuthSession {
       novaLocalStorage: novaLocalStorage ?? this.novaLocalStorage,
       lighthouseAccess: lighthouseAccess ?? this.lighthouseAccess,
       netTaAccess: netTaAccess ?? this.netTaAccess,
+      hideSensitiveFinance: hideSensitiveFinance ?? this.hideSensitiveFinance,
       qianjiAccess: qianjiAccess ?? this.qianjiAccess,
       novaVoiceCallAccess: novaVoiceCallAccess ?? this.novaVoiceCallAccess,
       novaVoiceCallLang: novaVoiceCallLang ?? this.novaVoiceCallLang,
@@ -459,6 +465,7 @@ class AuthSession {
           session.userType,
       lighthouseAccess: data['lighthouseAccess'] == true,
       netTaAccess: data['netTaAccess'] == true,
+      hideSensitiveFinance: data['hideSensitiveFinance'] == true,
       qianjiAccess: data['qianjiAccess'] == true,
       novaVoiceCallAccess: data['novaVoiceCallAccess'] == true,
       novaVoiceCallLang: (data['novaVoiceCallLang'] ?? 'zh').toString(),
@@ -525,6 +532,7 @@ class AuthSession {
       userType: _resolveUserType(claims),
       lighthouseAccess: claims['lighthouseAccess'] == true,
       netTaAccess: claims['netTaAccess'] == true,
+      hideSensitiveFinance: claims['hideSensitiveFinance'] == true,
       qianjiAccess: claims['qianjiAccess'] == true,
       novaVoiceCallAccess: claims['novaVoiceCallAccess'] == true,
       novaVoiceCallLang: (claims['novaVoiceCallLang'] ?? 'zh').toString(),
@@ -593,6 +601,7 @@ class AuthSession {
         'novaLocalStorage': novaLocalStorage,
       'lighthouseAccess': lighthouseAccess,
       'netTaAccess': netTaAccess,
+      'hideSensitiveFinance': hideSensitiveFinance,
       'qianjiAccess': qianjiAccess,
       'novaVoiceCallAccess': novaVoiceCallAccess,
       'novaVoiceCallLang': novaVoiceCallLang,
@@ -649,6 +658,7 @@ class AuthSession {
       novaLocalStorage: _parseNovaStorage(json['novaLocalStorage']),
       lighthouseAccess: json['lighthouseAccess'] == true,
       netTaAccess: json['netTaAccess'] == true,
+      hideSensitiveFinance: json['hideSensitiveFinance'] == true,
       qianjiAccess: json['qianjiAccess'] == true,
       novaVoiceCallAccess: json['novaVoiceCallAccess'] == true,
       novaVoiceCallLang: (json['novaVoiceCallLang'] ?? 'zh').toString(),

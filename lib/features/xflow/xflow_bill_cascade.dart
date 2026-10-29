@@ -130,7 +130,7 @@ List<String> xflowBillAmountLabels(
     return const ['默认金额', '已开票', '剩余可开'];
   }
   if (billDirection.toUpperCase() == 'AR') {
-    return const ['默认金额', '已还', '剩余应还'];
+    return const ['默认金额', '已收', '剩余应收'];
   }
   return const ['默认金额', '已付', '剩余应付'];
 }

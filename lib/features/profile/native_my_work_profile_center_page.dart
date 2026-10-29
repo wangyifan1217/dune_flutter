@@ -1411,7 +1411,7 @@ class _NativeMyWorkProfileCenterPageState
               ),
             ),
 
-            // 新建：提案、审批与 App 常用办公入口。
+            // 更多：提案、审批与 App 常用办公入口。PC 侧栏已有工作台，这里不重复放。
             Positioned(
               right: 20,
               bottom: navExtent + 16,
@@ -1425,12 +1425,11 @@ class _NativeMyWorkProfileCenterPageState
                   onMeeting: () => widget.navigation.go('MM-L'),
                   onKnowledge: () => widget.navigation.go('K1'),
                   onWorkbench:
-                      widget.onOpenWorkbench != null ||
-                          (!isDesktopCommOnly &&
-                              !widget.session.isExternalUser)
+                      !isDesktopCommOnly && !widget.session.isExternalUser
                       ? () {
-                          if (widget.onOpenWorkbench != null) {
-                            widget.onOpenWorkbench!();
+                          final open = widget.onOpenWorkbench;
+                          if (open != null) {
+                            open();
                           } else {
                             widget.navigation.go('QJA');
                           }

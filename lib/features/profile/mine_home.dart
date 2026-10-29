@@ -27,7 +27,7 @@ import '../xflow/xflow_service.dart';
 //   顶栏：我的 + 像素沙丘 + 身份行；
 //   营收目标：半圆仪表（第一责任深紫 / 第二责任浅紫）+ 我相关提案数据池；
 //   审批：待我审 / 待办理 / 我发起 / 抄送我 四格；
-//   我的提案：已完成 / 进行中 / 待我处理 三段，行可展开；右下角「+」新建。
+//   我的提案：已完成 / 进行中 / 待我处理 三段，行可展开；右下角宫格打开「更多」。
 //
 //   数据：
 //     · 提案列表走 /proposal-intakes（related=1 我相关、不带 related 全公司、actionable=1 待我处理）；
@@ -402,7 +402,7 @@ class MineRoundAction extends StatelessWidget {
   }
 }
 
-// ── 新建 ──────────────────────────────────────────────────────────────────
+// ── 更多 ──────────────────────────────────────────────────────────────────
 
 class MineCreateFab extends StatelessWidget {
   const MineCreateFab({super.key, required this.onTap});
@@ -412,7 +412,7 @@ class MineCreateFab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Tooltip(
-      message: '新建',
+      message: '更多',
       child: Material(
         color: _r(context, MinePalette.night),
         borderRadius: BorderRadius.circular(19),
@@ -433,7 +433,11 @@ class MineCreateFab extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.add_rounded, size: 26, color: Colors.white),
+            child: const Icon(
+              Icons.grid_view_rounded,
+              size: 24,
+              color: Colors.white,
+            ),
           ),
         ),
       ),
@@ -441,7 +445,7 @@ class MineCreateFab extends StatelessWidget {
   }
 }
 
-/// 新建面板：提案、审批与常用办公入口。
+/// 更多面板：提案、审批与常用办公入口。PC 不放工作台。
 Future<void> showMineCreateSheet(
   BuildContext context, {
   required VoidCallback onSales,
@@ -455,19 +459,21 @@ Future<void> showMineCreateSheet(
   return showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
+    isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: const Color(0xFF1F2421).withValues(alpha: .36),
     builder: (ctx) {
       Widget option({
-        required String badge,
-        required Color badgeBg,
-        required Color badgeFg,
+        required IconData icon,
+        required List<Color> iconGradient,
         required Color bg,
         required String title,
         required String subtitle,
         required VoidCallback onTap,
-        bool outlined = false,
       }) {
+        final gradient = iconGradient
+            .map((color) => DunesColors.resolve(ctx, color))
+            .toList();
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Material(
@@ -488,26 +494,21 @@ Future<void> showMineCreateSheet(
                       height: 40,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: _r(ctx, badgeBg, DunesColorRole.surface),
-                        borderRadius: BorderRadius.circular(13),
-                        border: outlined
-                            ? Border.all(
-                                color: _r(
-                                  ctx,
-                                  const Color(0xFFE4DFEE),
-                                  DunesColorRole.border,
-                                ),
-                              )
-                            : null,
-                      ),
-                      child: Text(
-                        badge,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: _r(ctx, badgeFg),
+                        gradient: LinearGradient(
+                          colors: gradient,
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        borderRadius: BorderRadius.circular(13),
+                        boxShadow: [
+                          BoxShadow(
+                            color: gradient.first.withValues(alpha: .22),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
+                      child: Icon(icon, size: 20, color: Colors.white),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -516,6 +517,8 @@ Future<void> showMineCreateSheet(
                         children: [
                           Text(
                             title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 14.5,
                               fontWeight: FontWeight.w700,
@@ -525,8 +528,11 @@ Future<void> showMineCreateSheet(
                           const SizedBox(height: 2),
                           Text(
                             subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 12,
+                              height: 1.35,
                               color: _r(ctx, MinePalette.ink2),
                             ),
                           ),
@@ -546,110 +552,138 @@ Future<void> showMineCreateSheet(
         );
       }
 
-      return SafeArea(
-        top: false,
-        child: Container(
-          decoration: BoxDecoration(
+      // 默认底栏最高只有屏高的 9/16，六项会 BOTTOM OVERFLOW。
+      // 放开高度后仍限制在可视区域里，矮屏或大字号改为内部滚动。
+      final media = MediaQuery.of(ctx);
+      final maxHeight = media.size.height - media.padding.top - 24;
+      return Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: Material(
             color: _r(ctx, MinePalette.card, DunesColorRole.surface),
+            clipBehavior: Clip.antiAlias,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 14),
-                  decoration: BoxDecoration(
-                    color: _r(ctx, const Color(0xFFDCD6E8), DunesColorRole.border),
-                    borderRadius: BorderRadius.circular(999),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                10,
+                16,
+                18 + media.viewPadding.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: _r(
+                          ctx,
+                          const Color(0xFFDCD6E8),
+                          DunesColorRole.border,
+                        ),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
-                child: Text(
-                  '新建',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: _r(ctx, MinePalette.ink),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+                    child: Text(
+                      '更多',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: _r(ctx, MinePalette.ink),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              if (showProposals) ...[
-                option(
-                  badge: '销',
-                  badgeBg: MinePalette.night,
-                  badgeFg: Colors.white,
-                  bg: MinePalette.wash,
-                  title: '销售提案',
-                  subtitle: '完成后在提案内发起业务审批',
-                  onTap: onSales,
-                ),
-                option(
-                  badge: '采',
-                  badgeBg: MinePalette.business,
-                  badgeFg: Colors.white,
-                  bg: MinePalette.wash,
-                  title: '采购提案',
-                  subtitle: '完成后在提案内发起业务审批',
-                  onTap: onPurchase,
-                ),
-              ],
-              option(
-                badge: '审',
-                badgeBg: MinePalette.card,
-                badgeFg: MinePalette.ink,
-                bg: MinePalette.page,
-                title: '审批',
-                subtitle: '进入后选择业务审批或非业务审批',
-                onTap: onApproval,
-                outlined: true,
-              ),
-              option(
-                badge: '会',
-                badgeBg: MinePalette.business,
-                badgeFg: Colors.white,
-                bg: MinePalette.wash,
-                title: '会议纪要',
-                subtitle: '录制、上传并查看 AI 会议纪要',
-                onTap: onMeeting,
-              ),
-              option(
-                badge: '知',
-                badgeBg: const Color(0xFF047857),
-                badgeFg: Colors.white,
-                bg: MinePalette.wash,
-                title: '企业知识库',
-                subtitle: '查看组织文档与知识沉淀',
-                onTap: onKnowledge,
-              ),
-              if (onWorkbench != null)
-                option(
-                  badge: '台',
-                  badgeBg: const Color(0xFF4338CA),
-                  badgeFg: Colors.white,
-                  bg: MinePalette.wash,
-                  title: '工作台',
-                  subtitle: '打开 App 版任务与协作工作台',
-                  onTap: onWorkbench,
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-                child: Text(
-                  '付款、开票、保证金等业务审批，请进入对应提案发起。',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    height: 1.5,
-                    color: _r(ctx, MinePalette.ink2),
+                  if (onWorkbench != null)
+                    option(
+                      icon: Icons.apps_rounded,
+                      iconGradient: const [
+                        Color(0xFF6366F1),
+                        Color(0xFF4338CA),
+                      ],
+                      bg: MinePalette.wash,
+                      title: '工作台',
+                      subtitle: '打开任务与协作工作台',
+                      onTap: onWorkbench,
+                    ),
+                  if (showProposals) ...[
+                    option(
+                      icon: Icons.request_quote_outlined,
+                      iconGradient: const [
+                        Color(0xFF0EA5E9),
+                        Color(0xFF0369A1),
+                      ],
+                      bg: MinePalette.wash,
+                      title: '销售提案',
+                      subtitle: '完成后在提案内发起业务审批',
+                      onTap: onSales,
+                    ),
+                    option(
+                      icon: Icons.shopping_bag_outlined,
+                      iconGradient: const [
+                        Color(0xFFF59E0B),
+                        Color(0xFFB45309),
+                      ],
+                      bg: MinePalette.wash,
+                      title: '采购提案',
+                      subtitle: '完成后在提案内发起业务审批',
+                      onTap: onPurchase,
+                    ),
+                  ],
+                  option(
+                    icon: Icons.add_task_rounded,
+                    iconGradient: const [
+                      Color(0xFF7C5CE6),
+                      Color(0xFF552D8E),
+                    ],
+                    bg: MinePalette.page,
+                    title: '审批',
+                    subtitle: '进入后选择业务审批或非业务审批',
+                    onTap: onApproval,
                   ),
-                ),
+                  option(
+                    icon: Icons.article_rounded,
+                    iconGradient: const [
+                      Color(0xFF3880FF),
+                      Color(0xFF1E40AF),
+                    ],
+                    bg: MinePalette.wash,
+                    title: '会议纪要',
+                    subtitle: '录制、上传并查看 AI 会议纪要',
+                    onTap: onMeeting,
+                  ),
+                  option(
+                    icon: Icons.auto_stories_rounded,
+                    iconGradient: const [
+                      Color(0xFF10B981),
+                      Color(0xFF047857),
+                    ],
+                    bg: MinePalette.wash,
+                    title: '企业知识库',
+                    subtitle: '查看组织文档与知识沉淀',
+                    onTap: onKnowledge,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                    child: Text(
+                      '付款、开票、保证金等业务审批，请进入对应提案发起。',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        height: 1.5,
+                        color: _r(ctx, MinePalette.ink2),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       );
@@ -2240,6 +2274,35 @@ class _MineHomeBodyState extends State<MineHomeBody> {
 
   // ── 我的提案 ──
 
+  Widget _proposalMoreLink(
+    BuildContext context,
+    String label, {
+    required VoidCallback onTap,
+  }) {
+    final color = _r(context, MinePalette.purple);
+    return InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: 46,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(Icons.chevron_right_rounded, size: 18, color: color),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildProposalSection(BuildContext context) {
     final todos = _todoItems();
     final doneRows = _scopeAll ? (_doneAll ?? const <ProposalIntakeRow>[]) : _doneMine;
@@ -2349,7 +2412,9 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                 thickness: 1,
                 color: _r(context, MinePalette.line, DunesColorRole.border),
               ),
-              InkWell(
+              _proposalMoreLink(
+                context,
+                moreText,
                 onTap: () {
                   if (_tab == _MineTab.todo) {
                     widget.onOpenPendingApprovals();
@@ -2357,52 +2422,19 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                     widget.onOpenProposalList('sales');
                   }
                 },
-                child: SizedBox(
-                  height: 46,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        moreText,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: _r(context, MinePalette.purple),
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 18,
-                        color: _r(context, MinePalette.purple),
-                      ),
-                    ],
-                  ),
-                ),
               ),
-              if (_tab != _MineTab.todo && widget.showProposals)
-                InkWell(
-                  onTap: () => widget.onOpenProposalList('purchase'),
-                  child: Container(
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                          color: _r(context, MinePalette.line, DunesColorRole.border),
-                        ),
-                      ),
-                    ),
-                    child: Text(
-                      '查看全部采购提案',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: _r(context, MinePalette.ink2),
-                      ),
-                    ),
-                  ),
+              if (_tab != _MineTab.todo && widget.showProposals) ...[
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: _r(context, MinePalette.line, DunesColorRole.border),
                 ),
+                _proposalMoreLink(
+                  context,
+                  '查看全部采购提案',
+                  onTap: () => widget.onOpenProposalList('purchase'),
+                ),
+              ],
             ],
           ),
         ),

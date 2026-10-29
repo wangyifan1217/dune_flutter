@@ -1225,6 +1225,32 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     return revenue > 0 ? revenue / 12 : 0;
   }
 
+  /// 销售提案年化销售规模（万元）。跟列表卡同一口径：测算 main.salesScale，否则表单。
+  /// 采购提案不计。
+  double _annualSalesWan(ProposalIntakeRow row) {
+    if (proposalIntakeIsPurchase(row.kind)) return 0;
+    final main = row.financeEstimate['main'];
+    final fromEstimate = main is Map
+        ? (main['salesScale'] as num?)?.toDouble()
+        : null;
+    if (fromEstimate != null && fromEstimate > 0) return fromEstimate;
+    return double.tryParse('${row.form['salesScale'] ?? ''}') ?? 0;
+  }
+
+  /// 利润率分母：销售提案销售额（元）。本月按年化 ÷ 12；历史/个人相关用全年规模。
+  double _salesYuanForMargin() {
+    final Iterable<ProposalIntakeRow> rows = widget.companyView
+        ? (_doneAll ?? const <ProposalIntakeRow>[])
+        : _doneMine.take(_poolFetchLimit);
+    var wan = 0.0;
+    for (final row in rows) {
+      wan += _annualSalesWan(row);
+    }
+    if (wan <= 0) return 0;
+    final monthly = widget.companyView && _poolMonthly;
+    return (monthly ? wan / 12 : wan) * 10000;
+  }
+
   int get _daysLeftInMonth {
     final now = DateTime.now();
     return DateTime(now.year, now.month + 1, 0).day - now.day;
@@ -1632,7 +1658,8 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     final show = ready && !empty && !failed;
     final costs = p.costs;
     final profit = p.revenue - costs;
-    final margin = p.revenue > 0 ? profit / p.revenue * 100 : null;
+    final sales = _salesYuanForMargin();
+    final margin = sales > 0 ? profit / sales * 100 : null;
     final ink2 = _r(context, MinePalette.ink2);
     final muted = _r(context, MinePalette.working);
     String amt(double yuan) => show ? _wan(yuan) : (ready || failed ? '—' : '…');

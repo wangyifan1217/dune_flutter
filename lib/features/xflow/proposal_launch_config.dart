@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'xflow_category_switcher.dart';
+import 'xflow_cost_bucket.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 
@@ -333,6 +334,8 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
     required this.onOpen,
     this.eyebrow,
     this.groupLabelFor,
+    this.proposalOnly = false,
+    this.showCostBucket = true,
   });
 
   final String title;
@@ -342,6 +345,12 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
   final ValueChanged<XflowTemplateCard> onOpen;
   final String? eyebrow;
   final String Function(XflowTemplateCard template)? groupLabelFor;
+
+  /// 业务审批已改为只能在提案内发起：行内标「提案内发起」。
+  final bool proposalOnly;
+
+  /// 行尾显示审批通过后归入的口径（业务成本、经营成本……）。
+  final bool showCostBucket;
 
   @override
   Widget build(BuildContext context) {
@@ -510,6 +519,14 @@ class ProposalTemplateGroupPanel extends StatelessWidget {
               isAdm: isAdm,
               index: index + 1,
               groupLabel: groupLabelFor?.call(templates[index]),
+              proposalOnly:
+                  proposalOnly && templates[index].category == 'biz',
+              costLabel: showCostBucket
+                  ? xflowCostBucketLabel(
+                      templates[index].templateKey,
+                      business: templates[index].category == 'biz',
+                    )
+                  : null,
               onTap: templates[index].enabled
                   ? () => onOpen(templates[index])
                   : null,
@@ -529,6 +546,8 @@ class ProposalTemplateListTile extends StatelessWidget {
     required this.onTap,
     this.index,
     this.groupLabel,
+    this.costLabel,
+    this.proposalOnly = false,
   });
 
   final XflowTemplateCard template;
@@ -536,6 +555,8 @@ class ProposalTemplateListTile extends StatelessWidget {
   final VoidCallback? onTap;
   final int? index;
   final String? groupLabel;
+  final String? costLabel;
+  final bool proposalOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -607,16 +628,29 @@ class ProposalTemplateListTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      template.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: DunesTypography.sans(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: DunesColors.resolve(context, DunesColors.text),
-                        context: context,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            template.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: DunesTypography.sans(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
+                              context: context,
+                            ),
+                          ),
+                        ),
+                        if (proposalOnly && tappable) ...[
+                          const SizedBox(width: 6),
+                          const _ProposalOnlyBadge(),
+                        ],
+                      ],
                     ),
                     if (subtitle.isNotEmpty ||
                         tag.isNotEmpty ||
@@ -675,6 +709,10 @@ class ProposalTemplateListTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
+              if (tappable && costLabel != null) ...[
+                XflowCostBucketChip(costLabel!, compact: true),
+                const SizedBox(width: 2),
+              ],
               if (tappable)
                 Icon(
                   Icons.chevron_right_rounded,
@@ -696,6 +734,42 @@ class ProposalTemplateListTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ProposalOnlyBadge extends StatelessWidget {
+  const _ProposalOnlyBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = DunesColors.resolve(context, XflowApprovalPalette.accentDeep);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          XflowApprovalPalette.soft,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline_rounded, size: 10, color: color),
+          const SizedBox(width: 2),
+          Text(
+            '提案内发起',
+            style: DunesTypography.sans(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: color,
+              context: context,
+            ),
+          ),
+        ],
       ),
     );
   }

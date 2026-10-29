@@ -8,13 +8,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('38 张审批模板全部进入唯一二级目录，未知模板进入其他', () {
-    expect(xflowApprovalCatalogKeys, hasLength(38));
+  test('35 张审批模板全部进入唯一二级目录，未知模板进入其他', () {
+    expect(xflowApprovalCatalogKeys, hasLength(35));
     expect(
       xflowApprovalCatalogKeys.toSet(),
       hasLength(xflowApprovalCatalogKeys.length),
     );
-    expect(xflowApprovalGroupsForCategory('biz'), hasLength(5));
+    expect(xflowApprovalGroupsForCategory('biz'), hasLength(7));
     expect(xflowApprovalGroupsForCategory('adm'), hasLength(5));
 
     expect(
@@ -26,6 +26,35 @@ void main() {
       '内部费用与报销',
     );
     expect(xflowApprovalGroupForTemplate('unknown-template').title, '其他');
+  });
+
+  test('V321：业务资质切到业务证照，停用单不再进目录', () {
+    final license = xflowApprovalGroupForTemplate('admin-business-qualification');
+    expect(license.id, 'biz-license');
+    expect(license.category, 'biz');
+    for (final key in [
+      'finance-equipment-rental',
+      'finance-voucher-refund',
+      'finance-customer-compensation',
+    ]) {
+      expect(xflowApprovalCatalogKeys, isNot(contains(key)));
+    }
+    final bizReimbursement = xflowApprovalGroupsForCategory(
+      'biz',
+    ).singleWhere((group) => group.id == 'biz-reimbursement');
+    expect(bizReimbursement.templateKeys, isEmpty);
+    // 空板块不出现在发起页。
+    final groups = xflowPopulatedApprovalGroups([
+      XflowTemplateCard(
+        templateKey: 'admin-business-qualification',
+        title: '业务资质申请',
+        subtitle: '',
+        endpoint: '',
+        tagLabel: '',
+        category: 'biz',
+      ),
+    ], category: 'biz');
+    expect(groups.map((group) => group.id), ['biz-license']);
   });
 
   test('后台目录覆盖内置子分类，未分配单据进入其他', () {

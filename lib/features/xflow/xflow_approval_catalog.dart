@@ -58,6 +58,8 @@ class XflowPopulatedApprovalGroup {
   int get count => _previewCount ?? templates.length;
 }
 
+/// 接口 `/xflow/approval-groups` 不可用时的兜底目录，与后端 V304 + V321 一致。
+/// 设备租赁、电子券退款、客户赔付已停用，不再列入。
 const List<XflowApprovalGroup> _xflowApprovalGroups = [
   XflowApprovalGroup(
     id: 'biz-initiative',
@@ -77,7 +79,6 @@ const List<XflowApprovalGroup> _xflowApprovalGroups = [
       'contract-seal',
       'finance-business-procurement',
       'finance-core-business-cost',
-      'finance-equipment-rental',
     ],
   ),
   XflowApprovalGroup(
@@ -102,8 +103,6 @@ const List<XflowApprovalGroup> _xflowApprovalGroups = [
     icon: Icons.groups_outlined,
     templateKeys: [
       'finance-customer-complaint',
-      'finance-voucher-refund',
-      'finance-customer-compensation',
       'finance-invoice-request',
       'finance-receipt-request',
     ],
@@ -119,6 +118,23 @@ const List<XflowApprovalGroup> _xflowApprovalGroups = [
       'finance-gift-request',
       'finance-travel-expense',
     ],
+  ),
+  // 下一期电子报销拆出业务那张后挂这里；空板块不显示。
+  XflowApprovalGroup(
+    id: 'biz-reimbursement',
+    category: 'biz',
+    title: '内部费用与报销',
+    description: '业务差旅报销',
+    icon: Icons.luggage_outlined,
+    templateKeys: <String>[],
+  ),
+  XflowApprovalGroup(
+    id: 'biz-license',
+    category: 'biz',
+    title: '证照与用印',
+    description: '业务资质办理',
+    icon: Icons.verified_user_outlined,
+    templateKeys: ['admin-business-qualification'],
   ),
   XflowApprovalGroup(
     id: 'adm-reimbursement',
@@ -164,7 +180,6 @@ const List<XflowApprovalGroup> _xflowApprovalGroups = [
       'seal-apply',
       'admin-qualification-use',
       'admin-contract-approval-seal',
-      'admin-business-qualification',
     ],
   ),
   XflowApprovalGroup(

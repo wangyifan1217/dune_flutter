@@ -305,6 +305,7 @@ class _NativeB3PageState extends State<NativeB3Page> {
                                   : selectedGroup?.group.description ?? '',
                               templates: visibleTemplates,
                               isAdm: isAdm,
+                              proposalOnly: _bizProposalOnly,
                               groupLabelFor: searching
                                   ? (template) => xflowApprovalGroupForTemplate(
                                       template.templateKey,

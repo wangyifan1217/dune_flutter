@@ -32,6 +32,7 @@ import '../workbench/native_avatar_sheet.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
+import 'mine_home.dart';
 import 'native_user_work_profile_page.dart';
 import 'work_profile_chat_share.dart';
 import 'work_profile_controls.dart';
@@ -293,6 +294,7 @@ class _NativeMyWorkProfileCenterPageState
   int _affairsLoadGeneration = 0;
 
   bool _avatarSheetOpen = false;
+  int _mineRefreshToken = 0;
   bool _qrScannerOpening = false;
   int _avatarRefreshVersion = 0;
   final MeetingLiveController _live = MeetingLiveController.instance;
@@ -647,6 +649,12 @@ class _NativeMyWorkProfileCenterPageState
     final next = DateTime(_month.year, _month.month + delta);
     if (next.isBefore(_earliestMonth) || next.isAfter(_currentMonth)) return;
     setState(() => _month = next);
+    _loadWorkProfileData();
+  }
+
+  void _resetMonth() {
+    if (_month == _currentMonth) return;
+    setState(() => _month = _currentMonth);
     _loadWorkProfileData();
   }
 
@@ -1216,6 +1224,7 @@ class _NativeMyWorkProfileCenterPageState
 
   @override
   Widget build(BuildContext context) {
+    // 2026-10-29 · 「我的」v3：只留审批与提案；AI、知识库、工作画像挪去 AI 板块。
     final stats = _affairsStats ?? const _CenterAffairsStats.empty();
     final profile = _profile ?? _ProfileUserInfo.fromSession(widget.session);
     final name = profile.displayName.trim().isEmpty
@@ -1223,110 +1232,219 @@ class _NativeMyWorkProfileCenterPageState
               ? '未命名用户'
               : widget.session.phone.trim())
         : profile.displayName.trim();
-    final identityLine = profile.subtitleLine.isNotEmpty
-        ? profile.subtitleLine
-        : '沙丘团队协作中心';
-
-    final kb = _kbSummary;
-    final kbDocCount = kb != null && kb.documents.isNotEmpty
-        ? kb.documents.length
-        : (kb?.documentCount ?? 0);
-    final kbCategoryCount = kb?.categoryCount ?? 0;
-
-    final portraitSnapshot =
-        _workProfileSnapshot ?? UserWorkProfileSnapshot.connecting();
-
-    final unreadPendingAffairs =
-        stats.pendingForMe +
-        stats.approvalRejected +
-        stats.pendingInitiateForMe;
+    final identityLine = [
+      profile.departmentName,
+      profile.title,
+    ].where((part) => part.trim().isNotEmpty).join(' · ');
+    final showProposals =
+        !widget.session.isExternalUser &&
+        widget.session.effectiveProposalIntakeAccess;
+    final counts = MineApprovalCounts(
+      pendingForMe: stats.pendingForMe,
+      pendingTodo: stats.pendingTodoForMe,
+      initiatedPending: stats.approvalPending,
+      initiatedTotal: stats.initiatedTotal,
+      cc: stats.ccProposalCount,
+      rejected: stats.approvalRejected,
+      pendingInitiate: stats.pendingInitiateForMe,
+    );
+    final avatarUrl = _avatarUrlWithVersion(profile.avatarUrl);
+    final navExtent = dunesAppBottomNavOverlayExtent(context);
 
     return ColoredBox(
       color: DunesColors.resolve(
         context,
-        const Color(0xFFF7F5FA),
+        MinePalette.page,
         role: DunesColorRole.surface,
       ),
       child: SafeArea(
         bottom: false,
         child: Stack(
           children: [
-            Column(
-              children: [
-                _buildTopBar(),
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: () async {
-                      await Future.wait([
-                        _loadWorkProfileData(),
-                        _loadAffairsData(silent: true),
-                      ]);
-                    },
-                    child: ListView(
-                      padding: EdgeInsets.fromLTRB(
-                        14,
-                        12,
-                        14,
-                        dunesAppBottomNavContentPadding(context, fallback: 20),
-                      ),
-                      children: [
-                        // 1. 行政级工作孪生通行证名片 (Executive Digital Passport)
-                        _buildSuperHeroCard(
-                          name: name,
-                          identityLine: identityLine,
-                          profile: profile,
-                          snapshot: portraitSnapshot,
-                          meetingCount: _meetingCount,
-                          kbDocCount: kbDocCount,
-                          pendingAffairsCount: unreadPendingAffairs,
-                        ),
-                        const SizedBox(height: 14),
-
-                        // 2. 高定双模 Segmented 切换胶囊
-                        _buildViewSegmentedControl(
-                          unreadBadge: unreadPendingAffairs,
-                        ),
-                        const SizedBox(height: 14),
-
-                        // 3. 视图内容分发 (双模丝滑 CrossFade 渐变切换，保留状态不卡顿)
-                        // _activeTabIndex == 0 为「我的事项与办公」，== 1 为「工作画像」
-                        AnimatedCrossFade(
-                          firstChild: KeyedSubtree(
-                            key: const ValueKey('view-affairs'),
-                            child: _buildAffairsView(
-                              stats: stats,
-                              kbDocCount: kbDocCount,
-                              kbCategoryCount: kbCategoryCount,
-                            ),
-                          ),
-                          secondChild: KeyedSubtree(
-                            key: const ValueKey('view-work-profile'),
-                            child: _buildWorkProfileView(
-                              snapshot: portraitSnapshot,
-                              stats: stats,
-                              kbDocCount: kbDocCount,
-                            ),
-                          ),
-                          crossFadeState: _activeTabIndex == 0
-                              ? CrossFadeState.showFirst
-                              : CrossFadeState.showSecond,
-                          duration: const Duration(milliseconds: 260),
-                          firstCurve: Curves.easeOutCubic,
-                          secondCurve: Curves.easeOutCubic,
-                          sizeCurve: Curves.easeInOutCubic,
-                        ),
-                      ],
-                    ),
-                  ),
+            RefreshIndicator(
+              onRefresh: () async {
+                setState(() => _mineRefreshToken++);
+                await _loadAffairsData(silent: true);
+              },
+              child: ListView(
+                padding: EdgeInsets.only(
+                  bottom:
+                      dunesAppBottomNavContentPadding(context, fallback: 20) +
+                      72,
                 ),
-              ],
+                children: [
+                  // 宽度跟灯塔一致：铺满，左右 22 一条左沿（kMinePageGutter）。
+                  Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          MineHomeHeader(
+                            month: _month,
+                            onPickMonth: _pickMonth,
+                            onCurrentMonth: _resetMonth,
+                            // 点头像改头像：右下角铅笔提示可编辑。
+                            avatar: Tooltip(
+                              message: '更换头像',
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: _avatarSheetOpen
+                                    ? null
+                                    : _openAvatarEditor,
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    NativeAvatarCircle(
+                                      key: ValueKey<String>(
+                                        '${profile.avatarPreset}|${profile.avatarObjectKey}|${profile.avatarUrl}|$_avatarRefreshVersion',
+                                      ),
+                                      size: 50,
+                                      avatarPreset: profile.avatarPreset,
+                                      avatarUrl: avatarUrl,
+                                      fallbackText: name.characters.first,
+                                      borderWidth: 0,
+                                    ),
+                                    Positioned(
+                                      right: -3,
+                                      bottom: -3,
+                                      child: Container(
+                                        width: 19,
+                                        height: 19,
+                                        decoration: BoxDecoration(
+                                          color: DunesColors.resolve(
+                                            context,
+                                            Colors.white,
+                                            role: DunesColorRole.surface,
+                                          ),
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(
+                                                alpha: .18,
+                                              ),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 1),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Icon(
+                                          _avatarSheetOpen
+                                              ? Icons.more_horiz
+                                              : Icons.edit_rounded,
+                                          size: 11,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            const Color(0xFF65399E),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            name: name,
+                            subtitle: identityLine,
+                            actions: [
+                              // 扫一扫仅 PC 桌面端隐藏；APP 与浏览器预览均展示。
+                              if (!isDesktopCommOnly)
+                                MineRoundAction(
+                                  icon: Icons.qr_code_scanner_rounded,
+                                  tooltip: '扫一扫',
+                                  onTap: _openQrScanner,
+                                ),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: SizedBox(
+                                  width: 40,
+                                  height: 40,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: DunesColors.resolve(
+                                        context,
+                                        MinePalette.card,
+                                        role: DunesColorRole.surface,
+                                      ),
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFF2B2160,
+                                          ).withValues(alpha: .06),
+                                          blurRadius: 18,
+                                          offset: const Offset(0, 6),
+                                        ),
+                                      ],
+                                    ),
+                                    child: _buildMoreMenu(),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: kMinePageGutter,
+                            ),
+                            child: MineHomeBody(
+                              session: widget.session,
+                              month: _month,
+                              counts: counts,
+                              showProposals: showProposals,
+                              companyView: mineIsCompanyViewer(name),
+                              refreshToken: _mineRefreshToken,
+                              onOpenPendingApprovals: () =>
+                                  widget.navigation.go('B1'),
+                              onOpenTodoApprovals: () =>
+                                  widget.navigation.go('B13'),
+                              onOpenInitiated: () => widget.onOpenB14(),
+                              onOpenCc: () => widget.navigation.go('P1'),
+                              onOpenRejected: () => widget.onOpenB14(),
+                              onOpenPendingInitiate: () =>
+                                  widget.onOpenB14(filter: 'PENDING_INITIATE'),
+                              onOpenLighthouse: () =>
+                                  widget.navigation.go('LH'),
+                              onOpenProposalList: _openProposalIntake,
+                            ),
+                          ),
+                        ],
+                  ),
+                ],
+              ),
             ),
 
-            // 会议录音悬浮药丸
+            // 新建：提案、审批与 App 常用办公入口。
+            Positioned(
+              right: 20,
+              bottom: navExtent + 16,
+              child: MineCreateFab(
+                onTap: () => showMineCreateSheet(
+                  context,
+                  showProposals: showProposals,
+                  onSales: () => _openProposalIntake('sales'),
+                  onPurchase: () => _openProposalIntake('purchase'),
+                  onApproval: () => widget.onOpenB3(),
+                  onMeeting: () => widget.navigation.go('MM-L'),
+                  onKnowledge: () => widget.navigation.go('K1'),
+                  onWorkbench:
+                      widget.onOpenWorkbench != null ||
+                          (!isDesktopCommOnly &&
+                              !widget.session.isExternalUser)
+                      ? () {
+                          if (widget.onOpenWorkbench != null) {
+                            widget.onOpenWorkbench!();
+                          } else {
+                            widget.navigation.go('QJA');
+                          }
+                        }
+                      : null,
+                ),
+              ),
+            ),
+
+            // 会议录音悬浮药丸（让出新建按钮的位置）
             if (_live.active.value && !isWindowsDesktopCommOnly)
               Positioned(
                 right: 16,
-                bottom: dunesAppBottomNavOverlayExtent(context) + 12,
+                bottom: navExtent + 84,
                 child: _buildLiveTranscribeFab(),
               ),
           ],
@@ -1410,9 +1528,11 @@ class _NativeMyWorkProfileCenterPageState
     return PopupMenuButton<String>(
       tooltip: '更多功能',
       position: PopupMenuPosition.under,
+      padding: EdgeInsets.zero,
       icon: Icon(
         Icons.more_horiz_rounded,
-        color: DunesColors.resolveNullable(context, Color(0xFF6B5882)),
+        size: 19,
+        color: DunesColors.resolveNullable(context, MinePalette.night),
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       elevation: 12,
@@ -1432,6 +1552,8 @@ class _NativeMyWorkProfileCenterPageState
             }
           case 'scan':
             _openQrScanner();
+          case 'settings':
+            _openAppSettingsSheet();
           case 'font_scale':
             _openTextScalePicker();
           case 'refresh':
@@ -1474,6 +1596,21 @@ class _NativeMyWorkProfileCenterPageState
                 ),
                 SizedBox(width: 10),
                 Text('扫一扫', style: menuTextStyle),
+              ],
+            ),
+          ),
+        if (!isDesktopCommOnly)
+          PopupMenuItem(
+            value: 'settings',
+            child: Row(
+              children: [
+                Icon(
+                  Icons.settings_suggest_rounded,
+                  size: 19,
+                  color: DunesColors.resolveNullable(ctx, Color(0xFF6B5882)),
+                ),
+                SizedBox(width: 10),
+                Text('系统设置', style: menuTextStyle),
               ],
             ),
           ),

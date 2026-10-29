@@ -12,6 +12,7 @@ import '../conversation/conversation_service.dart';
 import '../xflow/approval_chat_share.dart';
 import '../xflow/approval_detail_dialog.dart';
 import '../xflow/xflow_approval_catalog.dart';
+import '../xflow/xflow_cost_bucket.dart';
 import '../xflow/native_xflow_form_page.dart';
 import '../xflow/xflow_detail_logic.dart';
 import '../xflow/xflow_models.dart';
@@ -41,29 +42,10 @@ class ProposalBusinessApprovals extends StatefulWidget {
       _ProposalBusinessApprovalsState();
 }
 
-/// 业务审批归入提案的口径，与后端 proposal_business_cost_collection.go 一致。
-const Map<String, String> kProposalApprovalBucketLabels = {
-  'contract-seal': '无金额',
-  'finance-business-procurement': '项目成本',
-  'finance-core-business-cost': '业务成本',
-  'finance-equipment-rental': '项目成本',
-  'finance-deposit': '周转资金',
-  'finance-prepayment': '周转资金',
-  'finance-contract-payment': '项目成本',
-  'finance-promotion-payment': '项目成本',
-  'finance-voucher-distribution': '项目成本',
-  'finance-customer-complaint': '业务成本',
-  'finance-voucher-refund': '冲减收入',
-  'finance-customer-compensation': '业务成本',
-  'finance-invoice-request': '税务成本',
-  'finance-receipt-request': '收入',
-  'finance-entertainment-expense': '经营成本',
-  'finance-gift-request': '经营成本',
-  'finance-travel-expense': '经营成本',
-};
-
+/// 业务审批归入提案的口径。共用表见 `xflow_cost_bucket.dart`，与后端一致；
+/// 提案里只发起业务模板，没映射的按项目成本。
 String proposalApprovalBucketLabel(String templateKey) =>
-    kProposalApprovalBucketLabels[templateKey.trim()] ?? '项目成本';
+    xflowCostBucketLabel(templateKey, business: true) ?? '项目成本';
 
 const kProposalInvoiceTemplateKey = 'finance-invoice-request';
 
@@ -439,7 +421,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
                             color: DunesColors.resolve(ctx, DunesColors.text3),
                           ),
                         ),
-                        for (final label in const ['收入', '项目成本', '周转资金', '无金额'])
+                        for (final label in kXflowProposalBucketLegend)
                           _bucketChip(ctx, label),
                       ],
                     ),
@@ -756,12 +738,12 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
       children: [
         if (_costError != null) _notice(_costError!, error: true),
         if (_count(funds) == 0 && _costError == null)
-          _empty('暂无保证金、预付款等资金占用'),
+          _empty('暂无保证金、预付款、收据等资金占用'),
         if (_count(funds) > 0) _bucketSection(funds!),
         Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
-            '资金占用不计入成本，计入周转资金；预付款结算后转入成本归集。',
+            '保证金、预付款、收据计入周转资金，不计入成本；预付款结算后转入成本归集。',
             style: TextStyle(
               fontSize: 12,
               color: DunesColors.resolve(context, DunesColors.text3),
@@ -790,7 +772,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
               Text(
                 '已归集 ${_money(group['total'])}'
                 '${pending > 0 ? ' · 审批中 ${_money(pending)}' : ''}'
-                '${tax ? ' · 按发票税额计' : ''}',
+                '${tax ? ' · 发票按税额、税费缴纳按全额计' : ''}',
                 style: TextStyle(
                   fontSize: 12,
                   color: DunesColors.resolve(context, DunesColors.text3),
@@ -1113,26 +1095,10 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
     );
   }
 
-  Widget _bucketChip(BuildContext context, String label) {
-    final (bg, fg) = switch (label) {
-      '收入' || '冲减收入' => (const Color(0xFFEEEBFB), const Color(0xFF3B2E8F)),
-      '周转资金' => (const Color(0xFFE6F0FB), const Color(0xFF1F4F8A)),
-      '无金额' => (const Color(0xFFF1F0F6), const Color(0xFF4F4D60)),
-      _ => (const Color(0xFFFBEDE6), const Color(0xFF7A3212)),
-    };
-    return Container(
-      margin: const EdgeInsets.only(right: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: DunesColors.resolve(context, bg, role: DunesColorRole.surface),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 12, color: DunesColors.resolve(context, fg)),
-      ),
-    );
-  }
+  Widget _bucketChip(BuildContext context, String label) => Padding(
+    padding: const EdgeInsets.only(right: 4),
+    child: XflowCostBucketChip(label),
+  );
 
   Widget _notice(String text, {bool error = false}) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),

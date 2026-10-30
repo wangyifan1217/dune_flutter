@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show FontFeature;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_island.dart';
@@ -843,29 +844,412 @@ class _Segment extends StatelessWidget {
   }
 }
 
-/// 顶栏下方「业务 | 财务」口径切换。
+/// 顶栏下方「业务 ⚖ 财务」天平切换（2026-10-30 v3）。
+///   两边带数：业务资产 / 财务资产；中间支点是业财差，往数大的一边微微沉。
+///   点哪边切哪边；往下滑时宿主把它收进顶部浮岛（[LighthouseLedgerCompactToggle]）。
 class LighthouseLedgerModeSwitch extends StatelessWidget {
   const LighthouseLedgerModeSwitch({
     super.key,
     required this.finance,
     required this.onChanged,
+    this.controller,
   });
 
   final bool finance;
   final ValueChanged<bool> onChanged;
+  final LighthouseBfController? controller;
+
+  static const Color financeBlue = Color(0xFF2F6690);
+  static const double _h = 44;
 
   @override
   Widget build(BuildContext context) {
-    return _Segment(
-      labels: const ['业务', '财务'],
-      index: finance ? 1 : 0,
-      onChanged: (i) => onChanged(i == 1),
-      accent: finance ? LhBfColors.steel : LhBfColors.biz,
-      track: const Color(0xFFE7E3F0),
-      height: 36,
-      fontSize: 13,
+    final c = controller;
+    if (c == null) return _body(context, null);
+    return ListenableBuilder(
+      listenable: c,
+      builder: (context, _) {
+        // 业务视角也要两边的数：有权限、还没拉过就拉一次（失败不重试，免得来回打）。
+        if (c.summary == null && !c.loading && c.error == null && c.access.value == true) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (c.summary == null && !c.loading && c.error == null) unawaited(c.load());
+          });
+        }
+        return _body(context, c.summary?.total);
+      },
     );
   }
+
+  Widget _body(BuildContext context, LhBfRow? t) {
+    final biz = t?.business['assetPrincipal'];
+    final fin = t?.finance['assetPrincipal'];
+    final diff = t?.difference['assetPrincipal'];
+    final dur = MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 320);
+    final accent = finance ? financeBlue : LhBfColors.biz;
+
+    Widget side(bool isFin) {
+      final on = isFin == finance;
+      final label = isFin ? '财务' : '业务';
+      final v = isFin ? fin : biz;
+      final color = isFin ? financeBlue : LhBfColors.biz;
+      final dot = AnimatedContainer(
+        duration: dur,
+        width: 5,
+        height: 5,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: _c(context, on ? color : const Color(0xFFD6D0E3)),
+          boxShadow: on ? [BoxShadow(color: color.withAlpha(80), blurRadius: 5)] : null,
+        ),
+      );
+      final title = AnimatedDefaultTextStyle(
+        duration: dur,
+        style: LhTypography.sans(
+          size: 12,
+          weight: on ? FontWeight.w700 : FontWeight.w500,
+          color: _c(context, on ? color : LhColors.mute),
+          letterSpacing: 0.3,
+          height: 1.0,
+          context: context,
+        ),
+        child: Text(label),
+      );
+      return Expanded(
+        child: Semantics(
+          button: true,
+          selected: on,
+          label: '$label数据',
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onChanged(isFin),
+            child: Padding(
+              padding: EdgeInsets.only(left: isFin ? 38 : 16, right: isFin ? 16 : 38),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: isFin ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: isFin ? [title, const SizedBox(width: 4), dot] : [dot, const SizedBox(width: 4), title],
+                  ),
+                  if (v != null) ...[
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: isFin ? '资产 ' : '资产 ', style: _label(context, size: 9, color: _c(context, LhColors.mute2))),
+                            TextSpan(
+                              text: lhBfWan(v),
+                              style: LhTypography.mono(size: 10.5, weight: FontWeight.w700, color: _c(context, on ? LhColors.ink : LhColors.mute2), height: 1.0, context: context),
+                            ),
+                            TextSpan(text: ' 万', style: _label(context, size: 8.5, color: _c(context, LhColors.mute2))),
+                          ],
+                        ),
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: _h,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final w = box.maxWidth;
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(_h / 2),
+                    gradient: LinearGradient(
+                      colors: [
+                        _c(context, const Color(0xFFF3EFFB), DunesColorRole.surface),
+                        _c(context, const Color(0xFFF7F6FA), DunesColorRole.surface),
+                        _c(context, const Color(0xFFEEF3F8), DunesColorRole.surface),
+                      ],
+                    ),
+                    border: Border.all(color: _c(context, const Color(0xFFE9E3F3), DunesColorRole.border), width: 0.6),
+                    boxShadow: [BoxShadow(color: const Color(0xFF5A458F).withAlpha(10), blurRadius: 1, offset: const Offset(0, 0.5))],
+                  ),
+                ),
+              ),
+              AnimatedPositioned(
+                duration: dur,
+                curve: Curves.easeOutCubic,
+                top: 2.5,
+                bottom: 2.5,
+                left: finance ? w / 2 : 2.5,
+                width: w / 2 - 2.5,
+                child: AnimatedContainer(
+                  duration: dur,
+                  decoration: BoxDecoration(
+                    color: _c(context, Colors.white, DunesColorRole.surface),
+                    borderRadius: BorderRadius.circular((_h - 5) / 2),
+                    border: Border.all(color: accent.withAlpha(40), width: 0.6),
+                    boxShadow: [
+                      BoxShadow(color: accent.withAlpha(30), blurRadius: 10, offset: const Offset(0, 3)),
+                      BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 2, offset: const Offset(0, 0.5)),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned.fill(child: Row(children: [side(false), side(true)])),
+              Positioned(
+                left: w / 2 - 32,
+                width: 64,
+                top: 0,
+                bottom: -2,
+                child: IgnorePointer(child: _fulcrum(context, diff, biz, fin, dur)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _fulcrum(BuildContext context, double? diff, double? biz, double? fin, Duration dur) {
+    final base = math.max((biz ?? 0).abs(), (fin ?? 0).abs());
+    // 业务大 → 左边沉（逆时针）；财务大 → 右边沉。差得越多越歪，最多 ~3°。
+    final ratio = diff == null || base == 0 ? 0.0 : (-diff / base * 2).clamp(-1.0, 1.0).toDouble();
+    final angle = ratio * 0.055;
+    final color = _c(context, lhBfDifferenceColor(diff));
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        AnimatedRotation(
+          turns: angle / (2 * math.pi),
+          duration: dur,
+          curve: Curves.easeOutBack,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(6, 3, 6, 3),
+            decoration: BoxDecoration(
+              color: _c(context, const Color(0xFFFFFCF6), DunesColorRole.surface),
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: _c(context, const Color(0xFFEFDDBB), DunesColorRole.border), width: 0.6),
+              boxShadow: [BoxShadow(color: const Color(0xFF8A5D1C).withAlpha(22), blurRadius: 6, offset: const Offset(0, 1.5))],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('业财差', style: LhTypography.sans(size: 7.5, weight: FontWeight.w600, color: _c(context, LhBfColors.copper), letterSpacing: 0.4, height: 1.0, context: context)),
+                const SizedBox(height: 2),
+                if (diff == null)
+                  Icon(Icons.balance_rounded, size: 12, color: _c(context, LhBfColors.copper))
+                else
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      diff.abs() < 0.5 ? '0.00' : '${diff > 0 ? '+' : '−'}${lhBfWan(diff.abs())}',
+                      maxLines: 1,
+                      style: LhTypography.mono(size: 9.5, weight: FontWeight.w700, color: color, height: 1.0, context: context),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        CustomPaint(size: const Size(8, 3.5), painter: _PivotPainter(_c(context, const Color(0xFFE6D6B4)))),
+      ],
+    );
+  }
+}
+
+class _PivotPainter extends CustomPainter {
+  _PivotPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Path()
+      ..moveTo(size.width / 2, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(p, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PivotPainter old) => old.color != color;
+}
+
+/// 滑下去之后：天平收成顶部浮岛里的「业｜财」小开关。
+class LighthouseLedgerCompactToggle extends StatelessWidget {
+  const LighthouseLedgerCompactToggle({
+    super.key,
+    required this.finance,
+    required this.onChanged,
+    this.height = 40,
+  });
+
+  final bool finance;
+  final ValueChanged<bool> onChanged;
+  final double height;
+
+  static const LinearGradient _finGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF4A8CC0), Color(0xFF2F6690)],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final dur = MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 260);
+    Widget seg(String text, bool isFin) {
+      final on = isFin == finance;
+      return Semantics(
+        button: true,
+        selected: on,
+        label: isFin ? '财务数据' : '业务数据',
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onChanged(isFin),
+          child: AnimatedContainer(
+            duration: dur,
+            curve: Curves.easeOut,
+            width: 30,
+            height: height - 8,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              gradient: on ? (isFin ? _finGradient : kDunesIslandPillGradient) : null,
+              boxShadow: on ? kDunesIslandPillShadow : null,
+              borderRadius: BorderRadius.circular((height - 8) / 2),
+            ),
+            child: Text(
+              text,
+              style: LhTypography.sans(
+                size: 12.5,
+                weight: FontWeight.w700,
+                color: on ? Colors.white : _c(context, const Color(0xFF6E6890)),
+                height: 1.0,
+                context: context,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: height,
+      padding: const EdgeInsets.all(4),
+      decoration: dunesIslandDecoration(context, radius: height / 2),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [seg('业', false), const SizedBox(width: 2), seg('财', true)]),
+    );
+  }
+}
+
+/// 切业务 / 财务时，一道灯塔光从左往右扫过页面（业务紫光、财务蓝光）。
+class LighthouseLedgerBeam extends StatefulWidget {
+  const LighthouseLedgerBeam({super.key, required this.tick, required this.finance});
+
+  final ValueListenable<int> tick;
+  final bool finance;
+
+  @override
+  State<LighthouseLedgerBeam> createState() => _LighthouseLedgerBeamState();
+}
+
+class _LighthouseLedgerBeamState extends State<LighthouseLedgerBeam> with SingleTickerProviderStateMixin {
+  late final AnimationController _a = AnimationController(vsync: this, duration: const Duration(milliseconds: 780));
+
+  @override
+  void initState() {
+    super.initState();
+    widget.tick.addListener(_onTick);
+  }
+
+  @override
+  void didUpdateWidget(covariant LighthouseLedgerBeam old) {
+    super.didUpdateWidget(old);
+    if (old.tick != widget.tick) {
+      old.tick.removeListener(_onTick);
+      widget.tick.addListener(_onTick);
+    }
+  }
+
+  void _onTick() {
+    if (!mounted || MediaQuery.disableAnimationsOf(context)) return;
+    _a.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    widget.tick.removeListener(_onTick);
+    _a.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.finance ? LighthouseLedgerModeSwitch.financeBlue : _kPlumPrimary;
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _a,
+        builder: (context, _) {
+          final t = _a.value;
+          if (t <= 0 || t >= 1) return const SizedBox.shrink();
+          return CustomPaint(size: Size.infinite, painter: _BeamPainter(t: Curves.easeInOutCubic.transform(t), raw: t, color: color));
+        },
+      ),
+    );
+  }
+}
+
+class _BeamPainter extends CustomPainter {
+  _BeamPainter({required this.t, required this.raw, required this.color});
+
+  final double t;
+  final double raw;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final band = w * 0.5;
+    final skew = w * 0.28;
+    final cx = -band - skew + (w + band * 2 + skew * 2) * t;
+    // 光扫过的地方留一层很淡的余晖，慢慢退掉。
+    final fade = (1 - raw).clamp(0.0, 1.0);
+    canvas.drawRect(
+      Rect.fromLTRB(0, 0, (cx).clamp(0.0, w), h),
+      Paint()..color = color.withAlpha((22 * fade).round()),
+    );
+    // 斜着的光带（像灯塔光柱扫过）。
+    final path = Path()
+      ..moveTo(cx - band / 2 + skew, 0)
+      ..lineTo(cx + band / 2 + skew, 0)
+      ..lineTo(cx + band / 2 - skew, h)
+      ..lineTo(cx - band / 2 - skew, h)
+      ..close();
+    final shader = LinearGradient(
+      colors: [
+        color.withAlpha(0),
+        color.withAlpha(40),
+        Colors.white.withAlpha(110),
+        color.withAlpha(40),
+        color.withAlpha(0),
+      ],
+      stops: const [0, 0.32, 0.5, 0.68, 1],
+    ).createShader(Rect.fromLTRB(cx - band / 2 - skew, 0, cx + band / 2 + skew, h));
+    canvas.drawPath(path, Paint()..shader = shader);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BeamPainter old) => old.t != t || old.color != color;
 }
 
 /// 顶栏周期岛在财务视角下换成「截至 日期」。
@@ -1170,8 +1554,12 @@ class LighthouseBfHero extends StatelessWidget {
       required String seriesKey,
       required String barsLabel,
     }) {
-      final pts = controller.series ?? const <LhBfPoint>[];
+      // 只画有快照的日子（资管快照 10.28 起才有），不再留一排空格。
+      final pts = (controller.series ?? const <LhBfPoint>[]).where((p) => p.hasData).toList();
       final last7 = pts.length > 7 ? pts.sublist(pts.length - 7) : pts;
+      final barsCaption = pts.isNotEmpty && pts.length < 7
+          ? '${lhBfShortDate(pts.first.date)} 起 · ${barsLabel.replaceFirst('近 7 日', '')}'
+          : barsLabel;
       final footer = GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => showLighthouseBfCompare(context, controller, t, total: true),
@@ -1287,12 +1675,12 @@ class LighthouseBfHero extends StatelessWidget {
                   const Spacer(),
                   SizedBox(
                     height: 24,
-                    child: _MiniBars(values: [for (final p in last7) p.hasData ? p.values[seriesKey] : null]),
+                    child: _MiniBars(values: [for (final p in last7) p.values[seriesKey]]),
                   ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Expanded(child: Text(barsLabel, style: _label(context, size: 10, color: _c(context, LhColors.mute2)))),
+                      Expanded(child: Text(barsCaption, style: _label(context, size: 10, color: _c(context, LhColors.mute2)))),
                       Text(
                         controller.isToday ? '今' : controller.dateLabel,
                         style: LhTypography.sans(size: 10, weight: FontWeight.w700, color: _c(context, _kPlumPrimary), context: context),
@@ -1343,9 +1731,8 @@ class LighthouseBfHero extends StatelessWidget {
             bigKey: 'fundBalance',
             pct: t.balancePct('finance.fundBalance'),
             lines: [
+              // 借入 / 借出现网全空，放在大数卡里会把资金页撑爆（BOTTOM OVERFLOWED），留在「只在财务」。
               ('银行账户余额', t.finance['bankBalance'], null, 'bankBalance'),
-              ('资金借入', t.finance['borrowIn'], null, null),
-              ('资金借出', t.finance['borrowOut'], null, null),
             ],
             seriesKey: 'prepaid',
             barsLabel: '近 7 日预付款',
@@ -1410,7 +1797,7 @@ class LighthouseBfHero extends StatelessWidget {
       );
     }
 
-    Widget item(String key, String label, double? v, {double? pct, Color? color, Color divider = LhColors.line2, bool last = false}) {
+    Widget item(String key, String label, double? v, {double? pct, Color? color, Color divider = LhColors.line2, bool last = false, bool cum = false}) {
       final on = controller.focus == key;
       final diff = key == 'financeAsset' || key == 'bankBalance' ? null : t.difference[key];
       return GestureDetector(
@@ -1431,7 +1818,9 @@ class LighthouseBfHero extends StatelessWidget {
               Row(
                 children: [
                   Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _label(context, size: 11))),
-                  if (pct != null)
+                  if (cum)
+                    _chip(context, '累计', fg: LhBfColors.copper, bg: LhBfColors.copperSoft)
+                  else if (pct != null)
                     lhBfPctText(context, pct)
                   else if (diff != null && diff.abs() >= 0.5 && t.period == null)
                     Text(
@@ -1452,6 +1841,12 @@ class LighthouseBfHero extends StatelessWidget {
     // 期内发生额：没有期间数据（旧后端）时退回 1.1 起累计。
     double? fl(String key) => t.period == null ? t.finance[key] : t.flow('finance.$key');
     final win = s.windowLabel;
+    // 这一期缺期初快照、算不出期内发生额 → 显示 1.1 起累计，标「累计」。
+    bool cumOnly(String key) => t.period != null && t.flow('finance.$key') == null && t.finance[key] != null;
+    Widget flowItem(String key, String label, {bool last = false}) {
+      final c = cumOnly(key);
+      return item(key, label, c ? t.finance[key] : fl(key), pct: c ? null : t.flowPct('finance.$key'), cum: c, last: last);
+    }
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1465,8 +1860,8 @@ class LighthouseBfHero extends StatelessWidget {
               title: '收款',
               trailing: win,
               items: [
-                item('salesAmount', '销售回款', fl('salesAmount'), pct: t.flowPct('finance.salesAmount')),
-                item('rebateAr', '已收返利', fl('rebateAr'), pct: t.flowPct('finance.rebateAr'), last: true),
+                flowItem('salesAmount', '销售回款'),
+                flowItem('rebateAr', '已收返利', last: true),
               ],
             ),
           ),
@@ -1480,11 +1875,11 @@ class LighthouseBfHero extends StatelessWidget {
               title: '付款',
               trailing: win,
               items: [
-                item('purchaseAmount', '电子券采购付款', fl('purchaseAmount'), pct: t.flowPct('finance.purchaseAmount')),
-                item('commission', '已付返佣', fl('commission'), pct: t.flowPct('finance.commission')),
-                item('platformFee', '已付平台服务费', fl('platformFee'), pct: t.flowPct('finance.platformFee')),
-                item('paymentFee', '已付支付手续费', fl('paymentFee'), pct: t.flowPct('finance.paymentFee')),
-                item('invoiceAmount', '进项发票', fl('invoiceAmount'), pct: t.flowPct('finance.invoiceAmount'), last: true),
+                flowItem('purchaseAmount', '电子券采购付款'),
+                flowItem('commission', '已付返佣'),
+                flowItem('platformFee', '已付平台服务费'),
+                flowItem('paymentFee', '已付支付手续费'),
+                flowItem('invoiceAmount', '进项发票', last: true),
               ],
             ),
           ),
@@ -1529,6 +1924,8 @@ class _MiniBars extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
+        // 不足 7 根时靠右排，柱宽和 7 根时一致。
+        if (values.length < 7) Spacer(flex: 7 - values.length),
         for (var i = 0; i < values.length; i++) ...[
           if (i > 0) const SizedBox(width: 3),
           Expanded(
@@ -2969,7 +3366,7 @@ Widget _sheetHead(BuildContext context, String title, LhBfRow row, List<Widget> 
   );
 }
 
-Widget _miniStat(BuildContext context, String label, String value, {Color? color, Color fill = const Color(0xFFF7F6FA), Color edge = const Color(0xFFE7E3EF), Color? labelColor, String unit = '万'}) => Container(
+Widget _miniStat(BuildContext context, String label, String value, {Color? color, Color fill = const Color(0xFFF7F6FA), Color edge = const Color(0xFFE7E3EF), Color? labelColor, String unit = '万', String? sub, Color? subColor}) => Container(
   padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
   decoration: BoxDecoration(
     color: _c(context, fill, DunesColorRole.surface),
@@ -2982,6 +3379,10 @@ Widget _miniStat(BuildContext context, String label, String value, {Color? color
       Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _label(context, size: 10.5, color: labelColor)),
       const SizedBox(height: 3),
       _unitValue(context, value, size: 15, color: color, unit: unit),
+      if (sub != null && sub.isNotEmpty) ...[
+        const SizedBox(height: 2),
+        Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: LhTypography.mono(size: 10, weight: FontWeight.w700, color: subColor ?? _c(context, LhColors.mute2), context: context)),
+      ],
     ],
   ),
 );
@@ -3107,24 +3508,53 @@ class _BfTimelineSheetState extends State<_BfTimelineSheet> {
           ]);
         }
         final d = snap.data!;
-        // 月份桶：今年 1 月到截至月（账期可能落在去年，按出现的月补上）。
+        // 期间跟着上面的日 / 周 / 月 / 季 / 年：≤ 31 天按到账日铺柱，更长按月。
+        //   日视图只有一天 → 铺开到当月 1 日，选中那天。
+        final s = widget.controller.summary;
+        final end = DateTime.tryParse(s?.windowEnd ?? '') ?? DateTime.tryParse(asOf) ?? DateTime.now();
+        var start = DateTime.tryParse(s?.windowStart ?? '') ?? end;
+        if (!start.isBefore(end)) start = DateTime(end.year, end.month, 1);
+        final spanDays = DateTime(end.year, end.month, end.day).difference(DateTime(start.year, start.month, start.day)).inDays + 1;
+        final dailyAvail = spanDays >= 1 && spanDays <= 31;
+        final daily = _mode == 0 && dailyAvail;
+        String two(int v) => v.toString().padLeft(2, '0');
+        String keyOf(Map<String, dynamic> x) {
+          if (!daily) return _monthOf(x);
+          final raw = _str(x['paymentTime']);
+          return raw.length < 10 ? '?' : raw.substring(0, 10);
+        }
+
+        final months = <String>[];
+        if (daily) {
+          for (var i = 0; i < spanDays; i++) {
+            final x = DateTime(start.year, start.month, start.day + i);
+            months.add('${x.year}-${two(x.month)}-${two(x.day)}');
+          }
+        } else {
+          for (var i = 1; i <= end.month; i++) {
+            months.add('${end.year}-${two(i)}');
+          }
+        }
+        final keySet = months.toSet();
         final buckets = <String, (double, int)>{};
         var unknown = 0;
         for (final row in d.rows) {
-          final m = _monthOf(row);
+          final m = keyOf(row);
           if (m == '?') {
             unknown++;
             continue;
           }
+          if (daily && !keySet.contains(m)) continue;
           final prev = buckets[m] ?? (0.0, 0);
           buckets[m] = (prev.$1 + (_num(row['amount']) ?? 0), prev.$2 + 1);
         }
-        final end = DateTime.tryParse(asOf) ?? DateTime.now();
-        final months = <String>[for (var i = 1; i <= end.month; i++) '${end.year}-${i.toString().padLeft(2, '0')}'];
-        for (final k in buckets.keys) {
-          if (!months.contains(k)) months.add(k);
+        if (!daily) {
+          for (final k in buckets.keys) {
+            if (!months.contains(k)) months.add(k);
+          }
+          months.sort();
         }
-        months.sort();
+        if (_month != null && _month != '?' && !months.contains(_month)) _month = null;
         if (!_monthTouched && _month == null) {
           for (final m in months.reversed) {
             if ((buckets[m]?.$2 ?? 0) > 0) {
@@ -3142,7 +3572,15 @@ class _BfTimelineSheetState extends State<_BfTimelineSheet> {
         }
         final sel = _month;
         final selBucket = sel == null ? null : buckets[sel];
-        final rows = d.rows.where((x) => sel == null || _monthOf(x) == sel).toList();
+        final winRows = daily
+            ? d.rows.where((x) {
+                final k = keyOf(x);
+                return k == '?' || keySet.contains(k);
+              }).toList()
+            : d.rows;
+        final inWin = winRows.length;
+        final allTotal = daily ? run : (d.totalAmount ?? listTotal);
+        final rows = winRows.where((x) => sel == null || keyOf(x) == sel).toList();
         if (_order == 'amount') {
           rows.sort((a, b) => ((_num(b['amount']) ?? 0).abs()).compareTo((_num(a['amount']) ?? 0).abs()));
         } else if (_order == 'type') {
@@ -3150,15 +3588,30 @@ class _BfTimelineSheetState extends State<_BfTimelineSheet> {
         } else {
           rows.sort((a, b) => _str(b['paymentTime']).compareTo(_str(a['paymentTime'])));
         }
-        String monthLabel(String m) => m == '?' ? '时间未知' : '${int.tryParse(m.substring(5)) ?? m}月';
+        String monthLabel(String m) {
+          if (m == '?') return '时间未知';
+          if (m.length >= 10) return '${int.tryParse(m.substring(5, 7)) ?? 0}.${int.tryParse(m.substring(8, 10)) ?? 0}';
+          return '${int.tryParse(m.substring(5)) ?? m}月';
+        }
+
+        final rangeLabel = daily ? '${monthLabel(months.first)}–${monthLabel(months.last)}' : '';
+        String axisLabel(int i) {
+          final m = months[i];
+          if (daily) {
+            if (months.length <= 10 || i == 0 || i == months.length - 1) return monthLabel(m);
+            final day = int.tryParse(m.substring(8, 10)) ?? 0;
+            return day % 5 == 0 && months.length - 1 - i >= 3 ? '$day' : '';
+          }
+          return months.length > 12 ? (m.endsWith('-01') ? m.substring(2, 4) : '${int.parse(m.substring(5))}') : monthLabel(m);
+        }
 
         return _sheetFrame(context, widget.scroll, [
           ...head,
           Row(
             children: [
-              Expanded(child: _miniStat(context, '$_title合计', lhBfWan(d.totalAmount ?? listTotal), color: _c(context, _kHeroNum))),
+              Expanded(child: _miniStat(context, daily ? '$rangeLabel合计' : '$_title合计', lhBfWan(allTotal), color: _c(context, _kHeroNum))),
               const SizedBox(width: 6),
-              Expanded(child: _miniStat(context, '${_receipt ? '收款' : '付款'}来源', '${d.count}', unit: '条')),
+              Expanded(child: _miniStat(context, '${_receipt ? '回款' : '付款'}笔数', '$inWin', unit: '笔')),
               const SizedBox(width: 6),
               Expanded(
                 child: _miniStat(
@@ -3184,7 +3637,7 @@ class _BfTimelineSheetState extends State<_BfTimelineSheet> {
                   children: [
                     Text('${_receipt ? '回款' : '付款'}走势', style: LhTypography.sans(size: 13, weight: FontWeight.w700, color: _c(context, LhColors.ink), context: context)),
                     const Spacer(),
-                    _segPill(context, ['按$_verb月', '按账期'], _mode, (i) => setState(() {
+                    _segPill(context, [dailyAvail ? '按$_verb日' : '按$_verb月', '按账期'], _mode, (i) => setState(() {
                       _mode = i;
                       _month = null;
                       _monthTouched = false;
@@ -3196,12 +3649,12 @@ class _BfTimelineSheetState extends State<_BfTimelineSheet> {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text(sel == null ? '全部' : '${monthLabel(sel)}$_verb', style: _label(context, size: 11)),
+                    Text(sel == null ? (daily ? rangeLabel : '全部') : '${monthLabel(sel)}$_verb', style: _label(context, size: 11)),
                     const SizedBox(width: 8),
                     Flexible(
                       child: _unitValue(
                         context,
-                        lhBfWan(sel == null ? (d.totalAmount ?? listTotal) : (selBucket?.$1 ?? 0)),
+                        lhBfWan(sel == null ? allTotal : (selBucket?.$1 ?? 0)),
                         size: 18,
                         color: _c(context, _kHeroNum),
                       ),
@@ -3209,7 +3662,7 @@ class _BfTimelineSheetState extends State<_BfTimelineSheet> {
                     const Spacer(),
                     if (sel != null && sel != '?')
                       Text(
-                        '${selBucket?.$2 ?? 0} 条 · 累计 ${lhBfWan(cum[months.indexOf(sel)])}',
+                        '${selBucket?.$2 ?? 0} 笔 · 累计 ${lhBfWan(cum[months.indexOf(sel)])}',
                         style: _label(context, size: 10.5),
                       ),
                   ],
@@ -3234,10 +3687,10 @@ class _BfTimelineSheetState extends State<_BfTimelineSheet> {
                           values: values,
                           cumulative: cum,
                           selected: sel == null ? -1 : months.indexOf(sel),
-                          partialLast: _mode == 0 && months.isNotEmpty && months.last == '${end.year}-${end.month.toString().padLeft(2, '0')}',
+                          partialLast: !daily && _mode == 0 && months.isNotEmpty && months.last == '${end.year}-${two(end.month)}',
                           bar: _c(context, const Color(0xFFD9CFF2)),
                           barOn: _c(context, _kPlumPrimary),
-                          line: _c(context, const Color(0xFFB5563F)),
+                          line: _c(context, const Color(0xFF2F6690)),
                           grid: _c(context, const Color(0xFFF1ECF8)),
                         ),
                       ),
@@ -3247,16 +3700,18 @@ class _BfTimelineSheetState extends State<_BfTimelineSheet> {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    for (final m in months)
+                    for (var i = 0; i < months.length; i++)
                       Expanded(
                         child: Text(
-                          months.length > 12 ? (m.endsWith('-01') ? m.substring(2, 4) : '${int.parse(m.substring(5))}') : monthLabel(m),
+                          axisLabel(i),
                           textAlign: TextAlign.center,
                           maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
                           style: LhTypography.mono(
                             size: 9.5,
-                            weight: m == sel ? FontWeight.w700 : FontWeight.w500,
-                            color: _c(context, m == sel ? _kPlumDeep : LhColors.mute2),
+                            weight: months[i] == sel ? FontWeight.w700 : FontWeight.w500,
+                            color: _c(context, months[i] == sel ? _kPlumDeep : LhColors.mute2),
                             context: context,
                           ),
                         ),
@@ -3267,8 +3722,8 @@ class _BfTimelineSheetState extends State<_BfTimelineSheet> {
                 Wrap(
                   spacing: 12,
                   children: [
-                    Text('▮ 当月$_verb', style: _label(context, size: 10, color: _c(context, const Color(0xFF9C8BD6)))),
-                    Text('┅ 累计', style: _label(context, size: 10, color: _c(context, const Color(0xFFB5563F)))),
+                    Text(daily ? '▮ 当日$_verb' : '▮ 当月$_verb', style: _label(context, size: 10, color: _c(context, const Color(0xFF9C8BD6)))),
+                    Text(daily ? '┅ 期内累计' : '┅ 累计', style: _label(context, size: 10, color: _c(context, const Color(0xFF2F6690)))),
                   ],
                 ),
               ],
@@ -3278,7 +3733,7 @@ class _BfTimelineSheetState extends State<_BfTimelineSheet> {
           Row(
             children: [
               Text(
-                sel == null ? '全部明细' : '${monthLabel(sel)}明细',
+                sel == null ? (daily ? '$rangeLabel明细' : '全部明细') : '${monthLabel(sel)}明细',
                 style: LhTypography.sans(size: 13, weight: FontWeight.w700, color: _c(context, LhColors.ink), context: context),
               ),
               const SizedBox(width: 6),
@@ -3290,7 +3745,7 @@ class _BfTimelineSheetState extends State<_BfTimelineSheet> {
                     _monthTouched = true;
                     _month = null;
                   }),
-                  child: Text('看全部 ${d.rows.length} 条 ›', style: LhTypography.sans(size: 11, weight: FontWeight.w600, color: _c(context, _kPlumPrimary), context: context)),
+                  child: Text('看全部 $inWin 条 ›', style: LhTypography.sans(size: 11, weight: FontWeight.w600, color: _c(context, _kPlumPrimary), context: context)),
                 ),
             ],
           ),
@@ -3519,39 +3974,148 @@ class _BfBalanceSheetState extends State<_BfBalanceSheet> {
   late bool _bank = widget.bank;
   late Future<List<LhBfPoint>> _future = widget.controller.subjectSeries(widget.row);
 
+  static const _fin = Color(0xFF2F6690);
+  static const _bizBar = Color(0xFFB9A6EE);
+  static const _bizInk = Color(0xFF6A4FC9);
+  static const _bizLine = Color(0xFF9C82E6);
+  static const _copperLine = Color(0xFFB07A2A);
+
+  static String _sd(double d) => '${d > 0.5 ? '+' : (d < -0.5 ? '−' : '')}${lhBfWan(d.abs())}';
+
+  static bool _nextDay(String a, String b) {
+    final x = DateTime.tryParse(a), y = DateTime.tryParse(b);
+    if (x == null || y == null) return false;
+    return DateTime(y.year, y.month, y.day).difference(DateTime(x.year, x.month, x.day)).inDays == 1;
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = widget.row;
-    const fin = Color(0xFF2F6690);
-    const biz = Color(0xFF9C82E6);
     return FutureBuilder<List<LhBfPoint>>(
       future: _future,
       builder: (context, snap) {
-        final pts = snap.data ?? const <LhBfPoint>[];
+        final all = snap.data ?? const <LhBfPoint>[];
         final finKey = _bank ? 'bankBalance' : 'prepaid';
-        final finVals = [for (final p in pts) p.hasData ? p.values[finKey] : null];
-        final bizVals = _bank ? null : [for (final p in pts) p.hasData ? p.values['couponPool'] : null];
-        final days = pts.where((p) => p.hasData).length;
+        // 从第一个有快照的日子画起；更早的天收成一格「无快照」。
+        final first = all.indexWhere((p) => p.hasData);
+        final pts = first < 0 ? const <LhBfPoint>[] : all.sublist(first);
+        final before = first < 0 ? all : all.sublist(0, first);
+        final data = pts.where((p) => p.hasData).toList();
+        final days = data.length;
+        final today = widget.controller.isToday;
+        double? v(LhBfPoint p, String k) => p.hasData ? p.values[k] : null;
+
+        // 较上一快照日。
+        String? vsLabel;
+        double? delta(String k) {
+          if (data.length < 2) return null;
+          final a = data.last.values[k], b = data[data.length - 2].values[k];
+          return a == null || b == null ? null : a - b;
+        }
+
+        if (data.length >= 2) {
+          final prev = data[data.length - 2].date;
+          vsLabel = _nextDay(prev, data.last.date) ? '较昨' : '较${lhBfShortDate(prev)}';
+        }
+        Color upDown(double? d) => _c(context, d == null || d.abs() < 0.5 ? LhColors.mute2 : (d > 0 ? LhColors.neg : LhColors.pos));
+        String? sub(double? d) => d == null || vsLabel == null ? null : '$vsLabel ${_sd(d)}';
+        final dFin = delta(finKey);
+        final dPool = _bank ? null : delta('couponPool');
+        final dDiff = _bank ? null : delta('poolDiff');
+
+        final mono = LhTypography.mono(size: 10.5, weight: FontWeight.w700, color: _c(context, LhColors.ink), context: context);
+        final monoMute = LhTypography.mono(size: 10, color: _c(context, LhColors.mute2), context: context);
+        final sansMute = LhTypography.sans(size: 10, color: _c(context, LhColors.mute2), context: context);
+        final beforeLabel = before.isEmpty ? null : '≤${lhBfShortDate(before.last.date)}';
+        final dates = [for (var i = 0; i < pts.length; i++) i == pts.length - 1 && today ? '${lhBfShortDate(pts[i].date)} 今' : lhBfShortDate(pts[i].date)];
+
+        Widget legendDot(Color c, String t) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 9, height: 9, decoration: BoxDecoration(color: _c(context, c), borderRadius: BorderRadius.circular(2))),
+            const SizedBox(width: 4),
+            Text(t, style: _label(context, size: 10.5)),
+          ],
+        );
+
+        Widget chartBody() {
+          if (snap.connectionState != ConnectionState.done) {
+            return Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 1.8, color: _c(context, _kPlumPrimary))));
+          }
+          if (snap.hasError) {
+            return Center(child: Text('${snap.error}'.replaceFirst('Exception: ', ''), style: _label(context, size: 12)));
+          }
+          if (days == 0) return Center(child: Text('无快照', style: _label(context, size: 12)));
+          if (days <= 7) {
+            return CustomPaint(
+              size: Size.infinite,
+              painter: _SnapBarsPainter(
+                dates: dates,
+                a: [for (final p in pts) v(p, finKey)],
+                b: _bank ? null : [for (final p in pts) v(p, 'couponPool')],
+                aColor: _c(context, _fin),
+                bColor: _c(context, _bizBar),
+                bInk: _c(context, _bizInk),
+                stubLabel: beforeLabel,
+                highlightLast: today,
+                stubFill: _c(context, const Color(0xFFFAF8FD)),
+                stubEdge: _c(context, const Color(0xFFE6DFF2)),
+                todayFill: _c(context, const Color(0xFFF6F2FD)),
+                base: _c(context, const Color(0xFFE8E1F7)),
+                valueStyle: mono,
+                dateStyle: monoMute,
+                dateOn: monoMute.copyWith(fontWeight: FontWeight.w700, color: _c(context, _kPlumDeep)),
+                stubStyle: sansMute,
+              ),
+            );
+          }
+          return CustomPaint(
+            size: Size.infinite,
+            painter: _SnapLinePainter(
+              a: [for (final p in pts) v(p, finKey)],
+              b: _bank ? null : [for (final p in pts) v(p, 'couponPool')],
+              aColor: _c(context, _fin),
+              bColor: _c(context, _bizLine),
+              grid: _c(context, const Color(0xFFF1ECF8)),
+              empty: _c(context, const Color(0xFFFAF8FD)),
+            ),
+          );
+        }
+
         final children = <Widget>[
-          _sheetHead(context, '余额走势', r, [_chip(context, '每日快照', fg: _kPlumDeep, bg: LhBfColors.bizSoft)]),
+          _sheetHead(context, '余额走势', r, [
+            _chip(context, days == 0 ? '每日快照' : '$days 个快照日', fg: _kPlumDeep, bg: LhBfColors.bizSoft, mono: true),
+          ]),
           const SizedBox(height: 12),
-          _segPill(context, const ['预付款余额', '银行账户余额'], _bank ? 1 : 0, (i) => setState(() => _bank = i == 1), width: double.infinity),
+          _segPill(context, const ['预付款 vs 券池', '银行账户余额'], _bank ? 1 : 0, (i) => setState(() => _bank = i == 1), width: double.infinity),
           const SizedBox(height: 10),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: _miniStat(
                   context,
                   _bank ? '财务 · 银行账户余额' : '财务 · 预付款',
                   lhBfWan(r.finance[_bank ? 'bankBalance' : 'fundBalance']),
-                  color: _c(context, fin),
+                  color: _c(context, _fin),
                   fill: const Color(0xFFF3F0FB),
                   edge: const Color(0xFFE1DAF6),
+                  sub: sub(dFin),
+                  subColor: upDown(dFin),
                 ),
               ),
               if (!_bank) ...[
                 const SizedBox(width: 6),
-                Expanded(child: _miniStat(context, '业务 · 券池', lhBfWan(r.businessCouponPool), color: _c(context, const Color(0xFF6A4FC9)))),
+                Expanded(
+                  child: _miniStat(
+                    context,
+                    '业务 · 券池',
+                    lhBfWan(r.businessCouponPool),
+                    color: _c(context, _bizInk),
+                    sub: sub(dPool),
+                    subColor: upDown(dPool),
+                  ),
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: _miniStat(
@@ -3559,9 +4123,11 @@ class _BfBalanceSheetState extends State<_BfBalanceSheet> {
                     '业财差',
                     lhBfSignedWan(r.difference['fundBalance']),
                     color: _c(context, lhBfDifferenceColor(r.difference['fundBalance'])),
-                    fill: const Color(0xFFF7F6FA),
-                    edge: LhBfColors.line,
-                    labelColor: _c(context, lhBfDifferenceColor(r.difference['fundBalance'])),
+                    fill: const Color(0xFFFCF7EE),
+                    edge: const Color(0xFFF0E2C8),
+                    labelColor: _c(context, LhBfColors.copper),
+                    sub: sub(dDiff),
+                    subColor: _c(context, LhBfColors.copper),
                   ),
                 ),
               ],
@@ -3569,109 +4135,202 @@ class _BfBalanceSheetState extends State<_BfBalanceSheet> {
           ),
           const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+            padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
             decoration: _panel(context, fill: const Color(0xFFFFFDFF)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
-                    Text(_bank ? '━ 银行余额（财务）' : '━ 预付款（财务）', style: _label(context, size: 10.5, color: _c(context, fin))),
-                    if (!_bank) ...[
-                      const SizedBox(width: 12),
-                      Text('┅ 券池（业务）', style: _label(context, size: 10.5, color: _c(context, biz))),
-                    ],
+                    legendDot(_fin, _bank ? '银行余额（财务）' : '预付款（财务）'),
+                    if (!_bank) ...[const SizedBox(width: 12), legendDot(_bizBar, '券池（业务）')],
                     const Spacer(),
-                    Text('近 ${pts.isEmpty ? 14 : pts.length} 天', style: LhTypography.mono(size: 10, color: _c(context, LhColors.mute2), context: context)),
+                    Text('万元', style: monoMute),
                   ],
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 160,
-                  child: snap.connectionState != ConnectionState.done
-                      ? Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 1.8, color: _c(context, _kPlumPrimary))))
-                      : snap.hasError
-                      ? Center(child: Text('${snap.error}'.replaceFirst('Exception: ', ''), style: _label(context, size: 12)))
-                      : CustomPaint(
-                          size: Size.infinite,
-                          painter: _SnapLinePainter(
-                            a: finVals,
-                            b: bizVals,
-                            aColor: _c(context, fin),
-                            bColor: _c(context, biz),
-                            grid: _c(context, const Color(0xFFF1ECF8)),
-                            empty: _c(context, const Color(0xFFFAF8FD)),
-                          ),
-                        ),
-                ),
-                const SizedBox(height: 4),
-                if (pts.isNotEmpty)
+                const SizedBox(height: 6),
+                SizedBox(height: days > 7 ? 160 : 210, child: chartBody()),
+                if (days > 7) ...[
+                  const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       for (final i in {0, pts.length ~/ 3, (2 * pts.length) ~/ 3, pts.length - 1})
                         Text(
-                          i == pts.length - 1 && widget.controller.isToday ? '今' : lhBfShortDate(pts[i].date),
+                          i == pts.length - 1 && today ? '今' : lhBfShortDate(pts[i].date),
                           style: LhTypography.mono(size: 10, color: _c(context, i == pts.length - 1 ? _kPlumDeep : LhColors.mute2), context: context),
                         ),
                     ],
                   ),
+                ],
               ],
             ),
           ),
+        ];
+
+        // 业财差走势：券池 − 预付款，过零线一眼看出谁高。
+        if (!_bank && days > 0) {
+          final diffs = [for (final p in pts) v(p, 'poolDiff')];
+          final present = [for (final p in data) p.values['poolDiff']].whereType<double>().toList();
+          final change = present.length >= 2 ? present.last - present.first : null;
+          children.addAll([
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
+              decoration: _panel(context, fill: const Color(0xFFFFFDF9), edge: const Color(0xFFF0E2C8)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text('业财差', style: LhTypography.sans(size: 12.5, weight: FontWeight.w700, color: _c(context, const Color(0xFF7A4F14)), context: context)),
+                      const SizedBox(width: 8),
+                      Text('券池 − 预付款', style: _label(context, size: 11)),
+                      const Spacer(),
+                      if (change != null) _chip(context, '$days 天 ${_sd(change)}', fg: const Color(0xFF7A4F14), bg: const Color(0xFFFCF7EE), mono: true),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 120,
+                    child: CustomPaint(
+                      size: Size.infinite,
+                      painter: _DiffLinePainter(
+                        dates: dates,
+                        values: diffs,
+                        withStub: beforeLabel != null && days <= 7,
+                        line: _c(context, _copperLine),
+                        zero: _c(context, const Color(0xFFC9B48E)),
+                        negFill: _c(context, const Color(0xFFF6FBF8)),
+                        up: _c(context, LhColors.neg),
+                        down: _c(context, LhColors.pos),
+                        valueStyle: mono,
+                        dateStyle: monoMute,
+                        dateOn: monoMute.copyWith(fontWeight: FontWeight.w700, color: _c(context, _kPlumDeep)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ]);
+        }
+
+        children.addAll([
           const SizedBox(height: 14),
           Row(
             children: [
               Text('每日快照', style: LhTypography.sans(size: 13, weight: FontWeight.w700, color: _c(context, LhColors.ink), context: context)),
               const SizedBox(width: 6),
-              _chip(context, '$days 天有数', fg: _kPlumDeep, bg: LhBfColors.bizSoft),
+              _chip(context, '日变化', fg: _kPlumDeep, bg: LhBfColors.bizSoft),
             ],
           ),
           const SizedBox(height: 8),
-        ];
-        Widget tr(List<String> cells, {bool header = false, bool strong = false, bool muted = false}) => Container(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        ]);
+
+        Widget tr(List<String> cells, {List<(String, Color)?>? subs, List<Color?>? colors, bool header = false, bool strong = false, bool muted = false}) => Container(
+          padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
           decoration: BoxDecoration(
-            color: header ? _c(context, const Color(0xFFF7F6FA), DunesColorRole.surface) : null,
+            color: header
+                ? _c(context, const Color(0xFFF7F6FA), DunesColorRole.surface)
+                : (strong ? _c(context, const Color(0xFFFBF9FE), DunesColorRole.surface) : null),
             border: header ? null : Border(top: BorderSide(color: _c(context, _kPanelLine, DunesColorRole.border))),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               for (var i = 0; i < cells.length; i++)
                 Expanded(
                   flex: i == 0 ? 9 : 10,
-                  child: Text(
-                    cells[i],
-                    textAlign: i == 0 ? TextAlign.left : TextAlign.right,
-                    style: header
-                        ? _label(context, size: 10, color: _c(context, LhColors.mute2))
-                        : LhTypography.mono(
-                            size: 11.5,
-                            weight: strong ? FontWeight.w700 : FontWeight.w500,
-                            color: _c(context, muted ? LhColors.mute2 : (i == cells.length - 1 && !_bank ? LhBfColors.copper : LhColors.ink)),
-                            context: context,
-                          ),
+                  child: Column(
+                    crossAxisAlignment: i == 0 ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        cells[i],
+                        textAlign: i == 0 ? TextAlign.left : TextAlign.right,
+                        style: header
+                            ? _label(context, size: 10, color: colors?[i] ?? _c(context, LhColors.mute2))
+                            : LhTypography.mono(
+                                size: 11.5,
+                                weight: strong ? FontWeight.w700 : FontWeight.w500,
+                                color: muted ? _c(context, LhColors.mute2) : (colors?[i] ?? _c(context, LhColors.ink)),
+                                context: context,
+                              ),
+                      ),
+                      if (subs != null && subs[i] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 1),
+                          child: Text(subs[i]!.$1, style: LhTypography.mono(size: 9.5, weight: FontWeight.w600, color: subs[i]!.$2, context: context)),
+                        ),
+                    ],
                   ),
                 ),
             ],
           ),
         );
+
         final table = <Widget>[
-          tr(_bank ? const ['日期', '银行余额'] : const ['日期', '预付款', '券池', '差'], header: true),
+          tr(
+            _bank ? const ['日期', '银行余额'] : const ['日期', '预付款', '券池', '业财差'],
+            header: true,
+            colors: _bank ? null : [null, _c(context, _fin), _c(context, _bizInk), _c(context, LhBfColors.copper)],
+          ),
         ];
+        final keys = _bank ? const ['bankBalance'] : const ['prepaid', 'couponPool', 'poolDiff'];
         for (var i = pts.length - 1; i >= 0; i--) {
           final p = pts[i];
-          final label = '${lhBfShortDate(p.date)} · ${i == pts.length - 1 && widget.controller.isToday ? '当日' : '快照'}';
+          final last = i == pts.length - 1;
+          final label = '${lhBfShortDate(p.date)} · ${last && today ? '当日' : '快照'}';
           if (!p.hasData) {
-            table.add(tr(_bank ? [lhBfShortDate(p.date), '—'] : [lhBfShortDate(p.date), '—', '—', '—'], muted: true));
+            table.add(tr([lhBfShortDate(p.date), for (final _ in keys) '—'], muted: true));
             continue;
+          }
+          LhBfPoint? prev;
+          for (var j = i - 1; j >= 0; j--) {
+            if (pts[j].hasData) {
+              prev = pts[j];
+              break;
+            }
+          }
+          final subs = <(String, Color)?>[null];
+          final colors = <Color?>[null];
+          for (final k in keys) {
+            final cur = p.values[k];
+            final pv = prev?.values[k];
+            if (prev == null) {
+              subs.add(('首日', _c(context, LhColors.mute2)));
+            } else if (cur == null || pv == null) {
+              subs.add(null);
+            } else {
+              final d = cur - pv;
+              subs.add((_sd(d), k == 'poolDiff' ? _c(context, LhBfColors.copper) : upDown(d)));
+            }
+            colors.add(k == 'poolDiff' ? _c(context, lhBfDifferenceColor(cur)) : null);
           }
           table.add(
             tr(
-              _bank
-                  ? [label, lhBfWan(p.values['bankBalance'])]
-                  : [label, lhBfWan(p.values['prepaid']), lhBfWan(p.values['couponPool']), lhBfSignedWan(p.values['poolDiff'])],
-              strong: i == pts.length - 1,
+              [label, for (final k in keys) k == 'poolDiff' ? (p.values[k] == null ? '—' : _sd(p.values[k]!)) : lhBfWan(p.values[k])],
+              subs: subs,
+              colors: colors,
+              strong: last,
+            ),
+          );
+        }
+        if (before.isNotEmpty) {
+          table.add(
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
+              decoration: BoxDecoration(
+                color: _c(context, const Color(0xFFFAF9FC), DunesColorRole.surface),
+                border: Border(top: BorderSide(color: _c(context, _kPanelLine, DunesColorRole.border))),
+              ),
+              child: Row(
+                children: [
+                  Text('${lhBfShortDate(before.last.date)} 及以前', style: monoMute),
+                  const Spacer(),
+                  Text('无快照', style: _label(context, size: 11)),
+                ],
+              ),
             ),
           );
         }
@@ -3689,6 +4348,226 @@ class _BfBalanceSheetState extends State<_BfBalanceSheet> {
       },
     );
   }
+}
+
+void _paintText(Canvas canvas, String text, TextStyle style, Offset anchor, {bool above = false}) {
+  final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr)..layout();
+  tp.paint(canvas, Offset(anchor.dx - tp.width / 2, above ? anchor.dy - tp.height : anchor.dy));
+}
+
+/// 快照日 ≤ 7 天：每天一组柱（财务 / 业务并排），柱顶直接标数。
+class _SnapBarsPainter extends CustomPainter {
+  _SnapBarsPainter({
+    required this.dates,
+    required this.a,
+    required this.b,
+    required this.aColor,
+    required this.bColor,
+    required this.bInk,
+    required this.stubLabel,
+    required this.highlightLast,
+    required this.stubFill,
+    required this.stubEdge,
+    required this.todayFill,
+    required this.base,
+    required this.valueStyle,
+    required this.dateStyle,
+    required this.dateOn,
+    required this.stubStyle,
+  });
+
+  final List<String> dates;
+  final List<double?> a;
+  final List<double?>? b;
+  final Color aColor;
+  final Color bColor;
+  final Color bInk;
+  final String? stubLabel;
+  final bool highlightLast;
+  final Color stubFill;
+  final Color stubEdge;
+  final Color todayFill;
+  final Color base;
+  final TextStyle valueStyle;
+  final TextStyle dateStyle;
+  final TextStyle dateOn;
+  final TextStyle stubStyle;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = a.length;
+    if (n == 0) return;
+    const dateH = 18.0;
+    const topPad = 18.0;
+    final baseY = size.height - dateH - 4;
+    final left = stubLabel != null ? 62.0 : 0.0;
+    final slot = (size.width - left) / n;
+    final all = [...a.whereType<double>(), ...?b?.whereType<double>()].map((v) => v.abs());
+    final maxV = all.isEmpty ? 1.0 : all.reduce(math.max);
+    double bh(double v) => maxV == 0 ? 3 : math.max(3, v.abs() / maxV * (baseY - topPad));
+
+    if (stubLabel != null) {
+      final rr = RRect.fromRectAndRadius(Rect.fromLTRB(2, topPad + 8, 54, baseY), const Radius.circular(8));
+      canvas.drawRRect(rr, Paint()..color = stubFill);
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..color = stubEdge
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+      _paintText(canvas, '无快照', stubStyle, Offset(28, (topPad + 8 + baseY) / 2 - 7));
+      _paintText(canvas, stubLabel!, dateStyle, Offset(28, baseY + 5));
+    }
+    if (highlightLast) {
+      final cx = left + slot * (n - 0.5);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTRB(cx - slot / 2 + 4, 0, cx + slot / 2 - 4, size.height), const Radius.circular(10)),
+        Paint()..color = todayFill,
+      );
+    }
+    canvas.drawLine(Offset(left, baseY), Offset(size.width, baseY), Paint()
+      ..color = base
+      ..strokeWidth = 1);
+
+    final pair = b != null;
+    final bw = pair ? math.min(36.0, slot * 0.3) : math.min(44.0, slot * 0.42);
+    void bar(double x, double? v, Color c, Color ink) {
+      if (v == null) {
+        canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, baseY - 2, bw, 2), const Radius.circular(1)), Paint()..color = base);
+        _paintText(canvas, '—', valueStyle.copyWith(color: dateStyle.color), Offset(x + bw / 2, baseY - 4), above: true);
+        return;
+      }
+      final h = bh(v);
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, baseY - h, bw, h), const Radius.circular(5)), Paint()..color = c);
+      _paintText(canvas, lhBfWan(v), valueStyle.copyWith(color: ink), Offset(x + bw / 2, baseY - h - 3), above: true);
+    }
+
+    for (var i = 0; i < n; i++) {
+      final cx = left + slot * (i + 0.5);
+      if (pair) {
+        bar(cx - bw - 2, a[i], aColor, aColor);
+        bar(cx + 2, b![i], bColor, bInk);
+      } else {
+        bar(cx - bw / 2, a[i], aColor, aColor);
+      }
+      _paintText(canvas, dates[i], i == n - 1 && highlightLast ? dateOn : dateStyle, Offset(cx, baseY + 5));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SnapBarsPainter old) => old.a != a || old.b != b || old.dates != dates;
+}
+
+/// 业财差：零线 + 折线；≤ 7 个点每点标数，多了只标最后一点。
+class _DiffLinePainter extends CustomPainter {
+  _DiffLinePainter({
+    required this.dates,
+    required this.values,
+    required this.withStub,
+    required this.line,
+    required this.zero,
+    required this.negFill,
+    required this.up,
+    required this.down,
+    required this.valueStyle,
+    required this.dateStyle,
+    required this.dateOn,
+  });
+
+  final List<String> dates;
+  final List<double?> values;
+  final bool withStub;
+  final Color line;
+  final Color zero;
+  final Color negFill;
+  final Color up;
+  final Color down;
+  final TextStyle valueStyle;
+  final TextStyle dateStyle;
+  final TextStyle dateOn;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = values.length;
+    final present = values.whereType<double>().toList();
+    if (n == 0 || present.isEmpty) return;
+    const dateH = 16.0;
+    const pad = 16.0;
+    final bottom = size.height - dateH - 4;
+    final left = withStub ? 62.0 : 0.0;
+    final slot = (size.width - left) / n;
+    var lo = math.min(0.0, present.reduce(math.min));
+    var hi = math.max(0.0, present.reduce(math.max));
+    if ((hi - lo).abs() < 1e-9) {
+      lo -= 1;
+      hi += 1;
+    }
+    double y(double v) => pad + (hi - v) / (hi - lo) * (bottom - pad * 2) + pad / 2;
+    double x(int i) => left + slot * (i + 0.5);
+    final zy = y(0);
+    canvas.drawRect(Rect.fromLTRB(left, zy, size.width, bottom), Paint()..color = negFill);
+    canvas.drawLine(Offset(left, zy), Offset(size.width, zy), Paint()
+      ..color = zero
+      ..strokeWidth = 1);
+
+    final lp = Paint()
+      ..color = line
+      ..strokeWidth = 2.4
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+    Offset? prev;
+    for (var i = 0; i < n; i++) {
+      final v = values[i];
+      if (v == null) {
+        prev = null;
+        continue;
+      }
+      final p = Offset(x(i), y(v));
+      if (prev != null) canvas.drawLine(prev, p, lp);
+      prev = p;
+    }
+    var lastIdx = -1;
+    for (var i = n - 1; i >= 0; i--) {
+      if (values[i] != null) {
+        lastIdx = i;
+        break;
+      }
+    }
+    for (var i = 0; i < n; i++) {
+      final v = values[i];
+      if (v == null) continue;
+      final p = Offset(x(i), y(v));
+      final isLast = i == lastIdx;
+      if (isLast) {
+        canvas.drawCircle(p, 5.5, Paint()..color = line);
+      } else if (n <= 7) {
+        canvas.drawCircle(p, 4.5, Paint()..color = Colors.white);
+        canvas.drawCircle(
+          p,
+          4.5,
+          Paint()
+            ..color = line
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2,
+        );
+      }
+      if (n <= 7 || isLast) {
+        final c = v.abs() < 5000 ? dateStyle.color! : (v > 0 ? up : down);
+        final txt = v.abs() < 0.5 ? '0.00' : '${v > 0 ? '+' : '−'}${lhBfWan(v.abs())}';
+        final above = v >= 0;
+        _paintText(canvas, txt, valueStyle.copyWith(color: c), Offset(p.dx, above ? p.dy - 7 : p.dy + 7), above: above);
+      }
+    }
+    for (var i = 0; i < n; i++) {
+      if (n > 7 && i != 0 && i != n - 1) continue;
+      _paintText(canvas, dates[i], i == n - 1 ? dateOn : dateStyle, Offset(x(i), bottom + 4));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DiffLinePainter old) => old.values != values || old.dates != dates;
 }
 
 class _SnapLinePainter extends CustomPainter {

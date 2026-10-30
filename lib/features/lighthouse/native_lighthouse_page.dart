@@ -17,6 +17,8 @@ import '../../core/theme/dunes_island.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../conversation/comm_unread_notifier.dart';
+import '../conversation/conversation_service.dart';
+import '../chat/user_avatar_widget.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'lighthouse_asset_board.dart';
@@ -15276,6 +15278,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   final GlobalKey _mainListAreaKey = GlobalKey();
   final ValueNotifier<bool> _ledgerTabsStuck = ValueNotifier<bool>(false);
 
+  /// 业务 / 财务天平：滑下去收进顶部浮岛；切换时打一道灯塔光。
+  final ValueNotifier<bool> _ledgerSwitchCompact = ValueNotifier<bool>(false);
+  final ValueNotifier<int> _ledgerBeamTick = ValueNotifier<int>(0);
+
   /// 经营成本（/lighthouse/operating-cost）。key = 期间；换期间就重拉。
   Map<String, dynamic>? _opCost;
   String _opCostKey = '';
@@ -16425,6 +16431,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     _discountFocusTimer?.cancel();
     _mainListScrollCtrl.dispose();
     _ledgerTabsStuck.dispose();
+    _ledgerSwitchCompact.dispose();
+    _ledgerBeamTick.dispose();
     _bf?.dispose();
     _service.dispose();
     _heroFullscreenTick.dispose();
@@ -20391,6 +20399,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       : const SizedBox.shrink(),
                 ),
               ),
+              Positioned.fill(
+                child: LighthouseLedgerBeam(
+                  tick: _ledgerBeamTick,
+                  finance: _isFinanceLedger,
+                ),
+              ),
             ],
           ),
         ),
@@ -20407,16 +20421,31 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       valueListenable: bf.access,
       builder: (context, access, _) {
         if (!_hasNetTaAccess && access != true) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(
-            lighthouseHeroShellMarginH,
-            2,
-            lighthouseHeroShellMarginH,
-            10,
-          ),
-          child: LighthouseLedgerModeSwitch(
-            finance: _isFinanceLedger,
-            onChanged: _setFinanceLedger,
+        return ValueListenableBuilder<bool>(
+          valueListenable: _ledgerSwitchCompact,
+          builder: (context, compact, _) => AnimatedSize(
+            duration: _islandDur(260),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: AnimatedOpacity(
+              duration: _islandDur(200),
+              opacity: compact ? 0 : 1,
+              child: compact
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        lighthouseHeroShellMarginH,
+                        2,
+                        lighthouseHeroShellMarginH,
+                        4,
+                      ),
+                      child: LighthouseLedgerModeSwitch(
+                        finance: _isFinanceLedger,
+                        onChanged: _setFinanceLedger,
+                        controller: bf,
+                      ),
+                    ),
+            ),
           ),
         );
       },
@@ -20426,6 +20455,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   void _setFinanceLedger(bool finance) {
     if (finance == _isFinanceLedger) return;
     _closeDropdown();
+    // 灯塔换光：页面上扫一道光，左上角像素灯塔也打一下光束。
+    _ledgerBeamTick.value++;
+    _pixelCtl.fire(LighthousePixelEvent.sync);
     final bf = _bf;
     if (finance) {
       setState(() => _financeLedger = true);
@@ -20626,12 +20658,14 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     // 顶栏把本组放在最右侧、宽度不限时，按内容宽度排，避免把空白顶到组后面。
     // 2026-10-30 · 财务也按日 / 周 / 月 / 季 / 年：和业务共用同一颗周期岛。
     final period = _hasAccess ? _buildGlowingPeriodIsland() : null;
+    final ledger = _buildCompactLedgerIsland();
     return LayoutBuilder(
       builder: (context, constraints) {
         final bounded = constraints.maxWidth.isFinite;
         return Row(
           mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
           children: [
+            ledger,
             if (period != null)
               bounded
                   ? Expanded(
@@ -20644,6 +20678,43 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             if (_hasAccess) const SizedBox(width: 8),
             _buildMoreIsland(),
           ],
+        );
+      },
+    );
+  }
+
+  /// 天平收起后的「业｜财」小浮岛，排在周期岛左边。
+  Widget _buildCompactLedgerIsland() {
+    final bf = _bf;
+    if (bf == null) return const SizedBox.shrink();
+    return ValueListenableBuilder<bool?>(
+      valueListenable: bf.access,
+      builder: (context, access, _) {
+        if (!_hasNetTaAccess && access != true) return const SizedBox.shrink();
+        return ValueListenableBuilder<bool>(
+          valueListenable: _ledgerSwitchCompact,
+          builder: (context, compact, _) => AnimatedSize(
+            duration: _islandDur(260),
+            curve: Curves.easeOutCubic,
+            child: AnimatedSwitcher(
+              duration: _islandDur(220),
+              transitionBuilder: (child, a) => FadeTransition(
+                opacity: a,
+                child: ScaleTransition(scale: Tween(begin: 0.8, end: 1.0).animate(a), child: child),
+              ),
+              child: compact
+                  ? Padding(
+                      key: const ValueKey('ledger-compact'),
+                      padding: const EdgeInsets.only(right: 8),
+                      child: LighthouseLedgerCompactToggle(
+                        finance: _isFinanceLedger,
+                        onChanged: _setFinanceLedger,
+                        height: _kIslandH,
+                      ),
+                    )
+                  : const SizedBox.shrink(key: ValueKey('ledger-full')),
+            ),
+          ),
         );
       },
     );
@@ -21643,6 +21714,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         onNotification: (n) {
           if (n.metrics.axis == Axis.vertical && n.depth == 0) {
             _updateLedgerTabsStuck();
+            final px = n.metrics.pixels;
+            if (!_ledgerSwitchCompact.value && px > 40) {
+              _ledgerSwitchCompact.value = true;
+            } else if (_ledgerSwitchCompact.value && px < 6) {
+              _ledgerSwitchCompact.value = false;
+            }
           }
           if (_ddMode != _DdMode.none && n is ScrollStartNotification) {
             _closeDropdown();
@@ -52155,6 +52232,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       drill: _detailKey != null,
     );
     if (!mounted) return;
+    final avatarService = ConversationService(session: widget.session);
+    try {
     await showDialog<void>(
       context: context,
       barrierColor: const Color(0xFF241A3D).withAlpha(70),
@@ -52286,15 +52365,18 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                             dense: true,
                             minVerticalPadding: 10,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 5),
-                            leading: CircleAvatar(
-                              radius: 17,
-                              backgroundColor: DunesColors.resolve(context, _LhPlum.primary).withAlpha(20),
-                              child: Text(
-                                (user['userName']?.toString().trim().isNotEmpty ?? false)
-                                    ? user['userName'].toString().trim().substring(0, 1)
-                                    : '人',
-                                style: TextStyle(color: DunesColors.resolve(context, _LhPlum.primary), fontSize: 11),
-                              ),
+                            leading: ImUserAvatar(
+                              initial: (user['userName']?.toString().trim().isNotEmpty ?? false)
+                                  ? user['userName'].toString().trim().substring(0, 1)
+                                  : '人',
+                              seed: (user['userId'] as num?)?.toInt() ?? 0,
+                              size: 34,
+                              avatarPreset: user['avatarPreset']?.toString(),
+                              avatarObjectKey: user['avatarObjectKey']?.toString(),
+                              avatarUrl: user['avatarUrl']?.toString(),
+                              avatarService: avatarService,
+                              fallbackBackground: DunesColors.resolve(context, _LhPlum.primary).withAlpha(20),
+                              fallbackForeground: DunesColors.resolve(context, _LhPlum.primary),
                             ),
                             title: Text(
                               user['userName']?.toString() ?? '未命名用户',
@@ -52323,6 +52405,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         ),
       ),
     );
+    } finally {
+      avatarService.close();
+    }
   }
 
   void _togglePk(LhPkEntry entry, BuildContext buttonContext) {

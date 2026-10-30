@@ -1080,9 +1080,13 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
 
   List<String> _followUpsFor(Map turn) {
     final fromServer = turn['suggestions'];
-    final list = fromServer is List
-        ? fromServer.map((e) => '$e').where((e) => e.trim().isNotEmpty).toList()
-        : qianjiScopeSuggestions('${turn['scope']}');
+    // 板块默认问题是 const 列表，不能直接 insert。先复制成可改的。
+    final list = <String>[
+      if (fromServer is List)
+        ...fromServer.map((e) => '$e').where((e) => e.trim().isNotEmpty)
+      else
+        ...qianjiScopeSuggestions('${turn['scope']}'),
+    ];
     final asked = '${turn['question']}'.trim();
     if (_hasExportRows(turn['data']) &&
         !list.any((q) => q.contains('Excel') || q.contains('excel'))) {

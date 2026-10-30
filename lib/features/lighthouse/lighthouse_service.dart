@@ -286,6 +286,24 @@ class LighthouseService {
     }, '灯塔资金池加载失败');
   }
 
+  /// 当前灯塔数据行最终可见人员：后端同时计算板块授权和有效数据规则。
+  Future<Map<String, dynamic>> fetchRowVisibility({
+    required String module,
+    String? product,
+    String? productL3,
+    String? province,
+    bool drill = false,
+  }) {
+    return _getData('/lighthouse/visibility', {
+      'module': module,
+      if (product != null && product.isNotEmpty) 'product': product,
+      if (productL3 != null && productL3.isNotEmpty) 'productL3': productL3,
+      if (province != null && province.isNotEmpty) 'province': province,
+      'date': _fmtDate(DateTime.now()),
+      if (drill) 'drill': 'true',
+    }, '可见人员加载失败');
+  }
+
   /// 资产走势三条线（总额 / 资产（本金）/ 累计利润）。
   /// [scope]：total | oil | petro | province:<省> | entity:<rowKey>；
   /// [granularity]：day、week、month、quarter、year，跟随灯塔顶部周期。
@@ -549,6 +567,104 @@ class LighthouseService {
     );
   }
 
+  // ── 业财标签二（财务视角）──────────────────────────────────────────────
+  //   后端：/lighthouse/business-finance(/series | /detail/:kind)。
+  //   错误要带后端 message（资管的「明细与汇总尚未同步」等），缓存兜底带 _stale。
+
+  /// 业财对照汇总：rows + total，每行 business / finance / difference。
+  Future<Map<String, dynamic>> fetchBusinessFinance({
+    String? asOfDate,
+    String? province,
+  }) {
+    return _fetchBusinessFinance(
+      _uri('/lighthouse/business-finance', {
+        if (asOfDate != null && asOfDate.isNotEmpty) 'asOfDate': asOfDate,
+        if (province != null && province.isNotEmpty) 'province': province,
+      }),
+    );
+  }
+
+  /// 按期间（同业务：period / offset / 自定义区间）：期末列表 + 每行 period / periodPrev。
+  Future<Map<String, dynamic>> fetchBusinessFinancePeriod({
+    String? period,
+    int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    return _fetchBusinessFinance(
+      _uri('/lighthouse/business-finance/period', {
+        if (period != null && period.isNotEmpty) 'period': period,
+        if (offset != null && offset != 0) 'offset': '$offset',
+        ..._rangeQuery(startDate, endDate),
+      }),
+    );
+  }
+
+  /// 合计走势：截至 [asOfDate] 往前 [days] 天，每天一个快照。
+  Future<Map<String, dynamic>> fetchBusinessFinanceSeries({
+    String? asOfDate,
+    int days = 14,
+    String? subjectKey,
+  }) {
+    return _fetchBusinessFinance(
+      _uri('/lighthouse/business-finance/series', {
+        if (asOfDate != null && asOfDate.isNotEmpty) 'asOfDate': asOfDate,
+        'days': '$days',
+        if (subjectKey != null && subjectKey.isNotEmpty)
+          'subjectKey': subjectKey,
+      }),
+    );
+  }
+
+  /// 三类明细：zombie-coupons | sales-receipts | commission-payments。
+  Future<Map<String, dynamic>> fetchBusinessFinanceDetail({
+    required String kind,
+    String? asOfDate,
+    String? province,
+    String? subjectKey,
+  }) {
+    return _fetchBusinessFinance(
+      _uri('/lighthouse/business-finance/detail/$kind', {
+        if (asOfDate != null && asOfDate.isNotEmpty) 'asOfDate': asOfDate,
+        if (province != null && province.isNotEmpty) 'province': province,
+        if (subjectKey != null && subjectKey.isNotEmpty)
+          'subjectKey': subjectKey,
+      }),
+    );
+  }
+
+  Future<Map<String, dynamic>> _fetchBusinessFinance(Uri uri) async {
+    late final http.Response resp;
+    try {
+      resp = await _client.get(uri, headers: _headers).timeout(requestTimeout);
+    } on TimeoutException {
+      throw const LighthouseBfException('请求超时');
+    }
+    Map<String, dynamic>? body;
+    try {
+      final decoded = jsonDecode(resp.body);
+      if (decoded is Map) body = Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    if (resp.statusCode == 403) {
+      throw const LighthouseBfException('暂无权限', forbidden: true);
+    }
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw LighthouseBfException(
+        (body?['message'] ?? 'HTTP ${resp.statusCode}').toString(),
+      );
+    }
+    if (body == null) throw const LighthouseBfException('数据格式错误');
+    if (body['success'] == false) {
+      throw LighthouseBfException((body['message'] ?? '加载失败').toString());
+    }
+    final data = body['data'];
+    final out = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    out['_stale'] = resp.headers['x-lighthouse-stale'] == '1';
+    return out;
+  }
+
   Future<Map<String, dynamic>> _getData(
     String path,
     Map<String, String> query,
@@ -652,4 +768,14 @@ class LighthouseService {
     if (data is Map) return Map<String, dynamic>.from(data);
     return body;
   }
+}
+
+/// 业财接口错误：[message] 可直接展示；[forbidden] = 403。
+class LighthouseBfException implements Exception {
+  const LighthouseBfException(this.message, {this.forbidden = false});
+  final String message;
+  final bool forbidden;
+
+  @override
+  String toString() => message;
 }

@@ -292,7 +292,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
           ? DunesPalette.night.page
           : DunesColors.resolve(
               context,
-              const Color(0xFFF2F2F2),
+              DunesColors.bgApp,
               role: DunesColorRole.surface,
             ),
       body: SafeArea(
@@ -672,7 +672,7 @@ class _ProfileAddCell extends StatelessWidget {
             decoration: BoxDecoration(
               color: DunesColors.resolve(
                 context,
-                const Color(0xFFF7F7F7),
+                DunesColors.bgApp,
                 role: DunesColorRole.surface,
               ),
               borderRadius: BorderRadius.circular(radius),

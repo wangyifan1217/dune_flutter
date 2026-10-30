@@ -33,6 +33,7 @@ class NativeXflowFormPage extends StatefulWidget {
     this.onDeleted,
     this.initialLinkedProposal,
     this.service,
+    this.entryCategory,
   });
 
   final AuthSession session;
@@ -51,6 +52,9 @@ class NativeXflowFormPage extends StatefulWidget {
 
   /// 草稿删除成功后的回调（用于刷新来源列表）。
   final VoidCallback? onDeleted;
+
+  /// `biz` 从业务审批打开，`adm` 从非业务审批打开。
+  final String? entryCategory;
 
   @override
   State<NativeXflowFormPage> createState() => _NativeXflowFormPageState();
@@ -123,6 +127,13 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       _dismissKeyboard();
     }
     _keyboardWasVisible = keyboardVisible;
+  }
+
+  String? _launchEntry(dynamic raw) {
+    if (raw == null) return null;
+    final text = raw.toString().trim().toLowerCase();
+    if (text == 'biz' || text == 'adm') return text;
+    return null;
   }
 
   bool get _isEditing =>
@@ -381,6 +392,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
             .toString()
             .trim();
         if (bt.isNotEmpty) _draftBusinessType = bt;
+        final code = '${res['applicationNo'] ?? res['code'] ?? ''}'.trim();
+        if (code.isNotEmpty &&
+            '${_values['applicationNo'] ?? ''}'.trim().isEmpty) {
+          _values['applicationNo'] = code;
+        }
       }
       if (!mounted || seq != _autosaveSeq) return;
       setState(() => _autosaveHint = '已自动保存');
@@ -414,8 +430,20 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     });
     final ccFuture = _service.fetchCcRulesList(templateKey: widget.templateKey);
     try {
+      var entry = _launchEntry(widget.entryCategory);
+      XflowSubmissionDetail? editingSubmission;
+      if (_isDynamicSubmission) {
+        editingSubmission = await _service.fetchSubmissionDetail(
+          businessType: widget.editBusinessType,
+          businessId: widget.editProposalId!,
+        );
+        entry = _launchEntry(editingSubmission.formData['entryCategory']) ?? entry;
+      }
       var template = applyElectronicReimbursementTemplate(
-        await _service.fetchTemplateDetail(templateKey: widget.templateKey),
+        await _service.fetchTemplateDetail(
+          templateKey: widget.templateKey,
+          entryCategory: entry,
+        ),
       );
       // 先挂上模板，便于 _localDraftBusinessType 取到真实业务类型。
       _template = template;
@@ -431,14 +459,17 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       if (widget.initialLinkedProposal != null && !_isEditing) {
         _values['linkedProposal'] = widget.initialLinkedProposal;
       }
+      applyLinkedProposalProject(_values);
+      if (entry == 'biz' || entry == 'adm') {
+        _values['entryCategory'] = entry;
+      }
       XflowProposalDetail? detail;
-      if (_isDynamicSubmission) {
-        final submission = await _service.fetchSubmissionDetail(
-          businessType: widget.editBusinessType,
-          businessId: widget.editProposalId!,
-        );
-        _editingSubmission = submission;
-        _values.addAll(submission.formData);
+      if (editingSubmission != null) {
+        _editingSubmission = editingSubmission;
+        _values.addAll(editingSubmission.formData);
+        if (entry == 'biz' || entry == 'adm') {
+          _values['entryCategory'] = entry;
+        }
         _draftBusinessType = widget.editBusinessType;
       } else if (_isEditing) {
         detail = await _service.fetchProposalDetail(widget.editProposalId!);
@@ -472,6 +503,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         }
         _values['linkedProposal'] = selected;
       }
+      applyLinkedProposalProject(_values);
+      if (!_isEditing) await _ensureApplicationNo();
       setState(() {
         _template = template;
         _editingDetail = detail;
@@ -698,6 +731,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     _autosaveTimer?.cancel();
     _autosaveSeq++;
     if (_isEditing) _stripCopiedApprovalTitle();
+    _recompute();
     setState(() => _submitting = true);
     try {
       Map<String, dynamic> res;
@@ -901,6 +935,26 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       default:
         showDunesToast(context, '操作：$kind');
     }
+  }
+
+  Future<void> _ensureApplicationNo() async {
+    final fields = _template?.fields ?? const <XflowField>[];
+    if (!fields.any((field) => field.key == 'applicationNo')) return;
+    if ('${_values['applicationNo'] ?? ''}'.trim().isNotEmpty) return;
+    try {
+      final res = await _service.submitDraft(
+        formValues: Map<String, dynamic>.from(_values),
+        proposalId: _activeDraftId,
+        templateKey: widget.templateKey,
+      );
+      if (!mounted) return;
+      final pid = _int(res['proposalId'] ?? res['businessId'] ?? res['id']);
+      if (pid > 0) _draftProposalId = pid;
+      final bt = (res['businessType'] ?? '').toString().trim();
+      if (bt.isNotEmpty) _draftBusinessType = bt;
+      final code = '${res['applicationNo'] ?? res['code'] ?? ''}'.trim();
+      if (code.isNotEmpty) _values['applicationNo'] = code;
+    } catch (_) {}
   }
 
   Future<void> _saveDraft() async {
@@ -1260,6 +1314,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                     _applyApplicantProfile(
                                       _applicantProfiles[_int(value)],
                                     );
+                                  }
+                                  if (key == 'linkedProposal') {
+                                    applyLinkedProposalProject(_values);
                                   }
                                   _recompute();
                                 });

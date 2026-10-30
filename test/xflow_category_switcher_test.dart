@@ -8,11 +8,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('35 张审批模板全部进入唯一二级目录，未知模板进入其他', () {
-    expect(xflowApprovalCatalogKeys, hasLength(35));
+  test('审批模板在每一边的目录里不重复，电子报销可以两边都有', () {
+    expect(xflowApprovalCatalogKeys, hasLength(36));
+    expect(xflowApprovalCatalogKeys.toSet(), hasLength(35));
+    for (final category in ['biz', 'adm']) {
+      final keys = xflowApprovalGroupsForCategory(category)
+          .expand((group) => group.templateKeys)
+          .toList();
+      expect(keys.toSet(), hasLength(keys.length), reason: category);
+    }
     expect(
-      xflowApprovalCatalogKeys.toSet(),
-      hasLength(xflowApprovalCatalogKeys.length),
+      xflowApprovalGroupsForCategory('biz')
+          .expand((group) => group.templateKeys),
+      contains('electronic-reimbursement'),
+    );
+    expect(
+      xflowApprovalGroupsForCategory('adm')
+          .expand((group) => group.templateKeys),
+      contains('electronic-reimbursement'),
     );
     expect(xflowApprovalGroupsForCategory('biz'), hasLength(7));
     expect(xflowApprovalGroupsForCategory('adm'), hasLength(5));
@@ -26,6 +39,63 @@ void main() {
       '内部费用与报销',
     );
     expect(xflowApprovalGroupForTemplate('unknown-template').title, '其他');
+  });
+
+  test('同一模板可以同时归入业务和非业务子分类', () {
+    const catalog = [
+      XflowApprovalGroup(
+        id: 'biz-expense',
+        category: 'biz',
+        title: '经营费用',
+        description: '招待、礼品与业务差旅',
+        icon: Icons.receipt_long_outlined,
+        templateKeys: ['finance-travel-expense'],
+      ),
+      XflowApprovalGroup(
+        id: 'adm-reimbursement',
+        category: 'adm',
+        title: '内部费用与报销',
+        description: '员工报销、商旅与行政采购',
+        icon: Icons.luggage_outlined,
+        templateKeys: ['finance-travel-expense'],
+      ),
+    ];
+    const card = XflowTemplateCard(
+      templateKey: 'finance-travel-expense',
+      title: '差旅费申请',
+      subtitle: '',
+      endpoint: '',
+      tagLabel: '',
+      category: 'biz',
+    );
+    final biz = xflowPopulatedApprovalGroups(
+      [card],
+      category: 'biz',
+      catalog: catalog,
+    );
+    final adm = xflowPopulatedApprovalGroups(
+      [card],
+      category: 'adm',
+      catalog: catalog,
+    );
+    expect(biz.single.templates.single.templateKey, 'finance-travel-expense');
+    expect(adm.single.templates.single.templateKey, 'finance-travel-expense');
+    expect(
+      xflowApprovalGroupForTemplate(
+        'finance-travel-expense',
+        catalog: catalog,
+        category: 'adm',
+      ).id,
+      'adm-reimbursement',
+    );
+    expect(
+      xflowApprovalGroupForTemplate(
+        'finance-travel-expense',
+        catalog: catalog,
+        category: 'biz',
+      ).id,
+      'biz-expense',
+    );
   });
 
   test('V321：业务资质切到业务证照，停用单不再进目录', () {
@@ -42,8 +112,8 @@ void main() {
     final bizReimbursement = xflowApprovalGroupsForCategory(
       'biz',
     ).singleWhere((group) => group.id == 'biz-reimbursement');
-    expect(bizReimbursement.templateKeys, isEmpty);
-    // 空板块不出现在发起页。
+    expect(bizReimbursement.templateKeys, ['electronic-reimbursement']);
+    // 当前列表里没有电子报销时，这个子分类不出现。
     final groups = xflowPopulatedApprovalGroups([
       XflowTemplateCard(
         templateKey: 'admin-business-qualification',

@@ -66,7 +66,7 @@ class ChatInboxHeader extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         color: DunesColors.resolve(
           context,
-          DunesColors.bgApp,
+          Colors.white,
           role: DunesColorRole.surface,
         ),
         child: Row(
@@ -977,7 +977,7 @@ class _StatusIconChip extends StatelessWidget {
           ? color.withValues(alpha: 0.14)
           : DunesColors.resolve(
               context,
-              const Color(0xFFF5F5F5),
+              DunesColors.bgSoft,
               role: DunesColorRole.surface,
             ),
       borderRadius: BorderRadius.circular(8),
@@ -1162,7 +1162,7 @@ class ChatInboxSearchBar extends StatelessWidget {
       child: Container(
         color: DunesColors.resolve(
           context,
-          isDesktopCommOnly ? Colors.white : const Color(0xFFF5F5F5),
+          Colors.white,
           role: DunesColorRole.surface,
         ),
         padding: isDesktopCommOnly
@@ -1280,6 +1280,13 @@ class _InboxSearchChromeState extends State<_InboxSearchChrome> {
             role: DunesColorRole.surface,
           ),
           borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: widget.child,
       );
@@ -1561,8 +1568,7 @@ class ChatInboxRow extends StatelessWidget {
 
   Color get _rowBg {
     if (selected) return DunesColors.accentSoft;
-    if (pinned) return DunesColors.bgSoft;
-    return DunesColors.bgApp;
+    return pinned ? Colors.white : Colors.white;
   }
 
   @override

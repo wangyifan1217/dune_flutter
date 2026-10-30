@@ -1984,9 +1984,10 @@ const _kDrillTitles = <String, String>{
 };
 
 class LighthouseBfSubjectList extends StatelessWidget {
-  const LighthouseBfSubjectList({super.key, required this.controller});
+  const LighthouseBfSubjectList({super.key, required this.controller, this.onWhoCanSee});
 
   final LighthouseBfController controller;
+  final void Function(LhBfRow row)? onWhoCanSee;
 
   @override
   Widget build(BuildContext context) {
@@ -2013,7 +2014,7 @@ class LighthouseBfSubjectList extends StatelessWidget {
         } else {
           final rows = controller.visibleRows;
           for (var i = 0; i < rows.length; i++) {
-            children.add(_BfSubjectRow(controller: controller, row: rows[i], index: i + 1));
+            children.add(_BfSubjectRow(controller: controller, row: rows[i], index: i + 1, onWhoCanSee: onWhoCanSee));
           }
           if (rows.isEmpty && s.note.isNotEmpty) {
             children.add(center(Text(s.note, style: _label(context, size: 12.5))));
@@ -2102,11 +2103,12 @@ class LighthouseBfSubjectList extends StatelessWidget {
 }
 
 class _BfSubjectRow extends StatelessWidget {
-  const _BfSubjectRow({required this.controller, required this.row, required this.index});
+  const _BfSubjectRow({required this.controller, required this.row, required this.index, this.onWhoCanSee});
 
   final LighthouseBfController controller;
   final LhBfRow row;
   final int index;
+  final void Function(LhBfRow row)? onWhoCanSee;
 
   @override
   Widget build(BuildContext context) {
@@ -2184,7 +2186,7 @@ class _BfSubjectRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(
-                    width: 132,
+                    width: 156,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -2207,6 +2209,20 @@ class _BfSubjectRow extends StatelessWidget {
                                 style: LhTypography.sans(size: 13, weight: FontWeight.w700, height: 1.3, color: _c(context, LhColors.ink), context: context),
                               ),
                             ),
+                            if (onWhoCanSee != null)
+                              Semantics(
+                                button: true,
+                                label: '查看${r.title}谁能看到',
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => onWhoCanSee!(r),
+                                  child: SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: Icon(Icons.group_outlined, size: 14, color: _c(context, LhColors.mute)),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                         if (!r.isTail) ...[
@@ -4192,7 +4208,7 @@ class _BfBalanceSheetState extends State<_BfBalanceSheet> {
                   ),
                   const SizedBox(height: 6),
                   SizedBox(
-                    height: 120,
+                    height: 152,
                     child: CustomPaint(
                       size: Size.infinite,
                       painter: _DiffLinePainter(
@@ -4492,9 +4508,11 @@ class _DiffLinePainter extends CustomPainter {
     final n = values.length;
     final present = values.whereType<double>().toList();
     if (n == 0 || present.isEmpty) return;
+    // 折线下面留一截给负值数字，再下面才是日期，避免贴底的点和日期叠在一起。
     const dateH = 16.0;
-    const pad = 16.0;
-    final bottom = size.height - dateH - 4;
+    const labelBand = 22.0;
+    const plotTop = 18.0;
+    final plotBottom = size.height - dateH - labelBand;
     final left = withStub ? 62.0 : 0.0;
     final slot = (size.width - left) / n;
     var lo = math.min(0.0, present.reduce(math.min));
@@ -4503,10 +4521,10 @@ class _DiffLinePainter extends CustomPainter {
       lo -= 1;
       hi += 1;
     }
-    double y(double v) => pad + (hi - v) / (hi - lo) * (bottom - pad * 2) + pad / 2;
-    double x(int i) => left + slot * (i + 0.5);
-    final zy = y(0);
-    canvas.drawRect(Rect.fromLTRB(left, zy, size.width, bottom), Paint()..color = negFill);
+    double yOf(double v) => plotTop + (hi - v) / (hi - lo) * (plotBottom - plotTop);
+    double xOf(int i) => left + slot * (i + 0.5);
+    final zy = yOf(0);
+    canvas.drawRect(Rect.fromLTRB(left, zy, size.width, plotBottom), Paint()..color = negFill);
     canvas.drawLine(Offset(left, zy), Offset(size.width, zy), Paint()
       ..color = zero
       ..strokeWidth = 1);
@@ -4524,7 +4542,7 @@ class _DiffLinePainter extends CustomPainter {
         prev = null;
         continue;
       }
-      final p = Offset(x(i), y(v));
+      final p = Offset(xOf(i), yOf(v));
       if (prev != null) canvas.drawLine(prev, p, lp);
       prev = p;
     }
@@ -4535,10 +4553,11 @@ class _DiffLinePainter extends CustomPainter {
         break;
       }
     }
+    final dateTop = size.height - dateH;
     for (var i = 0; i < n; i++) {
       final v = values[i];
       if (v == null) continue;
-      final p = Offset(x(i), y(v));
+      final p = Offset(xOf(i), yOf(v));
       final isLast = i == lastIdx;
       if (isLast) {
         canvas.drawCircle(p, 5.5, Paint()..color = line);
@@ -4556,13 +4575,29 @@ class _DiffLinePainter extends CustomPainter {
       if (n <= 7 || isLast) {
         final c = v.abs() < 5000 ? dateStyle.color! : (v > 0 ? up : down);
         final txt = v.abs() < 0.5 ? '0.00' : '${v > 0 ? '+' : '−'}${lhBfWan(v.abs())}';
-        final above = v >= 0;
-        _paintText(canvas, txt, valueStyle.copyWith(color: c), Offset(p.dx, above ? p.dy - 7 : p.dy + 7), above: above);
+        final tp = TextPainter(text: TextSpan(text: txt, style: valueStyle.copyWith(color: c)), textDirection: TextDirection.ltr)..layout();
+        const gap = 5.0;
+        var top = v >= 0 ? p.dy - gap - tp.height : p.dy + gap;
+        if (top < 1) top = p.dy + gap;
+        if (top + tp.height > dateTop - 1) {
+          final pulled = dateTop - 1 - tp.height;
+          if (pulled >= p.dy + gap) {
+            top = pulled;
+          } else if (p.dy - gap - tp.height >= 1) {
+            top = p.dy - gap - tp.height;
+          } else {
+            top = math.max(1.0, pulled);
+          }
+        }
+        var dx = p.dx - tp.width / 2;
+        if (dx < left) dx = left;
+        if (dx + tp.width > size.width - 2) dx = size.width - 2 - tp.width;
+        tp.paint(canvas, Offset(dx, top));
       }
     }
     for (var i = 0; i < n; i++) {
       if (n > 7 && i != 0 && i != n - 1) continue;
-      _paintText(canvas, dates[i], i == n - 1 ? dateOn : dateStyle, Offset(x(i), bottom + 4));
+      _paintText(canvas, dates[i], i == n - 1 ? dateOn : dateStyle, Offset(xOf(i), dateTop + 1));
     }
   }
 

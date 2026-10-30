@@ -27,6 +27,7 @@ class XflowLinkage {
         values[field.key] = stampTax(values);
         continue;
       }
+      if (_applyTravelHook(field, values)) continue;
       final expr = field.raw['computeExpr']?.toString();
       if (expr != null && expr.trim().isNotEmpty) {
         values[field.key] = evalExpr(expr, values);
@@ -149,6 +150,123 @@ class XflowLinkage {
     }
     if (!hasCardMoney) return;
     values['totalAmount'] = sum.toStringAsFixed(2);
+  }
+
+  /// 差旅申请的天数、标题、住宿标准和预订渠道。返回 true 表示该 hook 已处理。
+  static bool _applyTravelHook(XflowField field, Map<String, dynamic> values) {
+    final hook = field.raw['hook']?.toString() ?? '';
+    switch (hook) {
+      case 'inclusiveDays':
+        _writeHook(values, field.key, _daySpanLabel(field, values, inclusive: true));
+        return true;
+      case 'hotelNights':
+        final nights = values['needHotel']?.toString() == '是'
+            ? _daySpanLabel(field, values, inclusive: false)
+            : '';
+        _writeHook(values, field.key, nights);
+        return true;
+      case 'hotelStandard':
+        final standard = values['needHotel']?.toString() == '是'
+            ? _hotelStandardLabel(values)
+            : '';
+        _writeHook(values, field.key, standard);
+        return true;
+      case 'travelTitle':
+        _writeHook(values, field.key, _travelTitleLabel(values));
+        return true;
+      case 'bookingChannel':
+        _writeHook(values, field.key, _bookingChannelLabel(values));
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  static void _writeHook(Map<String, dynamic> values, String key, String value) {
+    if (value.isEmpty) {
+      values.remove(key);
+      return;
+    }
+    values[key] = value;
+  }
+
+  static String _daySpanLabel(
+    XflowField field,
+    Map<String, dynamic> values, {
+    required bool inclusive,
+  }) {
+    final start = _parseDay(values[_metaString(field, 'from', 'startDate')]);
+    final end = _parseDay(values[_metaString(field, 'to', 'endDate')]);
+    if (start == null || end == null) return '';
+    final days = DateTime(end.year, end.month, end.day)
+        .difference(DateTime(start.year, start.month, start.day))
+        .inDays;
+    if (days < 0) return '';
+    final count = inclusive ? days + 1 : days;
+    return '$count${_metaString(field, 'suffix', '天')}';
+  }
+
+  static String _hotelStandardLabel(Map<String, dynamic> values) {
+    if ('${values['companions'] ?? ''}'.trim().isNotEmpty) {
+      return '同性别拼房标准：300元/人/晚';
+    }
+    return '单人差旅标准：450元/晚';
+  }
+
+  static String _travelTitleLabel(Map<String, dynamic> values) {
+    final unit = '${values['visitUnit'] ?? ''}'.trim();
+    var reason = '${values['travelReason'] ?? ''}'.trim();
+    final reasonChars = reason.runes.toList();
+    if (reasonChars.length > 30) {
+      reason = '${String.fromCharCodes(reasonChars.take(30))}...';
+    }
+    if (unit.isEmpty && reason.isEmpty) return '';
+    if (unit.isEmpty) return reason;
+    if (reason.isEmpty) return unit;
+    return '$unit - $reason';
+  }
+
+  static String _bookingChannelLabel(Map<String, dynamic> values) {
+    final rows = values['itineraryItems'];
+    var hasPlatform = false;
+    var hasSelf = false;
+    if (rows is List) {
+      for (final row in rows) {
+        if (row is! Map) continue;
+        switch ('${row['bookingMethod'] ?? ''}'.trim()) {
+          case '自行预订':
+            hasSelf = true;
+            break;
+          case '公司商旅平台':
+            hasPlatform = true;
+            break;
+        }
+      }
+    }
+    if (hasSelf) return '自行预订';
+    if (hasPlatform) return '携程';
+    return '';
+  }
+
+  static String _metaString(XflowField field, String key, String fallback) {
+    final meta = field.raw['meta'];
+    if (meta is Map) {
+      final text = '${meta[key] ?? ''}'.trim();
+      if (text.isNotEmpty) return text;
+    }
+    return fallback;
+  }
+
+  static DateTime? _parseDay(dynamic raw) {
+    final text = '${raw ?? ''}'.trim();
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(text);
+    if (match == null) return null;
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    final date = DateTime(year, month, day);
+    if (date.year != year || date.month != month || date.day != day) return null;
+    return date;
   }
 
   /// 印花税：按目标月规模（万元）的万分之三计算，保留两位小数。

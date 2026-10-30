@@ -77,13 +77,15 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
   }
 
   Future<void> _loadTemplates() async {
-    final results = await Future.wait(['biz', 'adm'].map((category) async {
-      try {
-        return await _service.fetchTemplatesByCategory(category);
-      } catch (_) {
-        return <XflowTemplateCard>[];
-      }
-    }));
+    final results = await Future.wait(
+      ['biz', 'adm'].map((category) async {
+        try {
+          return await _service.fetchTemplatesByCategory(category);
+        } catch (_) {
+          return <XflowTemplateCard>[];
+        }
+      }),
+    );
     List<XflowApprovalGroup>? catalog;
     try {
       catalog = await _service.fetchApprovalGroups();
@@ -197,6 +199,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
           code: widget.proposal.code,
           title: widget.proposal.title,
           kind: widget.proposal.kind,
+          projectName: '${widget.proposal.form['projectName'] ?? ''}',
         ),
       );
       if (mounted) await _load();
@@ -464,10 +467,11 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
     if (mounted) await _load();
   }
 
-  List<Map<String, dynamic>> _maps(Object? raw) => (raw is List ? raw : const [])
-      .whereType<Map>()
-      .map((r) => Map<String, dynamic>.from(r))
-      .toList();
+  List<Map<String, dynamic>> _maps(Object? raw) =>
+      (raw is List ? raw : const [])
+          .whereType<Map>()
+          .map((r) => Map<String, dynamic>.from(r))
+          .toList();
 
   Map<String, dynamic>? _bucket(String code) {
     for (final b in _maps(_costs['buckets'])) {
@@ -498,7 +502,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
     );
     final funds = _bucket('workingCapital');
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 10),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: DunesColors.resolve(
@@ -556,7 +560,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
           ),
           if (_busy) const LinearProgressIndicator(minHeight: 2),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+            padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
             child: switch (_tab) {
               _BizTab.approvals => _approvalsTab(items, total, stats),
               _BizTab.invoices => _rowsTab(
@@ -584,7 +588,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
         : '本提案关联的业务审批';
     return Container(
       color: DunesColors.resolve(context, _kSoft, role: DunesColorRole.surface),
-      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 6),
       child: Wrap(
         alignment: WrapAlignment.spaceBetween,
         crossAxisAlignment: WrapCrossAlignment.center,
@@ -597,13 +601,15 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
             children: [
               const Text(
                 '业务审批',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               ),
               const SizedBox(height: 2),
               Text(
                 subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
@@ -615,8 +621,11 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
             children: [
               IconButton(
                 tooltip: '刷新',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 onPressed: _busy ? null : _load,
-                icon: const Icon(Icons.refresh, size: 20),
+                icon: const Icon(Icons.refresh, size: 18),
               ),
               if (_canLaunch)
                 TextButton(
@@ -628,7 +637,18 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
                 FilledButton.icon(
                   key: const ValueKey('proposal-launch-business-approval'),
                   onPressed: _launching || _busy ? null : () => _launch(),
-                  icon: const Icon(Icons.add, size: 18),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  icon: const Icon(Icons.add, size: 16),
                   label: Text(_launching ? '正在打开…' : '发起审批'),
                 ),
             ],
@@ -638,11 +658,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
     );
   }
 
-  Widget _approvalsTab(
-    List<Map<String, dynamic>> items,
-    int total,
-    Map stats,
-  ) {
+  Widget _approvalsTab(List<Map<String, dynamic>> items, int total, Map stats) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -664,15 +680,16 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
         const SizedBox(height: 4),
         if (_error != null) _notice(_error!, error: true),
         if (!_busy && _error == null && items.isEmpty)
-          _empty(
-            _canLaunch ? '还没有业务审批，点「发起审批」从本提案发起' : '暂无关联业务审批',
-          ),
+          _empty(_canLaunch ? '还没有业务审批，点「发起审批」从本提案发起' : '暂无关联业务审批'),
         for (final row in items) _row(row, history: true),
         if (total > 20 || _page > 1)
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Text('共 $total 条 · 第 $_page 页', style: const TextStyle(fontSize: 12)),
+              Text(
+                '共 $total 条 · 第 $_page 页',
+                style: const TextStyle(fontSize: 12),
+              ),
               IconButton(
                 tooltip: '上一页',
                 onPressed: _busy || _page <= 1
@@ -724,8 +741,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_costError != null) _notice(_costError!, error: true),
-        if (!any && _costError == null)
-          _empty('付款、费用、发票等审批通过后，会按来源单据自动归集到这里'),
+        if (!any && _costError == null) _empty('付款、费用、发票等审批通过后，会按来源单据自动归集到这里'),
         for (final group in groups)
           if (_count(group) > 0) _bucketSection(group),
       ],
@@ -766,7 +782,10 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
             children: [
               Text(
                 '${group['label']}',
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(width: 8),
               Text(
@@ -822,7 +841,8 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
         ),
       ),
     );
-    final hasHistory = history && (row['history'] as List? ?? const []).isNotEmpty;
+    final hasHistory =
+        history && (row['history'] as List? ?? const []).isNotEmpty;
     return InkWell(
       onTap: () => _open(row),
       child: Container(
@@ -937,7 +957,8 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
     final (dot, text) = switch (status) {
       'APPROVED' => (const Color(0xFF1E7A4E), const Color(0xFF1E6B45)),
       'REJECTED' => (const Color(0xFFB42318), const Color(0xFF9A1C12)),
-      'PENDING' || 'RUNNING' => (const Color(0xFFC77700), const Color(0xFF8A4B00)),
+      'PENDING' ||
+      'RUNNING' => (const Color(0xFFC77700), const Color(0xFF8A4B00)),
       _ => (const Color(0xFF9A97AC), const Color(0xFF5F5D70)),
     };
     return Row(
@@ -980,47 +1001,51 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
         });
         unawaited(_load());
       },
-      itemBuilder: (context) => {
-        '': '全部',
-        for (final template in bizTemplates.isEmpty ? _templates : bizTemplates)
-          template.templateKey: template.title,
-      }.entries
-          .map(
-            (entry) => PopupMenuItem<String>(
-              value: entry.key,
-              height: 38,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 20,
-                    child: entry.key == _templateKey
-                        ? Icon(
-                            Icons.check_rounded,
-                            size: 16,
-                            color: DunesColors.resolve(context, _kAccent),
-                          )
-                        : null,
+      itemBuilder: (context) =>
+          {
+                '': '全部',
+                for (final template
+                    in bizTemplates.isEmpty ? _templates : bizTemplates)
+                  template.templateKey: template.title,
+              }.entries
+              .map(
+                (entry) => PopupMenuItem<String>(
+                  value: entry.key,
+                  height: 38,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        child: entry.key == _templateKey
+                            ? Icon(
+                                Icons.check_rounded,
+                                size: 16,
+                                color: DunesColors.resolve(context, _kAccent),
+                              )
+                            : null,
+                      ),
+                      Text(
+                        entry.value,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: entry.key == _templateKey
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    entry.value,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: entry.key == _templateKey
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-          .toList(),
+                ),
+              )
+              .toList(),
       child: Container(
         padding: const EdgeInsets.fromLTRB(10, 4, 6, 4),
         decoration: BoxDecoration(
           color: DunesColors.resolve(
             context,
-            _templateKey.isEmpty ? const Color(0xFFF1EFF8) : const Color(0xFFECE8FA),
+            _templateKey.isEmpty
+                ? const Color(0xFFF1EFF8)
+                : const Color(0xFFECE8FA),
             role: DunesColorRole.surface,
           ),
           borderRadius: BorderRadius.circular(999),
@@ -1069,7 +1094,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
@@ -1112,11 +1137,12 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
   );
 
   Widget _empty(String text) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 14),
+    padding: const EdgeInsets.fromLTRB(2, 4, 2, 2),
     child: Text(
       text,
       style: TextStyle(
-        fontSize: 13,
+        fontSize: 12,
+        height: 1.4,
         color: DunesColors.resolve(context, DunesColors.text3),
       ),
     ),
@@ -1150,7 +1176,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
     final canManage = _data['canManageLaunchers'] == true;
     if (launchers.isEmpty && !canManage) return const SizedBox.shrink();
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
+      padding: const EdgeInsets.fromLTRB(12, 4, 10, 4),
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
@@ -1196,17 +1222,38 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(item.name.isEmpty ? '用户 ${item.userId}' : item.name,
-                    style: const TextStyle(fontSize: 12)),
+                  Text(
+                    item.name.isEmpty ? '用户 ${item.userId}' : item.name,
+                    style: const TextStyle(fontSize: 12),
+                  ),
                   if (canManage) ...[
                     const SizedBox(width: 4),
                     InkWell(
-                      key: ValueKey('proposal-approval-launcher-remove-${item.userId}'),
-                      onTap: _busy || _savingLaunchers ? null : () => unawaited(
-                        _saveLaunchers(launchers.where((p) => p.userId != item.userId).map((p) => p.userId).toSet()),
+                      key: ValueKey(
+                        'proposal-approval-launcher-remove-${item.userId}',
                       ),
+                      onTap: _busy || _savingLaunchers
+                          ? null
+                          : () => unawaited(
+                              _saveLaunchers(
+                                launchers
+                                    .where((p) => p.userId != item.userId)
+                                    .map((p) => p.userId)
+                                    .toSet(),
+                              ),
+                            ),
                       borderRadius: BorderRadius.circular(20),
-                      child: Padding(padding: const EdgeInsets.all(3), child: Icon(Icons.close_rounded, size: 14, color: DunesColors.resolve(context, DunesColors.text3))),
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 14,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ],
@@ -1240,13 +1287,16 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
               ? people
               : people
                     .where(
-                      (p) => '${p.name} ${p.username} ${p.departmentName} ${p.positionName}'
-                          .toLowerCase()
-                          .contains(q),
+                      (p) =>
+                          '${p.name} ${p.username} ${p.departmentName} ${p.positionName}'
+                              .toLowerCase()
+                              .contains(q),
                     )
                     .toList();
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
             title: const Text('可发起人'),
             content: SizedBox(
               width: 460,
@@ -1266,11 +1316,22 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
                   TextField(
                     decoration: InputDecoration(
                       isDense: true,
-                      prefixIcon: Icon(Icons.search, size: 18, color: DunesColors.resolve(ctx, _kAccent)),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        size: 18,
+                        color: DunesColors.resolve(ctx, _kAccent),
+                      ),
                       hintText: '搜索姓名、部门',
                       filled: true,
-                      fillColor: DunesColors.resolve(ctx, _kSoft, role: DunesColorRole.surface),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      fillColor: DunesColors.resolve(
+                        ctx,
+                        _kSoft,
+                        role: DunesColorRole.surface,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                     onChanged: (v) => setLocal(() => query = v),
                   ),
@@ -1283,9 +1344,14 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
                               for (final p in shown)
                                 CheckboxListTile(
                                   dense: true,
-                                  activeColor: DunesColors.resolve(ctx, _kAccent),
+                                  activeColor: DunesColors.resolve(
+                                    ctx,
+                                    _kAccent,
+                                  ),
                                   secondary: ImUserAvatar(
-                                    initial: p.name.isEmpty ? '?' : p.name.characters.first,
+                                    initial: p.name.isEmpty
+                                        ? '?'
+                                        : p.name.characters.first,
                                     seed: p.userId,
                                     size: 38,
                                     avatarUrl: p.avatarUrl,
@@ -1333,7 +1399,10 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
 
   Future<void> _saveLaunchers(Set<int> result) async {
     if (_savingLaunchers) return;
-    setState(() { _savingLaunchers = true; _error = null; });
+    setState(() {
+      _savingLaunchers = true;
+      _error = null;
+    });
     try {
       await _service.saveProposalApprovalLaunchers(
         widget.proposal.id,
@@ -1630,6 +1699,7 @@ class _ProposalBusinessFormHostState extends State<_ProposalBusinessFormHost> {
     editProposalId: widget.businessId,
     editBusinessType: widget.businessType,
     initialLinkedProposal: widget.proposal,
+    entryCategory: 'biz',
     backScreen: 'proposal',
     onSubmitted: (_, _) => widget.close(),
   );

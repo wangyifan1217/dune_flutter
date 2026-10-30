@@ -30,6 +30,7 @@ import '../update/app_release_history_page.dart';
 import '../update/app_update_service.dart';
 import '../workbench/native_avatar_sheet.dart';
 import '../workbench/workbench_badge_notifier.dart';
+import '../proposal_intake/proposal_intake_models.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
 import 'mine_home.dart';
@@ -295,6 +296,7 @@ class _NativeMyWorkProfileCenterPageState
 
   bool _avatarSheetOpen = false;
   int _mineRefreshToken = 0;
+  ProposalIntakeRow? _desktopProposal;
   bool _qrScannerOpening = false;
   int _avatarRefreshVersion = 0;
   final MeetingLiveController _live = MeetingLiveController.instance;
@@ -790,6 +792,15 @@ class _NativeMyWorkProfileCenterPageState
     }
   }
 
+  void _openWorkbench() {
+    final open = widget.onOpenWorkbench;
+    if (open != null) {
+      open();
+      return;
+    }
+    widget.navigation.go('QJA');
+  }
+
   Future<void> _openQrScanner() async {
     if (_qrScannerOpening) return;
     setState(() => _qrScannerOpening = true);
@@ -1214,6 +1225,18 @@ class _NativeMyWorkProfileCenterPageState
     widget.navigation.go(kind == 'purchase' ? 'B2PURCHASE' : 'B2SALES');
   }
 
+  void _openDesktopProposal(ProposalIntakeRow row) {
+    setState(() => _desktopProposal = row);
+  }
+
+  void _closeDesktopProposal() {
+    if (!mounted) return;
+    setState(() {
+      _desktopProposal = null;
+      _mineRefreshToken++;
+    });
+  }
+
   String _formatLiveElapsed(Duration duration) {
     final total = duration.inSeconds.clamp(0, 24 * 60 * 60);
     final h = (total ~/ 3600).toString().padLeft(2, '0');
@@ -1344,6 +1367,9 @@ class _NativeMyWorkProfileCenterPageState
                             name: name,
                             subtitle: identityLine,
                             actions: [
+                              if (!isDesktopCommOnly &&
+                                  !widget.session.isExternalUser)
+                                MineWorkbenchChip(onTap: _openWorkbench),
                               // 扫一扫仅 PC 桌面端隐藏；APP 与浏览器预览均展示。
                               if (!isDesktopCommOnly)
                                 MineRoundAction(
@@ -1389,7 +1415,7 @@ class _NativeMyWorkProfileCenterPageState
                               month: _month,
                               counts: counts,
                               showProposals: showProposals,
-                              companyView: mineIsCompanyViewer(name),
+                              companyView: widget.session.mineCompanyView,
                               refreshToken: _mineRefreshToken,
                               onOpenPendingApprovals: () =>
                                   widget.navigation.go('B1'),
@@ -1403,6 +1429,7 @@ class _NativeMyWorkProfileCenterPageState
                               onOpenLighthouse: () =>
                                   widget.navigation.go('LH'),
                               onOpenProposalList: _openProposalIntake,
+                              onOpenProposalDetail: _openDesktopProposal,
                             ),
                           ),
                         ],
@@ -1445,6 +1472,17 @@ class _NativeMyWorkProfileCenterPageState
                 right: 16,
                 bottom: navExtent + 84,
                 child: _buildLiveTranscribeFab(),
+              ),
+
+            // 盖在「我的」内容上，不伸出左侧主导航。
+            if (_desktopProposal != null)
+              Positioned.fill(
+                child: MineProposalDetail(
+                  key: ValueKey<int>(_desktopProposal!.id),
+                  session: widget.session,
+                  row: _desktopProposal!,
+                  onClose: _closeDesktopProposal,
+                ),
               ),
           ],
         ),

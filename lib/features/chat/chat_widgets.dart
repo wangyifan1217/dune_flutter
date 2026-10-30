@@ -350,7 +350,7 @@ class ChatQuickActions extends StatelessWidget {
       width: double.infinity,
       color: DunesColors.resolve(
         context,
-        const Color(0xFFF7F7F7),
+        DunesColors.bgApp,
         role: DunesColorRole.surface,
       ),
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
@@ -574,31 +574,19 @@ class ChatInputBar extends StatelessWidget {
             decoration: BoxDecoration(
               color:
                   backgroundColor ??
-                  (wide
-                      ? DunesColors.resolve(
-                          context,
-                          DunesColors.bgApp,
-                          role: DunesColorRole.surface,
-                        )
-                      : DunesColors.resolve(
-                          context,
-                          const Color(0xFFF7F7F7),
-                          role: DunesColorRole.surface,
-                        )),
+                  DunesColors.resolve(
+                    context,
+                    DunesColors.bgApp,
+                    role: DunesColorRole.surface,
+                  ),
               border: showTopBorder
                   ? Border(
                       top: BorderSide(
-                        color: wide
-                            ? DunesColors.resolve(
-                                context,
-                                DunesColors.borderSoft,
-                                role: DunesColorRole.border,
-                              )
-                            : DunesColors.resolve(
-                                context,
-                                const Color(0xFFE8E8E8),
-                                role: DunesColorRole.border,
-                              ),
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.borderSoft,
+                          role: DunesColorRole.border,
+                        ),
                       ),
                     )
                   : null,
@@ -2497,8 +2485,6 @@ class ChatQuotePreviewBar extends StatelessWidget {
   final VoidCallback onCancel;
 
   static const _accent = Color(0xFF7E64BD);
-  static const _composerGray = Color(0xFFF7F7F7);
-  static const _composerLine = Color(0xFFE8E8E8);
 
   @override
   Widget build(BuildContext context) {
@@ -2511,22 +2497,18 @@ class ChatQuotePreviewBar extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(wide ? 12 : 10, 8, 4, 0),
       decoration: BoxDecoration(
-        color: wide
-            ? DunesColors.resolve(
-                context,
-                DunesColors.bgApp,
-                role: DunesColorRole.surface,
-              )
-            : _composerGray,
+        color: DunesColors.resolve(
+          context,
+          DunesColors.bgApp,
+          role: DunesColorRole.surface,
+        ),
         border: Border(
           top: BorderSide(
-            color: wide
-                ? DunesColors.resolve(
-                    context,
-                    DunesColors.borderSoft,
-                    role: DunesColorRole.border,
-                  )
-                : _composerLine,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
           ),
         ),
       ),

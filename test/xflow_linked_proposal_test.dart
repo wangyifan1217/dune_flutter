@@ -63,6 +63,7 @@ void main() {
     expect(payload['proposalId'], 22);
     expect(payload['source'], linkedProposalSourceIntake);
     expect(payload['businessType'], 'PROPOSAL_INTAKE');
+    expect(payload.containsKey('projectName'), isFalse);
     expect(parseLinkedProposalId(payload), 22);
     expect(linkedProposalOpensIntake(parseLinkedProposalSource(payload)), isTrue);
   });
@@ -101,5 +102,21 @@ void main() {
     );
     expect(linkedProposalOpensIntake(parseLinkedProposalSource(payload)), isTrue);
     expect(parseLinkedProposalId(payload), 37);
+  });
+
+  test('从提案发起时用提案项目回填成本中心', () {
+    final payload = linkedProposalIntakePayload(
+      id: 8,
+      code: 'PI-8',
+      title: '上海驻场',
+      projectName: '研发中心-项目交付部',
+    );
+    final values = <String, dynamic>{
+      'linkedProposal': payload,
+      'costCenter': '',
+    };
+    applyLinkedProposalProject(values);
+    expect(values['costCenter'], '研发中心-项目交付部');
+    expect(linkedProposalProjectName({'form': {'projectName': '贵州移动'}}), '贵州移动');
   });
 }

@@ -475,13 +475,13 @@ class ContactMemberPickerPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: DunesColors.resolve(
         context,
-        const Color(0xFFF5F6F8),
+        DunesColors.bgApp,
         role: DunesColorRole.surface,
       ),
       appBar: AppBar(
         backgroundColor: DunesColors.resolve(
           context,
-          Colors.white,
+          DunesColors.bgApp,
           role: DunesColorRole.surface,
         ),
         foregroundColor: DunesColors.resolve(context, DunesColors.text),

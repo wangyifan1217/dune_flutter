@@ -23203,7 +23203,17 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   child: _buildTabSegment(),
                 ),
                 if (_bfSubjectView)
-                  LighthouseBfSubjectList(controller: _bf!)
+                  LighthouseBfSubjectList(
+                    controller: _bf!,
+                    onWhoCanSee: widget.session.lighthouseAudienceAccess
+                        ? (row) => _showRowVisibility(
+                            const {},
+                            'business_finance',
+                            row.title,
+                            row.group,
+                          )
+                        : null,
+                  )
                 else if (_tab != 'analysis') ...[
                   if (_tab == 'netTa') _buildNetTAListMeta(),
                   // 🔍 / 指标已并进分类行；只有在查找、或分类行不在时才露这一行。
@@ -52172,6 +52182,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     String group,
     Widget? trailing,
   ) {
+    if (!widget.session.lighthouseAudienceAccess) {
+      return trailing ?? const SizedBox.shrink();
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -52205,23 +52218,31 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     String name,
     String group,
   ) async {
+    final financeSubject = tab == 'business_finance';
     var module = tab == 'netTa' ? 'net_ta' : tab;
     String? product;
     String? productL3;
     String? province;
-    if (tab == 'product') product = name;
-    if (tab == 'supply') province = name;
+    String? fundItem;
+    if (financeSubject) {
+      module = 'business_finance';
+      // 主体行只认财务汇总的「主体和业财明细」。账本的产品、省份规则切不开这些行。
+      fundItem = 'assets_entity';
+    } else {
+      if (tab == 'product') product = name;
+      if (tab == 'supply') province = name;
 
-    // 二级页同时带上父行和当前子行，得到交叉口径下真正能看到的人。
-    final root = (_detailKey ?? '').split('::').first.trim();
-    if (_detailKey != null && root.isNotEmpty) {
-      final rootType = _detailType ?? tab;
-      module = rootType == 'netTa' ? 'net_ta' : rootType;
-      if (rootType == 'product') product = root;
-      if (rootType == 'supply') province = root;
-      if (_detailSubTab == 'product') product = name;
-      if (_detailSubTab == lighthouseProductL3SubTab) productL3 = name;
-      if (_detailSubTab == 'supply') province = name;
+      // 二级页同时带上父行和当前子行，得到交叉口径下真正能看到的人。
+      final root = (_detailKey ?? '').split('::').first.trim();
+      if (_detailKey != null && root.isNotEmpty) {
+        final rootType = _detailType ?? tab;
+        module = rootType == 'netTa' ? 'net_ta' : rootType;
+        if (rootType == 'product') product = root;
+        if (rootType == 'supply') province = root;
+        if (_detailSubTab == 'product') product = name;
+        if (_detailSubTab == lighthouseProductL3SubTab) productL3 = name;
+        if (_detailSubTab == 'supply') province = name;
+      }
     }
 
     final future = _service.fetchRowVisibility(
@@ -52229,7 +52250,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       product: product,
       productL3: productL3,
       province: province,
-      drill: _detailKey != null,
+      fundItem: fundItem,
+      drill: !financeSubject && _detailKey != null,
     );
     if (!mounted) return;
     final avatarService = ConversationService(session: widget.session);
@@ -52319,8 +52341,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                               const SizedBox(height: 4),
                               Text(
                                 snapshot.connectionState == ConnectionState.done && !snapshot.hasError
-                                    ? '${users.length} 人可见 · 板块权限与数据规则共同计算'
-                                    : '板块权限与数据规则共同计算',
+                                    ? '${users.length} 人可见 · ${financeSubject ? '开了财务主体明细的人' : '板块权限与数据规则共同计算'}'
+                                    : (financeSubject ? '开了财务主体明细的人' : '板块权限与数据规则共同计算'),
                                 style: LhTypography.sans(size: 10.5, color: DunesColors.resolve(context, LhColors.mute), context: context),
                               ),
                             ],

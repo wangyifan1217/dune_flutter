@@ -21,6 +21,7 @@ class NativeXflowProposalPage extends StatefulWidget {
     this.backScreen = 'B3',
     this.onDeleted,
     this.editBusinessType = 'PROPOSAL',
+    this.entryCategory,
   });
 
   final AuthSession session;
@@ -31,6 +32,9 @@ class NativeXflowProposalPage extends StatefulWidget {
   final String backScreen;
   final VoidCallback? onDeleted;
   final String editBusinessType;
+
+  /// 从业务或非业务目录打开。电子报销两边都能进，只有业务入口要求关联提案。
+  final String? entryCategory;
 
   @override
   State<NativeXflowProposalPage> createState() =>
@@ -143,6 +147,7 @@ class _NativeXflowProposalPageState extends State<NativeXflowProposalPage> {
       templateKey: widget.templateKey,
       editProposalId: widget.editProposalId,
       editBusinessType: widget.editBusinessType,
+      entryCategory: widget.entryCategory,
       backScreen: widget.backScreen,
       onDeleted: widget.onDeleted,
       onSubmitted: widget.onSubmitted,

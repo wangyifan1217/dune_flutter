@@ -3412,21 +3412,27 @@ class ProposalFinanceSplit extends StatelessWidget {
               onTap: () => onSelect(tab.id),
             );
 
-        if (width < 300) {
+        // App / 窄屏：概况与负责人上移横排，表单通栏变宽（不再左侧竖栏挤内容）。
+        if (width < 760) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var i = 0; i < tabs.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 6),
-                    Expanded(child: tile(tabs[i], dense: true)),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (var i = 0; i < tabs.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 8),
+                      SizedBox(
+                        width: 148,
+                        child: tile(tabs[i], dense: true),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-              if (footer != null) ...[const SizedBox(height: 6), footer!],
-              const SizedBox(height: 8),
+              if (footer != null) ...[const SizedBox(height: 8), footer!],
+              const SizedBox(height: 10),
               pane,
             ],
           );
@@ -3443,24 +3449,30 @@ class ProposalFinanceSplit extends StatelessWidget {
               color: _border(context, const Color(0xFFE7E3F2)),
             ),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          // 负责人不放进左侧窄栏：名字比栏宽时会被右侧表单盖住。
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                width: railWidth,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var i = 0; i < tabs.length; i++) ...[
-                      if (i > 0) SizedBox(height: gap),
-                      tile(tabs[i], dense: dense),
-                    ],
-                    if (footer != null) ...[SizedBox(height: gap), footer!],
-                  ],
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: railWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < tabs.length; i++) ...[
+                          if (i > 0) SizedBox(height: gap),
+                          tile(tabs[i], dense: dense),
+                        ],
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: gap),
+                  Expanded(child: pane),
+                ],
               ),
-              SizedBox(width: gap),
-              Expanded(child: pane),
+              if (footer != null) ...[SizedBox(height: gap), footer!],
             ],
           ),
         );

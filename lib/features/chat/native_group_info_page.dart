@@ -502,7 +502,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     return Scaffold(
       backgroundColor: DunesColors.resolve(
         context,
-        const Color(0xFFF2F2F2),
+        DunesColors.bgApp,
         role: DunesColorRole.surface,
       ),
       body: SafeArea(
@@ -1044,7 +1044,7 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
             decoration: BoxDecoration(
               color: DunesColors.resolve(
                 context,
-                const Color(0xFFF0F1F3),
+                Colors.white,
                 role: DunesColorRole.surface,
               ),
               borderRadius: BorderRadius.circular(12),
@@ -1073,7 +1073,7 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
       decoration: BoxDecoration(
         color: DunesColors.resolveNullable(
           context,
-          Color(0xFFF5F6F8),
+          DunesColors.bgApp,
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -1116,7 +1116,7 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
                   decoration: BoxDecoration(
                     color: DunesColors.resolve(
                       context,
-                      const Color(0xFFEDEEF1),
+                      Colors.white,
                       role: DunesColorRole.surface,
                     ),
                     borderRadius: BorderRadius.circular(10),

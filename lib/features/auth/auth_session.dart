@@ -18,6 +18,7 @@ class AuthSession {
     this.userType = 'ORG',
     this.novaLocalStorage,
     this.lighthouseAccess = false,
+    this.lighthouseAudienceAccess = true,
     this.netTaAccess = false,
     this.hideSensitiveFinance = false,
     this.qianjiAccess = false,
@@ -44,6 +45,7 @@ class AuthSession {
     this.contractKbSyncAccess = false,
     this.proposalIntakeAccess = false,
     this.proposalIntakeViewAll = false,
+    this.mineCompanyView = false,
     this.travelImportAccess = false,
     this.travelViewAll = false,
     this.workSituationViewAll = false,
@@ -67,6 +69,9 @@ class AuthSession {
   final String avatarPreset;
   final String userType;
   final bool lighthouseAccess;
+
+  /// 灯塔行上的「谁能看到」。旧会话没这个字段时仍显示；服务端明确关掉后才收起。
+  final bool lighthouseAudienceAccess;
   final bool netTaAccess;
 
   /// 灯塔隐藏账款 / 人效 / 净TA / 资金。按手机号在后端拦截，前端用来藏「资金」页签。
@@ -124,6 +129,9 @@ class AuthSession {
 
   /// 工作台协作提案查看全部；未开通时列表由服务端按相关人过滤。
   final bool proposalIntakeViewAll;
+
+  /// 「我的」看全公司：营收目标、数据池、已完成提案按全公司展示。
+  final bool mineCompanyView;
 
   /// 工作台行政「差旅导入」。
   final bool travelImportAccess;
@@ -320,6 +328,7 @@ class AuthSession {
     String? userType,
     Map<String, String>? novaLocalStorage,
     bool? lighthouseAccess,
+    bool? lighthouseAudienceAccess,
     bool? netTaAccess,
     bool? hideSensitiveFinance,
     bool? qianjiAccess,
@@ -346,6 +355,7 @@ class AuthSession {
     bool? contractKbSyncAccess,
     bool? proposalIntakeAccess,
     bool? proposalIntakeViewAll,
+    bool? mineCompanyView,
     bool? travelImportAccess,
     bool? travelViewAll,
     bool? workSituationViewAll,
@@ -370,6 +380,8 @@ class AuthSession {
       userType: userType ?? this.userType,
       novaLocalStorage: novaLocalStorage ?? this.novaLocalStorage,
       lighthouseAccess: lighthouseAccess ?? this.lighthouseAccess,
+      lighthouseAudienceAccess:
+          lighthouseAudienceAccess ?? this.lighthouseAudienceAccess,
       netTaAccess: netTaAccess ?? this.netTaAccess,
       hideSensitiveFinance: hideSensitiveFinance ?? this.hideSensitiveFinance,
       qianjiAccess: qianjiAccess ?? this.qianjiAccess,
@@ -403,6 +415,7 @@ class AuthSession {
       proposalIntakeAccess: proposalIntakeAccess ?? this.proposalIntakeAccess,
       proposalIntakeViewAll:
           proposalIntakeViewAll ?? this.proposalIntakeViewAll,
+      mineCompanyView: mineCompanyView ?? this.mineCompanyView,
       travelImportAccess: travelImportAccess ?? this.travelImportAccess,
       travelViewAll: travelViewAll ?? this.travelViewAll,
       workSituationViewAll: workSituationViewAll ?? this.workSituationViewAll,
@@ -464,6 +477,10 @@ class AuthSession {
           (data['userType'] ?? session.userType)?.toString() ??
           session.userType,
       lighthouseAccess: data['lighthouseAccess'] == true,
+      lighthouseAudienceAccess: _audienceFlag(
+        data,
+        session.lighthouseAudienceAccess,
+      ),
       netTaAccess: data['netTaAccess'] == true,
       hideSensitiveFinance: data['hideSensitiveFinance'] == true,
       qianjiAccess: data['qianjiAccess'] == true,
@@ -492,6 +509,7 @@ class AuthSession {
       contractKbSyncAccess: data['contractKbSyncAccess'] == true,
       proposalIntakeAccess: data['proposalIntakeAccess'] == true,
       proposalIntakeViewAll: data['proposalIntakeViewAll'] == true,
+      mineCompanyView: data['mineCompanyView'] == true,
       travelImportAccess: data['travelImportAccess'] == true,
       travelViewAll: data['travelViewAll'] == true,
       workSituationViewAll: data['workSituationViewAll'] == true,
@@ -531,6 +549,7 @@ class AuthSession {
       avatarPreset: (claims['avatarPreset'] ?? '').toString(),
       userType: _resolveUserType(claims),
       lighthouseAccess: claims['lighthouseAccess'] == true,
+      lighthouseAudienceAccess: _audienceFlag(claims, true),
       netTaAccess: claims['netTaAccess'] == true,
       hideSensitiveFinance: claims['hideSensitiveFinance'] == true,
       qianjiAccess: claims['qianjiAccess'] == true,
@@ -556,6 +575,7 @@ class AuthSession {
       contractKbSyncAccess: claims['contractKbSyncAccess'] == true,
       proposalIntakeAccess: claims['proposalIntakeAccess'] == true,
       proposalIntakeViewAll: claims['proposalIntakeViewAll'] == true,
+      mineCompanyView: claims['mineCompanyView'] == true,
       travelImportAccess: claims['travelImportAccess'] == true,
       travelViewAll: claims['travelViewAll'] == true,
       workSituationViewAll: claims['workSituationViewAll'] == true,
@@ -600,6 +620,7 @@ class AuthSession {
       if (novaLocalStorage != null && novaLocalStorage!.isNotEmpty)
         'novaLocalStorage': novaLocalStorage,
       'lighthouseAccess': lighthouseAccess,
+      'lighthouseAudienceAccess': lighthouseAudienceAccess,
       'netTaAccess': netTaAccess,
       'hideSensitiveFinance': hideSensitiveFinance,
       'qianjiAccess': qianjiAccess,
@@ -626,6 +647,7 @@ class AuthSession {
       'contractKbSyncAccess': contractKbSyncAccess,
       'proposalIntakeAccess': proposalIntakeAccess,
       'proposalIntakeViewAll': proposalIntakeViewAll,
+      'mineCompanyView': mineCompanyView,
       'travelImportAccess': travelImportAccess,
       'travelViewAll': travelViewAll,
       'workSituationViewAll': workSituationViewAll,
@@ -657,6 +679,7 @@ class AuthSession {
       userType: (json['userType'] as String?)?.toUpperCase() ?? 'ORG',
       novaLocalStorage: _parseNovaStorage(json['novaLocalStorage']),
       lighthouseAccess: json['lighthouseAccess'] == true,
+      lighthouseAudienceAccess: _audienceFlag(json, true),
       netTaAccess: json['netTaAccess'] == true,
       hideSensitiveFinance: json['hideSensitiveFinance'] == true,
       qianjiAccess: json['qianjiAccess'] == true,
@@ -685,6 +708,7 @@ class AuthSession {
       contractKbSyncAccess: json['contractKbSyncAccess'] == true,
       proposalIntakeAccess: json['proposalIntakeAccess'] == true,
       proposalIntakeViewAll: json['proposalIntakeViewAll'] == true,
+      mineCompanyView: json['mineCompanyView'] == true,
       travelImportAccess: json['travelImportAccess'] == true,
       travelViewAll: json['travelViewAll'] == true,
       workSituationViewAll: json['workSituationViewAll'] == true,
@@ -703,6 +727,11 @@ class AuthSession {
       if (key is String && value != null) out[key] = value.toString();
     });
     return out.isEmpty ? null : out;
+  }
+
+  static bool _audienceFlag(Map<String, dynamic> data, bool fallback) {
+    if (!data.containsKey('lighthouseAudienceAccess')) return fallback;
+    return data['lighthouseAudienceAccess'] == true;
   }
 
   static Map<String, bool> _parseTaskPermissions(Object? raw) {

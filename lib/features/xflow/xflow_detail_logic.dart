@@ -175,7 +175,9 @@ Map<String, dynamic> linkedProposalIntakePayload({
   required String code,
   required String title,
   String kind = '',
+  String projectName = '',
 }) {
+  final project = projectName.trim();
   return <String, dynamic>{
     'proposalId': id,
     'code': code,
@@ -183,7 +185,25 @@ Map<String, dynamic> linkedProposalIntakePayload({
     'source': linkedProposalSourceIntake,
     'businessType': 'PROPOSAL_INTAKE',
     if (kind.isNotEmpty) 'kind': kind,
+    if (project.isNotEmpty) 'projectName': project,
   };
+}
+
+/// 提案表单里的项目名称。从提案发起审批时用来回填「成本中心/项目」。
+String linkedProposalProjectName(dynamic linked) {
+  if (linked is! Map) return '';
+  final direct = '${linked['projectName'] ?? ''}'.trim();
+  if (direct.isNotEmpty) return direct;
+  final form = linked['form'];
+  if (form is Map) return '${form['projectName'] ?? ''}'.trim();
+  return '';
+}
+
+/// 从提案发起时，用提案项目覆盖成本中心/项目。
+void applyLinkedProposalProject(Map<String, dynamic> values) {
+  final project = linkedProposalProjectName(values['linkedProposal']);
+  if (project.isEmpty) return;
+  values['costCenter'] = project;
 }
 
 typedef OpenLinkedProposalCallback = void Function(
@@ -194,6 +214,12 @@ typedef OpenLinkedProposalCallback = void Function(
 
 String formatUserDisplay(dynamic val) {
   if (val == null || val == '') return '';
+  if (val is List) {
+    return val
+        .map(formatUserDisplay)
+        .where((e) => e.isNotEmpty)
+        .join('、');
+  }
   if (val is String) {
     if (val.startsWith('map[')) return '';
     return val;

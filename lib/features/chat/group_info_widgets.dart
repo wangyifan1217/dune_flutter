@@ -8,8 +8,8 @@ import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import 'user_avatar_widget.dart';
 
-/// 企微风格浅灰底。
-const _bgPage = Color(0xFFF2F2F2);
+/// 与其它板块同一套近白页面底。
+const _bgPage = DunesColors.bgApp;
 const _bgCard = Colors.white;
 const _rowDivider = Color(0xFFEFEFEF);
 const _textPrimary = Color(0xFF191919);
@@ -516,7 +516,7 @@ class _ActionMemberCell extends StatelessWidget {
             decoration: BoxDecoration(
               color: DunesColors.resolve(
                 context,
-                const Color(0xFFF7F7F7),
+                DunesColors.bgApp,
                 role: DunesColorRole.surface,
               ),
               borderRadius: BorderRadius.circular(6),

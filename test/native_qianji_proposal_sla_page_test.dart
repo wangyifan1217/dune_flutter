@@ -33,6 +33,10 @@ void main() {
       ),
     );
     await tester.pump();
+    if (qianjiHubNewLayoutEnabled) {
+      await tester.tap(find.text('模块入口'));
+      await tester.pump();
+    }
 
     expect(find.text('提案时效'), findsOneWidget);
     expect(find.text('任务 · 日报 · 群响应 · 提案时效'), findsOneWidget);

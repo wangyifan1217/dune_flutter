@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../chat/user_avatar_widget.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_bill_cascade_field.dart';
 import 'xflow_detail_logic.dart';
@@ -306,6 +307,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         return _userField(field, inRow: inRow);
       case 'date':
         return _dateField(field, inRow: inRow);
+      case 'datetime':
+        return _dateField(field, inRow: inRow, withTime: true);
       case 'dynamicList':
         return _dynamicListField(field);
       case 'structuredTable':
@@ -483,13 +486,31 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
           ),
         ),
       ),
-      child: Text(
-        field.label.isEmpty ? '分组' : field.label,
-        style: DunesTypography.sans(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          context: context,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            field.label.isEmpty ? '分组' : field.label,
+            style: DunesTypography.sans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              context: context,
+            ),
+          ),
+          if ((field.raw['hint'] ?? '').toString().trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                (field.raw['hint'] ?? '').toString().trim(),
+                style: DunesTypography.sans(
+                  fontSize: 11,
+                  height: 1.45,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -596,8 +617,16 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     );
   }
 
+  bool _lockedFromProposal(XflowField field) {
+    final meta = field.raw['meta'];
+    if (meta is! Map) return false;
+    if ('${meta['fillFromLinkedProposal'] ?? ''}'.trim().isEmpty) return false;
+    return linkedProposalProjectName(widget.values['linkedProposal']).isNotEmpty;
+  }
+
   Widget _basicField(XflowField field, {bool inRow = false}) {
     final value = widget.values[field.key];
+    final readonly = field.readonly || _lockedFromProposal(field);
     final keyboardType = switch (field.type) {
       'number' ||
       'money' => const TextInputType.numberWithOptions(decimal: true),
@@ -614,13 +643,13 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         keyboardType: keyboardType,
         minLines: 1,
         maxLines: maxLines,
-        readOnly: field.readonly,
+        readOnly: readonly,
         style: field.type == 'money' || field.type == 'number'
             ? xfInputTextStyle(context: context, mono: true)
             : xfInputTextStyle(context: context),
         decoration: _inputDecoration(
           hint: field.placeholder,
-          readonly: field.readonly,
+          readonly: readonly,
         ),
         onChanged: (text) => widget.onChanged(field.key, text),
       ),
@@ -628,16 +657,22 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     );
   }
 
-  Widget _dateField(XflowField field, {bool inRow = false}) {
+  Widget _dateField(XflowField field, {bool inRow = false, bool withTime = false}) {
     final raw = widget.values[field.key]?.toString() ?? '';
     DateTime? date;
-    if (raw.isNotEmpty) date = DateTime.tryParse(raw);
+    if (raw.isNotEmpty) {
+      date = DateTime.tryParse(raw.replaceFirst(' ', 'T'));
+    }
     final readonly = field.readonly;
     final autoHint = (field.raw['hint'] ?? '').toString().trim();
     final label = date == null
         ? (readonly
               ? '待流程写入'
-              : (field.placeholder.isEmpty ? '年 / 月 / 日' : field.placeholder))
+              : (field.placeholder.isEmpty
+                    ? (withTime ? '年 / 月 / 日  时:分' : '年 / 月 / 日')
+                    : field.placeholder))
+        : withTime
+        ? '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}'
         : '${date.year} / ${date.month.toString().padLeft(2, '0')} / ${date.day.toString().padLeft(2, '0')}';
     final decoration = _inputDecoration(
       hint: readonly ? null : field.placeholder,
@@ -691,12 +726,28 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                   firstDate: DateTime(now.year - 5),
                   lastDate: DateTime(now.year + 10),
                 );
-                if (picked != null) {
-                  widget.onChanged(
-                    field.key,
-                    '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}',
+                if (picked == null || !mounted) return;
+                var hour = date?.hour ?? 9;
+                var minute = date?.minute ?? 0;
+                if (withTime) {
+                  final time = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay(hour: hour, minute: minute),
                   );
+                  if (!mounted) return;
+                  if (time != null) {
+                    hour = time.hour;
+                    minute = time.minute;
+                  }
                 }
+                final day =
+                    '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                widget.onChanged(
+                  field.key,
+                  withTime
+                      ? '$day ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}'
+                      : day,
+                );
               },
               borderRadius: BorderRadius.circular(9),
               child: control,
@@ -708,6 +759,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
 
   Widget _computedField(XflowField field, {bool inRow = false}) {
     final text = widget.values[field.key]?.toString() ?? '';
+    final hint = (field.raw['hint'] ?? '').toString().trim();
     return _fieldWrap(
       field,
       Container(
@@ -738,6 +790,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         ),
       ),
       inRow: inRow,
+      hint: hint.isEmpty ? null : hint,
     );
   }
 
@@ -831,6 +884,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         placeholder: hint,
         readonly: locked,
         roleCode: roleCode,
+        multiple: field.raw['multiple'] == true,
         onChanged: (v) => widget.onChanged(field.key, v),
       ),
       inRow: inRow,
@@ -2010,6 +2064,7 @@ class _XflowUserPicker extends StatefulWidget {
     required this.readonly,
     required this.onChanged,
     this.roleCode,
+    this.multiple = false,
   });
 
   final XflowService? service;
@@ -2017,6 +2072,7 @@ class _XflowUserPicker extends StatefulWidget {
   final String placeholder;
   final bool readonly;
   final String? roleCode;
+  final bool multiple;
   final void Function(dynamic value) onChanged;
 
   @override
@@ -2285,7 +2341,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
   @override
   void initState() {
     super.initState();
-    _controller.text = _displayName(widget.value);
+    if (!widget.multiple) _controller.text = _displayName(widget.value);
     _focus.addListener(_onFocusChange);
   }
 
@@ -2311,7 +2367,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
   @override
   void didUpdateWidget(covariant _XflowUserPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) {
+    if (!widget.multiple && oldWidget.value != widget.value) {
       final next = _displayName(widget.value);
       // 聚焦时不回写，避免选人后重搜/改人被草稿刷新盖掉。
       if (!_focus.hasFocus && _controller.text != next) {
@@ -2354,13 +2410,132 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
       _searched = false;
       _loading = false;
     });
+    if (widget.multiple) return;
     widget.onChanged(null);
+  }
+
+  List<Map<String, dynamic>> _selectedUsers() {
+    final raw = widget.value;
+    if (raw is List) {
+      return raw
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+    }
+    if (raw is Map) return [Map<String, dynamic>.from(raw)];
+    final text = raw?.toString().trim() ?? '';
+    if (text.isEmpty) return const [];
+    return [
+      {'name': text},
+    ];
+  }
+
+  Map<String, dynamic> _userPayload(Map<String, dynamic> u) {
+    final name = (u['displayName'] ?? u['name'] ?? '').toString().trim();
+    return {
+      'userId': u['userId'] ?? u['id'],
+      'name': name,
+      'dept': u['departmentName'] ?? u['dept'] ?? '',
+      'title': u['title'] ?? u['positionName'] ?? '',
+      'avatarUrl': u['avatarUrl'] ?? '',
+      'avatarPreset': u['avatarPreset'] ?? '',
+      'avatarObjectKey': u['avatarObjectKey'] ?? '',
+    };
+  }
+
+  int _userSeed(Map<String, dynamic> u) {
+    final raw = u['userId'] ?? u['id'];
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw') ?? (u['name'] ?? '').hashCode;
+  }
+
+  String _userInitial(String name) {
+    final text = name.trim();
+    if (text.isEmpty) return '?';
+    return String.fromCharCode(text.runes.first);
+  }
+
+  Widget _companionChip(Map<String, dynamic> user, int index) {
+    final name = (user['name'] ?? user['displayName'] ?? '').toString().trim();
+    final title = (user['title'] ?? '').toString().trim();
+    final label = [name, title].where((e) => e.isNotEmpty).join(' · ');
+    return Container(
+      padding: const EdgeInsets.fromLTRB(4, 3, 4, 3),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(context, const Color(0xFFF4F0FB)),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _userAvatar(user, 22),
+          const SizedBox(width: 6),
+          Text(
+            label.isEmpty ? '未命名' : label,
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
+            ),
+          ),
+          if (!widget.readonly)
+            GestureDetector(
+              onTap: () => _removeUser(index),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 4, right: 2),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _userAvatar(Map<String, dynamic> u, double size) {
+    final name = (u['displayName'] ?? u['name'] ?? '').toString();
+    return ImUserAvatar(
+      initial: _userInitial(name),
+      seed: _userSeed(u),
+      size: size,
+      avatarUrl: '${u['avatarUrl'] ?? ''}',
+      avatarPreset: '${u['avatarPreset'] ?? ''}',
+      avatarObjectKey: '${u['avatarObjectKey'] ?? ''}',
+    );
+  }
+
+  void _removeUser(int index) {
+    final next = _selectedUsers();
+    if (index < 0 || index >= next.length) return;
+    next.removeAt(index);
+    widget.onChanged(next);
   }
 
   void _selectUser(Map<String, dynamic> u) {
     final name = (u['displayName'] ?? u['name'] ?? '').toString().trim();
     if (name.isEmpty) return;
     _debounce?.cancel();
+    if (widget.multiple) {
+      final next = _selectedUsers().where((row) => row['userId'] != null).toList();
+      final payload = _userPayload(u);
+      final id = '${payload['userId'] ?? ''}';
+      final exists = next.any((row) => '${row['userId'] ?? ''}' == id && id.isNotEmpty);
+      if (!exists) next.add(payload);
+      widget.onChanged(next);
+      setState(() {
+        _controller.clear();
+        _results = const [];
+        _searched = false;
+        _loading = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _releaseFocus();
+      });
+      return;
+    }
     final display = [
       name,
       (u['departmentName'] ?? u['dept'] ?? '').toString().trim(),
@@ -2370,12 +2545,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
       text: display,
       selection: TextSelection.collapsed(offset: display.length),
     );
-    widget.onChanged({
-      'userId': u['userId'] ?? u['id'],
-      'name': name,
-      'dept': u['departmentName'] ?? u['dept'] ?? '',
-      'title': u['title'] ?? '',
-    });
+    widget.onChanged(_userPayload(u));
     setState(() {
       _results = const [];
       _searched = false;
@@ -2441,6 +2611,17 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (widget.multiple && _selectedUsers().isNotEmpty) ...[
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (var i = 0; i < _selectedUsers().length; i++)
+                  _companionChip(_selectedUsers()[i], i),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
           TextField(
             controller: _controller,
             focusNode: _focus,
@@ -2495,6 +2676,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
                 ].where((e) => e.isNotEmpty).join(' · ');
               },
               onSelect: (i) => _selectUser(_results[i]),
+              leadingOf: (i) => _userAvatar(_results[i], 28),
             ),
           ] else if (_searched && !_loading && hasText) ...[
             const SizedBox(height: 6),
@@ -2718,6 +2900,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
         code: code,
         title: title,
         kind: '${row['kind'] ?? ''}',
+        projectName: linkedProposalProjectName(row),
       ),
     );
     final label = code.isNotEmpty && title.isNotEmpty
@@ -3088,6 +3271,38 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
     widget.onFieldChanged(widget.fieldKey, '');
   }
 
+  bool get _canUseTyped {
+    if (!_cfg.allowManual || widget.readonly) return false;
+    final typed = _controller.text.trim();
+    if (typed.isEmpty || !_searched || _loading) return false;
+    for (final row in _results) {
+      final label = _cfg.labelOf(row).trim();
+      final name = '${row['cityName'] ?? row['name'] ?? ''}'.trim();
+      if (label == typed || name == typed) return false;
+    }
+    return true;
+  }
+
+  void _useTypedCity(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) return;
+    _debounce?.cancel();
+    if (widget.onPatch != null) {
+      widget.onPatch!({widget.fieldKey: text});
+    } else {
+      widget.onFieldChanged(widget.fieldKey, text);
+    }
+    _setControllerText(text);
+    setState(() {
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _releaseFocus();
+    });
+  }
+
   void _selectRow(Map<String, dynamic> row) {
     final patch = <String, dynamic>{};
     final value = _cfg.valueOf(row);
@@ -3239,20 +3454,36 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
           if (_results.isNotEmpty) ...[
             const SizedBox(height: 6),
             XfPickerSuggestionList(
-              itemCount: _results.length,
-              labelOf: (i) => _cfg.labelOf(_results[i]),
-              onSelect: (i) => _selectRow(_results[i]),
+              itemCount: _results.length + (_canUseTyped ? 1 : 0),
+              labelOf: (i) {
+                if (i >= _results.length) return '使用「${_controller.text.trim()}」';
+                return _cfg.labelOf(_results[i]);
+              },
+              onSelect: (i) {
+                if (i >= _results.length) {
+                  _useTypedCity(_controller.text);
+                  return;
+                }
+                _selectRow(_results[i]);
+              },
             ),
           ] else if (_searched && !_loading && hasText) ...[
             const SizedBox(height: 6),
-            Text(
-              '无匹配结果',
-              style: DunesTypography.sans(
-                fontSize: 11,
-                color: DunesColors.resolve(context, DunesColors.text3),
-                context: context,
+            if (_cfg.allowManual)
+              XfPickerSuggestionList(
+                itemCount: 1,
+                labelOf: (_) => '使用「${_controller.text.trim()}」',
+                onSelect: (_) => _useTypedCity(_controller.text),
+              )
+            else
+              Text(
+                '无匹配结果',
+                style: DunesTypography.sans(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
+                ),
               ),
-            ),
           ],
         ],
       ),

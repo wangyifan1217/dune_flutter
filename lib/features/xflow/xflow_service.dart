@@ -623,9 +623,14 @@ class XflowService {
   Future<XflowTemplateDetail> fetchTemplateDetail({
     String templateKey = salesTemplateKey,
     bool includeDictEnrich = true,
+    String? entryCategory,
   }) async {
+    final entry = entryCategory?.trim().toLowerCase();
+    final query = entry == 'biz' || entry == 'adm'
+        ? '?entryCategory=$entry'
+        : '';
     final rawRes = await _request(
-      '/xflow/templates/${Uri.encodeComponent(templateKey)}',
+      '/xflow/templates/${Uri.encodeComponent(templateKey)}$query',
     );
     final templateObj = rawRes['template'];
     final fieldsRaw =

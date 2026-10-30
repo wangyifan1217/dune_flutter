@@ -86,6 +86,17 @@ void main() {
     expect(find.byIcon(Icons.auto_stories_rounded), findsOneWidget);
   });
 
+  testWidgets('点面板外收起更多', (tester) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await openSheet(tester, surface: const Size(390, 800));
+
+    expect(find.text('更多'), findsOneWidget);
+    await tester.tapAt(const Offset(24, 24));
+    await tester.pumpAndSettle();
+    expect(find.text('更多'), findsNothing);
+    expect(find.text('打开新建'), findsOneWidget);
+  });
+
   testWidgets('不传工作台回调时面板不出现工作台', (tester) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await openSheet(tester, surface: const Size(390, 800));

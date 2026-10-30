@@ -12,10 +12,8 @@ import 'proposal_intake_models.dart';
 /// 字典（收入公式、成本项、成本公式）由后端 `options.finance.formulaCatalog`
 /// 下发；后端没给时用本文件里的兜底字典。
 
-/// 利润是否测算。收入公式里的业务量、补贴、利差等提案取不到真实值（见 test/proposal_finance_formula_mock_test.dart），
-/// 算出的利润不可信，先停掉：不显示利润 / 毛利率；项目、业务、税务成本和利润仍按当前口径测算回写。
-/// 改成 true 即恢复利润块和各处利润数字。
-const kProposalFinanceShowProfit = false;
+/// 利润是否展示。利润 = 收入 − 成本合计（电子券采购款已从收入里扣，不再减第二次）。
+const kProposalFinanceShowProfit = true;
 
 const kProposalRevenueFormulaKey = 'revenueFormula';
 const kProposalRevenueFormulaGroupKey = 'revenueFormulaGroup';
@@ -1204,14 +1202,19 @@ class ProposalFinanceLine {
 }
 
 class ProposalFinanceBucket {
-  const ProposalFinanceBucket({required this.category, required this.lines, this.computedTotal});
+  const ProposalFinanceBucket({
+    required this.category,
+    required this.lines,
+    this.computedTotal,
+  });
 
   final ProposalCostCategory category;
   final List<ProposalFinanceLine> lines;
   final double? computedTotal;
 
   double get total =>
-      computedTotal ?? proposalRoundWan(lines.fold<double>(0, (sum, line) => sum + line.amount));
+      computedTotal ??
+      proposalRoundWan(lines.fold<double>(0, (sum, line) => sum + line.amount));
 
   List<String> get names => [for (final line in lines) line.name];
 }
@@ -1267,9 +1270,11 @@ class ProposalFinanceEvaluation {
   double total(String key) => buckets[key]?.total ?? 0;
 
   /// 成本合计 = 项目 / 业务 / 税务（经营成本只选类型，金额为 0）。
-  double get costTotal => computedCostTotal ?? proposalRoundWan(
-    buckets.values.fold<double>(0, (sum, bucket) => sum + bucket.total),
-  );
+  double get costTotal =>
+      computedCostTotal ??
+      proposalRoundWan(
+        buckets.values.fold<double>(0, (sum, bucket) => sum + bucket.total),
+      );
 }
 
 /// 一个产品的测算：它自己的公式选择、规模和结算算出来的收入与成本。
@@ -2251,10 +2256,7 @@ ProposalFinanceLine _proposalBusinessFormulaLine(
         : measure.byFace
         ? '公式无法自动代入，按面值 ${_wan(measure.base)} 万元'
         : '公式无法自动代入，按 年化规模 × 比例：${_wan(scale)} × ${_pct(measure.ratio)} = ${_wan(amount)} 万元',
-    missing: [
-      if (!measure.byFace && scale <= 0) '销售规模',
-      ...eval.missing,
-    ],
+    missing: [if (!measure.byFace && scale <= 0) '销售规模', ...eval.missing],
   );
 }
 
@@ -2409,7 +2411,8 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
           formula: proposalFinanceItemFormula(form, category, name),
           scale: scale,
           revenue: revenue,
-          project: (totals[kProposalCostCategoryProject] ?? 0) +
+          project:
+              (totals[kProposalCostCategoryProject] ?? 0) +
               (key == kProposalCostCategoryProject ? 0 : couponPurchase),
           // 经营成本只选类型、不计金额，公式里按 0 计。
           operating: 0,
@@ -2504,10 +2507,7 @@ ProposalFinanceLine _evaluateProjectLine(
       substitution: results.isEmpty
           ? '尚未配置阶梯规则'
           : [...volumeNotes, ...results.map((r) => r.substitution)].join('\n'),
-      missing: [
-        if (results.isEmpty) '阶梯规则',
-        if (missingPrice) '主产品结算价',
-      ],
+      missing: [if (results.isEmpty) '阶梯规则', if (missingPrice) '主产品结算价'],
     );
   }
   if (item.tiered) {
@@ -2532,7 +2532,9 @@ ProposalFinanceLine _evaluateProjectLine(
       for (final plan in allPlans)
         if (!plan.isEmpty) plan,
     ].take(1).toList();
-    if (!explicit && !(filled && plans.isEmpty) && (plans.isNotEmpty || !settled)) {
+    if (!explicit &&
+        !(filled && plans.isEmpty) &&
+        (plans.isNotEmpty || !settled)) {
       final base = name == '推广费'
           ? proposalPromotionVolume(form, const [])
           : (

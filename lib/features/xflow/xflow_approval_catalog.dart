@@ -126,7 +126,7 @@ const List<XflowApprovalGroup> _xflowApprovalGroups = [
     title: '内部费用与报销',
     description: '业务差旅报销',
     icon: Icons.luggage_outlined,
-    templateKeys: <String>[],
+    templateKeys: ['electronic-reimbursement'],
   ),
   XflowApprovalGroup(
     id: 'biz-license',
@@ -234,9 +234,12 @@ List<XflowApprovalGroup> xflowApprovalGroupsForCategory(
 XflowApprovalGroup xflowApprovalGroupForTemplate(
   String templateKey, {
   List<XflowApprovalGroup>? catalog,
+  String? category,
 }) {
+  final preferred = category?.trim().toLowerCase() ?? '';
   for (final group in catalog ?? _xflowApprovalGroups) {
-    if (group.templateKeys.contains(templateKey)) return group;
+    if (!group.templateKeys.contains(templateKey)) continue;
+    if (preferred.isEmpty || group.category == preferred) return group;
   }
   return _otherApprovalGroup;
 }
@@ -251,13 +254,15 @@ List<XflowTemplateCard> xflowSearchApprovalTemplates(
   if (normalized.isEmpty) return visible;
   return visible
       .where((template) {
-        final group = xflowApprovalGroupForTemplate(
-          template.templateKey,
-          catalog: catalog,
+        final groups = (catalog ?? _xflowApprovalGroups).where(
+          (group) => group.templateKeys.contains(template.templateKey),
         );
+        final groupText = groups
+            .map((group) => '${group.title} ${group.description}')
+            .join(' ');
         final text =
             '${template.title} ${template.subtitle} ${template.tagLabel} '
-                    '${template.templateKey} ${group.title} ${group.description}'
+                    '${template.templateKey} $groupText'
                 .toLowerCase();
         return text.contains(normalized);
       })

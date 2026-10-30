@@ -26,7 +26,7 @@ class NativeB3Page extends StatefulWidget {
 
   final AuthSession session;
   final DunesNavigationController navigation;
-  final void Function(String templateKey) onOpenForm;
+  final void Function(String templateKey, String category) onOpenForm;
   final VoidCallback? onBack;
   final void Function(String category)? onCategoryChanged;
   final void Function(String query)? onSearchChanged;
@@ -171,7 +171,7 @@ class _NativeB3PageState extends State<NativeB3Page> {
       return;
     }
     widget.onCategoryChanged?.call(_category);
-    widget.onOpenForm(template.templateKey);
+    widget.onOpenForm(template.templateKey, _category);
   }
 
   /// 业务审批不能脱离提案单独发起：引导到工作台的提案里发起，系统自动关联提案。
@@ -310,6 +310,7 @@ class _NativeB3PageState extends State<NativeB3Page> {
                                   ? (template) => xflowApprovalGroupForTemplate(
                                       template.templateKey,
                                       catalog: _approvalCatalog,
+                                      category: _category,
                                     ).title
                                   : null,
                               onOpen: _openTemplate,

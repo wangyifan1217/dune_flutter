@@ -278,6 +278,8 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   List<ProposalIntakeRow> _actionQueue = const [];
   double _listScrollOffset = 0;
   bool _didOpenInitial = false;
+  bool _lookupsReady = false;
+  int _loadGen = 0;
 
   @override
   void initState() {
@@ -326,6 +328,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   }
 
   Future<void> _load({bool quiet = false, bool resetScroll = false}) async {
+    final gen = ++_loadGen;
     if (resetScroll) {
       _listScrollOffset = 0;
       if (_listScroll.hasClients) _listScroll.jumpTo(0);
@@ -338,94 +341,102 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     }
     try {
       final result = await Future.wait([
-        _fetchListPages(),
+        _fetchListPage(0),
         _service.fetchOptions(),
         _service.fetchPeople(),
       ]);
-      if (!mounted) return;
-      var list = result[0] as ProposalIntakeListResult;
-      var items = _scopedKindRows(list.items);
-      if (_presidentDesk) {
-        items = items
-            .where((row) => _presidentDeskStatuses.contains(row.status))
-            .toList(growable: false);
-      }
-      if (!widget.assistantMode && _statusFilter == _kMineFilter) {
-        final me = widget.session.userId;
-        items = items
-            .where((row) => me > 0 && row.createdBy == me)
-            .toList(growable: false);
-      }
-      if (widget.assistantMode) {
-        final q = _search.text.trim().toLowerCase();
-        if (q.isNotEmpty) {
-          items = items
-              .where((row) {
-                final hay = '${row.title} ${row.code}'.toLowerCase();
-                return hay.contains(q);
-              })
-              .toList(growable: false);
-        }
-      }
+      if (!mounted || gen != _loadGen) return;
+      final list = result[0] as ProposalIntakeListResult;
+      final items = _filterListedRows(list.items);
       setState(() {
         _rows = items;
         _libraryStats = list.stats;
         _options = result[1] as ProposalIntakeOptions;
         _people = result[2] as List<ProposalPerson>;
+        _lookupsReady = true;
+        _loading = false;
       });
+      if (list.items.length < list.total) {
+        unawaited(_loadRemainingPages(gen, list));
+      }
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen) return;
       if (quiet) {
         _toast('列表更新失败：${friendlyErrorText(error)}', error: true);
       } else {
         setState(() => _error = friendlyErrorText(error));
       }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && gen == _loadGen) setState(() => _loading = false);
     }
-    await _openInitialIfNeeded();
+    if (gen == _loadGen) await _openInitialIfNeeded();
   }
 
-  /// 服务端单页最多 50 条。库内总数更大时继续翻页，避免列表只停在第一页。
-  Future<ProposalIntakeListResult> _fetchListPages() async {
-    const pageSize = 50;
-    Future<ProposalIntakeListResult> pageOf(int page) {
-      return _service.fetchList(
-        page: page,
-        pageSize: pageSize,
-        keyword: widget.assistantMode ? '' : _search.text,
-        // 「我发起的」不是服务端状态：拉全部状态，再按创建人筛。
-        status: widget.assistantMode || _statusFilter == _kMineFilter
-            ? ''
-            : _statusFilter,
-        kind: widget.kind,
-        sector: widget.assistantMode ? '' : _sectorFilter,
-        period: widget.assistantMode ? '' : _periodFilter,
-        actionable: widget.assistantMode,
-      );
+  List<ProposalIntakeRow> _filterListedRows(List<ProposalIntakeRow> raw) {
+    var items = _scopedKindRows(raw);
+    if (_presidentDesk) {
+      items = items
+          .where((row) => _presidentDeskStatuses.contains(row.status))
+          .toList(growable: false);
     }
+    if (!widget.assistantMode && _statusFilter == _kMineFilter) {
+      final me = widget.session.userId;
+      items = items
+          .where((row) => me > 0 && row.createdBy == me)
+          .toList(growable: false);
+    }
+    if (widget.assistantMode) {
+      final q = _search.text.trim().toLowerCase();
+      if (q.isNotEmpty) {
+        items = items
+            .where((row) {
+              final hay = '${row.title} ${row.code}'.toLowerCase();
+              return hay.contains(q);
+            })
+            .toList(growable: false);
+      }
+    }
+    return items;
+  }
 
-    final first = await pageOf(0);
-    final items = [...first.items];
-    final seen = {for (final row in items) row.id};
+  Future<ProposalIntakeListResult> _fetchListPage(int page) {
+    const pageSize = 50;
+    return _service.fetchList(
+      page: page,
+      pageSize: pageSize,
+      keyword: widget.assistantMode ? '' : _search.text,
+      status: widget.assistantMode || _statusFilter == _kMineFilter
+          ? ''
+          : _statusFilter,
+      kind: widget.kind,
+      sector: widget.assistantMode ? '' : _sectorFilter,
+      period: widget.assistantMode ? '' : _periodFilter,
+      actionable: widget.assistantMode,
+    );
+  }
+
+  /// 第一页已经显示后再补后面的页，避免打开列表要等全部翻完。
+  Future<void> _loadRemainingPages(
+    int gen,
+    ProposalIntakeListResult first,
+  ) async {
+    final seen = {for (final row in first.items) row.id};
+    final raw = [...first.items];
     var page = 1;
-    while (items.length < first.total && page < 20) {
-      final batch = await pageOf(page);
+    while (raw.length < first.total && page < 20) {
+      if (!mounted || gen != _loadGen) return;
+      final batch = await _fetchListPage(page);
       var added = 0;
       for (final row in batch.items) {
         if (seen.add(row.id)) {
-          items.add(row);
+          raw.add(row);
           added++;
         }
       }
       if (added == 0) break;
       page++;
+      if (!mounted || gen != _loadGen) return;
+      setState(() => _rows = _filterListedRows(raw));
     }
-    return ProposalIntakeListResult(
-      items: items,
-      total: first.total,
-      stats: first.stats,
-    );
   }
 
   Future<void> _openInitialIfNeeded() async {
@@ -458,6 +469,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     setState(() {
       _options = result[0] as ProposalIntakeOptions;
       _people = result[1] as List<ProposalPerson>;
+      _lookupsReady = true;
     });
   }
 
@@ -507,7 +519,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   /// 卡住天数：从当前这一步开始等算起（和卡片底部、详情「审批进度」同一份数据）。
   int _stuckDays(ProposalIntakeRow row) =>
       proposalReviewWaited(
-        proposalIntakeProgressSteps(row: row, people: _people, options: _options),
+        proposalIntakeProgressSteps(
+          row: row,
+          people: _people,
+          options: _options,
+        ),
       )?.inDays ??
       0;
 
@@ -541,8 +557,14 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           '将给 ${targets.length} 份${_slaFilter == 'overdue' ? '已超时' : '即将超时'}提案的当前处理人发送提醒，并记入时限记录。',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('催办')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('催办'),
+          ),
         ],
       ),
     );
@@ -560,7 +582,10 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     }
     if (!mounted) return;
     setState(() => _slaReminding = false);
-    _toast(failed == 0 ? '已催办 $ok 份' : '已催办 $ok 份，$failed 份失败', error: failed > 0 && ok == 0);
+    _toast(
+      failed == 0 ? '已催办 $ok 份' : '已催办 $ok 份，$failed 份失败',
+      error: failed > 0 && ok == 0,
+    );
     await _load();
   }
 
@@ -815,7 +840,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     setState(() => _opening = true);
     try {
       final detail = await _service.fetchDetail(row.id);
-      await _refreshLookups();
+      if (!_lookupsReady) await _refreshLookups();
       if (mounted) _openForm(_withScopedKind(detail, fallback: row.kind));
     } catch (error) {
       _toast(friendlyErrorText(error), error: true);
@@ -894,15 +919,21 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           viewAll: widget.session.proposalIntakeViewAll,
         )) {
       try {
-        final persistForm = proposalIntakeIsPurchase(editing.kind) ? proposalIntakeBuildPersistForm(
-          editing.form,
-          businessCatalog: _options?.businessCostItemOptions ?? const [],
-          costCatalog: _options?.costItemOptions ?? const [],
-          costNames: _options?.resolvedProjectCostItems ?? const [],
-          formulaCatalog: _options?.resolvedFinanceFormulaCatalog,
-        ) : proposalIntakeJsonSafeForm(proposalIntakeConfirmContractEdits(
-          (await _service.estimateFinance(editing.form)).applyToForm(editing.form),
-        ));
+        final persistForm = proposalIntakeIsPurchase(editing.kind)
+            ? proposalIntakeBuildPersistForm(
+                editing.form,
+                businessCatalog: _options?.businessCostItemOptions ?? const [],
+                costCatalog: _options?.costItemOptions ?? const [],
+                costNames: _options?.resolvedProjectCostItems ?? const [],
+                formulaCatalog: _options?.resolvedFinanceFormulaCatalog,
+              )
+            : proposalIntakeJsonSafeForm(
+                proposalIntakeConfirmContractEdits(
+                  (await _service.estimateFinance(
+                    editing.form,
+                  )).applyToForm(editing.form),
+                ),
+              );
         final fallbackForm = proposalIntakeJsonSafeForm(
           proposalIntakeConfirmContractEdits(editing.form),
         );
@@ -1583,7 +1614,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       visualDensity: VisualDensity.compact,
       style: IconButton.styleFrom(
         backgroundColor: c(Colors.white, DunesColorRole.surface),
-        side: BorderSide(color: c(const Color(0xFFE4E1EE), DunesColorRole.border)),
+        side: BorderSide(
+          color: c(const Color(0xFFE4E1EE), DunesColorRole.border),
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         fixedSize: const Size(36, 36),
       ),
@@ -1598,8 +1631,13 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
               foregroundColor: Colors.white,
               minimumSize: const Size(0, 36),
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             icon: const Icon(Icons.add, size: 16),
             label: Text(
@@ -1642,7 +1680,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   Widget _protoStatusTabs({required bool compact}) {
     Color c(Color v, [DunesColorRole role = DunesColorRole.foreground]) =>
         DunesColors.resolve(context, v, role: role);
-    final items = _presidentDesk ? _presidentDeskFilters : _proposalStatusFilters;
+    final items = _presidentDesk
+        ? _presidentDeskFilters
+        : _proposalStatusFilters;
     return SingleChildScrollView(
       key: const ValueKey('proposal-status-strip'),
       scrollDirection: Axis.horizontal,
@@ -1650,10 +1690,17 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         children: [
           for (final item in items)
             InkWell(
-              key: ValueKey('proposal-status-${item.$1.isEmpty ? 'all' : item.$1}'),
+              key: ValueKey(
+                'proposal-status-${item.$1.isEmpty ? 'all' : item.$1}',
+              ),
               onTap: () => unawaited(_setStatusFilter(item.$1)),
               child: Container(
-                padding: EdgeInsets.fromLTRB(compact ? 11 : 16, 10, compact ? 11 : 16, 8),
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 11 : 16,
+                  10,
+                  compact ? 11 : 16,
+                  8,
+                ),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
@@ -1795,7 +1842,10 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           children: [
             Text(
               '$label ',
-              style: TextStyle(fontSize: 11.5, color: c(const Color(0xFF6B6680))),
+              style: TextStyle(
+                fontSize: 11.5,
+                color: c(const Color(0xFF6B6680)),
+              ),
             ),
             Text(
               value,
@@ -1844,7 +1894,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
               periodShort(item.$1, item.$2),
               periodCount(item.$1),
               selected: item.$1 == _periodFilter,
-              key: ValueKey('proposal-period-${item.$1.isEmpty ? 'all' : item.$1}'),
+              key: ValueKey(
+                'proposal-period-${item.$1.isEmpty ? 'all' : item.$1}',
+              ),
             ),
       ],
     );
@@ -1911,7 +1963,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
             const SizedBox(width: 2),
             TextButton.icon(
               key: const ValueKey('proposal-sla-remind-all'),
-              onPressed: _slaReminding ? null : () => unawaited(_remindSlaRows()),
+              onPressed: _slaReminding
+                  ? null
+                  : () => unawaited(_remindSlaRows()),
               style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1968,7 +2022,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         decoration: BoxDecoration(
           color: DunesColors.resolve(
             context,
-            selected ? tone.solid : (count > 0 ? tone.bg : const Color(0xFFF1EFF8)),
+            selected
+                ? tone.solid
+                : (count > 0 ? tone.bg : const Color(0xFFF1EFF8)),
             role: DunesColorRole.surface,
           ),
           borderRadius: BorderRadius.circular(999),
@@ -1977,10 +2033,15 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           '$label $count',
           style: TextStyle(
             fontSize: 11.5,
-            fontWeight: selected || count > 0 ? FontWeight.w700 : FontWeight.w500,
+            fontWeight: selected || count > 0
+                ? FontWeight.w700
+                : FontWeight.w500,
             color: selected
                 ? Colors.white
-                : DunesColors.resolve(context, count > 0 ? tone.fg : const Color(0xFF4D4860)),
+                : DunesColors.resolve(
+                    context,
+                    count > 0 ? tone.fg : const Color(0xFF4D4860),
+                  ),
           ),
         ),
       ),
@@ -1995,7 +2056,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       key: const ValueKey('proposal-proto-list-box'),
       decoration: BoxDecoration(
         color: c(Colors.white, DunesColorRole.surface),
-        border: Border.all(color: c(const Color(0xFFE8E5F1), DunesColorRole.border)),
+        border: Border.all(
+          color: c(const Color(0xFFE8E5F1), DunesColorRole.border),
+        ),
         borderRadius: BorderRadius.circular(compact ? 12 : 14),
       ),
       clipBehavior: Clip.antiAlias,
@@ -2065,7 +2128,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _protoHeader(compact: false, kindLabel: kindLabel, search: search),
+                _protoHeader(
+                  compact: false,
+                  kindLabel: kindLabel,
+                  search: search,
+                ),
                 const SizedBox(height: 12),
                 _protoListTiles(compact: false),
                 const SizedBox(height: 12),
@@ -2084,10 +2151,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   }
 
   /// 手机列表：整页一起滑（标题、汇总、页签筛选、提案卡片连在一起往上走）。
-  Widget _protoListPhone({
-    required String kindLabel,
-    required Widget search,
-  }) {
+  Widget _protoListPhone({required String kindLabel, required Widget search}) {
     Color c(Color v, [DunesColorRole role = DunesColorRole.foreground]) =>
         DunesColors.resolve(context, v, role: role);
     final Widget rowsBlock = _rows.isEmpty
@@ -2130,7 +2194,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                   // 左右留 16，卡片不再贴着屏幕边。
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
                   children: [
-                    _protoHeader(compact: true, kindLabel: kindLabel, search: search),
+                    _protoHeader(
+                      compact: true,
+                      kindLabel: kindLabel,
+                      search: search,
+                    ),
                     const SizedBox(height: 10),
                     _protoListTiles(compact: true),
                     const SizedBox(height: 10),
@@ -2187,74 +2255,76 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       VoidCallback? onTap,
       Key? key,
     }) => Expanded(
-          child: InkWell(
-            key: key,
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: compact ? 9 : 14,
-              vertical: compact ? 7 : 10,
+      child: InkWell(
+        key: key,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 9 : 14,
+            vertical: compact ? 7 : 10,
+          ),
+          decoration: BoxDecoration(
+            color: c(
+              selected ? const Color(0xFFFFF3EC) : Colors.white,
+              DunesColorRole.surface,
             ),
-            decoration: BoxDecoration(
+            border: Border.all(
               color: c(
-                selected ? const Color(0xFFFFF3EC) : Colors.white,
-                DunesColorRole.surface,
+                selected ? const Color(0xFFE7A27F) : const Color(0xFFE8E5F1),
+                DunesColorRole.border,
               ),
-              border: Border.all(
-                color: c(
-                  selected ? const Color(0xFFE7A27F) : const Color(0xFFE8E5F1),
-                  DunesColorRole.border,
+            ),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: compact ? 11 : 12,
+                  color: c(const Color(0xFF6B6680)),
                 ),
               ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              const SizedBox(height: 2),
+              Text.rich(
+                TextSpan(
+                  text: value,
                   style: TextStyle(
-                    fontSize: compact ? 11 : 12,
-                    color: c(const Color(0xFF6B6680)),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text.rich(
-                  TextSpan(
-                    text: value,
-                    style: TextStyle(
-                      fontSize: compact ? 15 : 20,
-                      height: 1.15,
-                      fontWeight: FontWeight.w700,
-                      color: c(warn ? const Color(0xFFB4441F) : const Color(0xFF1F1B2E)),
-                      fontFamily: kProposalProtoMono,
-                      fontFamilyFallback: kProposalProtoMonoFallback,
+                    fontSize: compact ? 15 : 20,
+                    height: 1.15,
+                    fontWeight: FontWeight.w700,
+                    color: c(
+                      warn ? const Color(0xFFB4441F) : const Color(0xFF1F1B2E),
                     ),
-                    children: [
-                      TextSpan(
-                        text: unit,
-                        style: TextStyle(
-                          fontSize: compact ? 10.5 : 12,
-                          fontWeight: FontWeight.w400,
-                          color: c(const Color(0xFF6B6680)),
-                          fontFamily: kProposalProtoSans,
-                          fontFamilyFallback: kProposalProtoSansFallback,
-                        ),
-                      ),
-                    ],
+                    fontFamily: kProposalProtoMono,
+                    fontFamilyFallback: kProposalProtoMonoFallback,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  children: [
+                    TextSpan(
+                      text: unit,
+                      style: TextStyle(
+                        fontSize: compact ? 10.5 : 12,
+                        fontWeight: FontWeight.w400,
+                        color: c(const Color(0xFF6B6680)),
+                        fontFamily: kProposalProtoSans,
+                        fontFamilyFallback: kProposalProtoSansFallback,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-          ),
-        );
+        ),
+      ),
+    );
     return Row(
       key: const ValueKey('proposal-overview-strip'),
       children: [
@@ -2321,6 +2391,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   List<ProposalTagGroupData> _protoTagGroups() {
     final order = <String>[];
     final byTag = <String, List<ProposalIntakeRow>>{};
+    final indexOf = <int, int>{
+      for (var i = 0; i < _rows.length; i++) _rows[i].id: i,
+    };
     for (final row in _listRows) {
       final raw = _rowTag1(row);
       final tag = raw.isEmpty ? '未选标签一' : raw;
@@ -2332,7 +2405,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     }
     return [
       for (var i = 0; i < order.length; i++)
-        _tagGroupData(i, order[i], byTag[order[i]]!),
+        _tagGroupData(i, order[i], byTag[order[i]]!, indexOf),
     ];
   }
 
@@ -2347,6 +2420,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     int index,
     String tag,
     List<ProposalIntakeRow> rows,
+    Map<int, int> indexOf,
   ) {
     var scale = 0.0;
     var hasScale = false;
@@ -2360,7 +2434,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     final tag3 = <String>{};
     final entries = <ProposalTagGroupEntry>[];
     for (final row in rows) {
-      final data = _listCardData(row, _rows.indexOf(row));
+      final data = _listCardData(row, indexOf[row.id] ?? 0);
       final value = double.tryParse(proposalRemoteListFigures(row).scale);
       if (value != null) {
         scale += value;
@@ -2381,18 +2455,28 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       final sector = proposalIntakeSectorName(row);
       if (sector.isNotEmpty) sectors.add(sector);
       for (final metric in data.right) {
-        if (metric.label == '标签三' && metric.value != '—') tag3.add(metric.value);
+        if (metric.label == '标签三' && metric.value != '—')
+          tag3.add(metric.value);
       }
       // 标签二 = 市场部「供给」：一级（资管供给方，如中石油）/ 二级（供给标签）。
-      final supplyL1 = (proposalIntakeFormRef(row.form, 'supplyTagL1Ref') ??
-              CatalogRef.fromName('${row.form['supplyTagL1'] ?? ''}'.trim()))
-          .label
-          .trim();
+      final supplyL1 =
+          (proposalIntakeFormRef(row.form, 'supplyTagL1Ref') ??
+                  CatalogRef.fromName(
+                    '${row.form['supplyTagL1'] ?? ''}'.trim(),
+                  ))
+              .label
+              .trim();
       final supplies = row.form['supplies'];
       final supplyL2 = supplies is List
-          ? supplies.map((item) => '$item'.trim()).where((item) => item.isNotEmpty).join('、')
+          ? supplies
+                .map((item) => '$item'.trim())
+                .where((item) => item.isNotEmpty)
+                .join('、')
           : '';
-      final supplyText = [supplyL1, supplyL2].where((item) => item.isNotEmpty).join(' / ');
+      final supplyText = [
+        supplyL1,
+        supplyL2,
+      ].where((item) => item.isNotEmpty).join(' / ');
       if (supplyText.isNotEmpty) tag2.add(supplyText);
       entries.add(
         ProposalTagGroupEntry(
@@ -2424,7 +2508,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         nameLabel: '提案 ${rows.length} 份',
         name: status,
         chips: sectors.toList(),
-        scale: hasScale ? proposalEstimateGrouped(scale.toStringAsFixed(0)) : '—',
+        scale: hasScale
+            ? proposalEstimateGrouped(scale.toStringAsFixed(0))
+            : '—',
         mid: [
           ProposalListCardMetric(
             label: '产品',
@@ -2433,7 +2519,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           ),
           ProposalListCardMetric(
             label: '年化规模合计',
-            value: hasScale ? proposalEstimateGrouped(scale.toStringAsFixed(0)) : '—',
+            value: hasScale
+                ? proposalEstimateGrouped(scale.toStringAsFixed(0))
+                : '—',
             unit: '万',
             tag: faceText,
             mono: true,
@@ -2529,31 +2617,45 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   Widget _protoRowActions(ProposalIntakeRow row, Widget moreMenu) {
     Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
         DunesColors.resolve(context, Color(v), role: role);
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-        SizedBox(width: 30, height: 30, child: IconButton(
-          padding: EdgeInsets.zero,
-          tooltip: '轮回次数 · ${row.restartCount} 次',
-          icon: Icon(Icons.restart_alt, size: 18, color: c(0xFF4F3488)),
-          onPressed: () => _showProposalRejections(row, history: false),
-        )),
-        SizedBox(width: 30, height: 30, child: IconButton(
-          padding: EdgeInsets.zero,
-          tooltip: row.sla == null ? '历史驳回记录' : '历史记录（驳回、催办、超时、申诉、免责）',
-          icon: Icon(Icons.history, size: 18, color: c(0xFF4F3488)),
-          onPressed: () => row.sla == null
-              ? _showProposalRejections(row, history: true)
-              : showProposalSlaRecords(
-                  context: context,
-                  service: _service,
-                  proposalId: row.id,
-                  finalRejections: proposalSlaFinalRejections(row, _people),
-                ),
-        )),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 30,
+          height: 30,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            tooltip: '轮回次数 · ${row.restartCount} 次',
+            icon: Icon(Icons.restart_alt, size: 18, color: c(0xFF4F3488)),
+            onPressed: () => _showProposalRejections(row, history: false),
+          ),
+        ),
+        SizedBox(
+          width: 30,
+          height: 30,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            tooltip: row.sla == null ? '历史驳回记录' : '历史记录（驳回、催办、超时、申诉、免责）',
+            icon: Icon(Icons.history, size: 18, color: c(0xFF4F3488)),
+            onPressed: () => row.sla == null
+                ? _showProposalRejections(row, history: true)
+                : showProposalSlaRecords(
+                    context: context,
+                    service: _service,
+                    proposalId: row.id,
+                    finalRejections: proposalSlaFinalRejections(row, _people),
+                  ),
+          ),
+        ),
         SizedBox(width: 30, height: 30, child: moreMenu),
-      ]);
+      ],
+    );
   }
 
-  Future<void> _showProposalRejections(ProposalIntakeRow row, {required bool history}) async {
+  Future<void> _showProposalRejections(
+    ProposalIntakeRow row, {
+    required bool history,
+  }) async {
     final records = row.finalRejectionHistory;
     await showDialog<void>(
       context: context,
@@ -2562,44 +2664,79 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
         content: SizedBox(
           width: 420,
-          child: SingleChildScrollView(child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('已轮回 ${records.length} 次 · 当前第 ${records.length + 1} 轮',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              const Text('最终审批人驳回、退回重新填写计为一次轮回；普通复核退回不计入。',
-                style: TextStyle(fontSize: 12)),
-              if (history && records.isEmpty) ...[
-                const SizedBox(height: 20), const Text('暂无最终驳回记录'),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '已轮回 ${records.length} 次 · 当前第 ${records.length + 1} 轮',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '最终审批人驳回、退回重新填写计为一次轮回；普通复核退回不计入。',
+                  style: TextStyle(fontSize: 12),
+                ),
+                if (history && records.isEmpty) ...[
+                  const SizedBox(height: 20),
+                  const Text('暂无最终驳回记录'),
+                ],
+                if (history)
+                  ...records.reversed.map((record) {
+                    final actor = '${record['actorUserId'] ?? ''}';
+                    final names = _people.where((p) => '${p.userId}' == actor);
+                    final name = names.isEmpty
+                        ? (actor.isEmpty ? '未知审批人' : '用户 $actor')
+                        : names.first.name;
+                    final rawDate = '${record['decidedAt'] ?? ''}';
+                    final parsedDate = DateTime.tryParse(rawDate)?.toLocal();
+                    final date = parsedDate == null
+                        ? rawDate
+                        : parsedDate.toString().split('.').first;
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '第 ${record['round']} 次轮回 · $name',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (date.isNotEmpty)
+                            Text(date, style: const TextStyle(fontSize: 11)),
+                          const SizedBox(height: 4),
+                          SelectableText(
+                            '${record['comment'] ?? ''}',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                if (records.any((r) => r['legacy'] == true)) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    '旧数据仅包含仍保留的最近一次驳回，更早的已覆盖记录无法恢复。',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                ],
               ],
-              if (history) ...records.reversed.map((record) {
-                final actor = '${record['actorUserId'] ?? ''}';
-                final names = _people.where((p) => '${p.userId}' == actor);
-                final name = names.isEmpty ? (actor.isEmpty ? '未知审批人' : '用户 $actor') : names.first.name;
-                final rawDate = '${record['decidedAt'] ?? ''}';
-                final parsedDate = DateTime.tryParse(rawDate)?.toLocal();
-                final date = parsedDate == null ? rawDate : parsedDate.toString().split('.').first;
-                return Padding(
-                  padding: const EdgeInsets.only(top: 14),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('第 ${record['round']} 次轮回 · $name',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                    if (date.isNotEmpty) Text(date, style: const TextStyle(fontSize: 11)),
-                    const SizedBox(height: 4),
-                    SelectableText('${record['comment'] ?? ''}', style: const TextStyle(fontSize: 13)),
-                  ]),
-                );
-              }),
-              if (records.any((r) => r['legacy'] == true)) ...[
-                const SizedBox(height: 12),
-                const Text('旧数据仅包含仍保留的最近一次驳回，更早的已覆盖记录无法恢复。', style: TextStyle(fontSize: 11)),
-              ],
-            ],
-          )),
+            ),
+          ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('关闭'),
+          ),
+        ],
       ),
     );
   }
@@ -2636,7 +2773,8 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     final skus = proposalIntakeSkuDetails(form);
     final faces = [
       for (final sku in skus)
-        if (proposalIntakeSkuSettleFace(sku) > 0) proposalIntakeSkuSettleFace(sku),
+        if (proposalIntakeSkuSettleFace(sku) > 0)
+          proposalIntakeSkuSettleFace(sku),
     ]..sort();
     final faceText = faces.isEmpty
         ? '—'
@@ -2678,8 +2816,12 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       owner: kProposalProductFinanceMain,
     );
     final estimateMain = row.financeEstimate['main'];
-    final estimateSummary = estimateMain is Map ? estimateMain['summary'] : null;
-    final turnover = estimateSummary is Map ? (estimateSummary['turnoverCash'] as num?)?.toDouble() : null;
+    final estimateSummary = estimateMain is Map
+        ? estimateMain['summary']
+        : null;
+    final turnover = estimateSummary is Map
+        ? (estimateSummary['turnoverCash'] as num?)?.toDouble()
+        : null;
     final times = proposalFinanceAmount(scope, kProposalTurnoverTimesKey);
 
     // 底：复核进度条。和提案详情里的「审批进度」用同一份步骤（proposalIntakeProgressSteps），
@@ -2700,9 +2842,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       tag1: tag1.isNotEmpty ? tag1 : title,
       name: title,
       approvalCount: row.relatedApprovalCount,
-      chips: [
-        if (sector.isNotEmpty) sector,
-      ],
+      chips: [if (sector.isNotEmpty) sector],
       proposalType: type,
       rating: rating,
       scale: scale,
@@ -2759,7 +2899,6 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       sla: row.sla,
     );
   }
-
 
   Widget _buildListContent({required bool compact}) {
     if (_error != null && _rows.isEmpty) {
@@ -3074,7 +3213,10 @@ class _ProposalListTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     if (row.relatedApprovalCount != null)
-                      Text('关联审批 ${row.relatedApprovalCount} 个', style: metaStyle),
+                      Text(
+                        '关联审批 ${row.relatedApprovalCount} 个',
+                        style: metaStyle,
+                      ),
                     if (compact) ...[
                       Text.rich(
                         TextSpan(
@@ -3351,21 +3493,41 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   static const _emptyRemoteFinanceEvaluation = ProposalFinanceEvaluation(
-    salesScale: 0, revenueGroup: null, revenueGroups: [],
+    salesScale: 0,
+    revenueGroup: null,
+    revenueGroups: [],
     revenue: ProposalFinanceLine(name: '收入', amount: 0, pending: true),
-    buckets: {}, profit: 0, profitSubstitution: '', margin: null, marginSubstitution: '',
+    buckets: {},
+    profit: 0,
+    profitSubstitution: '',
+    margin: null,
+    marginSubstitution: '',
   );
 
   Widget _remoteFinanceStatus() => Padding(
     padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-    child: Row(children: [
-      if (_remoteFinance.loading) ...[
-        const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-        const SizedBox(width: 8),
+    child: Row(
+      children: [
+        if (_remoteFinance.loading) ...[
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Text(
+            _remoteFinance.loading
+                ? '正在测算…'
+                : '测算暂不可用：${friendlyErrorText(_remoteFinance.error)}',
+            style: const TextStyle(fontSize: 12),
+          ),
+        ),
+        if (!_remoteFinance.loading)
+          TextButton(onPressed: _remoteFinance.retry, child: const Text('重试')),
       ],
-      Expanded(child: Text(_remoteFinance.loading ? '正在测算…' : '测算暂不可用：${friendlyErrorText(_remoteFinance.error)}', style: const TextStyle(fontSize: 12))),
-      if (!_remoteFinance.loading) TextButton(onPressed: _remoteFinance.retry, child: const Text('重试')),
-    ]),
+    ),
   );
 
   /// 每次表单内容变化加一，只让顶部「年化测算」单独刷新；
@@ -3460,6 +3622,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   final Map<String, _SettleCatalogBundle> _settleBundles = {};
   final Set<String> _settleLoading = {};
   final Map<String, Future<_SettleCatalogBundle>> _settleBundleLoads = {};
+
+  /// 结算弹窗不在页面树上，字典加载完成要靠它刷新，否则下拉会停在「字典加载中」。
+  final ValueNotifier<int> _dictTick = ValueNotifier<int>(0);
   final Map<String, List<ChannelProductHit>> _assetProductHits = {};
   final Map<String, int> _assetProductSearchSeq = {};
   final Set<String> _assetProductSearching = {};
@@ -3535,8 +3700,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ? widget.row
         : widget.row.copyWith(form: form);
     _serverForm = proposalIntakeCloneForm(_row.form);
-    _remoteFinance = ProposalRemoteFinanceController(widget.service.estimateFinance)
-      ..addListener(_remoteFinanceChanged);
+    _remoteFinance = ProposalRemoteFinanceController(
+      widget.service.estimateFinance,
+    )..addListener(_remoteFinanceChanged);
     if (!_isPurchase) _remoteFinance.setForm(_row.form);
     _visibleSection = _isPurchase && !_protoForm
         ? ProposalIntakeNavSection.toc
@@ -3573,6 +3739,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   void dispose() {
     _remoteFinance.removeListener(_remoteFinanceChanged);
     _remoteFinance.dispose();
+    _dictTick.dispose();
     _estimateTick.dispose();
     _flashTimer?.cancel();
     _scroll.removeListener(_syncVisibleSection);
@@ -3587,20 +3754,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool get _changeEditing => widget.changeEdit?.change.canEdit == true;
 
-  bool get _isLocked =>
-      _changeEditing
-          ? false
-          : _row.status == 'pending_president' ||
-                (_row.status == 'done' && !_row.techRevisionOpen);
+  bool get _isLocked => _changeEditing
+      ? false
+      : _row.status == 'pending_president' ||
+            (_row.status == 'done' && !_row.techRevisionOpen);
 
   /// 最终审核人、已通过提案只看已填结果，不铺开未选项。
   /// 复核中默认也只看已填结果（原型简单行），点「完整表单」才回到可改的表单。
-  bool get _showSelectedAsText =>
-      _changeEditing
-          ? false
-          : _row.status == 'pending_president' ||
-                (_row.status == 'done' && !_row.isTechRevising) ||
-                _reviewSimpleRows;
+  bool get _showSelectedAsText => _changeEditing
+      ? false
+      : _row.status == 'pending_president' ||
+            (_row.status == 'done' && !_row.isTechRevising) ||
+            _reviewSimpleRows;
 
   /// 复核中是否切回了完整表单（默认 false = 原型简单行）。
   bool _reviewFormMode = false;
@@ -3626,12 +3791,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _stage == 'tech_reviewing';
 
   /// 待最终确认或已完成后整单只读；复核中提交人仍可改未复核内容。
-  bool get _isContentFrozen =>
-      _changeEditing
-          ? false
-          : _row.status == 'pending_president' ||
-                (_row.status == 'done' && !_row.isTechRevising) ||
-                _isReviewing;
+  bool get _isContentFrozen => _changeEditing
+      ? false
+      : _row.status == 'pending_president' ||
+            (_row.status == 'done' && !_row.isTechRevising) ||
+            _isReviewing;
 
   int _ownerId(String key) => int.tryParse(_text('${key}UserId')) ?? 0;
 
@@ -4038,7 +4202,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (section == null || _me <= 0) return false;
     // 板块确认后逐条锁住，要改只能整板块驳回；否则撤销一条会把整个板块重新打开。
     final parent = _itemParentFlag(section);
-    if (!_row.techRevisionOpen && parent.isNotEmpty && _moduleReviewed(parent)) {
+    if (!_row.techRevisionOpen &&
+        parent.isNotEmpty &&
+        _moduleReviewed(parent)) {
       return false;
     }
     if (section.startsWith('technologyItem:')) {
@@ -4105,8 +4271,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return switch (keyName) {
       'technologyCompleted' => _isTechReviewer,
       'financeCompleted' => !_isPurchase && _isOwner('financeOwner1'),
-      'purchaseContractCompleted' || 'salesContractCompleted' =>
-        _isOwner('financeOwner2'),
+      'purchaseContractCompleted' ||
+      'salesContractCompleted' => _isOwner('financeOwner2'),
       _ => false,
     };
   }
@@ -4266,7 +4432,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     final items = review['technologyItems'];
     if (items is Map) {
-      final nextItems = Map<String, dynamic>.from(items)..remove('syncSourceRef');
+      final nextItems = Map<String, dynamic>.from(items)
+        ..remove('syncSourceRef');
       if (previousPlatform != nextPlatform) nextItems.remove('channelRef');
       review['technologyItems'] = nextItems;
     }
@@ -4382,12 +4549,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return _keepUnreviewed(next);
   }
 
-  Future<Map<String, dynamic>> _persistableForm(Map<String, dynamic> form) async {
+  Future<Map<String, dynamic>> _persistableForm(
+    Map<String, dynamic> form,
+  ) async {
     if (!_isPurchase) {
       final result = await _remoteFinance.calculateNow(form);
-      return proposalIntakeJsonSafeForm(_keepUnreviewed(
-        proposalIntakeConfirmContractEdits(result.applyToForm(form)),
-      ));
+      return proposalIntakeJsonSafeForm(
+        _keepUnreviewed(
+          proposalIntakeConfirmContractEdits(result.applyToForm(form)),
+        ),
+      );
     }
     return proposalIntakeBuildPersistForm(
       form,
@@ -4693,10 +4864,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('撤回本板块确认'),
-        content: const Text('撤回后本板块回到待确认，已通过的逐条复核保留，也可以撤销后重新选。不会退回提交人，也不会通知其他人。'),
+        content: const Text(
+          '撤回后本板块回到待确认，已通过的逐条复核保留，也可以撤销后重新选。不会退回提交人，也不会通知其他人。',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('撤回确认')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('撤回确认'),
+          ),
         ],
       ),
     );
@@ -4906,23 +5085,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 240),
       child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        dot,
-        const SizedBox(height: 4),
-        Text(
-          comment,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.right,
-          style: TextStyle(
-            color: DunesColors.resolveNullable(context, Color(0xFFB42318)),
-            fontSize: 11,
-            height: 1.35,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          dot,
+          const SizedBox(height: 4),
+          Text(
+            comment,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              color: DunesColors.resolveNullable(context, Color(0xFFB42318)),
+              fontSize: 11,
+              height: 1.35,
+            ),
           ),
-        ),
-      ],
+        ],
       ),
     );
   }
@@ -5192,6 +5371,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _counterpartyEntityCatalog = results[8];
     });
     _prefetchLiveChannelFormulas();
+    _prefetchSavedPlatformDicts();
+    _dictTick.value++;
     unawaited(
       _loadProductL3(
         _formRef('productRef') ?? CatalogRef.fromName(_text('product')),
@@ -5714,8 +5895,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       return _settleBundles[key] ?? const _SettleCatalogBundle();
     } finally {
       _settleLoading.remove(key);
-      if (mounted) setState(() {});
+      if (mounted) {
+        _dictTick.value++;
+        setState(() {});
+      }
     }
+  }
+
+  void _prefetchSavedPlatformDicts() {
+    final ref = proposalIntakeFormSyncSourceRef(_form);
+    final code = _boundSyncSourceCode(
+      ref?.code ?? '',
+      name: ref?.name ?? '',
+    );
+    if (code.isEmpty) return;
+    _prefetchSettle(code, 'CHANNEL');
+    _prefetchSettle(code, 'SUPPLIER');
   }
 
   void _prefetchSettle(String syncSource, String productSource) {
@@ -5916,17 +6111,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       rating: rating,
       stakeholders: _row
           .stakeholderLines(people: widget.people, options: widget.options)
-          .where((line) => const {
-            '创建人',
-            '市场部负责人一',
-            '市场部负责人二',
-            '科技部负责人',
-            '财务部负责人一',
-            '财务部负责人二',
-          }.contains(line.role))
-          .map((line) => line.role == '创建人'
-              ? ProposalStakeholderLine(role: '填写人', name: line.name)
-              : line)
+          .where(
+            (line) => const {
+              '创建人',
+              '市场部负责人一',
+              '市场部负责人二',
+              '运营',
+              '科技部负责人',
+              '财务部负责人一',
+              '财务部负责人二',
+            }.contains(line.role),
+          )
+          .map(
+            (line) => line.role == '创建人'
+                ? ProposalStakeholderLine(role: '填写人', name: line.name)
+                : line,
+          )
           .toList(),
       ratingRule: ratingRule,
       scale: _remoteFinance.result!.main.salesScale,
@@ -6013,7 +6213,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   void _openEstimateSection(ProposalIntakeNavSection section) {
     setState(() {
       _visibleSection = section;
-      _commentsTab = false;
       _contentOpenOverride = true;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -6041,7 +6240,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         }
       }
       _visibleSection = section;
-      _commentsTab = false;
       _contentOpenOverride = true;
       _flashFieldKeys
         ..clear()
@@ -6191,7 +6389,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               if (rating != null) ...[
                 SizedBox(width: phone ? 6 : 10),
                 Tooltip(
-                  message: '任务评级 $rating，按收入自动',
+                  message: '任务评级 $rating，按利润自动',
                   child: Container(
                     key: const ValueKey('proposal-top-rating'),
                     padding: const EdgeInsets.symmetric(
@@ -6341,7 +6539,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
     final submitter = _row.initiatorDisplayName(widget.people).trim();
     final sub = submitter.isEmpty ? '提交人' : '提交人 $submitter';
-    if (_commentsTab) return '所有人可见，可 @ 相关人';
     if (_isPurchase) {
       return switch (_visibleSection) {
         ProposalIntakeNavSection.tech =>
@@ -6408,14 +6605,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool get _contentOpen =>
       !_contentCollapsible || (_contentOpenOverride ?? _row.id <= 0);
 
-  /// 「评论」标签：原型把评论放在填报内容的标签里。
-  bool _commentsTab = false;
-
   Widget _simpleContentBox(Widget panes) {
     if (!_protoForm) return _withMeetingMinutesFooter(panes);
     final open = _contentOpen;
     final frozen = _isContentFrozen;
-    final showComments = widget.enableComments && _row.id > 0;
     final scoped = ProposalSimpleViewScope(
       readOnly: frozen,
       textRows: _simpleView,
@@ -6434,12 +6627,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // 原型：「填报内容」+ 板块标签（带 ✓ / 进度 / 只读 / 待办），按钮靠右。
-            // 手机：全部塞进一行，放不下左右滑。
-            _contentHeaderRow(open: open, showComments: showComments),
+            // 手机：全部塞进一行，放不下左右滑。评论已移到框内下方，不再做标签。
+            _contentHeaderRow(open: open),
             if (open) ...[
               // 销售提案的市场 / 科技 / 财务：负责人已放在左边格子下面，这行不再重复。
               if (_isPurchase ||
-                  _commentsTab ||
                   _visibleSection == ProposalIntakeNavSection.flow) ...[
                 const SizedBox(height: 6),
                 Text.rich(
@@ -6478,15 +6670,24 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   role: DunesColorRole.border,
                 ),
               ),
-              if (_commentsTab && showComments) ...[
-                _commentsSection(),
-                // 评论时各板块仍在树里（不显示），定位、跳转逻辑不受影响。
-                Offstage(child: TickerMode(enabled: false, child: scoped)),
-              ] else
-                scoped,
+              scoped,
             ] else
               // 收起时仍保留各板块（不显示），定位、四流跳转等逻辑不受影响。
               Offstage(child: TickerMode(enabled: false, child: scoped)),
+            // 评论固定放在会议纪要上方，不再占用「填报内容」标签。
+            if (widget.enableComments && _row.id > 0) ...[
+              const SizedBox(height: 10),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFF3F0F8),
+                  role: DunesColorRole.border,
+                ),
+              ),
+              _commentsSection(),
+            ],
             if (!_isPurchase) ...[
               const SizedBox(height: 10),
               Divider(
@@ -6510,7 +6711,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool get _phoneWidth =>
       ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
 
-  Widget _contentHeaderRow({required bool open, required bool showComments}) {
+  Widget _contentHeaderRow({required bool open}) {
     final phone = _phoneWidth;
     final title = Padding(
       padding: const EdgeInsets.only(right: 4),
@@ -6532,17 +6733,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ])
         _protoSectionPill(
           section,
-          selected: open && !_commentsTab && _visibleSection == section,
-        ),
-      if (showComments)
-        _protoPill(
-          key: const ValueKey('proposal-nav-comments'),
-          label: '评论',
-          selected: open && _commentsTab,
-          onTap: () => setState(() {
-            _commentsTab = true;
-            _contentOpenOverride = true;
-          }),
+          selected: open && _visibleSection == section,
         ),
     ];
     final actions = <Widget>[
@@ -6550,8 +6741,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       // 复核中给「修改内容」切到完整表单，改完点「回到简单版」。
       if (_canToggleReviewForm &&
           (_reviewFormMode || _canEditDuringReview) &&
-          open &&
-          !_commentsTab)
+          open)
         _reviewFormToggleButton(),
       if (_contentCollapsible)
         OutlinedButton(
@@ -6695,7 +6885,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: _readonlySelectedText(value, oneLine: oneLine)),
+                  Expanded(
+                    child: _readonlySelectedText(value, oneLine: oneLine),
+                  ),
                   _simpleTextButton(
                     open ? '收起 ▴' : '详情 ▾',
                     () => setState(() {
@@ -8009,7 +8201,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   /// 财务部「产品结算」块：填写、复核、查看共用一套版式。
   /// 只读时行里是「字段：值」；填写时同一行展开就是输入框。
   Widget _financeSimpleRows(bool wide) {
-    if (!_isPurchase && _remoteFinance.result == null) return _remoteFinanceStatus();
+    if (!_isPurchase && _remoteFinance.result == null)
+      return _remoteFinanceStatus();
     final editing = !_simpleView;
     final rows = proposalIntakeSkuDetails(_form);
     final shared = kProposalSharedSettleEnabled
@@ -8559,7 +8752,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   Widget _ratingChip(String rating) {
     if (kProposalPrototypeStyleEnabled) {
       return Tooltip(
-        message: '任务评级 $rating，按收入自动',
+        message: '任务评级 $rating，按利润自动',
         child: KeyedSubtree(
           key: const ValueKey('proposal-top-rating'),
           child: ProposalRatingBadge(rating: rating),
@@ -8585,7 +8778,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
     };
     return Tooltip(
-      message: '任务评级 $rating，按收入自动',
+      message: '任务评级 $rating，按利润自动',
       child: Container(
         key: const ValueKey('proposal-top-rating'),
         height: 20,
@@ -8732,11 +8925,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   bool _jumpToSection(ProposalIntakeNavSection section) {
-    if (_protoForm && (!_contentOpen || _commentsTab)) {
-      setState(() {
-        _contentOpenOverride = true;
-        _commentsTab = false;
-      });
+    if (_protoForm && !_contentOpen) {
+      setState(() => _contentOpenOverride = true);
     }
     if (_isPurchase && !_protoForm) {
       return _jumpToKey(_keyForNavSection(section), section);
@@ -8833,11 +9023,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool _jumpToKey(GlobalKey key, ProposalIntakeNavSection section) {
     // 填报内容默认收起：要定位到里面某一行（如「去处理」、卡点跳转）时先展开，下一帧再定位。
-    if (_protoForm && (!_contentOpen || _commentsTab)) {
-      setState(() {
-        _contentOpenOverride = true;
-        _commentsTab = false;
-      });
+    if (_protoForm && !_contentOpen) {
+      setState(() => _contentOpenOverride = true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _jumpToKey(key, section);
       });
@@ -9079,6 +9266,38 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return visible;
   }
 
+  /// 与后端提交复核同一套必填。HUN ID 在复核阶段由市场部负责人一填写，这里不拦。
+  List<String> _reviewSubmitIssues() {
+    final issues = <String>[];
+    if (!_isPurchase && !proposalIntakeFormHasText(_form, 'purchaseNo')) {
+      issues.add('采购合同编号或上传文件不能为空');
+    }
+    if (!_isPurchase) {
+      if (_text('salesNo').trim().isEmpty) {
+        issues.add('销售合同编号或上传文件不能为空');
+      }
+      if (_number('salesScale') < widget.options.minimumScale) {
+        issues.add(
+          '销售规模不得低于 ${widget.options.minimumScale.toStringAsFixed(0)} 万元',
+        );
+      }
+    }
+    if (_text('hasRdCost').trim() == '是' && _number('rdAmount') <= 0) {
+      issues.add('已选择涉及研发费用，金额必须大于 0');
+    }
+    final missing = _missingRequiredFinanceInterfaces();
+    if (missing.isNotEmpty) {
+      issues.add('财务技术接口缺少：${missing.join('、')}');
+    }
+    if (_isPurchase) {
+      issues.addAll(proposalIntakePurchaseMarketIssues(_form));
+      issues.addAll(proposalIntakePurchaseTechIssues(_form));
+    } else {
+      issues.addAll(proposalIntakeSkuSettleIssues(_form));
+    }
+    return issues;
+  }
+
   List<String> _validate() {
     final issues = <String>[];
     if (_row.title.trim().isEmpty) issues.add('产品提案名称不能为空');
@@ -9233,34 +9452,24 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         return;
       }
     }
-    if (action == 'notify_market2') {
-      final missingInterfaces = _missingRequiredFinanceInterfaces();
-      if (missingInterfaces.isNotEmpty) {
-        final issues = ['财务技术接口缺少：${missingInterfaces.join('、')}'];
-        setState(() => _issues = issues);
-        _scrollToTop();
-        widget.onError(issues.first);
-        return;
-      }
-      if (_isPurchase) {
-        final issues = proposalIntakePurchaseTechIssues(_form);
-        if (issues.isNotEmpty) {
-          setState(() => _issues = issues);
-          _scrollToTop();
-          widget.onError(issues.first);
-          return;
-        }
-      } else {
-        final issues = [
+    if (action == 'notify_market2' || action == 'start_review') {
+      final issues = <String>[
+        ..._reviewSubmitIssues(),
+        if (action == 'notify_market2' && !_isPurchase) ...[
           ...proposalIntakeTechFillIssues(_form, purchase: false),
           ...proposalIntakeChildTechFillIssues(_form),
-        ];
-        if (issues.isNotEmpty) {
-          setState(() => _issues = issues);
-          _scrollToTop();
-          widget.onError(issues.first);
-          return;
-        }
+        ],
+      ];
+      final unique = <String>[];
+      final seen = <String>{};
+      for (final issue in issues) {
+        if (seen.add(issue)) unique.add(issue);
+      }
+      if (unique.isNotEmpty) {
+        setState(() => _issues = unique);
+        _scrollToTop();
+        widget.onError(unique.first);
+        return;
       }
     }
     final (title, message, confirmLabel) = switch (action) {
@@ -9398,8 +9607,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         title: const Text('提交复核'),
         content: const Text('只通知这次改动涉及的板块。全部通过前，现在生效的提案内容不变。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('提交')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('提交'),
+          ),
         ],
       ),
     );
@@ -9616,11 +9831,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                 wide ? 28 : (_phoneWidth ? 4 : 14),
                                 wide ? 22 : (_phoneWidth ? 4 : 14),
                                 wide ? 28 : (_phoneWidth ? 4 : 14),
-                                _canDecidePresident ||
-                                        _awaitingTechModuleConfirm ||
-                                        _protoActionBarVisible
-                                    ? 120
-                                    : 80,
+                                // 底部操作条在滚动区外面，这里只留一点收尾，避免滚到底再空出一大块。
+                                wide ? 16 : 28,
                               ),
                               sliver: SliverToBoxAdapter(
                                 child: _protoPageBox(
@@ -9674,14 +9886,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                                         _openEstimateField,
                                                   );
                                             if (!kProposalPrototypeStyleEnabled) {
-                                              return card ?? _remoteFinanceStatus();
+                                              return card ??
+                                                  _remoteFinanceStatus();
                                             }
                                             // 原型：测算下面是「流程」格子。
                                             return Column(
                                               crossAxisAlignment:
                                                   CrossAxisAlignment.stretch,
                                               children: [
-                                                if (card == null) _remoteFinanceStatus(),
+                                                if (card == null)
+                                                  _remoteFinanceStatus(),
                                                 ?card,
                                                 Padding(
                                                   padding:
@@ -9771,10 +9985,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                             ),
                                           ),
                                         ),
-                                      if (widget.enableComments &&
-                                          _row.id > 0 &&
-                                          !_protoForm)
-                                        _commentsSection(),
                                     ],
                                   ),
                                   wide: wide,
@@ -10726,7 +10936,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       final saved = await edit.onSave(prepared.form);
       if (!mounted) return false;
       setState(() {
-        _row = _row.copyWith(form: Map<String, dynamic>.from(saved.proposedForm));
+        _row = _row.copyWith(
+          form: Map<String, dynamic>.from(saved.proposedForm),
+        );
         _serverForm = proposalIntakeCloneForm(saved.proposedForm);
         _fieldEpoch++;
         _markFormDirty(false);
@@ -11434,7 +11646,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: DunesColors.resolve(context, ProposalPalette.amberSoft, role: DunesColorRole.surface),
+        color: DunesColors.resolve(
+          context,
+          ProposalPalette.amberSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           onTap: () => unawaited(_openChange()),
@@ -11448,7 +11664,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.resolve(context, ProposalPalette.amber),
+                      color: DunesColors.resolve(
+                        context,
+                        ProposalPalette.amber,
+                      ),
                     ),
                   ),
                 ),
@@ -11457,7 +11676,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.resolve(context, ProposalPalette.purpleDeep),
+                    color: DunesColors.resolve(
+                      context,
+                      ProposalPalette.purpleDeep,
+                    ),
                   ),
                 ),
               ],
@@ -12201,11 +12423,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (_isPurchase) return child;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        child,
-        const SizedBox(height: 12),
-        _meetingMinutesBind(),
-      ],
+      children: [child, const SizedBox(height: 12), _meetingMinutesBind()],
     );
   }
 
@@ -12215,10 +12433,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       minutes: proposalMeetingMinutesOf(_form),
       canEdit: _canBindMeetingMinutes,
       onChanged: (next) {
-        _set(
-          kProposalMeetingMinutesKey,
-          proposalMeetingMinutesToJson(next),
-        );
+        _set(kProposalMeetingMinutesKey, proposalMeetingMinutesToJson(next));
         if (_row.id <= 0 ||
             proposalIntakeCanPatchDraft(
               _row,
@@ -12232,7 +12447,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  Future<void> _persistMeetingMinutes(List<ProposalMeetingMinute> minutes) async {
+  Future<void> _persistMeetingMinutes(
+    List<ProposalMeetingMinute> minutes,
+  ) async {
     if (_row.id <= 0) return;
     try {
       final saved = await ProposalIntakeService(session: widget.session)
@@ -12244,8 +12461,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       if (!mounted) return;
       setState(() {
         _row = _row.copyWith(version: saved.version);
-        _serverForm[kProposalMeetingMinutesKey] =
-            proposalMeetingMinutesToJson(proposalMeetingMinutesOf(saved.form));
+        _serverForm[kProposalMeetingMinutesKey] = proposalMeetingMinutesToJson(
+          proposalMeetingMinutesOf(saved.form),
+        );
       });
       _emitChanged(_row);
     } catch (error) {
@@ -12503,62 +12721,68 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return '${value ?? ''}'.trim().isNotEmpty;
   }
 
-  /// 分栏左边格子下面的负责人小卡：一人一行，姓名 + 短职责标签（市场 / 填写 / 复核 / 逐条 / 整板块），
-  /// 复核过的标签变绿带 ✓。表单里的负责人字段照旧保留。
+  /// 负责人条：按职责合并横滑 chip（市场 / 运营 / 科技 / 财务），App 顶栏与桌面侧栏共用。
   Widget _splitPeople(List<(String, String, bool?)> people) {
     Color c(Color light, [DunesColorRole role = DunesColorRole.foreground]) =>
         DunesColors.resolve(context, light, role: role);
-    // 一人一行：姓名在左，短职责小标签在右；带复核的人复核后标签变绿。
-    Widget row((String, String, bool?) person) {
+    const mergeDuty = <String, String>{
+      '复核': '市场',
+      '填写': '市场',
+      '市场': '市场',
+      '运营': '运营',
+      '科技': '科技',
+      '逐条': '财务',
+      '整板块': '财务',
+      '财务': '财务',
+    };
+    final buckets = <String, List<String>>{};
+    final reviewedDepts = <String>{};
+    for (final person in people) {
       final (duty, name, reviewed) = person;
+      final dept = mergeDuty[duty] ?? duty;
       final shown = name.trim().isEmpty ? '未指定' : name.trim();
-      final done = reviewed == true;
-      return SizedBox(
-        height: 24,
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                shown,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: c(
-                    name.trim().isEmpty
-                        ? const Color(0xFFB9B3C6)
-                        : const Color(0xFF2A2638),
-                  ),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+      final list = buckets.putIfAbsent(dept, () => <String>[]);
+      if (!list.contains(shown)) list.add(shown);
+      if (reviewed == true) reviewedDepts.add(dept);
+    }
+    const order = ['市场', '运营', '科技', '财务'];
+    final chips = [
+      for (final dept in [
+        ...order.where(buckets.containsKey),
+        ...buckets.keys.where((k) => !order.contains(k)),
+      ])
+        () {
+          final done = reviewedDepts.contains(dept);
+          final label = '$dept · ${buckets[dept]!.join('、')}';
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: c(
+                done ? ProposalPalette.greenSoft : const Color(0xFFF3F0FF),
+                DunesColorRole.surface,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: c(
+                  done ? ProposalPalette.green : const Color(0xFFE4DDF8),
+                  DunesColorRole.border,
                 ),
               ),
             ),
-            const SizedBox(width: 4),
-            ProposalFinanceTag(
-              done ? '$duty ✓' : duty,
-              color: done ? ProposalPalette.green : const Color(0xFF5B556A),
-              fill: done ? ProposalPalette.greenSoft : const Color(0xFFF3F0F7),
+            child: Text(
+              done ? '$label ✓' : label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: c(
+                  done ? ProposalPalette.green : const Color(0xFF2A2638),
+                ),
+              ),
             ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
-      decoration: BoxDecoration(
-        color: c(Colors.white, DunesColorRole.surface),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: c(const Color(0xFFEFECF6), DunesColorRole.border),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [for (final person in people) row(person)],
-      ),
-    );
+          );
+        }(),
+    ];
+    return Wrap(spacing: 8, runSpacing: 6, children: chips);
   }
 
   String _ownerName(String key) {
@@ -12738,20 +12962,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               : '占规模 ${proposalFormatWan(costRate)}%',
           colors: const [Color(0xFFD9822B), Color(0xFFF4B860)],
           icon: Icons.receipt_long_rounded,
-          onTap: () =>
-              _openEstimateField(
-                ProposalIntakeNavSection.finance,
-                kProposalFinanceCostAnchor,
-              ),
+          onTap: () => _openEstimateField(
+            ProposalIntakeNavSection.finance,
+            kProposalFinanceCostAnchor,
+          ),
         ),
         if (kProposalFinanceShowProfit)
           _kpiTile(
             label: '年化利润',
-            value: _businessCostSealed
-                ? '已加密'
-                : (known ? proposalFormatWan(eval.profit) : '—'),
-            sub: _businessCostSealed || margin == null
-                ? '收入 − 采购 − 各项成本'
+            value: known
+                ? proposalFormatWan(eval.revenue.amount - eval.costTotal)
+                : '—',
+            sub: margin == null
+                ? '收入 − 成本'
                 : '毛利率 ${proposalFormatWan(margin)}%',
             colors: const [Color(0xFFB8406A), Color(0xFFE9786A)],
             icon: Icons.savings_rounded,
@@ -12933,7 +13156,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   /// 整单测算：主产品 + 子产品加总。成本 / 利润块顶、下面按产品的各行、
   /// 市场部三格、左侧格子和主 hero 都用这一份，数字对得上。
   ProposalFinanceEvaluation get _allFinanceEvaluation {
-    if (!_isPurchase) return _remoteFinance.result?.total ?? _emptyRemoteFinanceEvaluation;
+    if (!_isPurchase)
+      return _remoteFinance.result?.total ?? _emptyRemoteFinanceEvaluation;
     final main = _mainFinanceEvaluation;
     if (!proposalIntakeHasChildProducts(_form) || main.products.isEmpty) {
       return main;
@@ -14585,7 +14809,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }) {
     if (!_isPurchase) {
       final result = _remoteFinance.result;
-      return (owner == kProposalProductFinanceChildren ? result?.children : result?.main) ?? _emptyRemoteFinanceEvaluation;
+      return (owner == kProposalProductFinanceChildren
+              ? result?.children
+              : result?.main) ??
+          _emptyRemoteFinanceEvaluation;
     }
     return proposalEvaluateFinance(
       scope,
@@ -14933,7 +15160,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ].join('   ');
       },
       turnoverTimes: times > 0 ? times : null,
-      turnoverCash: (_remoteFinance.result?.summary['turnoverCash'] as num?)?.toDouble(),
+      turnoverCash: (_remoteFinance.result?.summary['turnoverCash'] as num?)
+          ?.toDouble(),
       turnoverField: _scopedFinanceField(
         ('turnoverTimes', '月周转次数'),
         owner: owner,
@@ -16984,7 +17212,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       context: context,
       barrierDismissible: true,
       builder: (ctx) {
-        return StatefulBuilder(
+        return ListenableBuilder(
+          listenable: _dictTick,
+          builder: (ctx, _) {
+            return StatefulBuilder(
           builder: (ctx, setDialogState) {
             final current =
                 (child
@@ -17083,6 +17314,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   child: const Text('关闭'),
                 ),
               ],
+            );
+          },
             );
           },
         );
@@ -17199,10 +17432,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final out = <ProposalSkuSettleRow>[];
     for (var i = 0; i < copied.length; i++) {
       final coupon = _isCouponCostOf(copied[i], copied);
-      var id = i < current.length ? current[i].id : proposalIntakeNewSkuSettleId();
-      if (!coupon && id.endsWith('-coupon')) id = proposalIntakeNewSkuSettleId();
+      var id = i < current.length
+          ? current[i].id
+          : proposalIntakeNewSkuSettleId();
+      if (!coupon && id.endsWith('-coupon'))
+        id = proposalIntakeNewSkuSettleId();
       if (!coupon) idMap[copied[i].id] = id;
-      out.add(ProposalSkuSettleRow(id: id, kind: copied[i].kind, terms: copied[i].terms));
+      out.add(
+        ProposalSkuSettleRow(
+          id: id,
+          kind: copied[i].kind,
+          terms: copied[i].terms,
+        ),
+      );
     }
     return [
       for (var i = 0; i < out.length; i++)
@@ -17245,9 +17487,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       return;
     }
     final snap = proposalIntakeChildTechnology(_form);
-    final previousSource = catalogRefOrNull(snap['syncSourceRef'])?.code.trim() ?? '';
+    final previousSource =
+        catalogRefOrNull(snap['syncSourceRef'])?.code.trim() ?? '';
     final nextSource = catalogRefOrNull(value)?.code.trim() ?? '';
-    final platformChanged = key == 'syncSourceRef' && previousSource != nextSource;
+    final platformChanged =
+        key == 'syncSourceRef' && previousSource != nextSource;
     snap[key] = value;
     var form = platformChanged
         ? proposalIntakeResetPlatformBillTypes(_form, childOnly: true)
@@ -18333,7 +18577,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-
   /// 一个产品的「产品卡」：科技部、财务部共用。
   /// 产品信息取科技部 SKU；结算取财务部产品结算，金额 = 产品年化规模 × 该条比例（单价折成 单价 ÷ 面值）。
   /// 产品颜色序号：主产品按科技部产品顺序；关联产品跟它所在的主产品同色。
@@ -18407,7 +18650,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               t,
               scale: base,
               face: faceValue,
-              promotionMain: cost ? proposalPromotionMain(_form, product) : null,
+              promotionMain: cost
+                  ? proposalPromotionMain(_form, product)
+                  : null,
             );
             final formula = t.displayFormula.trim();
             return ProposalProductCardLine(
@@ -18418,7 +18663,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               minus: coupon,
               ratio: line.ratioText,
               redemptionRate: coupon ? t.expectedRedemptionRate : '',
-              amount: line.unfilled ? '—' : '${proposalFormatWan(line.amount)} 万',
+              amount: line.unfilled
+                  ? '—'
+                  : '${proposalFormatWan(line.amount)} 万',
               basis: _settleBasisShort(formula),
               perUnit: line.perUnit,
               // 第二行灰字：计算公式 · 发票类型 · 税率。
@@ -18496,38 +18743,40 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         // 科技部和财务部共用关联产品小卡，保留各自的操作入口。
         relatedProducts: [
           if (showRelated)
-          for (final child in children)
-            () {
-              final childScale = proposalSkuFaceShareScale(child, form: _form);
-              return ProposalRelatedProductEntry(
-                id: child.id,
-                title: child.displayName.isEmpty
-                    ? '未命名关联产品'
-                    : child.displayName,
-                subtitle: [
-                  '包内数量 ${proposalIntakeChildProductQuantity(_form, child.id)}',
-                  '${proposalIntakeSkuSettlements(child).length} 条结算',
-                ].join(' · '),
-                info: [
-                  for (final field in _productInfoRows(child))
-                    if (field.$2.trim().isNotEmpty) field,
-                ],
-                receivables: linesOf(child, cost: false, base: childScale),
-                payables: linesOf(child, cost: true, base: childScale),
-                onSettleDetail: () => unawaited(
-                  _openSkuSettleDialog(sku: child, child: true),
-                ),
-                action: side == ProposalProductCardSide.finance
-                    ? _productCardSettleButton(child, child: true)
-                    : Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          ?_productSelectBox(child.id),
-                          _skuRowActions(child, child: true),
-                        ],
-                      ),
-              );
-            }(),
+            for (final child in children)
+              () {
+                final childScale = proposalSkuFaceShareScale(
+                  child,
+                  form: _form,
+                );
+                return ProposalRelatedProductEntry(
+                  id: child.id,
+                  title: child.displayName.isEmpty
+                      ? '未命名关联产品'
+                      : child.displayName,
+                  subtitle: [
+                    '包内数量 ${proposalIntakeChildProductQuantity(_form, child.id)}',
+                    '${proposalIntakeSkuSettlements(child).length} 条结算',
+                  ].join(' · '),
+                  info: [
+                    for (final field in _productInfoRows(child))
+                      if (field.$2.trim().isNotEmpty) field,
+                  ],
+                  receivables: linesOf(child, cost: false, base: childScale),
+                  payables: linesOf(child, cost: true, base: childScale),
+                  onSettleDetail: () =>
+                      unawaited(_openSkuSettleDialog(sku: child, child: true)),
+                  action: side == ProposalProductCardSide.finance
+                      ? _productCardSettleButton(child, child: true)
+                      : Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            ?_productSelectBox(child.id),
+                            _skuRowActions(child, child: true),
+                          ],
+                        ),
+                );
+              }(),
         ],
         otherSideLabel: side == ProposalProductCardSide.finance
             ? '去科技部看'
@@ -18582,10 +18831,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       if (sku.productName.trim().isNotEmpty &&
           sku.productName.trim() != sku.displayName.trim())
         ('产品名称', sku.productName.trim()),
-      (
-        '券种',
-        sku.resolvedCouponKind.isEmpty ? '未填' : sku.resolvedCouponKind,
-      ),
+      ('券种', sku.resolvedCouponKind.isEmpty ? '未填' : sku.resolvedCouponKind),
       ('面值', value('face')),
       ('业务平台', value('platform')),
       ('年化规模', scale > 0 ? '${proposalFormatWan(scale)} 万' : ''),
@@ -21141,7 +21387,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         role: DunesColorRole.surface,
       );
       final evaluation = _productEvaluationOf(product.id)?.evaluation;
-      final total = cost ? evaluation?.total(kProposalCostCategoryProject) ?? 0 : evaluation?.revenue.amount ?? 0;
+      final total = cost
+          ? evaluation?.total(kProposalCostCategoryProject) ?? 0
+          : evaluation?.revenue.amount ?? 0;
       final verb = cost ? '付钱' : '收钱';
       return Container(
         key: ValueKey('settle-dialog-group-${product.id}-$cost'),
@@ -22289,7 +22537,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
     return Container(
       key: ValueKey('sku-settle-coupon-$skuId-${income.id}'),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: line))),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: line)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -22346,7 +22596,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: DunesColors.resolve(context, ProposalPalette.text),
+                        color: DunesColors.resolve(
+                          context,
+                          ProposalPalette.text,
+                        ),
                       ),
                     ),
                   ),
@@ -23199,7 +23452,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                   ),
               ],
-              if (includeRedemptionRate && (terms.settleByTier || faceMode)) ...[
+              if (includeRedemptionRate &&
+                  (terms.settleByTier || faceMode)) ...[
                 const SizedBox(height: 8),
                 redemptionField,
               ],
@@ -23212,18 +23466,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       ? null
                       : terms.promoter.trim(),
                   title: '推广商',
-                  hint: promoterNames.isEmpty
-                      ? '先在采购合同里选择推广商'
-                      : '选择推广商',
+                  hint: promoterNames.isEmpty ? '先在采购合同里选择推广商' : '选择推广商',
                   searchable: true,
                   options: [
                     for (final name in promoterNames)
                       ProposalSelectOption(value: name, label: name),
                   ],
                   onSelected: enabled
-                      ? (value) => onChanged(
-                          terms.copyWith(promoter: value ?? ''),
-                        )
+                      ? (value) =>
+                            onChanged(terms.copyWith(promoter: value ?? ''))
                       : null,
                 ),
                 if (terms.promoter.trim().isEmpty) ...[
@@ -23371,18 +23622,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                           code: terms.ourParty.trim(),
                           name: terms.ourParty.trim(),
                         ),
-                  options: _mergedEntities(
-                    _ourEntityCatalog,
-                    _ourEntityExtras,
-                  ),
+                  options: _mergedEntities(_ourEntityCatalog, _ourEntityExtras),
                   hint: '请选择或新增我方主体',
                   emptyText: '暂无我方主体，可新增',
                   required: true,
                   addLabel: '新增我方主体',
                   onCreated: (ref) => _rememberEntity(ref, ourSide: true),
-                  write: (value) => terms.copyWith(
-                    ourParty: _entityStoredCode(value),
-                  ),
+                  write: (value) =>
+                      terms.copyWith(ourParty: _entityStoredCode(value)),
                 ),
                 // 取资管 /counterparty-entity：选项显示简称，存全称（code）。
                 catalogField(
@@ -23402,9 +23649,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   required: true,
                   addLabel: '新增对方主体',
                   onCreated: (ref) => _rememberEntity(ref, ourSide: false),
-                  write: (value) => terms.copyWith(
-                    counterparty: _entityStoredCode(value),
-                  ),
+                  write: (value) =>
+                      terms.copyWith(counterparty: _entityStoredCode(value)),
                 ),
                 stack: stackPairs,
               ),
@@ -23496,7 +23742,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         CatalogRef(code: current, name: current),
       ...options,
     ];
-    final shown = selected ??
+    final shown =
+        selected ??
         (current.isEmpty ? null : CatalogRef(code: current, name: current));
     return ProposalField(
       label: label,
@@ -23519,7 +23766,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     label: item.name.trim().isNotEmpty
                         ? item.name.trim()
                         : item.code.trim(),
-                    meta: item.code.trim().isNotEmpty &&
+                    meta:
+                        item.code.trim().isNotEmpty &&
                             item.code.trim() != item.name.trim()
                         ? item.code.trim()
                         : null,
@@ -25090,8 +25338,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final form = formOverride ?? _form;
     switch (key) {
       case 'turnoverCash':
-        final cash = _isPurchase ? proposalTurnoverCashAmount(form)
-            : (_remoteFinance.result?.mainSummary['turnoverCash'] as num?)?.toDouble();
+        final cash = _isPurchase
+            ? proposalTurnoverCashAmount(form)
+            : (_remoteFinance.result?.mainSummary['turnoverCash'] as num?)
+                  ?.toDouble();
         return (
           display: cash == null ? '' : proposalFormatWan(cash),
           formula: kProposalTurnoverCashFormula,
@@ -25099,10 +25349,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       case 'salesScale':
         if (_isPurchase) {
           final rollup = proposalProductScaleRollup(form);
-          return (display: rollup == null ? '' : proposalFormatWan(rollup.salesScale), formula: kProposalSalesScaleFormula);
+          return (
+            display: rollup == null ? '' : proposalFormatWan(rollup.salesScale),
+            formula: kProposalSalesScaleFormula,
+          );
         }
         return (
-          display: _remoteFinance.result == null ? '' : proposalFormatWan(_remoteFinance.result!.main.salesScale),
+          display: _remoteFinance.result == null
+              ? ''
+              : proposalFormatWan(_remoteFinance.result!.main.salesScale),
           formula: kProposalSalesScaleFormula,
         );
       case 'revenue':
@@ -26880,7 +27135,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       hint: noPlatform
           ? '请先在科技部选择业务平台'
           : (options.isEmpty ? (loading ? '字典加载中…' : '该业务平台暂无供应商') : '请选择供应商'),
-      emptyText: noPlatform ? '请先在科技部选择业务平台' : (loading ? '字典加载中…' : '该业务平台暂无供应商'),
+      emptyText: noPlatform
+          ? '请先在科技部选择业务平台'
+          : (loading ? '字典加载中…' : '该业务平台暂无供应商'),
       onSelected: onSelected,
     );
   }
@@ -27167,9 +27424,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   ProposalSupplyProductRow _seedSupplyProduct({required bool existing}) {
-    return proposalIntakeNewSupplyProduct(existing: existing).copyWith(
-      syncSourceRef: proposalIntakeFormSyncSourceRef(_form),
-    );
+    return proposalIntakeNewSupplyProduct(
+      existing: existing,
+    ).copyWith(syncSourceRef: proposalIntakeFormSyncSourceRef(_form));
   }
 
   void _addSupplyProduct() {

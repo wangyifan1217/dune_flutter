@@ -75,13 +75,13 @@ List<ProposalListStep> proposalReviewSegments(
           ];
           final state =
               members.any(
-                (s) => s.state == ProposalIntakeProgressState.rejected,
+                (s) => s.state == ProposalIntakeProgressState.current,
               )
-              ? ProposalListStepState.rejected
-              : members.any(
-                  (s) => s.state == ProposalIntakeProgressState.current,
-                )
               ? ProposalListStepState.now
+              : members.any(
+                  (s) => s.state == ProposalIntakeProgressState.rejected,
+                )
+              ? ProposalListStepState.rejected
               : members.every(
                   (s) => s.state == ProposalIntakeProgressState.done,
                 )
@@ -132,14 +132,22 @@ String proposalReviewWhoText(List<ProposalIntakeProgressStep> steps) {
   };
   String who(ProposalIntakeProgressStep step) =>
       step.name.isEmpty || step.name == '未指定' ? step.role : step.name;
-  final parts = [
+  // 只写现在该谁处理。驳回留在红点上，不再和当前步骤并列，避免看起来还停在驳回人。
+  final current = [
     for (final step in steps)
-      if (step.state == ProposalIntakeProgressState.rejected)
-        '${who(step)}已驳回'
-      else if (step.state == ProposalIntakeProgressState.current)
+      if (step.state == ProposalIntakeProgressState.current)
         '待${who(step)}${verb(step.id)}',
   ];
-  return parts.toSet().join('、');
+  if (current.isNotEmpty) return current.toSet().join('、');
+  final rejected = [
+    for (final step in steps)
+      if (step.state == ProposalIntakeProgressState.rejected) step,
+  ];
+  if (rejected.isEmpty) return '';
+  for (final step in steps) {
+    if (step.id == 'initiate') return '待${who(step)}修改';
+  }
+  return rejected.map((step) => '${who(step)}已驳回').toSet().join('、');
 }
 
 /// 当前这一步已经停了多久（取进行中 / 驳回的步骤里最久的）。

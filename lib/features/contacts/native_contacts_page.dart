@@ -625,7 +625,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     return Scaffold(
       backgroundColor: DunesColors.resolve(
         context,
-        const Color(0xFFF5F6F8),
+        DunesColors.bgApp,
         role: DunesColorRole.surface,
       ),
       resizeToAvoidBottomInset: false,
@@ -675,7 +675,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                 ColoredBox(
                   color: DunesColors.resolve(
                     context,
-                    Colors.white,
+                    DunesColors.bgApp,
                     role: DunesColorRole.surface,
                   ),
                   child: Padding(
@@ -688,7 +688,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                       decoration: BoxDecoration(
                         color: DunesColors.resolve(
                           context,
-                          const Color(0xFFF5F6F8),
+                          Colors.white,
                           role: DunesColorRole.surface,
                         ),
                         borderRadius: BorderRadius.circular(10),
@@ -1108,7 +1108,7 @@ class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
                     filled: true,
                     fillColor: DunesColors.resolve(
                       context,
-                      const Color(0xFFF5F6F8),
+                      DunesColors.bgApp,
                       role: DunesColorRole.surface,
                     ),
                     border: OutlineInputBorder(

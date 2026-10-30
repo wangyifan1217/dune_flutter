@@ -292,6 +292,7 @@ class LighthouseService {
     String? product,
     String? productL3,
     String? province,
+    String? fundItem,
     bool drill = false,
   }) {
     return _getData('/lighthouse/visibility', {
@@ -299,6 +300,7 @@ class LighthouseService {
       if (product != null && product.isNotEmpty) 'product': product,
       if (productL3 != null && productL3.isNotEmpty) 'productL3': productL3,
       if (province != null && province.isNotEmpty) 'province': province,
+      if (fundItem != null && fundItem.isNotEmpty) 'fundItem': fundItem,
       'date': _fmtDate(DateTime.now()),
       if (drill) 'drill': 'true',
     }, '可见人员加载失败');

@@ -2158,7 +2158,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return Scaffold(
       backgroundColor: DunesColors.resolve(
         context,
-        DunesColors.bgApp,
+        Colors.white,
         role: DunesColorRole.surface,
       ),
       // 搜索聚焦时键盘不顶起底部 Tab，与灯塔页一致。

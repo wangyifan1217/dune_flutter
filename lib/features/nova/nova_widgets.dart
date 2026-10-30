@@ -3122,9 +3122,9 @@ class NovaC4InputBar extends StatelessWidget {
             expanded: quickActionsOpen,
             swipeExpand: !isDesktopCommOnly,
             onToggleMore: onToggleQuickActions,
+            onNewChat: onNewChat,
             onOpenKb: onOpenKb,
             onOpenMeeting: onOpenMeeting,
-            onVoiceCall: voiceCallBlocked ? null : onVoiceCall,
           ),
           AnimatedSize(
             duration: const Duration(milliseconds: 240),
@@ -3136,7 +3136,7 @@ class NovaC4InputBar extends StatelessWidget {
                     onCamera: onCamera,
                     onAlbum: onAlbum,
                     onMeetingPrd: onMeetingPrd,
-                    onNewChat: onNewChat,
+                    onVoiceCall: voiceCallBlocked ? null : onVoiceCall,
                     onHistory: onHistory,
                     onPickModel: onPickModel,
                     modelLabel: modelLabel,
@@ -3197,18 +3197,18 @@ class _NovaShortcutStrip extends StatelessWidget {
     required this.expanded,
     required this.onToggleMore,
     this.swipeExpand = false,
+    this.onNewChat,
     this.onOpenKb,
     this.onOpenMeeting,
-    this.onVoiceCall,
   });
 
   final bool locked;
   final bool expanded;
   final bool swipeExpand;
   final VoidCallback onToggleMore;
+  final VoidCallback? onNewChat;
   final VoidCallback? onOpenKb;
   final VoidCallback? onOpenMeeting;
-  final VoidCallback? onVoiceCall;
 
   void _onVerticalDragEnd(DragEndDetails details) {
     if (locked || !swipeExpand) return;
@@ -3227,6 +3227,12 @@ class _NovaShortcutStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = <_NovaShortcutItem>[
+      if (onNewChat != null)
+        _NovaShortcutItem(
+          icon: Icons.add_comment_outlined,
+          label: '新对话',
+          onTap: locked ? null : onNewChat,
+        ),
       if (onOpenKb != null)
         _NovaShortcutItem(
           icon: Icons.menu_book_outlined,
@@ -3238,12 +3244,6 @@ class _NovaShortcutStrip extends StatelessWidget {
           icon: Icons.groups_2_rounded,
           label: '会议',
           onTap: locked ? null : onOpenMeeting,
-        ),
-      if (onVoiceCall != null)
-        _NovaShortcutItem(
-          icon: Icons.phone_in_talk_rounded,
-          label: '电话',
-          onTap: locked ? null : onVoiceCall,
         ),
       _NovaShortcutItem(
         icon: expanded ? Icons.expand_less_rounded : Icons.apps_rounded,
@@ -3402,7 +3402,7 @@ class _NovaMoreGrid extends StatelessWidget {
     this.onCamera,
     this.onAlbum,
     this.onMeetingPrd,
-    this.onNewChat,
+    this.onVoiceCall,
     this.onHistory,
     this.onPickModel,
     this.modelLabel = '',
@@ -3412,7 +3412,7 @@ class _NovaMoreGrid extends StatelessWidget {
   final VoidCallback? onCamera;
   final VoidCallback? onAlbum;
   final VoidCallback? onMeetingPrd;
-  final VoidCallback? onNewChat;
+  final VoidCallback? onVoiceCall;
   final VoidCallback? onHistory;
   final VoidCallback? onPickModel;
   final String modelLabel;
@@ -3444,11 +3444,11 @@ class _NovaMoreGrid extends StatelessWidget {
           label: 'PRD',
           onTap: onMeetingPrd,
         ),
-      if (onNewChat != null)
+      if (onVoiceCall != null)
         _NovaShortcutItem(
-          icon: Icons.add_comment_outlined,
-          label: '新对话',
-          onTap: onNewChat,
+          icon: Icons.phone_in_talk_rounded,
+          label: '电话',
+          onTap: onVoiceCall,
         ),
       if (onHistory != null)
         _NovaShortcutItem(

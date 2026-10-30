@@ -3167,7 +3167,6 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
 
   ProposalIntakeProgressState startReviewState() {
     if (inStartReview) return ProposalIntakeProgressState.current;
-    if (inTechFill) return ProposalIntakeProgressState.current;
     if (presidentRejected && leftFilling) {
       return ProposalIntakeProgressState.pending;
     }
@@ -3215,17 +3214,22 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       ? ProposalIntakeProgressState.done
       : ProposalIntakeProgressState.current;
   final finance2Done = proposalIntakeFinance2ReviewDone(row);
-  final contractRejected =
-      rejectSection == 'purchaseContractCompleted' ||
-      rejectSection == 'salesContractCompleted' ||
-      rejectSection.startsWith('contractItem');
-  final techItemHandedBack = proposalIntakeHasOpenItemReject(
-    review,
-    'technologyItem:',
-  );
-  final owner2ItemHandedBack =
-      proposalIntakeHasOpenItemReject(review, 'financeItem:') ||
-      proposalIntakeHasOpenItemReject(review, 'contractItem:');
+  // 填写人重新提交后 reviewRejected 会清掉，但驳回段落和单条意见可能还在。
+  // 那些只在退回修改期间表示「财务已驳回」；回到复核后应重新变成待复核。
+  final handbackOpen =
+      reviewRejected || leftFilling || inTechFill || inStartReview;
+  final contractRejected = handbackOpen &&
+      (rejectSection == 'purchaseContractCompleted' ||
+          rejectSection == 'salesContractCompleted' ||
+          rejectSection.startsWith('contractItem'));
+  final techItemHandedBack = handbackOpen &&
+      proposalIntakeHasOpenItemReject(
+        review,
+        'technologyItem:',
+      );
+  final owner2ItemHandedBack = handbackOpen &&
+      (proposalIntakeHasOpenItemReject(review, 'financeItem:') ||
+          proposalIntakeHasOpenItemReject(review, 'contractItem:'));
   final techSectionRejected =
       reviewRejected && rejectSection == 'technologyCompleted';
   final owner2SectionRejected = contractRejected;

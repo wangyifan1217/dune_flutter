@@ -526,6 +526,7 @@ class XfPickerSuggestionList extends StatefulWidget {
     required this.onSelect,
     this.selectedIndex,
     this.maxHeight,
+    this.leadingOf,
   });
 
   final int itemCount;
@@ -533,6 +534,7 @@ class XfPickerSuggestionList extends StatefulWidget {
   final ValueChanged<int> onSelect;
   final int? selectedIndex;
   final double? maxHeight;
+  final Widget? Function(int index)? leadingOf;
 
   @override
   State<XfPickerSuggestionList> createState() => _XfPickerSuggestionListState();
@@ -611,24 +613,31 @@ class _XfPickerSuggestionListState extends State<XfPickerSuggestionList> {
                     constraints: const BoxConstraints(minHeight: 48),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          label.isEmpty ? '（无标题）' : label,
-                          softWrap: true,
-                          style: DunesTypography.sans(
-                            fontSize: 13,
-                            height: 1.4,
-                            fontWeight: selected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text,
+                      child: Row(
+                        children: [
+                          if (widget.leadingOf != null) ...[
+                            widget.leadingOf!(index) ?? const SizedBox.shrink(),
+                            const SizedBox(width: 8),
+                          ],
+                          Expanded(
+                            child: Text(
+                              label.isEmpty ? '（无标题）' : label,
+                              softWrap: true,
+                              style: DunesTypography.sans(
+                                fontSize: 13,
+                                height: 1.4,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text,
+                                ),
+                                context: context,
+                              ),
                             ),
-                            context: context,
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ),

@@ -287,6 +287,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String _selectedSubmissionBusinessType = '';
   int _selectedSubmissionBusinessId = 0;
   String _xflowFormBackScreen = 'B3';
+  String? _xflowEntryCategory;
   String? _b14InitialFilter;
   int _meetingId = 0;
   int _cursorBindingId = 0;
@@ -5018,8 +5019,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onSearchChanged: (query) {
             _b3SearchQuery = query;
           },
-          onOpenForm: (templateKey) {
-            _openProposalEntry(templateKey: templateKey, backScreen: 'B3');
+          onOpenForm: (templateKey, category) {
+            _openProposalEntry(
+              templateKey: templateKey,
+              backScreen: 'B3',
+              entryCategory: category,
+            );
           },
         );
       case 'XFP':
@@ -5031,6 +5036,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           templateKey: _xflowTemplateKey,
           editProposalId: _xflowEditProposalId,
           editBusinessType: _xflowEditBusinessType,
+          entryCategory: _xflowEntryCategory,
           backScreen: _xflowFormBackScreen,
           onDeleted: () {
             setState(() {
@@ -6289,12 +6295,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     required String backScreen,
     int? editProposalId,
     String editBusinessType = 'PROPOSAL',
+    String? entryCategory,
   }) {
+    final entry = entryCategory?.trim().toLowerCase();
     setState(() {
       _xflowTemplateKey = templateKey;
       _xflowEditProposalId = editProposalId;
       _xflowEditBusinessType = editBusinessType;
       _xflowFormBackScreen = backScreen;
+      _xflowEntryCategory = entry == 'biz' || entry == 'adm' ? entry : null;
     });
     widget.navigation.go('XFP');
   }

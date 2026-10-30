@@ -1,6 +1,7 @@
 import 'package:dunes_app/features/proposal_intake/proposal_cost_estimate.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_finance_formula.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_models.dart';
+import 'package:dunes_app/features/proposal_intake/proposal_list_card.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_unreviewed.dart';
 import 'package:dunes_app/features/proposal_intake/settlement_catalog.dart';
 import 'package:dunes_app/features/xflow/approval_chat_share.dart';
@@ -5268,6 +5269,7 @@ void main() {
       },
       'review': {
         'stage': 'reviewing',
+        'reviewRejected': true,
         'stageEnteredAt': '2026-10-18T00:00:00Z',
         'marketCompleted': true,
         'technologyCompleted': false,
@@ -5307,7 +5309,68 @@ void main() {
     final steps = proposalIntakeProgressSteps(row: row);
     expect(
       proposalIntakeProgressHeadline(steps),
-      '当前应由 填写人 朱子姝 · 补全科技与产品、当前应由 财务部负责人二 胡珏 · 填写财务技术接口、当前应由 填写人 朱子姝 · 财务技术接口填完后，点右上角「确认并提交复核」',
+      '当前应由 填写人 朱子姝 · 补全科技与产品、当前应由 财务部负责人二 胡珏 · 填写财务技术接口',
+    );
+    expect(
+      _progressById(steps, 'start_review').state,
+      ProposalIntakeProgressState.pending,
+    );
+    expect(proposalReviewWhoText(steps), '待朱子姝填写、待胡珏填写');
+  });
+
+  test('list process line stays on the person who must act after a rejection', () {
+    final row = ProposalIntakeRow.fromJson({
+      'id': 21,
+      'kind': 'sales',
+      'status': 'filling',
+      'createdBy': 1,
+      'form': {'createdByName': '石淼', 'marketOwner1': '刘雨涵'},
+      'review': {
+        'stage': 'filling',
+        'reviewRejected': true,
+        'reviewRejectSection': 'marketCompleted',
+        'technologyCompleted': true,
+      },
+    });
+    expect(
+      proposalReviewWhoText(proposalIntakeProgressSteps(row: row)),
+      '待石淼填写',
+    );
+  });
+
+  test('finance rejection clears from the current process after resubmit', () {
+    final row = ProposalIntakeRow.fromJson({
+      'id': 23,
+      'kind': 'sales',
+      'status': 'reviewing',
+      'createdBy': 1,
+      'form': {
+        'createdByName': '石淼',
+        'financeOwner2': '刘雨涵',
+        'financeOwner1': '邓艳丽',
+        'marketOwner1': '许正阳',
+        'technologyOwner': '李凡伊',
+      },
+      'review': {
+        'stage': 'reviewing',
+        'reviewRejected': false,
+        'reviewRejectSection': 'salesContractCompleted',
+        'marketCompleted': true,
+        'technologyCompleted': true,
+        'itemRejectComments': {
+          'contractItem:sales.no': '合同编号有误',
+        },
+      },
+    });
+    final steps = proposalIntakeProgressSteps(row: row);
+    expect(
+      _progressById(steps, 'review_contract').state,
+      ProposalIntakeProgressState.current,
+    );
+    expect(proposalReviewWhoText(steps), isNot(contains('已驳回')));
+    expect(
+      proposalReviewSegments(steps).firstWhere((step) => step.label == '财务部').state,
+      ProposalListStepState.now,
     );
   });
 

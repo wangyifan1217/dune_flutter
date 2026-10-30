@@ -48,10 +48,15 @@ void main() {
     );
     await tester.pump();
 
+    expect(find.text('新对话'), findsOneWidget);
     expect(find.text('知识库'), findsOneWidget);
     expect(find.text('会议'), findsOneWidget);
-    expect(find.text('电话'), findsOneWidget);
+    expect(find.text('电话'), findsNothing);
     expect(find.text('更多'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('新对话')).dx,
+      lessThan(tester.getTopLeft(find.text('知识库')).dx),
+    );
     expect(find.byIcon(Icons.groups_2_rounded), findsOneWidget);
     expect(find.byIcon(Icons.videocam_outlined), findsNothing);
 
@@ -157,8 +162,13 @@ void main() {
     expect(find.text('图片'), findsOneWidget);
     expect(find.text('文件'), findsOneWidget);
     expect(find.text('PRD'), findsOneWidget);
+    expect(find.text('电话'), findsOneWidget);
     expect(find.text('新对话'), findsOneWidget);
     expect(find.text('历史'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('PRD')).dx,
+      lessThan(tester.getTopLeft(find.text('电话')).dx),
+    );
     expect(find.text('GPT'), findsOneWidget);
   });
 

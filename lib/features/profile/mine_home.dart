@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:ui' show FontFeature;
+import 'dart:ui' show FontFeature, PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 
 import '../../core/http/session_http.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../lighthouse/lighthouse_hero_metric.dart'
@@ -16,7 +17,10 @@ import '../proposal_intake/proposal_intake_models.dart';
 import '../proposal_intake/proposal_intake_service.dart';
 import '../proposal_intake/proposal_list_card.dart';
 import '../proposal_intake/proposal_remote_finance.dart';
+import '../tasks/native_task_detail_page.dart';
 import '../tasks/native_task_home_pane.dart';
+import '../tasks/task_api.dart';
+import '../tasks/task_models.dart';
 import '../xflow/approval_chat_share.dart';
 import '../xflow/approval_detail_dialog.dart';
 import '../xflow/xflow_service.dart';
@@ -31,6 +35,7 @@ import '../xflow/xflow_service.dart';
 //
 //   数据：
 //     · 提案列表走 /proposal-intakes（related=1 我相关、不带 related 全公司、actionable=1 待我处理）；
+//       全公司视角由组织用户「我的看全公司」控制；
 //     · 数据池走 /proposal-intakes/{id}/cost-collection，只算已通过审批（total），审批中的不进合计；
 //     · 收入 = 已通过发票的不含税金额（2026-10-29 起收据改算周转资金；发票正式进收入前先这样过渡），
 //       全公司看板读 /approvals/cost-summary 的 invoice.approvedNet；
@@ -72,13 +77,6 @@ const _tnum = [FontFeature.tabularFigures()];
 
 /// 左右边距和灯塔主页同一条左沿（Hero / 账本卡都是 22）。
 const double kMinePageGutter = lighthouseHeroShellMarginH;
-
-/// 默认看全公司的人：朱子姝、王奕凡、许正阳。
-/// 后端提案列表的范围另由「协作提案查看全部」权限和总裁视角决定，这里只定默认视角。
-const Set<String> kMineCompanyViewers = {'朱子姝', '王奕凡', '许正阳'};
-
-bool mineIsCompanyViewer(String displayName) =>
-    kMineCompanyViewers.contains(displayName.trim());
 
 Color _r(
   BuildContext context,
@@ -285,16 +283,24 @@ class MineHomeHeader extends StatelessWidget {
               Text(
                 '我的',
                 style: TextStyle(
-                  fontSize: 28,
+                  fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 1.1,
+                  letterSpacing: 0.4,
                   height: 1,
                   color: _r(context, MinePalette.ink),
                 ),
               ),
               const SizedBox(width: 10),
-              const MinePixelDunes(),
-              const Spacer(),
+              const Flexible(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: MinePixelDunes(),
+                  ),
+                ),
+              ),
               ...actions,
             ],
           ),
@@ -360,6 +366,54 @@ class MineHomeHeader extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 顶栏右侧的「工作台」入口。窄屏时沙丘图会让位，这颗按钮保持原大。
+class MineWorkbenchChip extends StatelessWidget {
+  const MineWorkbenchChip({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _r(context, MinePalette.purple);
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Tooltip(
+        message: '工作台',
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: onTap,
+            child: Ink(
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: _r(context, MinePalette.purpleSoft, DunesColorRole.surface),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.apps_rounded, size: 16, color: color),
+                  const SizedBox(width: 4),
+                  Text(
+                    '工作台',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -556,9 +610,16 @@ Future<void> showMineCreateSheet(
       // 放开高度后仍限制在可视区域里，矮屏或大字号改为内部滚动。
       final media = MediaQuery.of(ctx);
       final maxHeight = media.size.height - media.padding.top - 24;
-      return Align(
-        alignment: Alignment.bottomCenter,
-        child: ConstrainedBox(
+      // isScrollControlled 时子组件会撑满路由。空白区单独接点击，点面板外即收起。
+      return Column(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.of(ctx).pop(),
+            ),
+          ),
+          ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
           child: Material(
             color: _r(ctx, MinePalette.card, DunesColorRole.surface),
@@ -686,7 +747,8 @@ Future<void> showMineCreateSheet(
             ),
           ),
         ),
-      );
+          ],
+        );
     },
   );
 }
@@ -828,6 +890,7 @@ class _MineCostApproval {
     required this.status,
     required this.amount,
     required this.occurredAt,
+    this.initiatorName = '',
   });
 
   final String title;
@@ -838,8 +901,10 @@ class _MineCostApproval {
   final String status;
   final double amount;
   final DateTime? occurredAt;
+  final String initiatorName;
 
   bool get isBusiness => category == 'biz';
+  bool get isApproved => status == 'APPROVED';
 
   factory _MineCostApproval.fromMap(Map raw) => _MineCostApproval(
     title: '${raw['title'] ?? ''}'.trim(),
@@ -850,6 +915,7 @@ class _MineCostApproval {
     status: '${raw['status'] ?? ''}'.trim().toUpperCase(),
     amount: (raw['amount'] as num?)?.toDouble() ?? 0,
     occurredAt: DateTime.tryParse('${raw['occurredAt'] ?? ''}')?.toLocal(),
+    initiatorName: '${raw['initiatorName'] ?? raw['submitterName'] ?? ''}'.trim(),
   );
 }
 
@@ -886,6 +952,7 @@ class _MineSummary {
             ? items
                   .whereType<Map>()
                   .map(_MineCostApproval.fromMap)
+                  .where((item) => item.isApproved)
                   .toList(growable: false)
             : const [];
       }
@@ -918,6 +985,8 @@ class _MineSummary {
 
 enum _MineTab { done, doing, todo }
 
+enum _MineTaskTab { doing, pending, done }
+
 class MineHomeBody extends StatefulWidget {
   const MineHomeBody({
     super.key,
@@ -931,6 +1000,7 @@ class MineHomeBody extends StatefulWidget {
     required this.onOpenPendingInitiate,
     required this.onOpenLighthouse,
     required this.onOpenProposalList,
+    this.onOpenProposalDetail,
     this.showProposals = true,
     this.companyView = false,
     this.refreshToken = 0,
@@ -953,6 +1023,9 @@ class MineHomeBody extends StatefulWidget {
   /// `sales` / `purchase`：打开对应提案列表。
   final ValueChanged<String> onOpenProposalList;
 
+  /// PC：在「我的」内容区打开提案，不盖住左侧主导航。
+  final ValueChanged<ProposalIntakeRow>? onOpenProposalDetail;
+
   /// 没有提案权限（外部用户等）时只显示审批。
   final bool showProposals;
 
@@ -974,6 +1047,8 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     'pending_president',
   };
   static const _poolFetchLimit = 12;
+  static const _kListPreview = 3;
+  static const _kListExpanded = 10;
   static const _companyPoolLimit = 100;
 
   late final ProposalIntakeService _service = ProposalIntakeService(
@@ -983,6 +1058,8 @@ class _MineHomeBodyState extends State<MineHomeBody> {
 
   _MineTab _tab = _MineTab.done;
   bool _scopeAll = false;
+  bool _proposalsOpen = false;
+  bool _tasksOpen = false;
   int? _openId;
 
   bool _loading = true;
@@ -1010,10 +1087,16 @@ class _MineHomeBodyState extends State<MineHomeBody> {
   double? _lhRevenueMonth;
   final Set<int> _poolLoading = {};
 
+  _MineTaskTab _taskTab = _MineTaskTab.doing;
+  bool _tasksLoading = true;
+  String? _tasksError;
+  List<TaskItem> _mineTasks = const [];
+
   @override
   void initState() {
     super.initState();
     _scopeAll = widget.companyView;
+    if (!widget.session.isExternalUser) unawaited(_loadTasks());
     if (widget.showProposals) {
       // _loading 初始就是 true，首帧不能 setState。
       unawaited(_load(silent: true));
@@ -1026,8 +1109,9 @@ class _MineHomeBodyState extends State<MineHomeBody> {
   @override
   void didUpdateWidget(covariant MineHomeBody oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.refreshToken != widget.refreshToken && widget.showProposals) {
-      unawaited(_load(silent: true));
+    if (oldWidget.refreshToken != widget.refreshToken) {
+      if (!widget.session.isExternalUser) unawaited(_loadTasks());
+      if (widget.showProposals) unawaited(_load(silent: true));
     } else if (oldWidget.month != widget.month && widget.companyView) {
       setState(() {
         _summaryMonth = null;
@@ -1170,6 +1254,29 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     if (all && _doneAll == null) unawaited(_loadAll());
   }
 
+  Future<void> _loadTasks() async {
+    if (widget.session.isExternalUser) return;
+    try {
+      final items = await TaskApi(widget.session).listTasks(
+        scope: 'mine',
+        size: 80,
+        maxPages: 1,
+      );
+      if (!mounted) return;
+      setState(() {
+        _mineTasks = items;
+        _tasksLoading = false;
+        _tasksError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _tasksLoading = false;
+        _tasksError = '任务加载失败，下拉重试';
+      });
+    }
+  }
+
   void _setTab(_MineTab tab) {
     if (_tab == tab) return;
     setState(() {
@@ -1179,9 +1286,14 @@ class _MineHomeBodyState extends State<MineHomeBody> {
   }
 
   Future<void> _openProposal(ProposalIntakeRow row) async {
+    final openInPlace = widget.onOpenProposalDetail;
+    if (isDesktopCommOnly && openInPlace != null) {
+      openInPlace(row);
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => _MineProposalRoute(session: widget.session, row: row),
+        builder: (_) => MineProposalDetail(session: widget.session, row: row),
       ),
     );
     if (mounted) unawaited(_load(silent: true));
@@ -1239,6 +1351,10 @@ class _MineHomeBodyState extends State<MineHomeBody> {
         _buildApprovalStrip(context),
         const SizedBox(height: 24),
         _buildProposalSection(context),
+        if (!widget.session.isExternalUser) ...[
+          const SizedBox(height: 24),
+          _buildTaskSection(context),
+        ],
       ],
     );
   }
@@ -1378,7 +1494,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     );
   }
 
-  /// 全公司视角（朱子姝、许正阳）：
+  /// 全公司视角（组织用户「我的看全公司」）：
   ///   · 本月目标 = Σ 全公司已完成销售提案测算收入 ÷ 12；
   ///   · 已达 = 全公司本月已通过的开票审批（含税），浅紫 = 本月开票审批中；
   ///   · 开票数据来自 /approvals/cost-summary，不按提案筛。
@@ -1569,7 +1685,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                             Text(
                               gaugeCenter,
                               style: TextStyle(
-                                fontSize: 26,
+                                fontSize: 20,
                                 fontWeight: FontWeight.w700,
                                 height: 1,
                                 fontFeatures: _tnum,
@@ -1602,7 +1718,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                               TextSpan(
                                 text: headline.$1,
                                 style: TextStyle(
-                                  fontSize: 22,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w700,
                                   height: 1,
                                   color: _r(context, MinePalette.ink),
@@ -1645,7 +1761,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     );
   }
 
-  // ── 数据池（与营收目标同一套字号：标题 15/w700，主数 22/w700，格内 13/w700）──
+  // ── 数据池（与营收目标同一套字号：标题 15/w700，主数 18/w700，格内 12/w600）──
 
   Widget _buildPoolCard(BuildContext context) {
     _MinePool? pool;
@@ -1710,7 +1826,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                 TextSpan(
                   text: amt(value),
                   style: TextStyle(
-                    fontSize: 22,
+                    fontSize: 18,
                     fontWeight: FontWeight.w700,
                     height: 1,
                     color: show ? _r(context, color) : muted,
@@ -1790,8 +1906,8 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                     fontFeatures: _tnum,
                     color: show ? _r(context, MinePalette.ink) : muted,
                   ),
@@ -1946,185 +2062,256 @@ class _MineHomeBodyState extends State<MineHomeBody> {
   ) {
     String date(DateTime? value) => value == null
         ? ''
-        : '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+        : '${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+    final total = items.fold<double>(0, (sum, item) => sum + item.amount);
+    final bizCount = items.where((item) => item.isBusiness).length;
     return showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
+      // 拖动关闭会抢走列表的上滑手势（网页端鼠标拖动尤其明显），只留点外面和关闭按钮。
+      enableDrag: false,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(ctx).height * .78,
-          ),
-          decoration: BoxDecoration(
-            color: _r(ctx, MinePalette.card, DunesColorRole.surface),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(top: 10, bottom: 14),
-                decoration: BoxDecoration(
-                  color: _r(ctx, MinePalette.line, DunesColorRole.border),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 9,
-                      height: 9,
-                      decoration: BoxDecoration(
-                        color: _r(ctx, color),
-                        borderRadius: BorderRadius.circular(3),
+      builder: (ctx) {
+        final ink = _r(ctx, MinePalette.ink);
+        final ink2 = _r(ctx, MinePalette.ink2);
+        final line = _r(ctx, MinePalette.line, DunesColorRole.border);
+        return SafeArea(
+          top: false,
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(ctx).height * .82,
+            ),
+            decoration: BoxDecoration(
+              color: _r(ctx, MinePalette.page, DunesColorRole.surface),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 16, 8, 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: _r(ctx, color),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$label成本审批',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: _r(ctx, MinePalette.ink),
+                      const SizedBox(width: 8),
+                      Text(
+                        '$label成本',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: ink,
+                        ),
                       ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      _poolMonthly ? _monthText : '历史',
-                      style: TextStyle(fontSize: 12, color: _r(ctx, MinePalette.ink2)),
-                    ),
-                  ],
-                ),
-              ),
-              Flexible(
-                child: items.isEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 28, 18, 40),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _r(ctx, MinePalette.card, DunesColorRole.surface),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
                         child: Text(
-                          _poolMonthly ? '$_monthText暂无$label成本审批' : '暂无$label成本审批',
-                          style: TextStyle(color: _r(ctx, MinePalette.ink2)),
+                          _poolMonthly ? _monthText : '历史',
+                          style: TextStyle(fontSize: 11, color: ink2),
                         ),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-                        itemCount: items.length,
-                        separatorBuilder: (_, _) => Divider(
-                          height: 1,
-                          color: _r(ctx, MinePalette.line, DunesColorRole.border),
-                        ),
-                        itemBuilder: (_, index) {
-                          final item = items[index];
-                          return InkWell(
-                            onTap: item.businessType.isEmpty || item.businessId <= 0
-                                ? null
-                                : () {
-                                    Navigator.of(ctx).pop();
-                                    unawaited(
-                                      showApprovalDetailOverlay(
-                                        context: context,
-                                        session: widget.session,
-                                        share: ApprovalChatShare(
-                                          businessType: item.businessType,
-                                          businessId: item.businessId,
-                                          title: item.title,
-                                          status: item.status,
-                                          templateKey: item.templateKey,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 13),
-                              child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        item.title.isEmpty ? '审批单' : item.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
-                                          color: _r(ctx, MinePalette.ink),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 5),
-                                      Row(
-                                        children: [
-                                          _chip(
-                                            ctx,
-                                            item.isBusiness ? '业务审批' : '非业务审批',
-                                            item.isBusiness
-                                                ? MinePalette.purpleSoft
-                                                : MinePalette.steelSoft,
-                                            item.isBusiness
-                                                ? MinePalette.purple
-                                                : MinePalette.steel,
-                                          ),
-                                          const SizedBox(width: 7),
-                                          Text(
-                                            '${item.status == 'APPROVED' ? '已通过' : '审批中'}${date(item.occurredAt).isEmpty ? '' : ' · ${date(item.occurredAt)}'}',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: _r(ctx, MinePalette.ink2),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      TextSpan(text: _wan(item.amount)),
-                                      TextSpan(
-                                        text: ' 万',
-                                        style: TextStyle(
-                                          fontSize: 10.5,
-                                          color: _r(ctx, MinePalette.ink2),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    fontFeatures: _tnum,
-                                    color: _r(ctx, MinePalette.ink),
-                                  ),
-                                ),
-                                if (item.businessType.isNotEmpty && item.businessId > 0) ...[
-                                  const SizedBox(width: 5),
-                                  Icon(
-                                    Icons.chevron_right_rounded,
-                                    size: 18,
-                                    color: _r(ctx, MinePalette.ink2),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            ),
-                          );
-                        },
                       ),
-              ),
-            ],
+                      const Spacer(),
+                      IconButton(
+                        tooltip: '关闭',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        icon: Icon(Icons.close_rounded, size: 20, color: ink2),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 2, 18, 12),
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: _wan(total),
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            fontFeatures: _tnum,
+                            color: ink,
+                          ),
+                        ),
+                        TextSpan(text: ' 万  ·  已通过 ${items.length} 张'),
+                        if (items.isNotEmpty)
+                          TextSpan(text: '（业务 $bizCount · 非业务 ${items.length - bizCount}）'),
+                      ],
+                    ),
+                    style: TextStyle(fontSize: 12, color: ink2),
+                  ),
+                ),
+                Flexible(
+                  child: items.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 20, 18, 40),
+                          child: Text(
+                            _poolMonthly ? '$_monthText暂无已通过的$label成本审批' : '暂无已通过的$label成本审批',
+                            style: TextStyle(color: ink2),
+                          ),
+                        )
+                      : ScrollConfiguration(
+                          behavior: ScrollConfiguration.of(ctx).copyWith(
+                            dragDevices: PointerDeviceKind.values.toSet(),
+                          ),
+                          child: Container(
+                            margin: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                            decoration: BoxDecoration(
+                              color: _r(ctx, MinePalette.card, DunesColorRole.surface),
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              padding: EdgeInsets.zero,
+                              itemCount: items.length,
+                              separatorBuilder: (_, _) => Divider(
+                                height: 1,
+                                thickness: 1,
+                                indent: 14,
+                                endIndent: 14,
+                                color: line,
+                              ),
+                              itemBuilder: (_, index) {
+                                final item = items[index];
+                                final canOpen =
+                                    item.businessType.isNotEmpty && item.businessId > 0;
+                                final when = date(item.occurredAt);
+                                return InkWell(
+                                  onTap: !canOpen
+                                      ? null
+                                      : () {
+                                          unawaited(
+                                            showApprovalDetailOverlay(
+                                              context: ctx,
+                                              preferDialog: true,
+                                              session: widget.session,
+                                              share: ApprovalChatShare(
+                                                businessType: item.businessType,
+                                                businessId: item.businessId,
+                                                title: item.title,
+                                                status: item.status,
+                                                templateKey: item.templateKey,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(14, 11, 8, 11),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                item.title.isEmpty ? '审批单' : item.title,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 13.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: ink,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 5),
+                                              Row(
+                                                children: [
+                                                  _chip(
+                                                    ctx,
+                                                    item.isBusiness ? '业务' : '非业务',
+                                                    item.isBusiness
+                                                        ? MinePalette.purpleSoft
+                                                        : MinePalette.steelSoft,
+                                                    item.isBusiness
+                                                        ? MinePalette.purple
+                                                        : MinePalette.steel,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Icon(
+                                                    Icons.check_circle_rounded,
+                                                    size: 12,
+                                                    color: _r(ctx, MinePalette.purple),
+                                                  ),
+                                                  const SizedBox(width: 2),
+                                                  Text(
+                                                    '已通过',
+                                                    style: TextStyle(fontSize: 11, color: ink2),
+                                                  ),
+                                                  Expanded(
+                                                    child: Text(
+                                                      [
+                                                        '',
+                                                        if (item.initiatorName.isNotEmpty)
+                                                          item.initiatorName,
+                                                        if (when.isNotEmpty) when,
+                                                      ].join(' · '),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: TextStyle(fontSize: 11, color: ink2),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Text.rich(
+                                          TextSpan(
+                                            children: [
+                                              TextSpan(text: _wan(item.amount)),
+                                              TextSpan(
+                                                text: ' 万',
+                                                style: TextStyle(fontSize: 10.5, color: ink2),
+                                              ),
+                                            ],
+                                          ),
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            fontFeatures: _tnum,
+                                            color: ink,
+                                          ),
+                                        ),
+                                        SizedBox(
+                                          width: 22,
+                                          child: canOpen
+                                              ? Icon(
+                                                  Icons.chevron_right_rounded,
+                                                  size: 18,
+                                                  color: ink2,
+                                                )
+                                              : null,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -2274,35 +2461,6 @@ class _MineHomeBodyState extends State<MineHomeBody> {
 
   // ── 我的提案 ──
 
-  Widget _proposalMoreLink(
-    BuildContext context,
-    String label, {
-    required VoidCallback onTap,
-  }) {
-    final color = _r(context, MinePalette.purple);
-    return InkWell(
-      onTap: onTap,
-      child: SizedBox(
-        height: 46,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-            const SizedBox(width: 2),
-            Icon(Icons.chevron_right_rounded, size: 18, color: color),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildProposalSection(BuildContext context) {
     final todos = _todoItems();
     final doneRows = _scopeAll ? (_doneAll ?? const <ProposalIntakeRow>[]) : _doneMine;
@@ -2312,6 +2470,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
       (_MineTab.todo, '待我处理', todos.length),
     ];
 
+    final limit = _proposalsOpen ? _kListExpanded : _kListPreview;
     Widget body;
     if (_loading && _tab != _MineTab.todo) {
       body = const Padding(
@@ -2340,17 +2499,23 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                     ),
                   ),
                 )
-              : _buildDoneList(context, doneRows),
-        _MineTab.doing => _buildDoingList(context),
-        _MineTab.todo => _buildTodoList(context, todos),
+              : _buildDoneList(context, doneRows, limit: limit),
+        _MineTab.doing => _buildDoingList(context, limit: limit),
+        _MineTab.todo => _buildTodoList(context, todos, limit: limit),
       };
     }
 
-    final moreText = switch (_tab) {
-      _MineTab.done => '查看全部销售提案',
-      _MineTab.doing => '查看全部销售提案',
-      _MineTab.todo => '查看审批流转',
+    final proposalCount = switch (_tab) {
+      _MineTab.done => doneRows.length,
+      _MineTab.doing => _doing.length,
+      _MineTab.todo => todos.length,
     };
+    final donePending = _tab == _MineTab.done &&
+        _scopeAll &&
+        _doneAll == null &&
+        (_loading || _allLoading);
+    final proposalBusy = (_loading && _tab != _MineTab.todo) || donePending;
+    final showFooter = !proposalBusy && _error == null && proposalCount > 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2362,13 +2527,15 @@ class _MineHomeBodyState extends State<MineHomeBody> {
               Text(
                 widget.showProposals ? '我的提案' : '待我处理',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: _r(context, MinePalette.ink),
                 ),
               ),
               const Spacer(),
-              if (_tab == _MineTab.done && widget.showProposals)
+              if (_tab == _MineTab.done &&
+                  widget.showProposals &&
+                  widget.companyView)
                 Container(
                   padding: const EdgeInsets.all(3),
                   decoration: _cardDecoration(context, radius: 999),
@@ -2407,38 +2574,106 @@ class _MineHomeBodyState extends State<MineHomeBody> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               body,
-              Divider(
-                height: 1,
-                thickness: 1,
-                color: _r(context, MinePalette.line, DunesColorRole.border),
-              ),
-              _proposalMoreLink(
-                context,
-                moreText,
-                onTap: () {
-                  if (_tab == _MineTab.todo) {
-                    widget.onOpenPendingApprovals();
-                  } else {
-                    widget.onOpenProposalList('sales');
-                  }
-                },
-              ),
-              if (_tab != _MineTab.todo && widget.showProposals) ...[
-                Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: _r(context, MinePalette.line, DunesColorRole.border),
-                ),
-                _proposalMoreLink(
+              if (showFooter)
+                _listFooter(
                   context,
-                  '查看全部采购提案',
-                  onTap: () => widget.onOpenProposalList('purchase'),
+                  total: proposalCount,
+                  unit: _tab == _MineTab.todo ? '项' : '份',
+                  open: _proposalsOpen,
+                  onToggle: () =>
+                      setState(() => _proposalsOpen = !_proposalsOpen),
+                  links: _tab == _MineTab.todo
+                      ? [('审批流转', widget.onOpenPendingApprovals)]
+                      : [
+                          ('全部销售', () => widget.onOpenProposalList('sales')),
+                          ('全部采购', () => widget.onOpenProposalList('purchase')),
+                        ],
                 ),
-              ],
             ],
           ),
         ),
       ],
+    );
+  }
+
+  /// 列表底栏：左边展开/收起，右边跳完整列表。
+  Widget _listFooter(
+    BuildContext context, {
+    required int total,
+    required String unit,
+    required bool open,
+    required VoidCallback onToggle,
+    required List<(String, VoidCallback)> links,
+  }) {
+    final purple = _r(context, MinePalette.purple);
+    final ink2 = _r(context, MinePalette.ink2);
+    final canToggle = total > _kListPreview;
+    final hidden = total - (open ? _kListExpanded : _kListPreview);
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: _r(context, MinePalette.line, DunesColorRole.border),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (canToggle)
+            TextButton.icon(
+              onPressed: onToggle,
+              style: TextButton.styleFrom(
+                foregroundColor: purple,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              iconAlignment: IconAlignment.end,
+              icon: Icon(
+                open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                size: 18,
+              ),
+              label: Text(
+                open
+                    ? (hidden > 0 ? '收起 · 还有 $hidden $unit' : '收起')
+                    : '展开 · 共 $total $unit',
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: Text(
+                '共 $total $unit',
+                style: TextStyle(fontSize: 12, color: ink2),
+              ),
+            ),
+          const Spacer(),
+          for (final (label, onTap) in links)
+            TextButton(
+              onPressed: onTap,
+              style: TextButton.styleFrom(
+                foregroundColor: ink2,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label),
+                  const Icon(Icons.chevron_right_rounded, size: 16),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -2562,16 +2797,319 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     );
   }
 
+  // ── 我的任务 ──
+
+  bool _taskPending(TaskItem task) =>
+      task.isPending || task.hasPendingChange || task.status == 'rejected';
+
+  bool _taskDone(TaskItem task) =>
+      task.status == 'completed' || task.status == 'cancelled';
+
+  List<TaskItem> get _taskDoingRows => _mineTasks
+      .where((task) => !_taskPending(task) && !_taskDone(task))
+      .toList(growable: false);
+
+  List<TaskItem> get _taskPendingRows =>
+      _mineTasks.where(_taskPending).toList(growable: false);
+
+  List<TaskItem> get _taskDoneRows =>
+      _mineTasks.where(_taskDone).toList(growable: false);
+
+  List<TaskItem> get _taskRows => switch (_taskTab) {
+    _MineTaskTab.doing => _taskDoingRows,
+    _MineTaskTab.pending => _taskPendingRows,
+    _MineTaskTab.done => _taskDoneRows,
+  };
+
+  Future<void> _openTask(int taskId) async {
+    if (taskId <= 0) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => Scaffold(
+          body: SafeArea(
+            child: NativeTaskDetailView(
+              session: widget.session,
+              taskId: taskId,
+              onBack: () => Navigator.of(routeContext).pop(),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (mounted) unawaited(_loadTasks());
+  }
+
+  Future<void> _openAllTasks() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => Scaffold(
+          appBar: AppBar(
+            title: const Text('我的任务'),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded),
+              onPressed: () => Navigator.of(routeContext).pop(),
+            ),
+          ),
+          body: NativeTaskHomePane(session: widget.session),
+        ),
+      ),
+    );
+    if (mounted) unawaited(_loadTasks());
+  }
+
+  Widget _buildTaskSection(BuildContext context) {
+    final rows = _taskRows;
+    final tabs = <(_MineTaskTab, String, int)>[
+      (_MineTaskTab.doing, '进行中', _taskDoingRows.length),
+      (_MineTaskTab.pending, '待处理', _taskPendingRows.length),
+      (_MineTaskTab.done, '已完成', _taskDoneRows.length),
+    ];
+    final Widget body;
+    if (_tasksLoading && _mineTasks.isEmpty) {
+      body = const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    } else if (_tasksError != null && _mineTasks.isEmpty) {
+      body = _empty(context, _tasksError!);
+    } else if (rows.isEmpty) {
+      body = _empty(
+        context,
+        switch (_taskTab) {
+          _MineTaskTab.doing => '没有进行中的任务',
+          _MineTaskTab.pending => '没有待确认、待接收或被驳回的任务',
+          _MineTaskTab.done => '还没有已完成的任务',
+        },
+      );
+    } else {
+      body = _divided(context, [
+        for (final task in rows.take(_tasksOpen ? _kListExpanded : _kListPreview))
+          _buildTaskRow(context, task),
+      ]);
+    }
+    final showFooter = rows.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            '我的任务',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: _r(context, MinePalette.ink),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: _r(context, MinePalette.track, DunesColorRole.surface),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: Row(
+            children: [
+              for (final (tab, label, count) in tabs)
+                Expanded(child: _taskTabButton(context, tab, label, count)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: _cardDecoration(context, radius: 24),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              body,
+              if (showFooter)
+                _listFooter(
+                  context,
+                  total: rows.length,
+                  unit: '个',
+                  open: _tasksOpen,
+                  onToggle: () => setState(() => _tasksOpen = !_tasksOpen),
+                  links: [('全部任务', _openAllTasks)],
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _taskTabButton(
+    BuildContext context,
+    _MineTaskTab tab,
+    String label,
+    int count,
+  ) {
+    final on = _taskTab == tab;
+    return GestureDetector(
+      onTap: () {
+        if (_taskTab == tab) return;
+        setState(() => _taskTab = tab);
+      },
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: on
+              ? _r(context, MinePalette.card, DunesColorRole.surface)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: label),
+              TextSpan(
+                text: ' $count',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: _tnum,
+                  color: _r(
+                    context,
+                    on ? MinePalette.purple : MinePalette.ink2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+            color: on
+                ? _r(context, MinePalette.ink)
+                : _r(context, MinePalette.ink2),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTaskRow(BuildContext context, TaskItem task) {
+    final overdue = task.overdue && task.status != 'completed';
+    final status = overdue ? '已逾期' : taskDisplayStatusLabel(task);
+    final due = formatTaskYmd(task.dueAt);
+    final priority = task.priority == 'high' || task.priority == 'urgent'
+        ? taskPriorityLabel(task.priority)
+        : '';
+    final change = task.hasPendingChange
+        ? taskPendingChangeLabel(task.pendingChangeKind)
+        : '';
+    return InkWell(
+      onTap: () => _openTask(task.id),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 9),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.title.trim().isEmpty ? '未命名任务' : task.title.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: _r(context, MinePalette.ink),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      _chip(
+                        context,
+                        taskKindLabel(task),
+                        MinePalette.purpleSoft,
+                        MinePalette.purple,
+                      ),
+                      if (priority.isNotEmpty) ...[
+                        const SizedBox(width: 4),
+                        _chip(
+                          context,
+                          priority,
+                          MinePalette.copperSoft,
+                          MinePalette.copper,
+                        ),
+                      ],
+                      if (change.isNotEmpty) ...[
+                        const SizedBox(width: 4),
+                        _chip(
+                          context,
+                          change,
+                          MinePalette.copperSoft,
+                          MinePalette.copper,
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _meta([
+                      if (task.ownerName.trim().isNotEmpty) '负责 ${task.ownerName.trim()}',
+                      if (due.isNotEmpty) '截止 $due',
+                      '进度 ${task.progressPct}%',
+                      if (task.subtaskCount > 0)
+                        '子任务 ${taskSubtaskProgressLabel(task)}',
+                    ]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: _r(context, MinePalette.ink2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              status,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: _r(
+                  context,
+                  overdue ? MinePalette.copper : MinePalette.ink,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── 已完成 ──
 
-  Widget _buildDoneList(BuildContext context, List<ProposalIntakeRow> rows) {
+  Widget _buildDoneList(
+    BuildContext context,
+    List<ProposalIntakeRow> rows, {
+    required int limit,
+  }) {
     if (rows.isEmpty) {
       return _empty(
         context,
         _scopeAll ? '全公司暂无已完成提案' : '还没有你参与的已完成提案',
       );
     }
-    final shown = rows.take(8).toList(growable: false);
+    final shown = rows.take(limit).toList(growable: false);
     if (shown.any((r) => !_pools.containsKey(r.id) && !_poolLoading.contains(r.id))) {
       unawaited(_loadPools(shown));
     }
@@ -2586,12 +3124,17 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     final approvals = pool?.approvals ?? row.relatedApprovalCount ?? 0;
     final completedRaw = '${row.review['presidentDecidedAt'] ?? ''}'.trim();
     final completed = _monthDay(completedRaw.isNotEmpty ? completedRaw : row.updatedAt);
+    final owner = '${row.form['createdByName'] ?? row.form['initiatorName'] ?? ''}'
+        .trim();
+    final sector = '${row.form['sector'] ?? ''}'.trim();
 
-    final hasRevenue = pool != null && pool.revenue != 0;
-    final value = pool == null
-        ? '…'
-        : (hasRevenue ? '${_wan(pool.revenue)} 万' : '$approvals 张');
-    final valueLabel = hasRevenue || pool == null ? '收入归集' : '业务审批';
+    final value = pool == null ? '…' : '${_wan(pool.costs)} 万';
+    final valueLabel = '成本归集';
+    final detail = _meta([
+      if (owner.isNotEmpty) '发起 $owner',
+      if (completed.isNotEmpty) '完成 $completed',
+      if (pool != null && approvals > 0) '$approvals 张已通过',
+    ]);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2604,15 +3147,17 @@ class _MineHomeBodyState extends State<MineHomeBody> {
           meta: _meta([
             role.isEmpty ? (_scopeAll ? '全公司' : '') : role,
             _scaleText(row),
+            sector,
           ]),
+          detail: detail,
           value: value,
           valueLabel: valueLabel,
-          valueColor: hasRevenue ? MinePalette.revenue : MinePalette.ink,
+          valueColor: MinePalette.ink,
           onTap: () => _openProposal(row),
         ),
         if (pool != null && pool.bandTotal > 0)
           Padding(
-            padding: const EdgeInsets.fromLTRB(62, 0, 14, 12),
+            padding: const EdgeInsets.fromLTRB(52, 0, 12, 10),
             child: _PoolBand(pool: pool, height: 4),
           ),
       ],
@@ -2621,10 +3166,10 @@ class _MineHomeBodyState extends State<MineHomeBody> {
 
   // ── 进行中 ──
 
-  Widget _buildDoingList(BuildContext context) {
+  Widget _buildDoingList(BuildContext context, {required int limit}) {
     if (_doing.isEmpty) return _empty(context, '没有进行中的提案');
     return _divided(context, [
-      for (final row in _doing.take(10)) _buildDoingRow(context, row),
+      for (final row in _doing.take(limit)) _buildDoingRow(context, row),
     ]);
   }
 
@@ -2667,6 +3212,11 @@ class _MineHomeBodyState extends State<MineHomeBody> {
           meta: _meta([
             _roleOf(row),
             mine ? '轮到你' : who,
+            now,
+          ]),
+          detail: _meta([
+            '${row.form['sector'] ?? ''}'.trim(),
+            row.status == 'draft' ? '草稿' : '',
           ]),
           value: value,
           valueLabel: valueLabel,
@@ -2733,10 +3283,14 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     ];
   }
 
-  Widget _buildTodoList(BuildContext context, List<_MineTodo> todos) {
+  Widget _buildTodoList(
+    BuildContext context,
+    List<_MineTodo> todos, {
+    required int limit,
+  }) {
     if (todos.isEmpty) return _empty(context, '没有待处理的事项');
     return _divided(context, [
-      for (final todo in todos)
+      for (final todo in todos.take(limit))
         InkWell(
           onTap: todo.onTap,
           child: Padding(
@@ -2823,6 +3377,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     required String title,
     required String kind,
     required String meta,
+    String detail = '',
     required String value,
     required String valueLabel,
     required Color valueColor,
@@ -2832,11 +3387,11 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 9),
         child: Row(
           children: [
-            SizedBox(width: 36, height: 36, child: ring),
-            const SizedBox(width: 12),
+            SizedBox(width: 30, height: 30, child: ring),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2846,12 +3401,12 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: _r(context, MinePalette.ink),
                     ),
                   ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 3),
                   Row(
                     children: [
                       _chip(
@@ -2868,7 +3423,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 11.5,
+                              fontSize: 10.5,
                               color: _r(context, MinePalette.ink2),
                             ),
                           ),
@@ -2876,27 +3431,39 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                       ],
                     ],
                   ),
+                  if (detail.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: _r(context, MinePalette.ink2),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                     fontFeatures: _tnum,
                     color: _r(context, valueColor),
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   valueLabel,
                   style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 10,
                     color: _r(context, MinePalette.ink2),
                   ),
                 ),
@@ -2911,9 +3478,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
 
 Widget _chip(BuildContext context, String text, Color bg, Color fg) {
   return Container(
-    height: 18,
-    padding: const EdgeInsets.symmetric(horizontal: 6),
-    alignment: Alignment.center,
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
     decoration: BoxDecoration(
       color: _r(context, bg, DunesColorRole.surface),
       borderRadius: BorderRadius.circular(5),
@@ -3125,17 +3690,25 @@ class _GaugePainter extends CustomPainter {
 }
 
 /// 从「我的」打开某一份提案：带返回的整页，复用提案详情。
-class _MineProposalRoute extends StatefulWidget {
-  const _MineProposalRoute({required this.session, required this.row});
+///
+/// [onClose] 有值时留在当前内容区（PC 左侧主导航不被盖住）；否则走整页路由。
+class MineProposalDetail extends StatefulWidget {
+  const MineProposalDetail({
+    super.key,
+    required this.session,
+    required this.row,
+    this.onClose,
+  });
 
   final AuthSession session;
   final ProposalIntakeRow row;
+  final VoidCallback? onClose;
 
   @override
-  State<_MineProposalRoute> createState() => _MineProposalRouteState();
+  State<MineProposalDetail> createState() => _MineProposalDetailState();
 }
 
-class _MineProposalRouteState extends State<_MineProposalRoute> {
+class _MineProposalDetailState extends State<MineProposalDetail> {
   TaskShellChrome _chrome = const TaskShellChrome();
 
   /// 提案页先加载列表再打开 initialIntakeId；打开前盖一层，免得先闪一下整张列表。
@@ -3158,12 +3731,21 @@ class _MineProposalRouteState extends State<_MineProposalRoute> {
     super.dispose();
   }
 
+  void _leave() {
+    final close = widget.onClose;
+    if (close != null) {
+      close();
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
   void _onChrome(TaskShellChrome chrome) {
     if (!mounted) return;
     final inForm = chrome.onBack != null;
     if (_formOpened && !inForm) {
       // 从提案详情退回列表 = 回「我的」。
-      Navigator.of(context).maybePop();
+      _leave();
       return;
     }
     setState(() {
@@ -3186,7 +3768,7 @@ class _MineProposalRouteState extends State<_MineProposalRoute> {
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-          onPressed: _chrome.onBack ?? () => Navigator.of(context).maybePop(),
+          onPressed: _chrome.onBack ?? _leave,
         ),
       ),
       body: Stack(

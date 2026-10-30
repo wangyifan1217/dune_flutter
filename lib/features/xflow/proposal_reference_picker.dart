@@ -578,6 +578,7 @@ class _CompletedProposalDialogState extends State<_CompletedProposalDialog> {
                                   code: '${row['code'] ?? ''}',
                                   title: '${row['title'] ?? ''}',
                                   kind: '${row['kind'] ?? ''}',
+                                  projectName: linkedProposalProjectName(row),
                                 ),
                               ),
                             ),

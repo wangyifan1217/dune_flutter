@@ -4,133 +4,148 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('NativeQianjiHubPage renders Alipay-style purple cards without top header', (tester) async {
-    tester.view.physicalSize = const Size(1080, 2400);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'NativeQianjiHubPage renders Alipay-style purple cards without top header',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    var cursorAccountTapped = false;
-    var bossPreviewTapped = false;
-    var cashFlowTapped = false;
-    var monthlyBillTapped = false;
+      var cursorAccountTapped = false;
+      var bossPreviewTapped = false;
+      var cashFlowTapped = false;
+      var monthlyBillTapped = false;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: NativeQianjiHubPage(
-            session: const AuthSession(
-              phone: '13812345678',
-              userId: 1001,
-              token: 'test-token',
-              apiBase: 'https://test.api',
-              roles: ['ADMIN'],
-              qianjiAccess: true,
-              digitalEmployeeAccess: true,
-              taskLookupAccess: true,
-              dailyReportLookupAccess: true,
-              groupReplyLookupAccess: true,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NativeQianjiHubPage(
+              session: const AuthSession(
+                phone: '13812345678',
+                userId: 1001,
+                token: 'test-token',
+                apiBase: 'https://test.api',
+                roles: ['ADMIN'],
+                qianjiAccess: true,
+                digitalEmployeeAccess: true,
+                taskLookupAccess: true,
+                dailyReportLookupAccess: true,
+                groupReplyLookupAccess: true,
+              ),
+              onOpenCursorAccount: () => cursorAccountTapped = true,
+              onOpenEfficiencyBossPreview: () => bossPreviewTapped = true,
+              onOpenCashFlow: () => cashFlowTapped = true,
+              onOpenMonthlyBill: () => monthlyBillTapped = true,
+              onOpenTravel: () {},
             ),
-            onOpenCursorAccount: () => cursorAccountTapped = true,
-            onOpenEfficiencyBossPreview: () => bossPreviewTapped = true,
-            onOpenCashFlow: () => cashFlowTapped = true,
-            onOpenMonthlyBill: () => monthlyBillTapped = true,
-            onOpenTravel: () {},
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await _openLegacy(tester);
 
-    // 1. Finance Asset Card items (Alipay total asset style)
-    expect(find.text('资金流向'), findsOneWidget);
-    expect(find.text('月结'), findsOneWidget);
-    expect(find.text('差旅管理'), findsOneWidget);
-    expect(find.text('列表'), findsNothing);
-    expect(find.text('资金看板'), findsOneWidget);
+      // 1. Finance Asset Card items (Alipay total asset style)
+      expect(find.text('资金流向'), findsOneWidget);
+      expect(find.text('月结'), findsOneWidget);
+      expect(find.text('差旅管理'), findsOneWidget);
+      expect(find.text('列表'), findsNothing);
+      expect(find.text('资金看板'), findsOneWidget);
 
-    // 2. Supervise Grid split: 组织汇总 / 业务查阅
-    expect(find.text('组织汇总'), findsOneWidget);
-    expect(find.text('业务查阅'), findsOneWidget);
-    expect(find.text('工作情况'), findsOneWidget);
-    expect(find.text('使用热力'), findsOneWidget);
-    expect(find.text('本人及下级'), findsWidgets);
-    expect(find.text('会议纪要'), findsWidgets);
-    expect(find.text('IM会话'), findsOneWidget);
-    expect(find.text('知识库'), findsOneWidget);
-    expect(find.text('任务'), findsOneWidget);
-    expect(find.text('日报'), findsOneWidget);
-    expect(find.text('群响应'), findsOneWidget);
-    expect(find.text('提案时效'), findsNothing);
-    expect(find.text('月结意见'), findsNothing);
-    expect(find.text('提案审核'), findsNothing);
-    expect(find.text('任务 · 日报 · 群响应'), findsOneWidget);
-    expect(find.text('研发账号'), findsOneWidget);
+      // 2. Supervise Grid split: 组织汇总 / 业务查阅
+      expect(find.text('组织汇总'), findsOneWidget);
+      expect(find.text('业务查阅'), findsOneWidget);
+      expect(find.text('工作情况'), findsOneWidget);
+      expect(find.text('使用热力'), findsOneWidget);
+      expect(find.text('本人及下级'), findsWidgets);
+      expect(find.text('会议纪要'), findsWidgets);
+      expect(find.text('IM会话'), findsOneWidget);
+      expect(find.text('知识库'), findsOneWidget);
+      expect(find.text('任务'), findsOneWidget);
+      expect(find.text('日报'), findsOneWidget);
+      expect(find.text('群响应'), findsOneWidget);
+      expect(find.text('提案时效'), findsNothing);
+      expect(find.text('月结意见'), findsNothing);
+      expect(find.text('提案审核'), findsNothing);
+      expect(find.text('任务 · 日报 · 群响应'), findsOneWidget);
+      expect(find.text('研发账号'), findsOneWidget);
 
-    // 3. Digital Employees Section
-    expect(find.text('AI 数字员工'), findsOneWidget);
-    expect(find.text('会议纪要'), findsWidgets);
-    expect(find.text('三桶油.渠道对接'), findsOneWidget);
-    expect(find.text('资管.AI助理'), findsOneWidget);
+      // 3. Digital Employees Section
+      expect(find.text('AI 数字员工'), findsOneWidget);
+      expect(find.text('会议纪要'), findsWidgets);
+      expect(find.text('三桶油.渠道对接'), findsOneWidget);
+      expect(find.text('资管.AI助理'), findsOneWidget);
 
-    // 4. Interaction
-    await tester.tap(find.text('资金流向'));
-    await tester.pump();
-    expect(cashFlowTapped, isTrue);
+      // 4. Interaction
+      await tester.tap(find.text('资金流向'));
+      await tester.pump();
+      expect(cashFlowTapped, isTrue);
 
-    await tester.tap(find.text('月结'));
-    await tester.pump();
-    expect(monthlyBillTapped, isTrue);
+      await tester.tap(find.text('月结'));
+      await tester.pump();
+      expect(monthlyBillTapped, isTrue);
 
-    await tester.tap(find.text('工作情况'));
-    await tester.pump();
-    expect(bossPreviewTapped, isTrue);
+      await tester.tap(find.text('工作情况'));
+      await tester.pump();
+      expect(bossPreviewTapped, isTrue);
 
-    await tester.tap(find.text('研发账号'));
-    await tester.pump();
-    expect(cursorAccountTapped, isTrue);
-  });
+      await tester.tap(find.text('研发账号'));
+      await tester.pump();
+      expect(cursorAccountTapped, isTrue);
+    },
+  );
 
-  testWidgets('NativeQianjiHubPage adapts supervise subtitle to session viewAll', (tester) async {
-    const session = AuthSession(
-      phone: '13812345678',
-      userId: 1001,
-      token: 'test-token',
-      apiBase: 'https://test.api',
-      roles: ['ADMIN'],
-      displayName: '张三',
-      jobTitle: '投资总监',
-      workSituationViewAll: true,
-      appUsageViewAll: true,
-      qianjiAccess: true,
-      digitalEmployeeAccessKnown: false,
-    );
+  testWidgets(
+    'NativeQianjiHubPage adapts supervise subtitle to session viewAll',
+    (tester) async {
+      const session = AuthSession(
+        phone: '13812345678',
+        userId: 1001,
+        token: 'test-token',
+        apiBase: 'https://test.api',
+        roles: ['ADMIN'],
+        displayName: '张三',
+        jobTitle: '投资总监',
+        workSituationViewAll: true,
+        appUsageViewAll: true,
+        qianjiAccess: true,
+        digitalEmployeeAccessKnown: false,
+      );
 
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: NativeQianjiHubPage(
-            session: session,
-            onOpenCursorAccount: _noop,
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: NativeQianjiHubPage(
+              session: session,
+              onOpenCursorAccount: _noop,
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await _openLegacy(tester);
 
-    expect(find.text('全部部门'), findsOneWidget);
-    expect(find.text('全部人员'), findsOneWidget);
-    expect(find.text('工作情况'), findsOneWidget);
-    expect(find.text('使用热力'), findsOneWidget);
-    expect(find.text('任务'), findsOneWidget);
-    expect(find.text('日报'), findsOneWidget);
-    expect(find.text('群响应'), findsOneWidget);
-    expect(find.text('提案时效'), findsNothing);
-  });
+      expect(find.text('全部部门'), findsOneWidget);
+      expect(find.text('全部人员'), findsOneWidget);
+      expect(find.text('工作情况'), findsOneWidget);
+      expect(find.text('使用热力'), findsOneWidget);
+      expect(find.text('任务'), findsOneWidget);
+      expect(find.text('日报'), findsOneWidget);
+      expect(find.text('群响应'), findsOneWidget);
+      expect(find.text('提案时效'), findsNothing);
+    },
+  );
 }
 
 void _noop() {}
+
+Future<void> _openLegacy(WidgetTester tester) async {
+  if (!qianjiHubNewLayoutEnabled) return;
+  await tester.tap(find.text('模块入口'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+}

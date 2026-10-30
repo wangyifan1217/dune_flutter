@@ -311,7 +311,7 @@ class _NativeFavoritesPageState extends State<NativeFavoritesPage> {
     return Scaffold(
       backgroundColor: DunesColors.resolve(
         context,
-        const Color(0xFFF5F5F5),
+        DunesColors.bgApp,
         role: DunesColorRole.surface,
       ),
       body: SafeArea(

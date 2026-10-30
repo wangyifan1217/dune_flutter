@@ -19,6 +19,7 @@ Future<void> showApprovalDetailOverlay({
   VoidCallback? onApprovalCompleted,
   void Function(XflowProposalItem item)? onEditSubmission,
   void Function(int proposalId)? onReeditProposal,
+  bool preferDialog = false,
 }) {
   Widget hostFor(VoidCallback close) {
     return _ApprovalDetailOverlayHost(
@@ -31,12 +32,14 @@ Future<void> showApprovalDetailOverlay({
     );
   }
 
-  if (isDesktopCommOnly) {
+  if (isDesktopCommOnly || preferDialog) {
     return showDialog<void>(
       context: context,
+      useRootNavigator: true,
       barrierDismissible: true,
       builder: (ctx) {
         final size = MediaQuery.sizeOf(ctx);
+        final compact = size.width < 640;
         void close() {
           if (Navigator.of(ctx).canPop()) {
             Navigator.of(ctx).maybePop();
@@ -44,17 +47,16 @@ Future<void> showApprovalDetailOverlay({
         }
 
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 36,
-            vertical: 24,
-          ),
+          insetPadding: compact
+              ? const EdgeInsets.symmetric(horizontal: 10, vertical: 28)
+              : const EdgeInsets.symmetric(horizontal: 36, vertical: 24),
           backgroundColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: 920,
               maxHeight: size.height * 0.9,
-              minWidth: 560,
-              minHeight: 480,
+              minWidth: compact ? 0 : 560,
+              minHeight: compact ? size.height * 0.7 : 480,
             ),
             child: Material(
               color: DunesColors.resolve(

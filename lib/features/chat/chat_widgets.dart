@@ -33,11 +33,15 @@ class ChatConvHeader extends StatelessWidget {
     this.imStatusText,
     this.imStatusIcon,
     this.imStatusColor,
+    this.showBottomBorder = true,
   });
 
   final String title;
   final String subtitle;
   final VoidCallback onBack;
+
+  /// 关掉后由外层按滚动位置自行画分割线。
+  final bool showBottomBorder;
   final VoidCallback? onTapTitle;
   final List<Widget> actions;
   final Widget? leadingAvatar;
@@ -50,11 +54,6 @@ class ChatConvHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final nightApp =
-        !isDesktopCommOnly && Theme.of(context).brightness == Brightness.dark;
-    final subtitleTypography = nightApp
-        ? DunesTypography.sans
-        : DunesTypography.mono;
     return Container(
       constraints: isDesktopCommOnly
           ? const BoxConstraints(minHeight: 68)
@@ -69,13 +68,15 @@ class ChatConvHeader extends StatelessWidget {
           role: DunesColorRole.surface,
         ),
         border: Border(
-          bottom: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
-            ),
-          ),
+          bottom: showBottomBorder
+              ? BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                )
+              : BorderSide.none,
         ),
       ),
       child: Row(
@@ -87,7 +88,41 @@ class ChatConvHeader extends StatelessWidget {
               color: DunesColors.resolve(context, DunesColors.text2),
             ),
           if (leadingAvatar != null) ...[
-            GestureDetector(onTap: onTapTitle, child: leadingAvatar!),
+            GestureDetector(
+              onTap: onTapTitle,
+              child: isDesktopCommOnly && showOnlineDot
+                  ? Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        leadingAvatar!,
+                        Positioned(
+                          right: -1,
+                          bottom: -1,
+                          child: Container(
+                            width: 11,
+                            height: 11,
+                            decoration: BoxDecoration(
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.green,
+                                role: DunesColorRole.surface,
+                              ),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.bgApp,
+                                  role: DunesColorRole.surface,
+                                ),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : leadingAvatar!,
+            ),
             SizedBox(width: isDesktopCommOnly ? 12 : 8),
           ],
           Expanded(
@@ -130,7 +165,7 @@ class ChatConvHeader extends StatelessWidget {
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      if (showOnlineDot) ...[
+                      if (showOnlineDot && !isDesktopCommOnly) ...[
                         Container(
                           width: 7,
                           height: 7,
@@ -150,13 +185,12 @@ class ChatConvHeader extends StatelessWidget {
                           subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: subtitleTypography(
-                            fontSize: isDesktopCommOnly || nightApp ? 11 : 9.5,
+                          style: DunesTypography.sans(
+                            fontSize: isDesktopCommOnly ? 12 : 11.5,
                             color: DunesColors.resolve(
                               context,
                               DunesColors.text3,
                             ),
-                            letterSpacing: isDesktopCommOnly ? 0 : 0.04 * 9.5,
                             context: context,
                           ),
                         ),
@@ -196,7 +230,11 @@ class ChatQuickActions extends StatelessWidget {
     this.onVideo,
     this.showAt = false,
     this.showVideo = false,
+    this.onHeightDrag,
   });
+
+  /// PC：拖动工具栏上沿调整输入区高度（deltaDy>0 为向下拖）。
+  final ValueChanged<double>? onHeightDrag;
 
   final VoidCallback onCamera;
   final VoidCallback onAlbum;
@@ -250,7 +288,11 @@ class ChatQuickActions extends StatelessWidget {
         onTap: onApproval,
       ),
       if (showAt && onAt != null)
-        _QaCell(icon: Icons.alternate_email, label: '@', onTap: onAt!),
+        _QaCell(
+          icon: Icons.alternate_email,
+          label: isDesktopCommOnly ? '@ 提及成员' : '@',
+          onTap: onAt!,
+        ),
       if (wide && onEmoji != null)
         _QaCell(
           icon: Icons.emoji_emotions_outlined,
@@ -259,9 +301,11 @@ class ChatQuickActions extends StatelessWidget {
         ),
     ];
     if (wide) {
+      // PC：桌面 IM 的紧凑图标栏，靠左排列，名称和快捷键放在悬停提示里；
+      // 上沿兼作输入区高度拖动条，和输入框连成一块。
+      final heightDrag = onHeightDrag;
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
         decoration: BoxDecoration(
           color: DunesColors.resolve(
             context,
@@ -278,63 +322,90 @@ class ChatQuickActions extends StatelessWidget {
             ),
           ),
         ),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Row(
-              children: cells
-                  .map(
-                    (c) => Expanded(
-                      child: Tooltip(
-                        message: (c.hint ?? '').isNotEmpty
-                            ? '${c.label}（${c.hint}）'
-                            : c.label,
-                        waitDuration: const Duration(milliseconds: 400),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (heightDrag != null)
+              MouseRegion(
+                cursor: SystemMouseCursors.resizeUpDown,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onVerticalDragUpdate: (details) =>
+                      heightDrag(details.delta.dy),
+                  child: const SizedBox(height: 6),
+                ),
+              )
+            else
+              const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+              child: Wrap(
+                spacing: 2,
+                children: [
+                  for (final c in cells)
+                    Tooltip(
+                      message: (c.hint ?? '').isNotEmpty
+                          ? '${c.label}（${c.hint}）'
+                          : c.label,
+                      waitDuration: const Duration(milliseconds: 300),
+                      child: Semantics(
+                        button: true,
+                        label: c.label,
                         child: DesktopFeedbackSurface(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(8),
                           onTap: c.onTap,
-                          child: SizedBox(
-                            height: isDesktopCommOnly
-                                ? 46 +
-                                      (MediaQuery.textScalerOf(
-                                                context,
-                                              ).scale(9.5) -
-                                              9.5)
-                                          .clamp(0, 20)
-                                : 46,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  c.icon,
-                                  size: 18,
-                                  color: DunesColors.resolve(
-                                    context,
-                                    DunesColors.text2,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  c.label,
-                                  style: DunesTypography.sans(
-                                    fontSize: 9.5,
-                                    color: DunesColors.resolve(
-                                      context,
-                                      DunesColors.text3,
+                          // 触屏宽屏（iPad / Web）没有悬停提示，保留文字和手指可点的尺寸。
+                          child: isDesktopCommOnly
+                              ? SizedBox(
+                                  width: 34,
+                                  height: 32,
+                                  child: Center(
+                                    child: Icon(
+                                      c.icon,
+                                      size: 20,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text2,
+                                      ),
                                     ),
-                                    context: context,
+                                  ),
+                                )
+                              : SizedBox(
+                                  width: 60,
+                                  height: 48,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        c.icon,
+                                        size: 20,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text2,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        c.label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: DunesTypography.sans(
+                                          fontSize: 10.5,
+                                          color: DunesColors.text3,
+                                          context: context,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
                         ),
                       ),
                     ),
-                  )
-                  .toList(),
+                ],
+              ),
             ),
-          ),
+          ],
         ),
       );
     }
@@ -753,28 +824,57 @@ class ChatInputBar extends StatelessWidget {
                           ),
                       ],
                       const SizedBox(width: 6),
-                      if (showStop)
-                        _WeChatPlusBtn(
-                          showStop: true,
-                          sending: sending,
-                          locked: false,
-                          plusOpen: false,
-                          onTap: onStop,
-                        )
-                      else if (hasText)
-                        _WeChatSendBtn(
-                          sending: sending,
-                          locked: interactionLocked,
-                          onTap: interactionLocked ? null : onSend,
-                        )
-                      else
-                        _WeChatPlusBtn(
-                          showStop: false,
-                          sending: sending,
-                          locked: interactionLocked,
-                          plusOpen: plusOpen,
-                          onTap: interactionLocked ? null : (onPlus ?? onSend),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.centerRight,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          switchInCurve: Curves.easeOutBack,
+                          switchOutCurve: Curves.easeIn,
+                          transitionBuilder: (child, animation) =>
+                              FadeTransition(
+                                opacity: animation,
+                                child: ScaleTransition(
+                                  scale: Tween<double>(
+                                    begin: 0.7,
+                                    end: 1,
+                                  ).animate(animation),
+                                  child: child,
+                                ),
+                              ),
+                          layoutBuilder: (current, previous) => Stack(
+                            alignment: Alignment.centerRight,
+                            children: [...previous, ?current],
+                          ),
+                          child: showStop
+                              ? _WeChatPlusBtn(
+                                  key: const ValueKey('stop'),
+                                  showStop: true,
+                                  sending: sending,
+                                  locked: false,
+                                  plusOpen: false,
+                                  onTap: onStop,
+                                )
+                              : hasText
+                              ? _WeChatSendBtn(
+                                  key: const ValueKey('send'),
+                                  sending: sending,
+                                  locked: interactionLocked,
+                                  onTap: interactionLocked ? null : onSend,
+                                )
+                              : _WeChatPlusBtn(
+                                  key: const ValueKey('plus'),
+                                  showStop: false,
+                                  sending: sending,
+                                  locked: interactionLocked,
+                                  plusOpen: plusOpen,
+                                  onTap: interactionLocked
+                                      ? null
+                                      : (onPlus ?? onSend),
+                                ),
                         ),
+                      ),
                     ],
                   ],
                 ),
@@ -1092,6 +1192,7 @@ class _WeChatCircleIconBtn extends StatelessWidget {
 /// 微信风格圆形「+」按钮（主题紫）。
 class _WeChatPlusBtn extends StatelessWidget {
   const _WeChatPlusBtn({
+    super.key,
     required this.showStop,
     required this.sending,
     required this.locked,
@@ -1162,10 +1263,15 @@ class _WeChatPlusBtn extends StatelessWidget {
                       color: DunesColors.resolve(context, Colors.white),
                     ),
                   )
-                : Icon(
-                    plusOpen ? Icons.close_rounded : Icons.add_rounded,
-                    size: 22,
-                    color: DunesColors.resolve(context, Colors.white),
+                : AnimatedRotation(
+                    turns: plusOpen ? 0.125 : 0,
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutBack,
+                    child: Icon(
+                      Icons.add_rounded,
+                      size: 22,
+                      color: DunesColors.resolve(context, Colors.white),
+                    ),
                   ),
           ),
         ),
@@ -1177,6 +1283,7 @@ class _WeChatPlusBtn extends StatelessWidget {
 /// 手机端有输入内容时替换「+」的发送按钮（对齐微信；不依赖 IME 右下角）。
 class _WeChatSendBtn extends StatelessWidget {
   const _WeChatSendBtn({
+    super.key,
     required this.sending,
     required this.locked,
     required this.onTap,
@@ -1202,18 +1309,18 @@ class _WeChatSendBtn extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(18),
         onTap: onTap,
         child: Ink(
           height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
             color: DunesColors.resolveNullable(
               context,
               bg,
               role: DunesColorRole.surface,
             ),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Center(
             child: sending
@@ -1629,6 +1736,8 @@ class ChatMessageRow extends StatelessWidget {
 
   final NativeChatMessage message;
   final bool mine;
+
+  /// 是否在时间旁显示发送人名字（私聊里对方是谁已经很清楚，传 false）。
   final bool showSenderMeta;
   final String? readLabel;
   final Widget content;
@@ -1645,10 +1754,16 @@ class ChatMessageRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final time = (timeLabel ?? '').trim();
-    final showMeta =
-        showSenderMeta ||
-        (mine && showTimeForMine && time.isNotEmpty) ||
-        (!mine && time.isNotEmpty);
+    final showName = showSenderMeta && !mine;
+    final showTime = time.isNotEmpty && (!mine || showTimeForMine);
+    final showMeta = showName || showTime;
+    final metaStyle = DunesTypography.sans(
+      fontSize: 11,
+      height: 1.2,
+      color: DunesColors.resolve(context, DunesColors.text3),
+      context: context,
+    ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+    final avatarSlot = SizedBox(width: chatMessageAvatarSize);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -1658,10 +1773,7 @@ class ChatMessageRow extends StatelessWidget {
             ? MainAxisAlignment.end
             : MainAxisAlignment.start,
         children: [
-          if (!mine) ...[
-            avatar ?? const SizedBox(width: 45),
-            const SizedBox(width: 8),
-          ],
+          if (!mine) ...[avatar ?? avatarSlot, const SizedBox(width: 8)],
           Flexible(
             child: GestureDetector(
               onLongPress: onLongPress,
@@ -1682,61 +1794,23 @@ class ChatMessageRow extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (showSenderMeta && !mine)
+                          if (showName)
                             Flexible(
                               child: Text(
                                 message.senderName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: DunesTypography.mono(
-                                  fontSize: 9.5,
+                                style: metaStyle.copyWith(
+                                  fontWeight: FontWeight.w500,
                                   color: DunesColors.resolve(
                                     context,
-                                    DunesColors.text3,
+                                    DunesColors.text2,
                                   ),
-                                  context: context,
                                 ),
                               ),
                             ),
-                          if (showSenderMeta && !mine && time.isNotEmpty)
-                            const SizedBox(width: 6),
-                          if (!mine && time.isNotEmpty)
-                            Text(
-                              time,
-                              style: DunesTypography.mono(
-                                fontSize: 9.5,
-                                color: DunesColors.resolve(
-                                  context,
-                                  DunesColors.text3,
-                                ),
-                                context: context,
-                              ),
-                            ),
-                          if (mine && showTimeForMine && time.isNotEmpty) ...[
-                            Text(
-                              time,
-                              style: DunesTypography.mono(
-                                fontSize: 9.5,
-                                color: DunesColors.resolve(
-                                  context,
-                                  DunesColors.text3,
-                                ),
-                                context: context,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              message.senderName,
-                              style: DunesTypography.mono(
-                                fontSize: 9.5,
-                                color: DunesColors.resolve(
-                                  context,
-                                  DunesColors.text3,
-                                ),
-                                context: context,
-                              ),
-                            ),
-                          ],
+                          if (showName && showTime) const SizedBox(width: 6),
+                          if (showTime) Text(time, style: metaStyle),
                         ],
                       ),
                     ),
@@ -1746,8 +1820,7 @@ class ChatMessageRow extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 3, right: 2),
                       child: Text(
                         readLabel!,
-                        style: DunesTypography.mono(
-                          fontSize: 10.5,
+                        style: metaStyle.copyWith(
                           fontWeight: FontWeight.w500,
                           color: readLabel == '已读'
                               ? DunesColors.resolve(
@@ -1755,7 +1828,6 @@ class ChatMessageRow extends StatelessWidget {
                                   DunesColors.readReceipt,
                                 )
                               : DunesColors.resolve(context, DunesColors.text3),
-                          context: context,
                         ),
                       ),
                     )
@@ -1766,8 +1838,7 @@ class ChatMessageRow extends StatelessWidget {
                         onTap: onReadTap,
                         child: Text(
                           (readTapLabel ?? '查看已读').trim(),
-                          style: DunesTypography.mono(
-                            fontSize: 10.5,
+                          style: metaStyle.copyWith(
                             fontWeight: FontWeight.w500,
                             color: (readTapLabel ?? '').trim() != '未读'
                                 ? DunesColors.resolve(
@@ -1778,7 +1849,6 @@ class ChatMessageRow extends StatelessWidget {
                                     context,
                                     DunesColors.text3,
                                   ),
-                            context: context,
                           ),
                         ),
                       ),
@@ -1789,7 +1859,7 @@ class ChatMessageRow extends StatelessWidget {
           ),
           if (mine) ...[
             const SizedBox(width: 8),
-            trailingAvatar ?? avatar ?? const SizedBox(width: 45),
+            trailingAvatar ?? avatar ?? avatarSlot,
           ],
         ],
       ),
@@ -1816,19 +1886,14 @@ List<ContextMenuButtonItem> chatTextContextMenuButtonItems({
       ContextMenuButtonItem(label: '复制', onPressed: onCopy),
       ContextMenuButtonItem(label: '全选', onPressed: onSelectAll),
     ],
-    if (onQuote != null)
-      ContextMenuButtonItem(label: '引用', onPressed: onQuote),
+    if (onQuote != null) ContextMenuButtonItem(label: '引用', onPressed: onQuote),
     if (onForward != null)
       ContextMenuButtonItem(label: '转发', onPressed: onForward),
     if (onFavorite != null)
       ContextMenuButtonItem(label: '收藏', onPressed: onFavorite),
     if (onPin != null)
-      ContextMenuButtonItem(
-        label: isPinned ? '取消置顶' : '置顶',
-        onPressed: onPin,
-      ),
-    if (onMulti != null)
-      ContextMenuButtonItem(label: '多选', onPressed: onMulti),
+      ContextMenuButtonItem(label: isPinned ? '取消置顶' : '置顶', onPressed: onPin),
+    if (onMulti != null) ContextMenuButtonItem(label: '多选', onPressed: onMulti),
     if (onRecall != null)
       ContextMenuButtonItem(label: '撤回', onPressed: onRecall),
   ];
@@ -1889,6 +1954,7 @@ class ChatTextBubble extends StatelessWidget {
 
   TextSpan _buildMentionTextSpan(BuildContext context) {
     // 对方气泡正文加深一档并略加重，PC/APP 一致，避免发灰难读。
+    // APP 正文与输入框同为 15 号；PC 阅读距离近，保持 13。
     final baseStyle = DunesTypography.sans(
       fontSize: 13,
       height: 1.5,
@@ -2216,7 +2282,8 @@ class _ChatSelectableRichTextState extends State<_ChatSelectableRichText> {
                     ? null
                     : () => widget.onSelectionForward!(widget.text.trim()),
               ),
-              onFavorite: widget.showFavorite || widget.onSelectionFavorite != null
+              onFavorite:
+                  widget.showFavorite || widget.onSelectionFavorite != null
                   ? bindAction('favorite', widget.onSelectionFavorite)
                   : null,
               onPin: widget.showPin
@@ -2595,44 +2662,30 @@ class ChatDateDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 消息上只写时分，日期全靠这里：做成居中胶囊，比细线夹小字醒目。
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 14, 0, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Divider(
-              height: 1,
-              color: DunesColors.resolve(
-                context,
-                DunesColors.borderSoft,
-                role: DunesColorRole.border,
-              ),
+      padding: const EdgeInsets.fromLTRB(0, 14, 0, 10),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.bgSoft,
+              role: DunesColorRole.surface,
+            ),
+            borderRadius: BorderRadius.circular(99),
+          ),
+          child: Text(
+            label,
+            style: DunesTypography.sans(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 11),
-            child: Text(
-              label.toUpperCase(),
-              style: DunesTypography.mono(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.06 * 9.5,
-                color: DunesColors.resolve(context, DunesColors.text3),
-                context: context,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Divider(
-              height: 1,
-              color: DunesColors.resolve(
-                context,
-                DunesColors.borderSoft,
-                role: DunesColorRole.border,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2645,23 +2698,19 @@ class ChatSystemPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 不加底色：和日期胶囊区分开，也不抢消息的视线。
     return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: DunesColors.resolve(
-            context,
-            DunesColors.bgSoft,
-            role: DunesColorRole.surface,
-          ),
-          borderRadius: BorderRadius.circular(99),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
         child: Text(
           text,
-          style: DunesTypography.mono(
-            fontSize: 10,
-            color: DunesColors.resolve(context, DunesColors.text3),
+          textAlign: TextAlign.center,
+          style: DunesTypography.sans(
+            fontSize: 11.5,
+            color: DunesColors.resolve(
+              context,
+              DunesColors.text3,
+            ).withValues(alpha: 0.8),
             context: context,
           ),
         ),
@@ -2719,12 +2768,12 @@ class ChatPinnedMessagesBar extends StatelessWidget {
                   ? onToggleExpand
                   : () => onTapItem(latest),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+                padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
                 child: Row(
                   children: [
                     Icon(
                       Icons.push_pin_rounded,
-                      size: 16,
+                      size: 15,
                       color: DunesColors.resolveNullable(
                         context,
                         Color(0xFFE6A23C),
@@ -2744,7 +2793,7 @@ class ChatPinnedMessagesBar extends StatelessWidget {
                                 context: context,
                               ),
                             )
-                          : _PinnedMessageText(item: latest),
+                          : _PinnedMessageText(item: latest, singleLine: true),
                     ),
                     if (canExpand)
                       IconButton(
@@ -2849,12 +2898,37 @@ class ChatPinnedMessagesBar extends StatelessWidget {
 }
 
 class _PinnedMessageText extends StatelessWidget {
-  const _PinnedMessageText({required this.item});
+  const _PinnedMessageText({required this.item, this.singleLine = false});
 
   final NativePinnedMessage item;
 
+  /// 收起状态只占一行：内容本身已带发送人，谁置顶的放进悬停提示。
+  final bool singleLine;
+
   @override
   Widget build(BuildContext context) {
+    if (singleLine) {
+      return Tooltip(
+        message: item.pinnedActionLabel,
+        waitDuration: const Duration(milliseconds: 400),
+        child: SizedBox(
+          height: 32,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              item.contentLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DunesTypography.sans(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text2),
+                context: context,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3171,132 +3245,147 @@ class ChatFileAttach extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxW = chatBubbleMaxWidth(constraints.maxWidth);
-        final minW = 210.0 > maxW ? maxW : 210.0;
-        return GestureDetector(
-          onTap: busy ? null : onTap,
-          onSecondaryTapDown: busy ? null : onSecondaryTapDown,
-          child: Container(
-            constraints: BoxConstraints(minWidth: minW, maxWidth: maxW),
-            padding: const EdgeInsets.all(11),
-            decoration: BoxDecoration(
-              color: DunesColors.resolve(
-                context,
-                Colors.white,
-                role: DunesColorRole.surface,
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      ChatFileTypeIcon(fileName: fileName, size: 40),
-                      if (busy)
-                        SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: CircularProgressIndicator(
-                            value: busyProgress > 0 && busyProgress < 1
-                                ? busyProgress
-                                : null,
-                            strokeWidth: 2.5,
-                            color: DunesColors.resolve(
-                              context,
-                              const Color(0xFF7E64BD),
-                            ),
-                            backgroundColor: DunesColors.resolve(
-                              context,
-                              Colors.white54,
-                              role: DunesColorRole.surface,
-                            ),
-                          ),
-                        ),
-                    ],
+        // 固定卡片宽度：否则会撑满气泡最大宽度，右侧的状态勾离文件名很远。
+        final cardW = maxW < 300.0 ? maxW : 300.0;
+        return MouseRegion(
+          cursor: busy ? MouseCursor.defer : SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: busy ? null : onTap,
+            onSecondaryTapDown: busy ? null : onSecondaryTapDown,
+            child: Container(
+              width: cardW,
+              padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+              decoration: BoxDecoration(
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.border,
                   ),
                 ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        fileName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          context: context,
-                        ),
-                      ),
-                      if (statusLabel != null || sizeLabel != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          statusLabel ?? sizeLabel!,
-                          style: DunesTypography.sans(
-                            fontSize: 11,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text3,
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        ChatFileTypeIcon(fileName: fileName, size: 40),
+                        if (busy)
+                          SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: CircularProgressIndicator(
+                              value: busyProgress > 0 && busyProgress < 1
+                                  ? busyProgress
+                                  : null,
+                              strokeWidth: 2.5,
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFF7E64BD),
+                              ),
+                              backgroundColor: DunesColors.resolve(
+                                context,
+                                Colors.white54,
+                                role: DunesColorRole.surface,
+                              ),
                             ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          fileName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: DunesTypography.sans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            height: 1.3,
                             context: context,
                           ),
                         ),
+                        if (statusLabel != null || sizeLabel != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            statusLabel ?? sizeLabel!,
+                            style: DunesTypography.sans(
+                              fontSize: 11,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                ),
-                if (uploading && onCancelUpload != null) ...[
-                  const SizedBox(width: 4),
-                  IconButton(
-                    tooltip: '取消上传',
-                    onPressed: onCancelUpload,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                    icon: Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
-                ] else if (downloading && onCancelDownload != null) ...[
-                  const SizedBox(width: 4),
-                  IconButton(
-                    tooltip: '取消下载',
-                    onPressed: onCancelDownload,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
+                  if (uploading && onCancelUpload != null) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      tooltip: '取消上传',
+                      onPressed: onCancelUpload,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
-                    icon: Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: DunesColors.resolve(context, DunesColors.text3),
+                  ] else if (downloading && onCancelDownload != null) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      tooltip: '取消下载',
+                      onPressed: onCancelDownload,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                      ),
                     ),
-                  ),
-                ] else if (downloaded && !busy) ...[
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.check_circle,
-                    size: 18,
-                    color: DunesColors.resolveNullable(
-                      context,
-                      Color(0xFF07C160),
+                  ] else if (downloaded && !busy) ...[
+                    const SizedBox(width: 8),
+                    Tooltip(
+                      message: '已下载到本地',
+                      child: Icon(
+                        Icons.check_circle,
+                        size: 16,
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Color(0xFF07C160),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );

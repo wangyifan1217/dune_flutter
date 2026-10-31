@@ -874,6 +874,13 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _hasMore = false;
   bool _hasNewer = false;
   int? _highlightMessageId;
+
+  /// APP 自己刚发出的消息首次出现的时间，用于只播一次入场动画；
+  /// 行被回收后重建时按已过去的时间直接落到终态，不会重播。
+  final Map<int, DateTime> _sendEnterStartedAt = {};
+
+  /// APP 标题栏分割线：只有消息滚到标题栏下面时才显示。
+  final ValueNotifier<bool> _headerDividerVisible = ValueNotifier(false);
   int _peerLastReadMessageId = 0;
   Timer? _highlightTimer;
   bool _voiceMode = false;
@@ -1536,6 +1543,7 @@ class _NativeChatViewState extends State<NativeChatView>
     _olderScrollHold?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
+    _headerDividerVisible.dispose();
     // 关闭本页 HTTP client，打断未完成请求并释放连接，减轻频繁切会话时的连接压力。
     _service.close();
     super.dispose();
@@ -2253,7 +2261,32 @@ class _NativeChatViewState extends State<NativeChatView>
 
   bool get _supportsDesktopFileDrop => !kIsWeb && isDesktopCommOnly;
 
+  /// 列表是 reverse 的：离最旧一端还有距离，说明有消息滚到了标题栏下面。
+  void _syncHeaderDivider(ScrollMetrics metrics) {
+    if (isDesktopCommOnly || metrics.axis != Axis.vertical) return;
+    _headerDividerVisible.value = metrics.maxScrollExtent - metrics.pixels > 4;
+  }
+
+  Widget _buildScrollAwareHeaderDivider() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _headerDividerVisible,
+      builder: (context, visible, _) => AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: const Duration(milliseconds: 180),
+        child: Container(
+          height: 1,
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
+      ),
+    );
+  }
+
   bool _onMessageListScroll(ScrollNotification notification) {
+    if (notification.depth == 0) _syncHeaderDivider(notification.metrics);
     // 手指拖动 / 惯性：记为用户交互，并取消进会话贴底。
     if (notification is UserScrollNotification ||
         (notification is ScrollUpdateNotification &&
@@ -2835,7 +2868,7 @@ class _NativeChatViewState extends State<NativeChatView>
       entries.add(
         _ChatListEntry.message(
           m,
-          showSenderMeta: !_isSystemKind(m.kind),
+          showSenderMeta: !_isSystemKind(m.kind) && !_isPrivate,
           imageGroup: groupedImages.length > 1 ? groupedImages : const [],
         ),
       );
@@ -2849,6 +2882,29 @@ class _NativeChatViewState extends State<NativeChatView>
     return entries;
   }
 
+  /// 自己刚发出（服务端时间 8 秒内）的消息才播入场动画；PC、历史消息、
+  /// 设备时钟偏差过大时都返回 null，按原样显示。
+  DateTime? _sendEnterStartFor(NativeChatMessage m, {required bool mine}) {
+    if (!mine || isDesktopCommOnly || m.id <= 0) return null;
+    final known = _sendEnterStartedAt[m.id];
+    if (known != null) return known;
+    final created = m.createdAt;
+    if (created == null) return null;
+    final now = DateTime.now();
+    if (now.difference(created).abs() > const Duration(seconds: 8)) {
+      return null;
+    }
+    return _sendEnterStartedAt[m.id] = now;
+  }
+
+  /// 日期已由分隔条给出，消息上只写时分。
+  static String _messageClockLabel(DateTime? at) {
+    if (at == null) return '';
+    final local = at.isUtc ? at.toLocal() : at;
+    return '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+
   String _privateHeaderSubtitle(NativeConversation conv) {
     if (conv.isSelfMemo) return '';
     final parts = <String>[];
@@ -2856,7 +2912,10 @@ class _NativeChatViewState extends State<NativeChatView>
     final role = conv.peerRoleLabel?.trim();
     if (dept != null && dept.isNotEmpty) parts.add(dept);
     if (role != null && role.isNotEmpty) parts.add(role);
-    parts.add(_peerOnline ? '在线' : '离线');
+    // PC 头像角上的绿点已表示在线，文字只在离线时补一句。
+    if (!isDesktopCommOnly || !_peerOnline) {
+      parts.add(_peerOnline ? '在线' : '离线');
+    }
     return parts.join(' · ');
   }
 
@@ -6125,7 +6184,10 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
-  Future<void> _runMessageQuickAction(String? action, NativeChatMessage m) async {
+  Future<void> _runMessageQuickAction(
+    String? action,
+    NativeChatMessage m,
+  ) async {
     final kind = m.kind.toUpperCase();
     final isFile = kind == 'FILE';
     final isImage = kind == 'IMAGE';
@@ -6968,6 +7030,15 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
+  void _dragPcInputHeight(double deltaDy) {
+    setState(() {
+      _pcInputHeight = (_pcInputHeight - deltaDy).clamp(
+        _pcInputHeightMin,
+        _pcInputHeightMax,
+      );
+    });
+  }
+
   Widget _buildComposerDock({required bool locked, required String inputHint}) {
     final wide = isWideChatLayout(context);
     return TextFieldTapRegion(
@@ -7010,6 +7081,7 @@ class _NativeChatViewState extends State<NativeChatView>
               onVideo: locked || _mediaBusy ? () {} : _pickAndSendVideo,
               showAt: !_isPrivate,
               showVideo: true,
+              onHeightDrag: _dragPcInputHeight,
             ),
           if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
             ChatQuotePreviewBar(
@@ -7034,7 +7106,8 @@ class _NativeChatViewState extends State<NativeChatView>
                 controller: _inputController,
                 focusNode: _inputFocusNode,
                 showTopBorder:
-                    _quoteDraft == null || _quoteDraft!.isEmpty || locked,
+                    !wide &&
+                    (_quoteDraft == null || _quoteDraft!.isEmpty || locked),
                 onInputFocused: () {
                   if (!wide && _toolsOpen) setState(() => _toolsOpen = false);
                   _scrollToLatestAfterKeyboard();
@@ -7042,16 +7115,6 @@ class _NativeChatViewState extends State<NativeChatView>
                 onTapOutside: _dismissChatKeyboard,
                 shouldKeepFocusAfterSend: () => _composerKeepFocus,
                 inputHeight: wide ? _pcInputHeight : null,
-                onInputHeightDrag: wide
-                    ? (deltaDy) {
-                        setState(() {
-                          _pcInputHeight = (_pcInputHeight - deltaDy).clamp(
-                            _pcInputHeightMin,
-                            _pcInputHeightMax,
-                          );
-                        });
-                      }
-                    : null,
                 voiceMode: effectiveVoiceMode,
                 voiceEnabled: showVoice,
                 sending: _sending,
@@ -9351,12 +9414,12 @@ class _NativeChatViewState extends State<NativeChatView>
       return ImUserAvatar(
         initial: initial,
         seed: widget.session.userId,
-        size: 45,
+        size: chatMessageAvatarSize,
         avatarPreset: m.senderAvatarPreset ?? _selfAvatarPreset,
         avatarObjectKey: m.senderAvatarObjectKey ?? _selfAvatarObjectKey,
         avatarUrl: _selfAvatarUrl,
         avatarService: _service,
-        borderRadius: 45 * 0.18,
+        borderRadius: chatMessageAvatarSize * 0.18,
       );
     }
     final name = m.senderName.isNotEmpty
@@ -9386,12 +9449,12 @@ class _NativeChatViewState extends State<NativeChatView>
     return ImUserAvatar(
       initial: name.isNotEmpty ? name.substring(0, 1) : '?',
       seed: seed,
-      size: 45,
+      size: chatMessageAvatarSize,
       showOnline: false,
       avatarPreset: preset,
       avatarObjectKey: objectKey,
       avatarService: _service,
-      borderRadius: 45 * 0.18,
+      borderRadius: chatMessageAvatarSize * 0.18,
     );
   }
 
@@ -11009,6 +11072,7 @@ class _NativeChatViewState extends State<NativeChatView>
                               subtitle: subtitle,
                               onBack: widget.onBack,
                               showBackButton: widget.showBackButton,
+                              showBottomBorder: isDesktopCommOnly,
                               onTapTitle: _isPrivate
                                   ? widget.onOpenProfile
                                   : widget.onOpenGroupInfo,
@@ -11100,6 +11164,8 @@ class _NativeChatViewState extends State<NativeChatView>
                                   ),
                               ],
                             ),
+                          if (!selecting && !isDesktopCommOnly)
+                            _buildScrollAwareHeaderDivider(),
                           if (!selecting && _pinnedMessages.isNotEmpty)
                             TapRegion(
                               groupId: 'chat-pinned-bar',
@@ -11164,8 +11230,21 @@ class _NativeChatViewState extends State<NativeChatView>
                                     ),
                                   )
                                 else
-                                  NotificationListener<ScrollNotification>(
-                                    onNotification: _onMessageListScroll,
+                                  NotificationListener<Notification>(
+                                    onNotification: (notification) {
+                                      if (notification
+                                          is ScrollMetricsNotification) {
+                                        if (notification.depth == 0) {
+                                          _syncHeaderDivider(
+                                            notification.metrics,
+                                          );
+                                        }
+                                        return false;
+                                      }
+                                      return notification
+                                              is ScrollNotification &&
+                                          _onMessageListScroll(notification);
+                                    },
                                     child: LayoutBuilder(
                                       builder: (context, constraints) {
                                         final wide = isWideChatLayout(context);
@@ -11173,6 +11252,12 @@ class _NativeChatViewState extends State<NativeChatView>
                                         // 鼠标滚轮无法驱动 ScrollPosition，「上滑加载」失效。
                                         final useShrinkWrap =
                                             wide && !isDesktopCommOnly;
+                                        final sidePadding =
+                                            isDesktopCommOnly &&
+                                                constraints.maxWidth.isFinite
+                                            ? ((constraints.maxWidth - 920) / 2)
+                                                  .clamp(12.0, double.infinity)
+                                            : 12.0;
                                         final list = Listener(
                                           onPointerSignal:
                                               _onMessageListPointerSignal,
@@ -11192,10 +11277,12 @@ class _NativeChatViewState extends State<NativeChatView>
                                             keyboardDismissBehavior:
                                                 ScrollViewKeyboardDismissBehavior
                                                     .onDrag,
-                                            padding: const EdgeInsets.fromLTRB(
+                                            // PC 窗口很宽时消息列居中、最宽约 920，左右消息不至于隔得太远；
+                                            // 用内边距而不是外层约束，滚动条仍贴窗口右侧。
+                                            padding: EdgeInsets.fromLTRB(
+                                              sidePadding,
                                               12,
-                                              12,
-                                              12,
+                                              sidePadding,
                                               10,
                                             ),
                                             itemCount:
@@ -11301,7 +11388,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                               final highlighted =
                                                   _highlightMessageId == m.id;
                                               final timeLabel =
-                                                  InboxFormat.msgTimeLabel(
+                                                  _messageClockLabel(
                                                     m.createdAt,
                                                   );
                                               final rowAvatar =
@@ -11459,6 +11546,29 @@ class _NativeChatViewState extends State<NativeChatView>
                                                           ),
                                                   ),
                                                 );
+                                                final enterAt =
+                                                    _sendEnterStartFor(
+                                                      m,
+                                                      mine: mine,
+                                                    );
+                                                if (enterAt != null) {
+                                                  row = _ChatSendEnter(
+                                                    startedAt: enterAt,
+                                                    child: row,
+                                                  );
+                                                }
+                                                if (!desktop) {
+                                                  row = _ChatSwipeToQuote(
+                                                    enabled:
+                                                        canShowActions &&
+                                                        _conversation
+                                                                ?.dissolved !=
+                                                            true,
+                                                    onQuote: () =>
+                                                        _startQuote(m),
+                                                    child: row,
+                                                  );
+                                                }
                                               }
                                               var rowWidget = highlighted
                                                   ? AnimatedContainer(
@@ -12902,5 +13012,216 @@ class _ChatScrollPhysics extends ScrollPhysics {
   ) {
     final clamped = velocity.clamp(-flingVelocityCap, flingVelocityCap);
     return super.createBallisticSimulation(position, clamped);
+  }
+}
+
+/// 起点靠近屏幕左缘的拖动让给 iOS 侧滑返回。
+class _EdgeSafeHorizontalDragRecognizer
+    extends HorizontalDragGestureRecognizer {
+  _EdgeSafeHorizontalDragRecognizer({super.debugOwner});
+
+  static const double edgeGuard = 28;
+
+  @override
+  bool isPointerAllowed(PointerEvent event) {
+    if (event.position.dx < edgeGuard) return false;
+    return super.isPointerAllowed(event);
+  }
+}
+
+/// APP 消息右滑引用：拖过阈值轻震一下，松手即引用，消息弹回原位。
+class _ChatSwipeToQuote extends StatefulWidget {
+  const _ChatSwipeToQuote({
+    required this.enabled,
+    required this.onQuote,
+    required this.child,
+  });
+
+  final bool enabled;
+  final VoidCallback onQuote;
+  final Widget child;
+
+  @override
+  State<_ChatSwipeToQuote> createState() => _ChatSwipeToQuoteState();
+}
+
+class _ChatSwipeToQuoteState extends State<_ChatSwipeToQuote>
+    with SingleTickerProviderStateMixin {
+  static const _trigger = 56.0;
+  static const _max = 84.0;
+
+  late final AnimationController _offset = AnimationController.unbounded(
+    vsync: this,
+  );
+  double _dragRaw = 0;
+  bool _armed = false;
+
+  @override
+  void dispose() {
+    _offset.dispose();
+    super.dispose();
+  }
+
+  void _onStart(DragStartDetails _) {
+    _offset.stop();
+    _dragRaw = _offset.value;
+    _armed = false;
+  }
+
+  void _onUpdate(DragUpdateDetails details) {
+    _dragRaw = (_dragRaw + details.delta.dx).clamp(0.0, double.infinity);
+    final resisted = _dragRaw <= _trigger
+        ? _dragRaw
+        : _trigger + (_dragRaw - _trigger) * 0.3;
+    _offset.value = resisted.clamp(0.0, _max);
+    final armed = _dragRaw >= _trigger;
+    if (armed && !_armed) HapticFeedback.selectionClick();
+    _armed = armed;
+  }
+
+  void _onEnd([DragEndDetails? _]) {
+    if (_armed) widget.onQuote();
+    _armed = false;
+    _dragRaw = 0;
+    _offset.animateTo(
+      0,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      behavior: HitTestBehavior.translucent,
+      gestures: widget.enabled
+          ? <Type, GestureRecognizerFactory>{
+              _EdgeSafeHorizontalDragRecognizer:
+                  GestureRecognizerFactoryWithHandlers<
+                    _EdgeSafeHorizontalDragRecognizer
+                  >(() => _EdgeSafeHorizontalDragRecognizer(debugOwner: this), (
+                    recognizer,
+                  ) {
+                    recognizer
+                      ..onStart = _onStart
+                      ..onUpdate = _onUpdate
+                      ..onEnd = _onEnd
+                      ..onCancel = _onEnd;
+                  }),
+            }
+          : const <Type, GestureRecognizerFactory>{},
+      child: AnimatedBuilder(
+        animation: _offset,
+        child: widget.child,
+        builder: (context, child) {
+          final dx = _offset.value;
+          final progress = (dx / _trigger).clamp(0.0, 1.0);
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: 4,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: Opacity(
+                    opacity: progress,
+                    child: Transform.scale(
+                      scale: 0.6 + 0.4 * progress,
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.bgSoft,
+                            role: DunesColorRole.surface,
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.reply_rounded,
+                          size: 18,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Transform.translate(offset: Offset(dx, 0), child: child),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// 自己发出的消息从右下（输入框方向）轻滑入并淡入。
+class _ChatSendEnter extends StatefulWidget {
+  const _ChatSendEnter({required this.startedAt, required this.child});
+
+  final DateTime startedAt;
+  final Widget child;
+
+  @override
+  State<_ChatSendEnter> createState() => _ChatSendEnterState();
+}
+
+class _ChatSendEnterState extends State<_ChatSendEnter>
+    with SingleTickerProviderStateMixin {
+  static const _duration = Duration(milliseconds: 320);
+
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: _duration,
+  );
+  late final Animation<double> _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    final elapsed = DateTime.now().difference(widget.startedAt);
+    final from = (elapsed.inMicroseconds / _duration.inMicroseconds).clamp(
+      0.0,
+      1.0,
+    );
+    _controller.value = from;
+    if (from < 1) _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _curve,
+      child: widget.child,
+      builder: (context, child) {
+        final t = _curve.value;
+        return Opacity(
+          opacity: (0.2 + 0.8 * t).clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(12 * (1 - t), 22 * (1 - t)),
+            child: Transform.scale(
+              scale: 0.94 + 0.06 * t,
+              alignment: Alignment.bottomRight,
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
   }
 }

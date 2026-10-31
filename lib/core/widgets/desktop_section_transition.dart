@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../platform/desktop_features.dart';
 
 /// Animates presentation on main-section changes while retaining the child.
+/// PC slides in slightly; APP only cross-fades, like iOS tab switches.
 class DesktopSectionTransition extends StatefulWidget {
   const DesktopSectionTransition({
     super.key,
@@ -19,7 +20,7 @@ class _DesktopSectionTransitionState extends State<DesktopSectionTransition>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 180),
+    duration: Duration(milliseconds: isDesktopCommOnly ? 180 : 220),
     value: 1,
   );
   bool _reduce = false;
@@ -28,9 +29,9 @@ class _DesktopSectionTransitionState extends State<DesktopSectionTransition>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _reduce = MediaQuery.disableAnimationsOf(context);
-    if (_reduce || !isDesktopCommOnly) {
+    if (_reduce) {
       _controller.value = 1;
-    } else if (!_initialized && widget.token > 0) {
+    } else if (!_initialized && widget.token > 0 && isDesktopCommOnly) {
       _controller.forward(from: 0);
     }
     _initialized = true;
@@ -39,7 +40,7 @@ class _DesktopSectionTransitionState extends State<DesktopSectionTransition>
   @override
   void didUpdateWidget(DesktopSectionTransition oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.token != widget.token && isDesktopCommOnly && !_reduce) {
+    if (oldWidget.token != widget.token && !_reduce) {
       _controller.forward(from: 0);
     }
   }
@@ -52,7 +53,17 @@ class _DesktopSectionTransitionState extends State<DesktopSectionTransition>
 
   @override
   Widget build(BuildContext context) {
-    if (!isDesktopCommOnly) return widget.child;
+    if (!isDesktopCommOnly) {
+      return FadeTransition(
+        opacity: _controller.drive(
+          Tween<double>(
+            begin: .45,
+            end: 1,
+          ).chain(CurveTween(curve: Curves.easeOutCubic)),
+        ),
+        child: widget.child,
+      );
+    }
     return ClipRect(
       child: AnimatedBuilder(
         animation: _controller,

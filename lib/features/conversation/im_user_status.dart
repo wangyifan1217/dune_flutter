@@ -278,6 +278,7 @@ class ImStatusBadge extends StatelessWidget {
     this.iconKey = '',
     this.color = '',
     this.compact = true,
+    this.iconOnly = false,
   });
 
   final String status;
@@ -285,6 +286,9 @@ class ImStatusBadge extends StatelessWidget {
   final String iconKey;
   final String color;
   final bool compact;
+
+  /// 位置很窄时只画图标，文字放进悬停提示。
+  final bool iconOnly;
 
   factory ImStatusBadge.fromValue(
     ImUserStatusValue value, {
@@ -315,24 +319,30 @@ class ImStatusBadge extends StatelessWidget {
     final def = value.def;
     final iconSize = compact ? 12.0 : 14.0;
     final fontSize = compact ? 11.0 : 12.0;
+    final icon = Icon(
+      def.icon,
+      size: iconSize,
+      color: DunesColors.resolveNullable(context, def.color),
+    );
+    if (iconOnly) {
+      return Tooltip(message: def.label, child: icon);
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          def.icon,
-          size: iconSize,
-          color: DunesColors.resolveNullable(context, def.color),
-        ),
+        icon,
         const SizedBox(width: 3),
-        Text(
-          def.label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: DunesTypography.sans(
-            fontSize: fontSize,
-            fontWeight: FontWeight.w500,
-            color: def.color,
-            context: context,
+        Flexible(
+          child: Text(
+            def.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: DunesTypography.sans(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w500,
+              color: def.color,
+              context: context,
+            ),
           ),
         ),
       ],

@@ -1568,7 +1568,8 @@ class ChatInboxRow extends StatelessWidget {
 
   Color get _rowBg {
     if (selected) return DunesColors.accentSoft;
-    return pinned ? Colors.white : Colors.white;
+    if (pinned) return DunesColors.bgSoft;
+    return Colors.white;
   }
 
   @override
@@ -1663,87 +1664,96 @@ class ChatInboxRow extends StatelessWidget {
                       Row(
                         children: [
                           Expanded(
-                            child: Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: DunesTypography.sans(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w500,
-                                      letterSpacing: -0.01 * 15,
-                                      color: DunesColors.resolve(
-                                        context,
-                                        DunesColors.text,
-                                      ),
-                                      context: context,
-                                    ),
-                                  ),
-                                ),
-                                if (workgroupTag) ...[
-                                  const SizedBox(width: 6),
-                                  const WorkgroupTag(),
-                                ],
-                                if (ImUserStatusCatalog.showsBadge(
-                                  imStatus,
-                                )) ...[
-                                  const SizedBox(width: 6),
-                                  ImStatusBadge(
-                                    status: imStatus!,
-                                    text: imStatusText ?? '',
-                                    iconKey: imStatusIcon ?? '',
-                                    color: imStatusColor ?? '',
-                                  ),
-                                ],
-                                if (showAiMark) ...[
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 5,
-                                      vertical: 1,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: DunesColors.resolve(
-                                        context,
-                                        DunesColors.accent,
-                                        role: DunesColorRole.surface,
-                                      ),
-                                      borderRadius: BorderRadius.circular(3),
-                                    ),
+                            child: LayoutBuilder(
+                              builder: (context, titleBox) => Row(
+                                children: [
+                                  Flexible(
                                     child: Text(
-                                      'AI',
-                                      style: DunesTypography.mono(
-                                        fontSize: 8.5,
-                                        fontWeight: FontWeight.w700,
+                                      title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: DunesTypography.sans(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: -0.01 * 15,
                                         color: DunesColors.resolve(
                                           context,
-                                          Colors.white,
+                                          DunesColors.text,
                                         ),
-                                        letterSpacing: 0.04 * 8.5,
                                         context: context,
                                       ),
                                     ),
                                   ),
-                                ],
-                                if (subtitle != null &&
-                                    subtitle!.isNotEmpty) ...[
-                                  Text(
-                                    ' · ${subtitle!.toUpperCase()}',
-                                    style: DunesTypography.mono(
-                                      fontSize: 8.5,
-                                      fontWeight: FontWeight.w500,
-                                      letterSpacing: 0.06 * 8.5,
-                                      color: DunesColors.resolve(
-                                        context,
-                                        DunesColors.text3,
+                                  if (workgroupTag) ...[
+                                    const SizedBox(width: 6),
+                                    const WorkgroupTag(),
+                                  ],
+                                  // 列表拖窄时名字优先：状态最多占四成，再窄只留图标。
+                                  if (ImUserStatusCatalog.showsBadge(
+                                    imStatus,
+                                  )) ...[
+                                    const SizedBox(width: 6),
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxWidth: titleBox.maxWidth * 0.4,
                                       ),
-                                      context: context,
+                                      child: ImStatusBadge(
+                                        status: imStatus!,
+                                        text: imStatusText ?? '',
+                                        iconKey: imStatusIcon ?? '',
+                                        color: imStatusColor ?? '',
+                                        iconOnly: titleBox.maxWidth < 150,
+                                      ),
                                     ),
-                                  ),
+                                  ],
+                                  if (showAiMark) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.accent,
+                                          role: DunesColorRole.surface,
+                                        ),
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                      child: Text(
+                                        'AI',
+                                        style: DunesTypography.mono(
+                                          fontSize: 8.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            Colors.white,
+                                          ),
+                                          letterSpacing: 0.04 * 8.5,
+                                          context: context,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  if (subtitle != null &&
+                                      subtitle!.isNotEmpty) ...[
+                                    Text(
+                                      ' · ${subtitle!.toUpperCase()}',
+                                      style: DunesTypography.mono(
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0.06 * 8.5,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text3,
+                                        ),
+                                        context: context,
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                           if (timeLabel.isNotEmpty)
@@ -1858,11 +1868,16 @@ class _UnreadBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSingle = text.length == 1;
+    final appMini = mini && !isDesktopCommOnly;
     return Container(
       margin: mini ? EdgeInsets.zero : const EdgeInsets.only(top: 4),
       constraints: BoxConstraints(
-        minWidth: mini ? (isSingle ? 16 : 20) : (isSingle ? 24 : 26),
-        minHeight: mini ? 16 : 24,
+        minWidth: appMini
+            ? (isSingle ? 18 : 22)
+            : mini
+            ? (isSingle ? 16 : 20)
+            : (isSingle ? 24 : 26),
+        minHeight: appMini ? 18 : (mini ? 16 : 24),
       ),
       padding: EdgeInsets.symmetric(
         horizontal: mini ? (isSingle ? 0 : 5) : (isSingle ? 0 : 8),
@@ -1897,7 +1912,7 @@ class _UnreadBadge extends StatelessWidget {
         text,
         textAlign: TextAlign.center,
         style: DunesTypography.sans(
-          fontSize: mini ? 9 : 11,
+          fontSize: appMini ? 10.5 : (mini ? 9 : 11),
           color: DunesColors.resolve(context, Colors.white),
           fontWeight: FontWeight.w700,
           letterSpacing: mini ? 0 : -0.02 * 11,
@@ -1924,6 +1939,7 @@ class _PreviewLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final previewSize = isDesktopCommOnly ? 12.5 : 13.5;
     if (generating) {
       return Row(
         children: [
@@ -1937,7 +1953,7 @@ class _PreviewLine extends StatelessWidget {
             child: Text(
               preview.isEmpty ? '正在生成…' : preview,
               style: DunesTypography.sans(
-                fontSize: 12.5,
+                fontSize: previewSize,
                 color: DunesColors.resolve(context, DunesColors.text3),
                 context: context,
               ),
@@ -1949,13 +1965,16 @@ class _PreviewLine extends StatelessWidget {
       );
     }
     final mention = (mentionLabel ?? '').trim();
+    final tag = (sysTag ?? '').trim();
+    // 机器人会话的 businessType 存的是 robotKey（r_xxx）：给人看「机器人」，key 放悬停提示。
+    final robotTag = tag.startsWith('r_');
     return Row(
       children: [
         if (mention.isNotEmpty) ...[
           Text(
             mention,
             style: DunesTypography.sans(
-              fontSize: 12.5,
+              fontSize: previewSize,
               fontWeight: FontWeight.w600,
               color: DunesColors.resolve(context, const Color(0xFFE4554D)),
               context: context,
@@ -1967,9 +1986,43 @@ class _PreviewLine extends StatelessWidget {
           child: Text.rich(
             TextSpan(
               children: [
-                if (sysTag != null && sysTag!.isNotEmpty)
+                if (robotTag)
+                  WidgetSpan(
+                    alignment: PlaceholderAlignment.middle,
+                    child: Tooltip(
+                      message: tag,
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.accentSoft,
+                            role: DunesColorRole.surface,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '机器人',
+                          style: DunesTypography.sans(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w500,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.accent,
+                            ),
+                            context: context,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else if (tag.isNotEmpty)
                   TextSpan(
-                    text: '$sysTag ',
+                    text: '$tag ',
                     style: DunesTypography.mono(
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
@@ -1980,7 +2033,7 @@ class _PreviewLine extends StatelessWidget {
                 TextSpan(
                   text: preview.isEmpty ? '暂无消息' : preview,
                   style: DunesTypography.sans(
-                    fontSize: 12.5,
+                    fontSize: previewSize,
                     color: DunesColors.resolve(context, DunesColors.text3),
                     context: context,
                   ),
@@ -2534,76 +2587,76 @@ class _NovaEyesButton extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: Center(
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: DunesColors.resolve(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: Center(
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: DunesColors.resolve(
+                              context,
+                              Colors.white,
+                              role: DunesColorRole.border,
+                            ),
+                            width: 1.5,
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x222E75FF),
+                              blurRadius: 5,
+                              offset: Offset(0, 1.5),
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
+                          child: NovaPersonAvatarImage(width: 34, height: 34),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (unread)
+                    Positioned(
+                      top: 1,
+                      right: 1,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolveNullable(
                             context,
-                            Colors.white,
-                            role: DunesColorRole.border,
+                            Color(0xFFFF5B61),
+                            role: DunesColorRole.surface,
                           ),
-                          width: 1.5,
+                          shape: BoxShape.circle,
                         ),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x222E75FF),
-                            blurRadius: 5,
-                            offset: Offset(0, 1.5),
+                        child: Text(
+                          '1',
+                          style: DunesTypography.sans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: DunesColors.resolve(context, Colors.white),
+                            context: context,
                           ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: NovaPersonAvatarImage(width: 34, height: 34),
-                      ),
-                    ),
-                  ),
-                ),
-                if (unread)
-                  Positioned(
-                    top: 1,
-                    right: 1,
-                    child: Container(
-                      width: 16,
-                      height: 16,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: DunesColors.resolveNullable(
-                          context,
-                          Color(0xFFFF5B61),
-                          role: DunesColorRole.surface,
-                        ),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        '1',
-                        style: DunesTypography.sans(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: DunesColors.resolve(context, Colors.white),
-                          context: context,
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-          ),
-        ),
+      ),
     );
   }
 }

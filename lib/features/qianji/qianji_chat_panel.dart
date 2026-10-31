@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -2381,7 +2380,6 @@ class _ReplyCardState extends State<_ReplyCard>
         for (final item in value) {
           if (item is Map && item.isNotEmpty) {
             found.add(Map<String, dynamic>.from(item));
-            if (found.length >= 8) return;
           }
         }
       } else if (value is Map) {
@@ -2670,7 +2668,7 @@ class _ReplyCardState extends State<_ReplyCard>
   }
 }
 
-class _QueryRowsPreview extends StatelessWidget {
+class _QueryRowsPreview extends StatefulWidget {
   const _QueryRowsPreview({
     required this.rows,
     required this.color,
@@ -2681,33 +2679,144 @@ class _QueryRowsPreview extends StatelessWidget {
   final Color color;
   final Color muted;
 
+  @override
+  State<_QueryRowsPreview> createState() => _QueryRowsPreviewState();
+}
+
+class _QueryRowsPreviewState extends State<_QueryRowsPreview> {
+  static const _pageSize = 10;
+  int _page = 0;
+
   String _label(String key) => switch (key) {
+    'name' => '名称',
     'displayName' || 'personName' => '姓名',
-    'departmentName' => '部门',
+    'departmentName' || 'department' || 'dept' => '部门',
     'username' => '账号',
-    'title' => '标题',
-    'createdAt' || 'meetingDate' => '时间',
+    'title' || 'fileName' => '标题',
+    'createdAt' || 'meetingDate' || 'date' => '时间',
     'summary' || 'replySummary' => '摘要',
     'status' || 'statusLabel' => '状态',
-    _ => key,
+    'userId' => '用户编号',
+    'id' => '编号',
+    'type' || 'kind' => '类型',
+    'count' || 'total' => '数量',
+    'documentCount' || 'kbDocuments' || 'knowledgeDocuments' => '文档数',
+    'folderCount' => '文件夹数',
+    'uploadedCount' => '上传数',
+    'minutesCount' || 'meetings' => '会议数',
+    'sessionCount' || 'imSessions' => '会话数',
+    'activeDays' => '活跃天数',
+    'lastSeenAt' => '最近活跃时间',
+    'turnCount' => '对话轮数',
+    'taskTotal' => '任务数',
+    'trips' => '差旅行程数',
+    'durationMs' || 'topModuleDurationMs' => '使用时长（毫秒）',
+    'costFen' || 'amountFen' => '金额（分）',
+    'amount' || 'amountYuan' => '金额（元）',
+    'billNo' => '账单编号',
+    'side' => '收付方向',
+    'period' => '账期',
+    'typeName' => '账单类型',
+    'counterparty' => '交易对方',
+    'ourEntity' => '我方主体',
+    'projectName' => '项目名称',
+    'province' => '省份',
+    'termDays' => '账期天数',
+    'overdueDays' => '逾期天数',
+    'paidYuan' => '已付金额（元）',
+    'reconcileYuan' => '核对金额（元）',
+    'payDiffYuan' => '差额（元）',
+    'account' => '账户',
+    'memo' => '摘要',
+    'flowId' => '流水编号',
+    'entityId' => '主体编号',
+    'priority' => '优先级',
+    'progressPct' => '进度（%）',
+    'dueAt' => '截止时间',
+    'description' => '描述',
+    'pv' || 'PV' => '访问次数',
+    'moduleName' || 'topModuleName' => '板块名称',
+    'moduleKey' => '板块标识',
+    'from' => '起点',
+    'to' => '终点',
+    'legs' => '行程明细',
+    'items' => '明细项目',
+    'pages' => '页面明细',
+    'screenName' => '页面名称',
+    'person' => '人员信息',
+    'modules' || 'topModules' => '板块明细',
+    'source' => '来源',
+    'folder' => '文件夹',
+    'lastMessageAt' => '最后消息时间',
+    'startedAt' => '开始时间',
+    'current' => '当前环节',
+    'code' => '编号',
+    'hint' => '说明',
+    _ => RegExp(r'^[A-Za-z][A-Za-z0-9_]*$').hasMatch(key) ? '未定义字段（$key）' : key,
   };
 
-  String _value(dynamic value) {
+  String _value(dynamic value, [String key = '']) {
     if (value == null) return '—';
-    if (value is Map || value is List) return jsonEncode(value);
+    if (value is bool) return value ? '是' : '否';
+    if (value is Map) {
+      return value.entries
+          .map((e) => '${_label('${e.key}')}：${_value(e.value, '${e.key}')}')
+          .join('；');
+    }
+    if (value is List) {
+      return value.isEmpty ? '无' : value.map((v) => _value(v)).join('；');
+    }
+    if (key == 'side') {
+      return switch ('$value'.toLowerCase()) {
+        'receivable' => '应收',
+        'payable' => '应付',
+        _ => '$value',
+      };
+    }
+    if (key == 'kind') {
+      return switch ('$value'.toLowerCase()) {
+        'channel' => '渠道',
+        'supply' => '供给',
+        _ => '$value',
+      };
+    }
+    if (key == 'status' || key == 'statusLabel') {
+      return switch ('$value'.toLowerCase()) {
+        'pending' => '待处理',
+        'pending_approval' => '待审批',
+        'pending_assignment' => '待接收',
+        'in_progress' || 'in-progress' => '进行中',
+        'completed' || 'done' => '已完成',
+        'cancelled' || 'canceled' => '已取消',
+        'overdue' => '已逾期',
+        'approved' => '已通过',
+        'rejected' => '已驳回',
+        _ =>
+          RegExp(r'^[A-Za-z_\-]+$').hasMatch('$value')
+              ? '状态代码：$value'
+              : '$value',
+      };
+    }
     return '$value';
   }
 
   @override
   Widget build(BuildContext context) {
+    final rows = widget.rows;
+    final color = widget.color;
+    final muted = widget.muted;
     final keys = <String>[];
     for (final row in rows) {
       for (final key in row.keys) {
-        if (keys.length >= 5) break;
         if (!keys.contains(key)) keys.add(key);
       }
     }
-    final columns = keys.take(4).toList();
+    final columns = keys;
+    if (columns.isEmpty) return const SizedBox.shrink();
+    final pageCount = (rows.length + _pageSize - 1) ~/ _pageSize;
+    final page = _page.clamp(0, pageCount - 1);
+    final start = page * _pageSize;
+    final end = (start + _pageSize).clamp(0, rows.length);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2716,7 +2825,7 @@ class _QueryRowsPreview extends StatelessWidget {
             Icon(Icons.dataset_outlined, size: 14, color: muted),
             const SizedBox(width: 5),
             Text(
-              '查询明细 · ${rows.length} 条预览',
+              '查询明细 · 已取得 ${rows.length} 条',
               style: TextStyle(fontSize: 11, color: muted),
             ),
           ],
@@ -2727,7 +2836,7 @@ class _QueryRowsPreview extends StatelessWidget {
           child: DataTable(
             headingRowHeight: 32,
             dataRowMinHeight: 34,
-            dataRowMaxHeight: 56,
+            dataRowMaxHeight: 110,
             horizontalMargin: 10,
             columnSpacing: 18,
             columns: [
@@ -2740,7 +2849,7 @@ class _QueryRowsPreview extends StatelessWidget {
                 ),
             ],
             rows: [
-              for (final row in rows)
+              for (final row in rows.sublist(start, end))
                 DataRow(
                   cells: [
                     for (final key in columns)
@@ -2748,10 +2857,25 @@ class _QueryRowsPreview extends StatelessWidget {
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 180),
                           child: Text(
-                            _value(row[key]),
-                            maxLines: 2,
+                            _value(row[key], key),
+                            maxLines: 4,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(fontSize: 11, color: color),
+                          ),
+                        ),
+                        onTap: () => showDialog<void>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: Text(_label(key)),
+                            content: SingleChildScrollView(
+                              child: SelectableText(_value(row[key], key)),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                child: const Text('关闭'),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -2760,6 +2884,29 @@ class _QueryRowsPreview extends StatelessWidget {
             ],
           ),
         ),
+        if (pageCount > 1)
+          Row(
+            children: [
+              Text(
+                '${start + 1}–$end / ${rows.length}',
+                style: TextStyle(fontSize: 11, color: muted),
+              ),
+              IconButton(
+                tooltip: '上一页',
+                onPressed: page > 0
+                    ? () => setState(() => _page = page - 1)
+                    : null,
+                icon: const Icon(Icons.chevron_left),
+              ),
+              IconButton(
+                tooltip: '下一页',
+                onPressed: page + 1 < pageCount
+                    ? () => setState(() => _page = page + 1)
+                    : null,
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
       ],
     );
   }

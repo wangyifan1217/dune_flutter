@@ -46,25 +46,44 @@ bool isWideChatLayout(BuildContext context) {
   return MediaQuery.sizeOf(context).width >= kWideChatLayoutBreakpoint;
 }
 
+/// 大屏手机气泡上限。
+const double kChatBubblePhoneWideMaxWidth = 340;
+
+/// 手机上气泡离对侧屏幕边缘至少留出的距离（约一个头像位，微信式）。
+const double kChatBubbleOppositeGap = 52;
+
+/// 会话消息头像边长：PC 45，手机 / 平板 40。
+double get chatMessageAvatarSize => isDesktopCommOnly ? 45 : 40;
+
+bool get _isPhonePlatform {
+  if (kIsWeb || isDesktopCommOnly) return false;
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+}
+
+/// 手机气泡上限：随栏宽留出对侧头像位，最少 280、最多 340；
+/// 栏宽超过 [kChatPhoneWidthCap]（平板 / 折叠内屏）仍是 280。
+double _phoneBubbleCap(double available) {
+  if (available > kChatPhoneWidthCap) return kChatBubblePhoneMaxWidth;
+  return (available - kChatBubbleOppositeGap).clamp(
+    kChatBubblePhoneMaxWidth,
+    kChatBubblePhoneWideMaxWidth,
+  );
+}
+
 /// 会话气泡最大宽度。
 ///
-/// [available] 为消息行可用宽度。普通手机（约 75% ≤ 280）仍返回 280；
+/// [available] 为消息行可用宽度。手机按 [_phoneBubbleCap]，大屏手机最宽到 340；
 /// 折叠展开后返回 `available * 0.75`。桌面/Web/iPad 默认不拉宽。
-double chatBubbleMaxWidth(double available, {bool? expand}) {
+double chatBubbleMaxWidth(double available, {bool? expand, bool? phone}) {
   final useExpand = expand ?? shouldExpandChatBubbles;
   if (!(available > 0) || !available.isFinite) {
     return kChatBubblePhoneMaxWidth;
   }
-  if (!useExpand) {
-    return available < kChatBubblePhoneMaxWidth
-        ? available
-        : kChatBubblePhoneMaxWidth;
-  }
+  final floor = (phone ?? _isPhonePlatform)
+      ? _phoneBubbleCap(available)
+      : kChatBubblePhoneMaxWidth;
   final byFactor = available * kChatBubbleWidthFactor;
-  if (byFactor <= kChatBubblePhoneMaxWidth) {
-    return available < kChatBubblePhoneMaxWidth
-        ? available
-        : kChatBubblePhoneMaxWidth;
-  }
-  return byFactor;
+  final cap = useExpand && byFactor > floor ? byFactor : floor;
+  return available < cap ? available : cap;
 }

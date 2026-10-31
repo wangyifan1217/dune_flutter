@@ -6009,7 +6009,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       ),
       child: Stack(
         children: [
-          Positioned.fill(child: content),
+          Positioned.fill(
+            child: DesktopSectionTransition(
+              token: _desktopSectionTransitionToken,
+              child: content,
+            ),
+          ),
           if (_showsAppBottomTabBar(screen))
             Align(alignment: Alignment.bottomCenter, child: tabBar),
         ],
@@ -6105,7 +6110,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     final current = widget.navigation.currentScreen;
     final currentTab = _mainTabScreenFor(current);
-    if (isDesktopCommOnly && currentTab != screen) {
+    if (currentTab != screen) {
       setState(() => _desktopSectionTransitionToken++);
     }
 

@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../nova/presence/nova_presence_host.dart';
 import '../nova/nova_background_coordinator.dart';
 
@@ -142,6 +143,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   Widget get _myTab => _tab(
     icon: Icons.person_outline_rounded,
+    activeIcon: Icons.person_rounded,
     label: '我的',
     screen: 'B2',
     showRedDot: widget.chatOnlyMode ? false : _showMyDot,
@@ -153,13 +155,19 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
   List<Widget> get _tabs => [
     _tab(
       icon: Icons.forum_outlined,
+      activeIcon: Icons.forum_rounded,
       label: '通讯',
       screen: 'C1',
       showRedDot: _showCommDot,
     ),
     if (!_hideWorkbenchTabs) _tab(icon: Icons.people, label: '饕', screen: 'QJ'),
     if (!_hideWorkbenchTabs)
-      _tab(icon: Icons.explore_outlined, label: '灯塔', screen: 'LH'),
+      _tab(
+        icon: Icons.explore_outlined,
+        activeIcon: Icons.explore_rounded,
+        label: '灯塔',
+        screen: 'LH',
+      ),
     if (!_hideWorkbenchTabs && _isVertical)
       _tab(icon: Icons.apps_rounded, label: '工作台', screen: 'QJA'),
     if (!_isVertical) _myTab,
@@ -501,8 +509,19 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     );
   }
 
+  void _selectMainTab(String screen) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final switchMainTab = widget.onSwitchMainTab;
+    if (switchMainTab != null) {
+      switchMainTab(screen);
+    } else {
+      widget.navigation.switchMainTab(screen);
+    }
+  }
+
   Widget _tab({
     IconData? icon,
+    IconData? activeIcon,
     Widget Function(Color color)? iconBuilder,
     required String label,
     String? screen,
@@ -513,20 +532,36 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     final palette =
         Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
     final active = screen != null && widget.activeScreen == screen;
+    if (!_isVertical) {
+      return Expanded(
+        child: _AppTabButton(
+          icon: icon,
+          activeIcon: activeIcon ?? icon,
+          iconBuilder: iconBuilder,
+          label: label,
+          active: active,
+          activeColor: DunesColors.resolve(context, DunesColors.brandPurple),
+          inactiveColor: DunesColors.resolve(context, palette.textSecondary),
+          showRedDot: showRedDot,
+          onTap: () {
+            if (onTap != null) {
+              onTap();
+              return;
+            }
+            if (!active) HapticFeedback.selectionClick();
+            _selectMainTab(screen!);
+          },
+        ),
+      );
+    }
     final color = active
         ? DunesColors.resolve(context, DunesColors.brandPurple)
-        : _isVertical
-        ? palette.textMuted
-        : palette.textSecondary;
+        : palette.textMuted;
     final tabIcon = iconBuilder != null
         ? SizedBox(width: 24, height: 24, child: iconBuilder(color))
         : Icon(
             icon,
-            size: _isVertical && isDesktopCommOnly
-                ? 22
-                : _isVertical
-                ? 24
-                : 23,
+            size: isDesktopCommOnly ? 22 : 24,
             color: DunesColors.resolveNullable(context, color),
           );
 
@@ -534,78 +569,34 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
       selected: active,
       button: true,
       child: InkWell(
-        borderRadius: _isVertical && isDesktopCommOnly
-            ? BorderRadius.circular(12)
-            : _isVertical
-            ? null
-            : BorderRadius.circular(28),
-        onTap:
-            onTap ??
-            () {
-              FocusManager.instance.primaryFocus?.unfocus();
-              final switchMainTab = widget.onSwitchMainTab;
-              if (switchMainTab != null) {
-                switchMainTab(screen!);
-              } else {
-                widget.navigation.switchMainTab(screen!);
-              }
-            },
+        borderRadius: isDesktopCommOnly ? BorderRadius.circular(12) : null,
+        onTap: onTap ?? () => _selectMainTab(screen!),
         child: SizedBox(
-          width: _isVertical ? kDunesMainSideRailWidth : null,
-          height: _isVertical ? 64 : kDunesMainTabBarHeight,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
+          width: kDunesMainSideRailWidth,
+          height: 64,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      if (_isVertical)
-                        tabIcon
-                      else
-                        AnimatedScale(
-                          scale: active ? 1.12 : 1,
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOutBack,
-                          child: SizedBox(
-                            width: 38,
-                            height: 30,
-                            child: Center(child: tabIcon),
-                          ),
-                        ),
-                      if (showRedDot)
-                        const Positioned(
-                          top: -3,
-                          right: -5,
-                          child: _UnreadDot(),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  AnimatedSlide(
-                    offset: active && !_isVertical
-                        ? const Offset(0, -0.08)
-                        : Offset.zero,
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOutCubic,
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: _isVertical && isDesktopCommOnly ? 10.5 : 11,
-                        height: 1.05,
-                        fontWeight:
-                            active && (!_isVertical || isDesktopCommOnly)
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: DunesColors.resolveNullable(context, color),
-                      ),
-                    ),
-                  ),
+                  tabIcon,
+                  if (showRedDot)
+                    const Positioned(top: -3, right: -5, child: _UnreadDot()),
                 ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: isDesktopCommOnly ? 10.5 : 11,
+                  height: 1.05,
+                  fontWeight: active && isDesktopCommOnly
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                  color: DunesColors.resolveNullable(context, color),
+                ),
               ),
             ],
           ),
@@ -613,10 +604,144 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
       ),
     );
 
-    if (_isVertical) {
-      return isDesktopCommOnly ? Tooltip(message: label, child: body) : body;
-    }
-    return Expanded(child: body);
+    return isDesktopCommOnly ? Tooltip(message: label, child: body) : body;
+  }
+}
+
+/// APP 底栏单个 Tab：按下轻压缩、松手弹回；选中时图标由线框换实心并交叉淡入。
+class _AppTabButton extends StatefulWidget {
+  const _AppTabButton({
+    required this.icon,
+    required this.activeIcon,
+    required this.iconBuilder,
+    required this.label,
+    required this.active,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.showRedDot,
+    required this.onTap,
+  });
+
+  final IconData? icon;
+  final IconData? activeIcon;
+  final Widget Function(Color color)? iconBuilder;
+  final String label;
+  final bool active;
+  final Color activeColor;
+  final Color inactiveColor;
+  final bool showRedDot;
+  final VoidCallback onTap;
+
+  @override
+  State<_AppTabButton> createState() => _AppTabButtonState();
+}
+
+class _AppTabButtonState extends State<_AppTabButton> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed != value) setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final active = widget.active;
+    final color = active ? widget.activeColor : widget.inactiveColor;
+    final iconBuilder = widget.iconBuilder;
+    final icon = iconBuilder != null
+        ? SizedBox(
+            key: ValueKey(active),
+            width: 24,
+            height: 24,
+            child: iconBuilder(color),
+          )
+        : Icon(
+            active ? widget.activeIcon : widget.icon,
+            key: ValueKey(active),
+            size: 23,
+            color: color,
+          );
+
+    return Semantics(
+      selected: active,
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _setPressed(true),
+        onTapUp: (_) => _setPressed(false),
+        onTapCancel: () => _setPressed(false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _pressed && !reduceMotion ? 0.9 : 1,
+          duration: Duration(milliseconds: _pressed ? 90 : 260),
+          curve: _pressed ? Curves.easeOut : Curves.easeOutBack,
+          child: SizedBox(
+            height: kDunesMainTabBarHeight,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    SizedBox(
+                      width: 38,
+                      height: 30,
+                      child: Center(
+                        child: AnimatedSwitcher(
+                          duration: reduceMotion
+                              ? Duration.zero
+                              : const Duration(milliseconds: 240),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          // 选中的图标带一点回弹「跳」出来，取消选中的只淡出。
+                          transitionBuilder: (child, animation) =>
+                              FadeTransition(
+                                opacity: animation,
+                                child: ScaleTransition(
+                                  scale:
+                                      Tween<double>(
+                                        begin: active ? 0.6 : 0.85,
+                                        end: 1,
+                                      ).animate(
+                                        CurvedAnimation(
+                                          parent: animation,
+                                          curve: active
+                                              ? Curves.easeOutBack
+                                              : Curves.easeOut,
+                                        ),
+                                      ),
+                                  child: child,
+                                ),
+                              ),
+                          child: icon,
+                        ),
+                      ),
+                    ),
+                    if (widget.showRedDot)
+                      const Positioned(top: -3, right: -5, child: _UnreadDot()),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                AnimatedDefaultTextStyle(
+                  duration: reduceMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.05,
+                    fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                    color: color,
+                  ),
+                  child: Text(widget.label, maxLines: 1),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

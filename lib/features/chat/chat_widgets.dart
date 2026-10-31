@@ -633,11 +633,11 @@ class ChatInputBar extends StatelessWidget {
         return TextFieldTapRegion(
           child: Container(
             padding: EdgeInsets.fromLTRB(
-              wide ? 12 : 10,
+              wide ? 12 : 6,
               canResize
                   ? 0
                   : (showTopBorder ? (wide ? 10 : 8) : (wide ? 6 : 4)),
-              wide ? 12 : 10,
+              wide ? 12 : 6,
               bottomInset > 0
                   ? bottomInset + (wide ? 6 : 4)
                   : (wide ? 12.0 : 8.0),
@@ -679,13 +679,16 @@ class ChatInputBar extends StatelessWidget {
                           onTap: interactionLocked ? null : onToggleVoice,
                         )
                       else
-                        _WeChatCircleIconBtn(
-                          icon: effectiveVoiceMode
-                              ? Icons.keyboard_alt_outlined
-                              : Icons.mic_none_rounded,
-                          onTap: interactionLocked ? null : onToggleVoice,
+                        Padding(
+                          padding: _kMobileComposerButtonPad,
+                          child: _WeChatCircleIconBtn(
+                            icon: effectiveVoiceMode
+                                ? Icons.keyboard_alt_outlined
+                                : Icons.mic_none_rounded,
+                            onTap: interactionLocked ? null : onToggleVoice,
+                          ),
                         ),
-                      const SizedBox(width: 8),
+                      SizedBox(width: wide ? 8 : 4),
                     ],
                     Expanded(
                       child: effectiveVoiceMode
@@ -813,17 +816,22 @@ class ChatInputBar extends StatelessWidget {
                     ),
                     if (showMobileTrailing) ...[
                       if (showEmojiControl) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 2),
                         if (emojiPicker != null)
                           emojiPicker!
                         else if (onEmoji != null)
-                          _WeChatCircleIconBtn(
-                            icon:
-                                secondaryIcon ?? Icons.emoji_emotions_outlined,
-                            onTap: interactionLocked ? null : onEmoji,
+                          Padding(
+                            padding: _kMobileComposerButtonPad,
+                            child: _WeChatCircleIconBtn(
+                              icon:
+                                  secondaryIcon ??
+                                  Icons.emoji_emotions_outlined,
+                              iconSize: 32,
+                              onTap: interactionLocked ? null : onEmoji,
+                            ),
                           ),
                       ],
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 2),
                       AnimatedSize(
                         duration: const Duration(milliseconds: 200),
                         curve: Curves.easeOutCubic,
@@ -843,9 +851,15 @@ class ChatInputBar extends StatelessWidget {
                                   child: child,
                                 ),
                               ),
-                          layoutBuilder: (current, previous) => Stack(
-                            alignment: Alignment.centerRight,
-                            children: [...previous, ?current],
+                          layoutBuilder: (current, previous) => Padding(
+                            padding: _kMobileComposerButtonPad,
+                            child: SizedBox(
+                              height: _kMobileComposerButtonBox,
+                              child: Stack(
+                                alignment: Alignment.centerRight,
+                                children: [...previous, ?current],
+                              ),
+                            ),
                           ),
                           child: showStop
                               ? _WeChatPlusBtn(
@@ -1161,12 +1175,28 @@ class _RoundIconBtn extends StatelessWidget {
   }
 }
 
+/// APP 输入栏按钮的点击区边长（语音 / 表情 / 「+」一致）。
+const double _kMobileComposerButtonBox = 34;
+
+/// APP「+」实心圆直径；表情图标的外圈与它目测等大。
+const double _kMobileComposerDiscSize = 27;
+
+/// 输入栏底部对齐，按钮比单行输入框矮，垫起后单行时上下居中。
+const EdgeInsets _kMobileComposerButtonPad = EdgeInsets.only(bottom: 4);
+
 /// 微信风格圆形图标按钮（语音 / 表情）。
 class _WeChatCircleIconBtn extends StatelessWidget {
-  const _WeChatCircleIconBtn({required this.icon, required this.onTap});
+  const _WeChatCircleIconBtn({
+    required this.icon,
+    required this.onTap,
+    this.iconSize = 26,
+  });
 
   final IconData icon;
   final VoidCallback? onTap;
+
+  /// Material 线框圆形图标的外圈约为字号的 5/6，表情传 32 才和「+」实心圆一样大。
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
@@ -1176,11 +1206,11 @@ class _WeChatCircleIconBtn extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: SizedBox(
-          width: 36,
-          height: 36,
+          width: _kMobileComposerButtonBox,
+          height: _kMobileComposerButtonBox,
           child: Icon(
             icon,
-            size: 26,
+            size: iconSize,
             color: DunesColors.resolve(context, const Color(0xFF1A1A1A)),
           ),
         ),
@@ -1231,14 +1261,14 @@ class _WeChatPlusBtn extends StatelessWidget {
                   const Color(0xFF7E64BD),
                   role: DunesColorRole.surface,
                 ));
-    return Material(
+    final button = Material(
       color: Colors.transparent,
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: Ink(
-          width: 36,
-          height: 36,
+          width: _kMobileComposerDiscSize,
+          height: _kMobileComposerDiscSize,
           decoration: BoxDecoration(
             color: DunesColors.resolveNullable(
               context,
@@ -1251,13 +1281,13 @@ class _WeChatPlusBtn extends StatelessWidget {
             child: showStop
                 ? Icon(
                     Icons.stop_rounded,
-                    size: 18,
+                    size: 15,
                     color: DunesColors.resolve(context, Colors.white),
                   )
                 : sending
                 ? SizedBox(
-                    width: 16,
-                    height: 16,
+                    width: 13,
+                    height: 13,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       color: DunesColors.resolve(context, Colors.white),
@@ -1269,13 +1299,18 @@ class _WeChatPlusBtn extends StatelessWidget {
                     curve: Curves.easeOutBack,
                     child: Icon(
                       Icons.add_rounded,
-                      size: 22,
+                      size: 20,
                       color: DunesColors.resolve(context, Colors.white),
                     ),
                   ),
           ),
         ),
       ),
+    );
+    return SizedBox(
+      width: _kMobileComposerButtonBox,
+      height: _kMobileComposerButtonBox,
+      child: Center(child: button),
     );
   }
 }
@@ -1309,18 +1344,18 @@ class _WeChatSendBtn extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Ink(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 13),
           decoration: BoxDecoration(
             color: DunesColors.resolveNullable(
               context,
               bg,
               role: DunesColorRole.surface,
             ),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: Center(
             child: sending
@@ -1613,6 +1648,14 @@ class _ChatTextFieldState extends State<_ChatTextField> {
           ],
         );
       },
+      // APP 锁定行高：占位提示、中文、emoji、@ 成员混排时单行高度都不跳。
+      strutStyle: widget.wide
+          ? null
+          : const StrutStyle(
+              fontSize: 16,
+              height: 1.35,
+              forceStrutHeight: true,
+            ),
       style: DunesTypography.sans(
         fontSize: widget.wide ? 15 : 16,
         height: widget.wide ? 1.55 : 1.35,
@@ -1624,8 +1667,11 @@ class _ChatTextFieldState extends State<_ChatTextField> {
       ),
       decoration: InputDecoration(
         hintText: widget.hintText ?? '输入消息…',
+        // 群聊提示较长，窄屏折成两行会把输入框撑高。
+        hintMaxLines: widget.wide ? null : 1,
         hintStyle: DunesTypography.sans(
           fontSize: widget.wide ? 15 : 16,
+          height: widget.wide ? null : 1.35,
           color: widget.wide
               ? DunesColors.resolve(context, const Color(0xFF6F6E66))
               : DunesColors.resolve(context, const Color(0xFFB0B0B0)),

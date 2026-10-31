@@ -6001,6 +6001,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
 
     // APP：根页用悬浮底栏覆盖内容，列表能透过导航胶囊呈现毛玻璃效果。
+    // 饕输入框弹键盘时藏起底栏，避免键盘和 Tab 叠在一起。
+    final hideTabForKeyboard =
+        screen == 'QJ' && MediaQuery.viewInsetsOf(context).bottom > 0;
     return ColoredBox(
       color: DunesColors.resolve(
         context,
@@ -6015,7 +6018,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               child: content,
             ),
           ),
-          if (_showsAppBottomTabBar(screen))
+          if (_showsAppBottomTabBar(screen) && !hideTabForKeyboard)
             Align(alignment: Alignment.bottomCenter, child: tabBar),
         ],
       ),

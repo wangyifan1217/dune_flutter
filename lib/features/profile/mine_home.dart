@@ -187,14 +187,55 @@ class _PixelDunesPainter extends CustomPainter {
       old.brightness != brightness;
 }
 
-/// 顶栏：「我的」+ 像素沙丘 + 右侧操作；下一行头像、姓名、部门岗位、本月。
+/// 「我的」最顶一行：标题、沙丘和工作台入口。页面下滑时固定在安全区下方。
+class MineHomeTitleBar extends StatelessWidget {
+  const MineHomeTitleBar({super.key, this.actions = const []});
+
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: _r(context, MinePalette.page, DunesColorRole.surface),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(kMinePageGutter, 18, kMinePageGutter, 8),
+        child: Row(
+          children: [
+            Text(
+              '我的',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+                height: 1,
+                color: _r(context, MinePalette.ink),
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Flexible(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: MinePixelDunes(),
+                ),
+              ),
+            ),
+            ...actions,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class MineHomeHeader extends StatelessWidget {
   const MineHomeHeader({
     super.key,
     required this.avatar,
     required this.name,
     required this.subtitle,
-    this.actions = const [],
     this.month,
     this.onPickMonth,
     this.onCurrentMonth,
@@ -203,7 +244,6 @@ class MineHomeHeader extends StatelessWidget {
   final Widget avatar;
   final String name;
   final String subtitle;
-  final List<Widget> actions;
 
   /// 选中的月份；null 或当月 = 「本月」。
   final DateTime? month;
@@ -271,96 +311,61 @@ class MineHomeHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         kMinePageGutter,
-        18,
+        6,
         kMinePageGutter,
         16,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Text(
-                '我的',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                  height: 1,
-                  color: _r(context, MinePalette.ink),
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Flexible(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: MinePixelDunes(),
-                  ),
-                ),
-              ),
-              ...actions,
-            ],
-          ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: EdgeInsets.zero,
-            child: Row(
+          avatar,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                avatar,
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: _r(context, MinePalette.ink),
-                        ),
-                      ),
-                      if (subtitle.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: _r(context, MinePalette.ink2),
-                          ),
-                        ),
-                      ],
-                    ],
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _r(context, MinePalette.ink),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  height: 36,
-                  padding: const EdgeInsets.all(3),
-                  decoration: _cardDecoration(context, radius: 999),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      segment(
-                        label: '本月',
-                        on: isCurrent,
-                        onTap: isCurrent ? null : onCurrentMonth,
-                      ),
-                      segment(
-                        label: monthLabel,
-                        on: !isCurrent,
-                        onTap: onPickMonth,
-                        picker: true,
-                      ),
-                    ],
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: _r(context, MinePalette.ink2),
+                    ),
                   ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            height: 36,
+            padding: const EdgeInsets.all(3),
+            decoration: _cardDecoration(context, radius: 999),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                segment(
+                  label: '本月',
+                  on: isCurrent,
+                  onTap: isCurrent ? null : onCurrentMonth,
+                ),
+                segment(
+                  label: monthLabel,
+                  on: !isCurrent,
+                  onTap: onPickMonth,
+                  picker: true,
                 ),
               ],
             ),

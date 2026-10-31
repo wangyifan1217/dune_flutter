@@ -73,71 +73,6 @@ class QianjiChatScopeGroup {
   final bool initiallyExpanded;
 }
 
-class _Example {
-  const _Example({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.text,
-    this.scope,
-    this.selectEnd = 0,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String text;
-  final String? scope;
-
-  /// 大于 0 时只填入输入框并选中前 N 个字符，方便直接改成真实姓名或部门。
-  final int selectEnd;
-}
-
-const _examples = <_Example>[
-  _Example(
-    icon: Icons.person_search_rounded,
-    color: Color(0xFF6B5CE8),
-    title: '按人查询',
-    text: '张三的知识库有多少文档',
-    selectEnd: 2,
-  ),
-  _Example(
-    icon: Icons.apartment_rounded,
-    color: Color(0xFF4884E8),
-    title: '按部门查询',
-    text: '技术部的知识库有多少文档',
-    selectEnd: 3,
-  ),
-  _Example(
-    icon: Icons.account_balance_rounded,
-    color: Color(0xFF2E7D32),
-    title: '资金看板',
-    text: '资金流向概览',
-    scope: '资金流向',
-  ),
-  _Example(
-    icon: Icons.receipt_long_rounded,
-    color: Color(0xFF7B5CD8),
-    title: '月结账单',
-    text: '月结应收逾期多少？',
-    scope: '月结',
-  ),
-  _Example(
-    icon: Icons.task_alt_outlined,
-    color: Color(0xFF2F8F7E),
-    title: '我的任务',
-    text: '我的进行中任务有多少？',
-    scope: '任务',
-  ),
-  _Example(
-    icon: Icons.grid_view_rounded,
-    color: Color(0xFFD67E33),
-    title: '使用热力',
-    text: '本月使用热力概览',
-    scope: '使用热力',
-  ),
-];
-
 List<String> qianjiScopeSuggestions(String scope) => switch (scope) {
   '资金流向' => const ['资金流向概览', '资金流向流水列表'],
   '月结' => const ['月结概览', '应收账单列表', '应付账单列表', '应收逾期多少？', '应付逾期多少？'],
@@ -153,6 +88,14 @@ List<String> qianjiScopeSuggestions(String scope) => switch (scope) {
   '日报' || '群响应' => ['$scope有多少？'],
   _ => const [],
 };
+
+final _detailAsk = RegExp(
+  r'明细|列表|清单|名单|详情|详细|哪些|有谁|是谁|列出|列一下|都有什么|每个|逐个|excel|导出|表格',
+  caseSensitive: false,
+);
+
+/// 问题里明确要明细/列表时才默认展开查询明细。
+bool qianjiAsksForDetail(String question) => _detailAsk.hasMatch(question);
 
 /// 新版饕：独立对话查询页。会话与小饕历史不共用，结果按当前权限实时重查。
 class QianjiChatPanel extends StatefulWidget {
@@ -177,6 +120,7 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
     with SingleTickerProviderStateMixin {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
+  final _composerKey = GlobalKey();
   final _scroll = ScrollController();
   late final AnimationController _sidebarAnim = AnimationController(
     vsync: this,
@@ -223,9 +167,6 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
     for (final group in widget.scopeGroups)
       for (final scope in group.scopes) scope.label: scope.onOpen,
   };
-
-  bool _scopeEnabled(String scope) =>
-      scope == qianjiAllScopes || _scopeActions[scope] != null;
 
   @override
   void initState() {
@@ -341,6 +282,9 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
     if (_visible == visible) return;
     final wasVisible = _visible;
     _visible = visible;
+    if (!visible && wasVisible == true) {
+      _focusNode.unfocus();
+    }
     if (visible && wasVisible == false) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _visible != true) return;
@@ -349,6 +293,18 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
         if (id != null && _turns.isEmpty) unawaited(_openChat(id));
       });
     }
+  }
+
+  /// 点输入区以外（空白、板块、模块入口）时收起键盘。
+  void _dismissKeyboardIfOutsideComposer(PointerDownEvent event) {
+    if (!_focusNode.hasFocus) return;
+    final box = _composerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) {
+      _focusNode.unfocus();
+      return;
+    }
+    final local = box.globalToLocal(event.position);
+    if (!box.size.contains(local)) _focusNode.unfocus();
   }
 
   @override
@@ -658,21 +614,6 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
     }
   }
 
-  void _useExample(_Example example) {
-    if (example.selectEnd > 0) {
-      _controller.value = TextEditingValue(
-        text: example.text,
-        selection: TextSelection(
-          baseOffset: 0,
-          extentOffset: example.selectEnd,
-        ),
-      );
-      _focusNode.requestFocus();
-      return;
-    }
-    unawaited(_send(example.text));
-  }
-
   void _editFailed() {
     final question = _failedQuestion;
     if (question == null) return;
@@ -717,7 +658,10 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
             _centered(_buildComposerArea()),
           ],
         );
-        return DecoratedBox(
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: _dismissKeyboardIfOutsideComposer,
+          child: DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
@@ -789,6 +733,7 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
                 ],
               );
             },
+          ),
           ),
         );
       },
@@ -891,7 +836,10 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
             QianjiPillButton(
               icon: Icons.dashboard_outlined,
               label: '模块入口',
-              onTap: widget.onSwitchLegacy,
+              onTap: () {
+                _focusNode.unfocus();
+                widget.onSwitchLegacy();
+              },
             ),
           ],
         ),
@@ -1012,6 +960,9 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
                       child: _ReplyCard(
                         scope: scope,
                         reply: reply,
+                        showRowsByDefault: qianjiAsksForDetail(
+                          '${turn['question']}',
+                        ),
                         reveal: fresh,
                         maxWidth: bubbleMax + 40,
                         onCopy: () => _copy(reply),
@@ -1189,9 +1140,11 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
     final name = widget.session?.displayName?.trim() ?? '';
     final scoped = _scope != qianjiAllScopes;
     final suggestions = qianjiScopeSuggestions(_scope);
-    final examples = _examples
-        .where((e) => e.scope == null || _scopeEnabled(e.scope!))
-        .toList();
+    final boards = [
+      for (final group in widget.scopeGroups)
+        for (final scope in group.scopes)
+          if (scope.onOpen != null) scope.label,
+    ];
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 620 ? 3 : 2;
@@ -1222,24 +1175,28 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
                   ),
                 ],
               )
+            : boards.isEmpty
+            ? const SizedBox.shrink(key: ValueKey('no-boards'))
             : Column(
-                key: const ValueKey('examples'),
+                key: const ValueKey('boards'),
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _SectionLabel(text: '试试这样问'),
+                  _SectionLabel(text: '可查询的板块 · 点选后给出常用问题'),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: gap,
                     runSpacing: gap,
                     children: [
-                      for (var i = 0; i < examples.length; i++)
+                      for (var i = 0; i < boards.length; i++)
                         _Appear(
-                          delay: 80 + i * 45,
+                          delay: 60 + i * 30,
                           child: SizedBox(
                             width: cardWidth,
-                            child: _ExampleCard(
-                              example: examples[i],
-                              onTap: () => _useExample(examples[i]),
+                            child: _BoardTile(
+                              label: boards[i],
+                              hint: qianjiScopeSuggestions(boards[i]).firstOrNull ??
+                                  '直接提问',
+                              onTap: () => _selectScope(boards[i]),
                             ),
                           ),
                         ),
@@ -1310,11 +1267,15 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
   }
 
   Widget _buildComposerArea() {
-    final navOverlay = dunesAppBottomNavOverlayExtent(context);
-    final bottom = navOverlay > 0
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final navOverlay = keyboard > 0 ? 0.0 : dunesAppBottomNavOverlayExtent(context);
+    final bottom = keyboard > 0
+        ? keyboard + 8
+        : navOverlay > 0
         ? navOverlay + 8
         : MediaQuery.paddingOf(context).bottom + 12;
     return Padding(
+      key: _composerKey,
       padding: EdgeInsets.fromLTRB(14, 4, 14, bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1382,6 +1343,7 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
                 maxLines: 5,
                 minLines: 1,
                 textInputAction: TextInputAction.send,
+                onTapOutside: (_) => _focusNode.unfocus(),
                 onSubmitted: (_) => unawaited(_send()),
                 cursorColor: _c(_purple),
                 style: TextStyle(fontSize: 13.5, height: 1.45, color: _c(_ink)),
@@ -2083,15 +2045,20 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-class _ExampleCard extends StatelessWidget {
-  const _ExampleCard({required this.example, required this.onTap});
+class _BoardTile extends StatelessWidget {
+  const _BoardTile({
+    required this.label,
+    required this.hint,
+    required this.onTap,
+  });
 
-  final _Example example;
+  final String label;
+  final String hint;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = DunesColors.resolve(context, example.color);
+    final color = DunesColors.resolve(context, _purple);
     return _Pressable(
       child: Material(
         color: DunesColors.resolve(
@@ -2133,18 +2100,22 @@ class _ExampleCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: DunesColors.resolve(
                           context,
-                          example.color,
+                          _purple,
                           role: DunesColorRole.surface,
-                        ).withValues(alpha: 0.12),
+                        ).withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       alignment: Alignment.center,
-                      child: Icon(example.icon, size: 14, color: color),
+                      child: Icon(
+                        qianjiScopeIcons[label] ?? Icons.apps_rounded,
+                        size: 14,
+                        color: color,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        example.title,
+                        label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -2154,16 +2125,21 @@ class _ExampleCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 16,
+                      color: DunesColors.resolve(context, _faint),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
-                  '「${example.text}」',
-                  maxLines: 2,
+                  hint,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 11.5,
-                    height: 1.45,
+                    fontSize: 11,
+                    height: 1.4,
                     color: DunesColors.resolve(context, _muted),
                   ),
                 ),
@@ -2306,10 +2282,14 @@ class _ReplyCard extends StatefulWidget {
     required this.onFollowUp,
     this.reveal = false,
     this.onRevealed,
+    this.showRowsByDefault = false,
   });
 
   final String scope;
   final String reply;
+
+  /// 用户问的是明细/列表时直接展开查询明细；只问数量时收起，可手动展开。
+  final bool showRowsByDefault;
   final double maxWidth;
   final VoidCallback onCopy;
   final VoidCallback? onOpenPage;
@@ -2332,6 +2312,7 @@ class _ReplyCardState extends State<_ReplyCard>
   late List<String> _bullets;
   AnimationController? _anim;
   double _headShare = 1;
+  late bool _rowsOpen = widget.showRowsByDefault;
 
   @override
   void initState() {
@@ -2553,12 +2534,41 @@ class _ReplyCardState extends State<_ReplyCard>
                     ),
                   ),
                 ],
-                if (rows.isNotEmpty) ...[
+                if (rows.isNotEmpty && _rowsOpen) ...[
                   const SizedBox(height: 12),
                   _QueryRowsPreview(
                     rows: rows,
                     color: c(_ink),
                     muted: c(_muted),
+                  ),
+                ],
+                if (rows.isNotEmpty && !_rowsOpen) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => setState(() => _rowsOpen = true),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.table_rows_outlined, size: 14, color: c(_purple)),
+                            const SizedBox(width: 4),
+                            Text(
+                              '查看明细 · ${rows.length} 条',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: c(_purple),
+                              ),
+                            ),
+                            Icon(Icons.expand_more_rounded, size: 16, color: c(_purple)),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 6),

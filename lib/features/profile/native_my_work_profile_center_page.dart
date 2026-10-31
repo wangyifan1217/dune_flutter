@@ -1284,7 +1284,47 @@ class _NativeMyWorkProfileCenterPageState
         bottom: false,
         child: Stack(
           children: [
-            RefreshIndicator(
+            Column(
+              children: [
+                MineHomeTitleBar(
+                  actions: [
+                    if (!isDesktopCommOnly && !widget.session.isExternalUser)
+                      MineWorkbenchChip(onTap: _openWorkbench),
+                    if (!isDesktopCommOnly)
+                      MineRoundAction(
+                        icon: Icons.qr_code_scanner_rounded,
+                        tooltip: '扫一扫',
+                        onTap: _openQrScanner,
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: DunesColors.resolve(
+                              context,
+                              MinePalette.card,
+                              role: DunesColorRole.surface,
+                            ),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF2B2160).withValues(alpha: .06),
+                                blurRadius: 18,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: _buildMoreMenu(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: RefreshIndicator(
               onRefresh: () async {
                 setState(() => _mineRefreshToken++);
                 await _loadAffairsData(silent: true);
@@ -1366,45 +1406,6 @@ class _NativeMyWorkProfileCenterPageState
                             ),
                             name: name,
                             subtitle: identityLine,
-                            actions: [
-                              if (!isDesktopCommOnly &&
-                                  !widget.session.isExternalUser)
-                                MineWorkbenchChip(onTap: _openWorkbench),
-                              // 扫一扫仅 PC 桌面端隐藏；APP 与浏览器预览均展示。
-                              if (!isDesktopCommOnly)
-                                MineRoundAction(
-                                  icon: Icons.qr_code_scanner_rounded,
-                                  tooltip: '扫一扫',
-                                  onTap: _openQrScanner,
-                                ),
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: SizedBox(
-                                  width: 40,
-                                  height: 40,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: DunesColors.resolve(
-                                        context,
-                                        MinePalette.card,
-                                        role: DunesColorRole.surface,
-                                      ),
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(
-                                            0xFF2B2160,
-                                          ).withValues(alpha: .06),
-                                          blurRadius: 18,
-                                          offset: const Offset(0, 6),
-                                        ),
-                                      ],
-                                    ),
-                                    child: _buildMoreMenu(),
-                                  ),
-                                ),
-                              ),
-                            ],
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(
@@ -1436,6 +1437,9 @@ class _NativeMyWorkProfileCenterPageState
                   ),
                 ],
               ),
+            ),
+                ),
+              ],
             ),
 
             // 更多：提案、审批与 App 常用办公入口。PC 侧栏已有工作台，这里不重复放。

@@ -10,7 +10,9 @@ abstract final class InboxFormat {
     final now = DateTime.now();
     final hm =
         '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-    if (local.year == now.year && local.month == now.month && local.day == now.day) {
+    if (local.year == now.year &&
+        local.month == now.month &&
+        local.day == now.day) {
       return hm;
     }
     final diff = now.difference(local).inHours / 24.0;
@@ -33,6 +35,21 @@ abstract final class InboxFormat {
     if (local.year == clock.year) {
       return '${local.month}月${local.day}日 $hm';
     }
+    return '${local.year}年${local.month}月${local.day}日 $hm';
+  }
+
+  /// 聊天气泡：今天只显示时间，其他日期显示具体日期和时间。
+  static String messageBubbleTimeLabel(DateTime? at, {DateTime? now}) {
+    if (at == null) return '';
+    final local = at.isUtc ? at.toLocal() : at;
+    final clock = now == null
+        ? DateTime.now()
+        : (now.isUtc ? now.toLocal() : now);
+    final hm =
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+    if (_dayKey(local) == _dayKey(clock)) return hm;
+    if (local.year == clock.year) return '${local.month}月${local.day}日 $hm';
     return '${local.year}年${local.month}月${local.day}日 $hm';
   }
 
@@ -74,10 +91,7 @@ abstract final class InboxFormat {
 }
 
 class PersonAvatarStyle {
-  const PersonAvatarStyle({
-    required this.gradient,
-    required this.textColor,
-  });
+  const PersonAvatarStyle({required this.gradient, required this.textColor});
 
   final List<Color> gradient;
   final Color textColor;

@@ -124,11 +124,12 @@ class _ChatScrollMetrics {
   int get initialPageSize =>
       (visibleMessageEstimate * 1.8).round().clamp(15, 24);
 
-  /// 上滑/下拉分页：约 1.2 屏，12~18 条。
-  int get batchPageSize => (visibleMessageEstimate * 1.2).round().clamp(12, 18);
+  /// 上滑/下拉分页：约 2.5 屏，20~30 条；一页要明显高于 [prefetchLead]，
+  /// 否则 prepend 后仍在预拉区内会连续触发。
+  int get batchPageSize => (visibleMessageEstimate * 2.5).round().clamp(20, 30);
 
-  /// 距顶部剩余多少时预拉下一批（约 0.55 屏）。
-  double get prefetchLead => listViewportHeight * 0.55;
+  /// 距顶部剩余多少时预拉下一批（约 1 屏），用户滑到顶前数据已就位。
+  double get prefetchLead => listViewportHeight;
 
   /// 列表预渲染范围（约 0.85 屏）。
   double get cacheExtent => listViewportHeight * 0.85;
@@ -801,14 +802,18 @@ class _NativeChatViewState extends State<NativeChatView>
       _recordHoldAction == VoiceHoldAction.transcribe;
   bool _loadingOlder = false;
 
-  /// prepend 历史消息后正在恢复滚动位置，避免仍停在 maxScrollExtent 连续拉完全部历史。
+  /// 切会话 / 重新加载时递增，作废在途的历史页请求。
+  int _olderLoadSeq = 0;
+
+  /// 上次拉历史失败：顶部改为「点击重试」，自动预拉退避一段时间。
+  bool _olderLoadFailed = false;
+
+  /// 历史页刚 prepend、新布局尚未完成，避免仍按旧 maxScrollExtent 连续拉完全部历史。
   bool _olderScrollRestorePending = false;
   int _olderLoadCooldownUntilMs = 0;
   int _newerLoadCooldownUntilMs = 0;
   int? _scrollRestoreAnchorId;
   final Map<int, GlobalKey> _scrollRestoreKeys = <int, GlobalKey>{};
-  ScrollHoldController? _olderScrollHold;
-  double _olderScrollHoldPixels = 0;
 
   /// 最小化期间收到新消息但贴底失败时，恢复前台后再滚一次。
   /// 也会在「最小化前贴在最新端」时置位，避免还原窗口把列表拽去历史方向。
@@ -823,7 +828,6 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _foregroundPauseWasObscured = false;
   DateTime? _foregroundRestoredAt;
   DateTime? _lastPointerSignalScrollAt;
-  double _olderScrollHoldMax = 0;
   bool _loadingNewer = false;
   bool _locatedMode = false;
   bool _forceLatestMode = false;
@@ -1237,6 +1241,11 @@ class _NativeChatViewState extends State<NativeChatView>
       // 同一 State 复用时立即作废旧加载；有缓存则先展示，避免整页转圈。
       _persistComposeDraft(flush: true);
       _loadGeneration++;
+      _olderLoadSeq++;
+      _loadingOlder = false;
+      _olderLoadFailed = false;
+      _olderScrollRestorePending = false;
+      _olderLoadCooldownUntilMs = 0;
       _enterStickBottomPending = true;
       _userInteractedWithScroll = false;
       _locatedMode = false;
@@ -1540,7 +1549,6 @@ class _NativeChatViewState extends State<NativeChatView>
       unawaited(NativeAudioRecorder.instance.cancel());
     }
     unawaited(ChatVoicePlayer.instance.stop());
-    _olderScrollHold?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
     _headerDividerVisible.dispose();
@@ -1650,7 +1658,9 @@ class _NativeChatViewState extends State<NativeChatView>
     if (nowMs < _olderLoadCooldownUntilMs) return false;
     // 内容撑不满：无法靠「滑到顶」触发，直接续拉。
     if (pos.maxScrollExtent <= 24) return true;
-    final edge = math.max(120.0, pos.viewportDimension * 0.35);
+    final edge = _ChatScrollMetrics.fromListViewport(
+      pos.viewportDimension,
+    ).prefetchLead;
     return pos.pixels >= pos.maxScrollExtent - edge;
   }
 
@@ -1683,10 +1693,14 @@ class _NativeChatViewState extends State<NativeChatView>
     if (event.scrollDelta.dy < 0) {
       _lastUserScrollTowardLatestAt = null;
       if (!_hasMore || _loadingOlder || _olderScrollRestorePending) return;
+      if (DateTime.now().millisecondsSinceEpoch < _olderLoadCooldownUntilMs) {
+        return;
+      }
+      final edge = _ChatScrollMetrics.fromListViewport(
+        pos.viewportDimension,
+      ).prefetchLead;
       if (pos.maxScrollExtent <= 24 ||
-          pos.pixels >=
-              pos.maxScrollExtent -
-                  math.max(160.0, pos.viewportDimension * 0.4)) {
+          pos.pixels >= pos.maxScrollExtent - edge) {
         unawaited(_loadOlder());
       }
       return;
@@ -2897,14 +2911,6 @@ class _NativeChatViewState extends State<NativeChatView>
     return _sendEnterStartedAt[m.id] = now;
   }
 
-  /// 日期已由分隔条给出，消息上只写时分。
-  static String _messageClockLabel(DateTime? at) {
-    if (at == null) return '';
-    final local = at.isUtc ? at.toLocal() : at;
-    return '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
-  }
-
   String _privateHeaderSubtitle(NativeConversation conv) {
     if (conv.isSelfMemo) return '';
     final parts = <String>[];
@@ -3234,68 +3240,6 @@ class _NativeChatViewState extends State<NativeChatView>
     return ValueKey<int>(messageId);
   }
 
-  void _finishOlderScrollRestore() {
-    _olderScrollHold?.cancel();
-    _olderScrollHold = null;
-    _scrollRestoreAnchorId = null;
-    _releaseOlderScrollRestoreGate();
-    if (mounted) setState(() {});
-    // 恢复锚点后再检查是否仍需补页（未撑满 / 仍贴历史顶）。
-    _scheduleAutoloadOlderToFill();
-  }
-
-  void _ensureAnchorVisibleAfterOlderLoad(
-    int anchorId, {
-    int attempt = 0,
-    double? fallbackPixels,
-    double? fallbackOldMax,
-    required int gen,
-  }) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (gen != _messageScrollGen) {
-        _olderScrollHold?.cancel();
-        _olderScrollHold = null;
-        _scrollRestoreAnchorId = null;
-        _releaseOlderScrollRestoreGate();
-        return;
-      }
-      if (!_scrollController.hasClients) {
-        _finishOlderScrollRestore();
-        return;
-      }
-      final ctx = _scrollRestoreKeys[anchorId]?.currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(ctx, alignment: 0.06, duration: Duration.zero);
-        _finishOlderScrollRestore();
-        return;
-      }
-      if (attempt < 18) {
-        _ensureAnchorVisibleAfterOlderLoad(
-          anchorId,
-          attempt: attempt + 1,
-          fallbackPixels: fallbackPixels,
-          fallbackOldMax: fallbackOldMax,
-          gen: gen,
-        );
-        return;
-      }
-      if (fallbackPixels != null && fallbackOldMax != null) {
-        final pos = _scrollController.position;
-        final delta = pos.maxScrollExtent - fallbackOldMax;
-        if (delta > 0.5) {
-          final wasAtHistoryTop =
-              fallbackOldMax > 0 && fallbackPixels >= fallbackOldMax - 1.0;
-          final target = wasAtHistoryTop
-              ? fallbackPixels.clamp(0.0, pos.maxScrollExtent)
-              : (fallbackPixels + delta).clamp(0.0, pos.maxScrollExtent);
-          _scrollController.jumpTo(target);
-        }
-      }
-      _finishOlderScrollRestore();
-    });
-  }
-
   Future<void> _loadOlder() async {
     final conv = _conversation;
     if (conv == null ||
@@ -3307,12 +3251,19 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     final oldestId = _messages.first.id;
     if (oldestId <= 0) return;
-    final anchorMessageId = _topVisibleMessageId() ?? oldestId;
     final batchSize = _scrollController.hasClients
         ? _ChatScrollMetrics.fromListViewport(
             _scrollController.position.viewportDimension,
           ).batchPageSize
         : _scrollMetricsForScreen().batchPageSize;
+    final seq = ++_olderLoadSeq;
+    // 切走会话、或列表被整页重载后，这一页已接不上当前列表。
+    bool stale() =>
+        !mounted ||
+        seq != _olderLoadSeq ||
+        _conversation?.id != conv.id ||
+        _messages.isEmpty ||
+        _messages.first.id != oldestId;
     setState(() => _loadingOlder = true);
     try {
       final page = await _service.fetchMessagePage(
@@ -3320,55 +3271,22 @@ class _NativeChatViewState extends State<NativeChatView>
         size: batchSize,
         before: oldestId,
       );
-      if (!mounted) return;
+      if (stale()) return;
+      _olderLoadFailed = false;
       if (page.items.isEmpty) {
-        _olderScrollHold?.cancel();
-        _olderScrollHold = null;
         setState(() => _hasMore = false);
         return;
       }
       final merged = _enrichMessages(_mergeMessages(page.items, _messages));
       if (!mounted) return;
-      // 网络请求期间允许用户继续滚动；响应回来后再以当前视口为锚点。
-      // ScrollHold 只覆盖 prepend 与锚点恢复，避免整个请求期间吞掉滚轮输入。
-      final restoreAnchorMessageId = _topVisibleMessageId() ?? anchorMessageId;
-      final restoreOldPixels = _scrollController.hasClients
-          ? _scrollController.position.pixels
-          : 0.0;
-      final restoreOldMax = _scrollController.hasClients
-          ? _scrollController.position.maxScrollExtent
-          : 0.0;
-      // 贴底看最新时补历史：只钉在最新端，不要 ensureVisible 把视口往上拽。
+      // 贴底看最新时补历史：只钉在最新端，不要把视口往上拽。
       // 用户已上滑看历史时，绝不能走贴底分支（否则 APP 上滑加载会被拽回最新）。
       final stickBottom =
           !_isBrowsingHistory &&
           !_isScrolledAwayFromLatest &&
           (_enterStickBottomPending || _isNearBottom);
-      if (stickBottom) {
-        _olderScrollHold?.cancel();
-        _olderScrollHold = null;
-        _scrollRestoreAnchorId = null;
-        setState(() {
-          _messages = merged;
-          _hasMore = page.hasMore;
-          _loadingOlder = false;
-          _refreshFirstUnreadAfterHistory(merged);
-        });
-        unawaited(_refreshDownloadedFileFlags());
-        _olderLoadCooldownUntilMs = DateTime.now().millisecondsSinceEpoch + 600;
-        _releaseOlderScrollRestoreGate();
-        _scrollBottom(force: true, gentle: false);
-        _scheduleAutoloadOlderToFill();
-        _scheduleUnreadVisibilityCheck();
-        return;
-      }
-      _scrollRestoreAnchorId = restoreAnchorMessageId;
-      _olderScrollHold?.cancel();
-      _olderScrollHoldPixels = restoreOldPixels;
-      _olderScrollHoldMax = restoreOldMax;
-      if (_scrollController.hasClients) {
-        _olderScrollHold = _scrollController.position.hold(() {});
-      }
+      // reverse 列表的 offset 从最新端算起，更早的消息追加在视觉顶部之外，
+      // 视口内容天然不动；不要 hold / ensureVisible，否则会打断惯性并跳到估算锚点。
       _olderScrollRestorePending = true;
       setState(() {
         _messages = merged;
@@ -3377,28 +3295,33 @@ class _NativeChatViewState extends State<NativeChatView>
         _refreshFirstUnreadAfterHistory(merged);
       });
       unawaited(_refreshDownloadedFileFlags());
-      _olderLoadCooldownUntilMs = DateTime.now().millisecondsSinceEpoch + 600;
-      _ensureAnchorVisibleAfterOlderLoad(
-        restoreAnchorMessageId,
-        fallbackPixels: _olderScrollHoldPixels,
-        fallbackOldMax: _olderScrollHoldMax,
-        gen: _messageScrollGen,
-      );
+      _releaseOlderScrollRestoreGate();
+      if (stickBottom) {
+        _scrollBottom(force: true, gentle: false);
+      }
       _scheduleUnreadVisibilityCheck();
     } catch (e) {
-      _olderScrollHold?.cancel();
-      _olderScrollHold = null;
-      _scrollRestoreAnchorId = null;
+      if (stale()) return;
       _olderScrollRestorePending = false;
-      _showToast('加载历史失败：${friendlyErrorText(e)}');
+      // 预拉在滚动中反复触发：连续失败只提示一次，并退避后再自动重试。
+      if (!_olderLoadFailed) {
+        _showToast('加载历史失败：${friendlyErrorText(e)}');
+      }
+      _olderLoadFailed = true;
+      _olderLoadCooldownUntilMs = DateTime.now().millisecondsSinceEpoch + 3000;
     } finally {
-      if (mounted && _loadingOlder) setState(() => _loadingOlder = false);
+      if (mounted && seq == _olderLoadSeq && _loadingOlder) {
+        setState(() => _loadingOlder = false);
+      }
     }
   }
 
   void _releaseOlderScrollRestoreGate() {
     Future<void>.delayed(const Duration(milliseconds: 120), () {
-      if (mounted) _olderScrollRestorePending = false;
+      if (!mounted) return;
+      _olderScrollRestorePending = false;
+      // 未撑满视口 / 仍贴历史顶时继续补页。
+      _scheduleAutoloadOlderToFill();
     });
   }
 
@@ -3495,8 +3418,6 @@ class _NativeChatViewState extends State<NativeChatView>
     final focusToSuppress = widget.focusMessageId ?? 0;
     _messageScrollGen++;
     _highlightTimer?.cancel();
-    _olderScrollHold?.cancel();
-    _olderScrollHold = null;
     _olderScrollRestorePending = false;
     _scrollRestoreAnchorId = null;
     setState(() {
@@ -11359,8 +11280,10 @@ class _NativeChatViewState extends State<NativeChatView>
                                                         : TextButton(
                                                             onPressed:
                                                                 _loadOlder,
-                                                            child: const Text(
-                                                              '加载更早消息',
+                                                            child: Text(
+                                                              _olderLoadFailed
+                                                                  ? '加载失败，点击重试'
+                                                                  : '加载更早消息',
                                                             ),
                                                           ),
                                                   ),
@@ -11388,7 +11311,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                               final highlighted =
                                                   _highlightMessageId == m.id;
                                               final timeLabel =
-                                                  _messageClockLabel(
+                                                  InboxFormat.messageBubbleTimeLabel(
                                                     m.createdAt,
                                                   );
                                               final rowAvatar =
@@ -11682,24 +11605,6 @@ class _NativeChatViewState extends State<NativeChatView>
                                           ),
                                         );
                                       },
-                                    ),
-                                  ),
-                                if (_loadingOlder)
-                                  const Positioned(
-                                    top: 8,
-                                    left: 0,
-                                    right: 0,
-                                    child: Center(
-                                      child: Material(
-                                        color: Colors.transparent,
-                                        child: SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
-                                      ),
                                     ),
                                   ),
                                 if (_locating)

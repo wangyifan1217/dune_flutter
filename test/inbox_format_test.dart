@@ -4,6 +4,25 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   final now = DateTime(2026, 9, 10, 15, 4);
 
+  test('聊天气泡非今天的时间显示具体日期', () {
+    expect(InboxFormat.messageBubbleTimeLabel(null, now: now), '');
+    expect(
+      InboxFormat.messageBubbleTimeLabel(DateTime(2026, 9, 10, 9, 8), now: now),
+      '09:08',
+    );
+    expect(
+      InboxFormat.messageBubbleTimeLabel(DateTime(2026, 9, 9, 21, 6), now: now),
+      '9月9日 21:06',
+    );
+    expect(
+      InboxFormat.messageBubbleTimeLabel(
+        DateTime(2025, 12, 31, 23, 5),
+        now: now,
+      ),
+      '2025年12月31日 23:05',
+    );
+  });
+
   test('当天消息只显示时分', () {
     expect(
       InboxFormat.msgTimeLabel(DateTime(2026, 9, 10, 9, 8), now: now),

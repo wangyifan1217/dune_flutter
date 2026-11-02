@@ -4217,6 +4217,58 @@ void main() {
         'skuDetails': [
           {
             'id': 'sku-1',
+            'productName': '广西移动出行会员银卡',
+            'supplierCodes': 'SUP-1',
+            'settlements': [
+              {
+                'id': 'st-main',
+                'billType': '会员销售款',
+                'settleRatio': '1',
+                'formula': '按下发统计结算单价',
+                'taxRate': '6%',
+                'ourParty': '沙丘',
+                'counterparty': '移动',
+              },
+            ],
+          },
+        ],
+        'childProducts': [
+          {
+            'id': 'child-1',
+            'productName': '现金券',
+            'couponKind': '现金券',
+            'parentSkuId': 'sku-1',
+            'supplierCodes': 'SUP-1',
+            'settlements': [
+              {
+                'id': 'st-1',
+                'billType': '会员销售款',
+                'settleRatio': '0.97',
+                'formula': '销售面值*结算比例',
+                'taxRate': '0%',
+                'ourParty': '沙丘',
+                'counterparty': '移动',
+              },
+              {
+                'id': 'st-1-coupon',
+                'kind': 'cost',
+                'settleRatio': '0.97',
+                'formula': '核销面值*结算比例',
+                'taxRate': '0%',
+                'ourParty': '沙丘',
+                'counterparty': '移动',
+              },
+            ],
+          },
+        ],
+      }),
+      isNot(contains('请选择成本类型')),
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'skuDetails': [
+          {
+            'id': 'sku-1',
             'productName': '中石油100元',
             'supplierCodes': 'SUP-1',
             'settlements': [

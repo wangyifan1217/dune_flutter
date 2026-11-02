@@ -6182,6 +6182,20 @@ String proposalIntakeSettleLabel(int index, {String kind = '结算'}) {
   return '$kind${index + 1}';
 }
 
+/// 挂在某条收入下面的电子券采购款。id 固定为「收入 id-coupon」。
+///
+/// 页面只填比例、公式、税率和主体，不出现成本类型。提交校验不要把它当成项目成本。
+bool proposalIntakeIsIncomeCouponCost(
+  ProposalSkuSettleRow row,
+  List<ProposalSkuSettleRow> settlements,
+) {
+  const suffix = '-coupon';
+  if (!row.isCost || !row.id.endsWith(suffix)) return false;
+  final incomeId = row.id.substring(0, row.id.length - suffix.length);
+  if (incomeId.isEmpty) return false;
+  return settlements.any((item) => !item.isCost && item.id == incomeId);
+}
+
 List<ProposalSkuSettleRow> proposalIntakeSettlementsOf({
   required String id,
   required List<ProposalSkuSettleRow> settlements,
@@ -6612,10 +6626,16 @@ List<String> _proposalIntakeSkuGroupIssues({
     final name = rowLabel(i, sku);
     final settlements = proposalIntakeSkuSettlements(sku);
     for (var j = 0; j < settlements.length; j++) {
-      final label = proposalIntakeSettleLabel(
-        j,
-        kind: settlements[j].isCost ? '成本' : '收入',
+      final couponCost = proposalIntakeIsIncomeCouponCost(
+        settlements[j],
+        settlements,
       );
+      final label = couponCost
+          ? '电子券采购款'
+          : proposalIntakeSettleLabel(
+              j,
+              kind: settlements[j].isCost ? '成本' : '收入',
+            );
       final terms = settlements[j].terms;
       if (!terms.isSettleAmountComplete) {
         issues.add('$name$label未填完结算比例或单价、计算公式、税率');
@@ -6623,7 +6643,8 @@ List<String> _proposalIntakeSkuGroupIssues({
       if (terms.isPromotionFee && !terms.promotionPromoterReady) {
         issues.add('$name$label请选择推广商');
       }
-      if (!terms.billTypeReady) {
+      // 电子券采购款不选成本类型，页面上也没有这个字段。
+      if (!couponCost && !terms.billTypeReady) {
         issues.add(
           '$name$label请选择${settlements[j].isCost ? '成本类型' : '收入类型'}',
         );

@@ -22477,11 +22477,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool _isCouponCostOf(
     ProposalSkuSettleRow row,
     List<ProposalSkuSettleRow> settlements,
-  ) {
-    if (!row.isCost || !row.id.endsWith('-coupon')) return false;
-    final incomeId = row.id.substring(0, row.id.length - '-coupon'.length);
-    return settlements.any((item) => !item.isCost && item.id == incomeId);
-  }
+  ) => proposalIntakeIsIncomeCouponCost(row, settlements);
 
   void _addCouponCost(String skuId, String incomeId) {
     if (!_canEditSkuSettlements) return;

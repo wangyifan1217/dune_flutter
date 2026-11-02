@@ -924,6 +924,20 @@ class _NativeChatViewState extends State<NativeChatView>
   ValueNotifier<String>? _atFilterNotifier;
   bool _syncingAtFilter = false;
   bool _insertingAtMentions = false;
+
+  /// PC：输入框上方的 @ 浮层，输入焦点始终留在输入框；null 表示未打开。
+  String? _desktopAtFilter;
+
+  /// 浮层候选成员（已排除自己）；null 表示仍在加载。
+  List<Map<String, dynamic>>? _desktopAtMembers;
+  int _desktopAtIndex = 0;
+  int _desktopAtLoadSeq = 0;
+  final OverlayPortalController _desktopAtPortal = OverlayPortalController();
+  final LayerLink _composerLayerLink = LayerLink();
+  final ScrollController _desktopAtScroll = ScrollController();
+
+  /// 浮层内容变化只重建浮层，不 setState 整个聊天页。
+  final ValueNotifier<int> _desktopAtRevision = ValueNotifier<int>(0);
   String _lastComposeText = '';
   Map<int, int> _groupReadMap = const <int, int>{};
   final Map<String, Future<String>> _mediaUrlCache = <String, Future<String>>{};
@@ -1246,6 +1260,8 @@ class _NativeChatViewState extends State<NativeChatView>
       _olderLoadFailed = false;
       _olderScrollRestorePending = false;
       _olderLoadCooldownUntilMs = 0;
+      _closeDesktopAtPopover();
+      _desktopAtMembers = null;
       _enterStickBottomPending = true;
       _userInteractedWithScroll = false;
       _locatedMode = false;
@@ -1545,6 +1561,8 @@ class _NativeChatViewState extends State<NativeChatView>
     _persistComposeDraft(flush: true);
     _inputFocusNode.dispose();
     _atFilterNotifier?.dispose();
+    _desktopAtScroll.dispose();
+    _desktopAtRevision.dispose();
     if (_recording) {
       unawaited(NativeAudioRecorder.instance.cancel());
     }
@@ -4080,7 +4098,10 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   void _onInputFocusChanged() {
-    if (!_inputFocusNode.hasFocus) return;
+    if (!_inputFocusNode.hasFocus) {
+      _closeDesktopAtPopover();
+      return;
+    }
     if (_emojiOpen) {
       setState(() => _emojiOpen = false);
     }
@@ -7023,9 +7044,10 @@ class _NativeChatViewState extends State<NativeChatView>
               final effectiveVoiceMode = voiceBlocked ? false : _voiceMode;
               // PC 不展示语音入口；APP 始终展示（不支持时点按提示）。
               final showVoice = wide ? voiceSupported : true;
-              return ChatInputBar(
+              final inputBar = ChatInputBar(
                 controller: _inputController,
                 focusNode: _inputFocusNode,
+                onKeyIntercept: wide ? _onComposerKeyIntercept : null,
                 showTopBorder:
                     !wide &&
                     (_quoteDraft == null || _quoteDraft!.isEmpty || locked),
@@ -7088,6 +7110,15 @@ class _NativeChatViewState extends State<NativeChatView>
                 onVoiceHoldEnd: (_) => _finishHoldRecord(),
                 onVoiceHoldCancel: () =>
                     _cancelHoldRecordInternal(showHint: false),
+              );
+              // 宽窄屏都包一层，避免跨断点时输入框被重建而丢焦点。
+              return OverlayPortal(
+                controller: _desktopAtPortal,
+                overlayChildBuilder: _buildDesktopAtOverlay,
+                child: CompositedTransformTarget(
+                  link: _composerLayerLink,
+                  child: inputBar,
+                ),
               );
             },
           ),
@@ -10742,6 +10773,17 @@ class _NativeChatViewState extends State<NativeChatView>
       return;
     }
     final filter = _partialAtFilter(text);
+    if (isWideChatLayout(context)) {
+      if (filter == null) {
+        _closeDesktopAtPopover();
+      } else if (_desktopAtFilter != null) {
+        _updateDesktopAtFilter(filter);
+      } else if (!_restoringComposeDraft &&
+          text.length > previousText.length) {
+        _openDesktopAtPopover(filter);
+      }
+      return;
+    }
     if (filter != null) {
       if (_atSheetOpen) {
         _syncingAtFilter = true;
@@ -10757,6 +10799,198 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
+  List<Map<String, dynamic>> _membersExceptSelf(
+    List<Map<String, dynamic>> members,
+  ) {
+    return members
+        .where(
+          (m) => ((m['userId'] as num?)?.toInt() ?? 0) != widget.session.userId,
+        )
+        .toList(growable: false);
+  }
+
+  List<_DesktopAtCandidate> _desktopAtCandidates() {
+    final filter = _desktopAtFilter;
+    if (filter == null) return const <_DesktopAtCandidate>[];
+    final q = filter.trim().toLowerCase();
+    final out = <_DesktopAtCandidate>[];
+    if (q.isEmpty || _AtMentionSheet._atAllLabel.contains(q)) {
+      out.add(const _DesktopAtCandidate.all());
+    }
+    for (final m in _desktopAtMembers ?? const <Map<String, dynamic>>[]) {
+      final name = (m['displayName'] ?? m['name'] ?? '').toString().trim();
+      if (name.isEmpty) continue;
+      final dept = (m['department'] ?? m['departmentName'] ?? '')
+          .toString()
+          .trim();
+      final title = (m['title'] ?? m['roleLabel'] ?? m['role'] ?? '')
+          .toString()
+          .trim();
+      if (q.isNotEmpty &&
+          !name.toLowerCase().contains(q) &&
+          !dept.toLowerCase().contains(q) &&
+          !title.toLowerCase().contains(q)) {
+        continue;
+      }
+      out.add(
+        _DesktopAtCandidate(
+          name: name,
+          subtitle: [dept, title].where((s) => s.isNotEmpty).join(' · '),
+          member: m,
+        ),
+      );
+    }
+    return out;
+  }
+
+  void _openDesktopAtPopover(String filter) {
+    final conv = _conversation;
+    if (conv == null || _isPrivate || conv.dissolved == true) return;
+    _desktopAtFilter = filter;
+    _desktopAtIndex = 0;
+    if (_groupMembers.isNotEmpty) {
+      _desktopAtMembers = _membersExceptSelf(_groupMembers);
+    }
+    _desktopAtRevision.value++;
+    if (!_desktopAtPortal.isShowing) _desktopAtPortal.show();
+    if (_desktopAtMembers != null) return;
+    final seq = ++_desktopAtLoadSeq;
+    unawaited(() async {
+      try {
+        final members = _membersExceptSelf(
+          await _service.fetchConversationMembers(conv.id),
+        );
+        if (!mounted || seq != _desktopAtLoadSeq || _desktopAtFilter == null) {
+          return;
+        }
+        if (_groupMembers.isEmpty) _groupMembers = members;
+        _desktopAtMembers = members;
+        _desktopAtRevision.value++;
+      } catch (e) {
+        if (!mounted || seq != _desktopAtLoadSeq) return;
+        _closeDesktopAtPopover();
+        _showToast('@ 成员加载失败：${friendlyErrorText(e)}');
+      }
+    }());
+  }
+
+  void _updateDesktopAtFilter(String filter) {
+    if (_desktopAtFilter == filter) return;
+    _desktopAtFilter = filter;
+    _desktopAtIndex = 0;
+    _desktopAtRevision.value++;
+    if (_desktopAtScroll.hasClients) _desktopAtScroll.jumpTo(0);
+  }
+
+  void _closeDesktopAtPopover() {
+    if (_desktopAtFilter == null) return;
+    _desktopAtLoadSeq++;
+    _desktopAtFilter = null;
+    // 可能在 didUpdateWidget 等构建阶段被调用，portal 的显隐放到帧后。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_desktopAtFilter != null) return;
+      if (_desktopAtPortal.isShowing) _desktopAtPortal.hide();
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  void _selectDesktopAtCandidate(_DesktopAtCandidate candidate) {
+    _closeDesktopAtPopover();
+    unawaited(_insertAtMentions([candidate.name]));
+    _inputFocusNode.requestFocus();
+  }
+
+  void _moveDesktopAtHighlight(int delta, int count) {
+    if (count <= 0) return;
+    final next = (_desktopAtIndex + delta) % count;
+    _desktopAtIndex = next < 0 ? next + count : next;
+    _desktopAtRevision.value++;
+    if (!_desktopAtScroll.hasClients) return;
+    final pos = _desktopAtScroll.position;
+    final top = _desktopAtIndex * _DesktopAtMentionPopover.rowHeight;
+    final bottom = top + _DesktopAtMentionPopover.rowHeight;
+    if (top < pos.pixels) {
+      _desktopAtScroll.jumpTo(top);
+    } else if (bottom > pos.pixels + pos.viewportDimension) {
+      _desktopAtScroll.jumpTo(
+        (bottom - pos.viewportDimension).clamp(0.0, pos.maxScrollExtent),
+      );
+    }
+  }
+
+  KeyEventResult _onComposerKeyIntercept(KeyEvent event) {
+    if (_desktopAtFilter == null) return KeyEventResult.ignored;
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.escape) {
+      _closeDesktopAtPopover();
+      return KeyEventResult.handled;
+    }
+    final candidates = _desktopAtCandidates();
+    // 没有可选项时 Enter 仍按原逻辑发送。
+    if (candidates.isEmpty) return KeyEventResult.ignored;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _moveDesktopAtHighlight(1, candidates.length);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _moveDesktopAtHighlight(-1, candidates.length);
+      return KeyEventResult.handled;
+    }
+    final confirm =
+        key == LogicalKeyboardKey.tab ||
+        ((key == LogicalKeyboardKey.enter ||
+                key == LogicalKeyboardKey.numpadEnter) &&
+            !HardwareKeyboard.instance.isShiftPressed);
+    if (confirm && event is KeyDownEvent) {
+      final i = _desktopAtIndex.clamp(0, candidates.length - 1);
+      _selectDesktopAtCandidate(candidates[i]);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Widget _buildDesktopAtOverlay(BuildContext overlayContext) {
+    return Positioned(
+      left: 0,
+      top: 0,
+      child: CompositedTransformFollower(
+        link: _composerLayerLink,
+        showWhenUnlinked: false,
+        targetAnchor: Alignment.topLeft,
+        followerAnchor: Alignment.bottomLeft,
+        offset: const Offset(16, -6),
+        // 点浮层不算点到输入框外，避免失焦收起。
+        child: TextFieldTapRegion(
+          child: ValueListenableBuilder<int>(
+            valueListenable: _desktopAtRevision,
+            builder: (context, _, _) {
+              if (_desktopAtFilter == null) return const SizedBox.shrink();
+              final candidates = _desktopAtCandidates();
+              return _DesktopAtMentionPopover(
+                candidates: candidates,
+                loading: _desktopAtMembers == null,
+                highlightedIndex: candidates.isEmpty
+                    ? -1
+                    : _desktopAtIndex.clamp(0, candidates.length - 1),
+                scrollController: _desktopAtScroll,
+                avatarService: _service,
+                onHover: (i) {
+                  if (i == _desktopAtIndex) return;
+                  _desktopAtIndex = i;
+                  _desktopAtRevision.value++;
+                },
+                onSelect: _selectDesktopAtCandidate,
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   void _closeAtMentionPicker() {
     if (!_atSheetOpen) return;
     _atSheetOpen = false;
@@ -10767,6 +11001,23 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Future<void> _pickAtMember() async {
+    if (!_isPrivate && isWideChatLayout(context)) {
+      final text = _inputController.text;
+      if (_partialAtFilter(text) == null) {
+        final needsSpace = text.isNotEmpty && !RegExp(r'\s$').hasMatch(text);
+        final newText = '$text${needsSpace ? ' ' : ''}@';
+        _inputController.value = TextEditingValue(
+          text: newText,
+          selection: TextSelection.collapsed(offset: newText.length),
+        );
+      }
+      _inputFocusNode.requestFocus();
+      final filter = _partialAtFilter(_inputController.text);
+      if (filter != null && _desktopAtFilter == null) {
+        _openDesktopAtPopover(filter);
+      }
+      return;
+    }
     if (!_isPrivate) {
       final text = _inputController.text;
       if (_partialAtFilter(text) == null) {
@@ -11173,12 +11424,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                         // 鼠标滚轮无法驱动 ScrollPosition，「上滑加载」失效。
                                         final useShrinkWrap =
                                             wide && !isDesktopCommOnly;
-                                        final sidePadding =
-                                            isDesktopCommOnly &&
-                                                constraints.maxWidth.isFinite
-                                            ? ((constraints.maxWidth - 920) / 2)
-                                                  .clamp(12.0, double.infinity)
-                                            : 12.0;
+                                        const sidePadding = 12.0;
                                         final list = Listener(
                                           onPointerSignal:
                                               _onMessageListPointerSignal,
@@ -11198,8 +11444,6 @@ class _NativeChatViewState extends State<NativeChatView>
                                             keyboardDismissBehavior:
                                                 ScrollViewKeyboardDismissBehavior
                                                     .onDrag,
-                                            // PC 窗口很宽时消息列居中、最宽约 920，左右消息不至于隔得太远；
-                                            // 用内边距而不是外层约束，滚动条仍贴窗口右侧。
                                             padding: EdgeInsets.fromLTRB(
                                               sidePadding,
                                               12,
@@ -12108,6 +12352,254 @@ class _SheetAvatar extends StatelessWidget {
       avatarObjectKey: avatarObjectKey,
       avatarService: avatarService,
       borderRadius: 40 * 0.18,
+    );
+  }
+}
+
+class _DesktopAtCandidate {
+  const _DesktopAtCandidate({
+    required this.name,
+    required this.subtitle,
+    required this.member,
+  });
+
+  const _DesktopAtCandidate.all()
+    : name = _AtMentionSheet._atAllLabel,
+      subtitle = '提醒群内所有成员',
+      member = null;
+
+  final String name;
+  final String subtitle;
+  final Map<String, dynamic>? member;
+
+  bool get isAll => member == null;
+}
+
+/// PC：输入框上方的 @ 浮层（单选即插入，对齐微信 / 飞书 PC）。
+class _DesktopAtMentionPopover extends StatelessWidget {
+  const _DesktopAtMentionPopover({
+    required this.candidates,
+    required this.loading,
+    required this.highlightedIndex,
+    required this.scrollController,
+    required this.avatarService,
+    required this.onHover,
+    required this.onSelect,
+  });
+
+  static const double rowHeight = 44;
+  static const int _maxVisibleRows = 6;
+
+  final List<_DesktopAtCandidate> candidates;
+  final bool loading;
+  final int highlightedIndex;
+  final ScrollController scrollController;
+  final ConversationService avatarService;
+  final ValueChanged<int> onHover;
+  final ValueChanged<_DesktopAtCandidate> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final text3 = DunesColors.resolve(context, DunesColors.text3);
+    Widget body;
+    if (candidates.isEmpty) {
+      body = SizedBox(
+        height: rowHeight,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (loading) ...[
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Text(
+              loading ? '正在加载成员…' : '未找到匹配成员',
+              style: DunesTypography.sans(
+                fontSize: 12.5,
+                color: text3,
+                context: context,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      final visible = math.min(candidates.length, _maxVisibleRows);
+      body = SizedBox(
+        height: visible * rowHeight,
+        child: Scrollbar(
+          controller: scrollController,
+          child: ListView.builder(
+            controller: scrollController,
+            padding: EdgeInsets.zero,
+            itemExtent: rowHeight,
+            itemCount: candidates.length,
+            itemBuilder: (context, i) => _buildRow(context, i),
+          ),
+        ),
+      );
+    }
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: 300,
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.bgApp,
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x24000000),
+              blurRadius: 24,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+              child: Text(
+                '↑↓ 选择 · Enter 确认 · Esc 关闭',
+                style: DunesTypography.sans(
+                  fontSize: 11,
+                  color: text3,
+                  context: context,
+                ),
+              ),
+            ),
+            body,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(BuildContext context, int index) {
+    final c = candidates[index];
+    final highlighted = index == highlightedIndex;
+    final member = c.member;
+    final Widget avatar;
+    if (member == null) {
+      avatar = Container(
+        width: 28,
+        height: 28,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              DunesColors.resolve(
+                context,
+                const Color(0xFFE85D4C),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                const Color(0xFFF07A5A),
+                role: DunesColorRole.surface,
+              ),
+            ],
+          ),
+        ),
+        child: Text(
+          '@',
+          style: DunesTypography.sans(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: DunesColors.resolve(context, Colors.white),
+            context: context,
+          ),
+        ),
+      );
+    } else {
+      final preset = (member['avatarPreset'] ?? '').toString().trim();
+      final objectKey = (member['avatarObjectKey'] ?? '').toString().trim();
+      avatar = ImUserAvatar(
+        initial: c.name.substring(0, 1),
+        seed: (member['userId'] as num?)?.toInt() ?? 0,
+        size: 28,
+        avatarPreset: preset.isEmpty ? null : preset,
+        avatarObjectKey: objectKey.isEmpty ? null : objectKey,
+        avatarService: avatarService,
+        borderRadius: 28 * 0.18,
+      );
+    }
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      // onHover 只在鼠标真的移动时触发，键盘滚动列表时不会抢高亮。
+      onHover: (_) => onHover(index),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onSelect(c),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: highlighted
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0x14553B96),
+                    role: DunesColorRole.surface,
+                  )
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              avatar,
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  c.isAll ? '@${c.name}' : c.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: DunesTypography.sans(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    context: context,
+                  ),
+                ),
+              ),
+              if (c.subtitle.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    c.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 11.5,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
+                    ),
+                  ),
+                ),
+              ] else
+                const Spacer(),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

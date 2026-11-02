@@ -556,6 +556,7 @@ class ChatInputBar extends StatelessWidget {
     this.inputHeight,
     this.onInputHeightDrag,
     this.showTopBorder = true,
+    this.onKeyIntercept,
   });
 
   final TextEditingController controller;
@@ -607,6 +608,9 @@ class ChatInputBar extends StatelessWidget {
 
   /// 上方已有引用条时去掉顶部分割线，和输入区连成一块。
   final bool showTopBorder;
+
+  /// 先于「Enter 发送」处理按键（如 @ 浮层的上下选择 / 回车确认）；IME 组字中不会调用。
+  final KeyEventResult Function(KeyEvent event)? onKeyIntercept;
 
   @override
   Widget build(BuildContext context) {
@@ -789,6 +793,7 @@ class ChatInputBar extends StatelessWidget {
                               onAttemptPasteImage: interactionLocked
                                   ? null
                                   : onAttemptPasteImage,
+                              onKeyIntercept: onKeyIntercept,
                               showStop: showStop,
                               sending: sending,
                               interactionLocked: interactionLocked,
@@ -812,6 +817,7 @@ class ChatInputBar extends StatelessWidget {
                               onAttemptPasteImage: interactionLocked
                                   ? null
                                   : onAttemptPasteImage,
+                              onKeyIntercept: onKeyIntercept,
                             ),
                     ),
                     if (showMobileTrailing) ...[
@@ -915,6 +921,7 @@ class _PcComposerBox extends StatelessWidget {
     this.shouldKeepFocusAfterSend,
     required this.onSend,
     required this.onAttemptPasteImage,
+    this.onKeyIntercept,
     required this.showStop,
     required this.sending,
     required this.interactionLocked,
@@ -932,6 +939,7 @@ class _PcComposerBox extends StatelessWidget {
   final bool Function()? shouldKeepFocusAfterSend;
   final VoidCallback? onSend;
   final Future<bool> Function()? onAttemptPasteImage;
+  final KeyEventResult Function(KeyEvent event)? onKeyIntercept;
   final bool showStop;
   final bool sending;
   final bool interactionLocked;
@@ -962,6 +970,7 @@ class _PcComposerBox extends StatelessWidget {
                 shouldKeepFocusAfterSend: shouldKeepFocusAfterSend,
                 onSend: onSend,
                 onAttemptPasteImage: onAttemptPasteImage,
+                onKeyIntercept: onKeyIntercept,
               ),
             ),
             Padding(
@@ -1398,6 +1407,7 @@ class _ChatTextField extends StatefulWidget {
     this.shouldKeepFocusAfterSend,
     required this.onSend,
     required this.onAttemptPasteImage,
+    this.onKeyIntercept,
     this.fixedHeight,
     this.fillParent = false,
     this.showOutline = true,
@@ -1419,6 +1429,7 @@ class _ChatTextField extends StatefulWidget {
   final bool Function()? shouldKeepFocusAfterSend;
   final VoidCallback? onSend;
   final Future<bool> Function()? onAttemptPasteImage;
+  final KeyEventResult Function(KeyEvent event)? onKeyIntercept;
 
   @override
   State<_ChatTextField> createState() => _ChatTextFieldState();
@@ -1543,6 +1554,8 @@ class _ChatTextFieldState extends State<_ChatTextField> {
     if (_isImeComposing() || _isImeToggleOrModifierKey(event)) {
       return KeyEventResult.ignored;
     }
+    final intercepted = widget.onKeyIntercept?.call(event);
+    if (intercepted == KeyEventResult.handled) return intercepted!;
     if (_isSendKey(event)) {
       widget.onSend?.call();
       return KeyEventResult.handled;

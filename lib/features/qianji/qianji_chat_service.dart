@@ -60,6 +60,18 @@ class QianjiChatService {
         as Map,
   );
 
+  /// 回答有没有帮助（后端记日志）。
+  Future<void> feedback(
+    int conversationId,
+    int turnId,
+    bool helpful, {
+    String comment = '',
+  }) async => _request('POST', '/$conversationId/turns/feedback', {
+    'turnId': turnId,
+    'helpful': helpful,
+    if (comment.isNotEmpty) 'comment': comment,
+  });
+
   Future<Uint8List> exportTurn(int conversationId, int turnId) async {
     final uri = _uri('/$conversationId/turns/export?turnId=$turnId');
     final response = await http

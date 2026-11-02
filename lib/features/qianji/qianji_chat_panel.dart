@@ -630,6 +630,21 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
     showDunesToast(context, '已复制');
   }
 
+  /// 回答有没有帮助：后端记日志，用来整理问答评测集。
+  Future<void> _sendFeedback(int turnId, bool helpful) async {
+    final service = _service;
+    final chatId = _chatId;
+    if (service == null || chatId == null) return;
+    try {
+      await service.feedback(chatId, turnId, helpful);
+      if (mounted) {
+        showDunesToast(context, helpful ? '谢谢反馈' : '已记录，我们会改进这类问题');
+      }
+    } catch (_) {
+      if (mounted) showDunesToast(context, '反馈没有发送成功，请稍后再试');
+    }
+  }
+
   void _selectScope(String scope) {
     setState(() {
       _scope = scope;
@@ -980,6 +995,10 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
                             : const [],
                         onFollowUp: (q) => unawaited(_send(q)),
                         onRevealed: _scrollToBottom,
+                        onFeedback: turnId == null
+                            ? null
+                            : (helpful) =>
+                                  unawaited(_sendFeedback(turnId, helpful)),
                       ),
                     ),
                   ],
@@ -2283,10 +2302,14 @@ class _ReplyCard extends StatefulWidget {
     this.reveal = false,
     this.onRevealed,
     this.showRowsByDefault = false,
+    this.onFeedback,
   });
 
   final String scope;
   final String reply;
+
+  /// 「有用 / 答错了」反馈；为空时不显示。
+  final ValueChanged<bool>? onFeedback;
 
   /// 用户问的是明细/列表时直接展开查询明细；只问数量时收起，可手动展开。
   final bool showRowsByDefault;
@@ -2313,6 +2336,30 @@ class _ReplyCardState extends State<_ReplyCard>
   AnimationController? _anim;
   double _headShare = 1;
   late bool _rowsOpen = widget.showRowsByDefault;
+  bool _basisOpen = false;
+  bool? _feedback;
+
+  /// 通用查询的口径（数据、时间、筛选、计算……），折叠显示。
+  List<String> _basis() {
+    final data = widget.data;
+    if (data is Map && data['basis'] is List) {
+      return [for (final line in data['basis'] as List) '$line'];
+    }
+    return const [];
+  }
+
+  /// 按月趋势的折线图配置：{type, x, series, group?}。
+  Map? _chart() {
+    final data = widget.data;
+    if (data is Map && data['chart'] is Map) return data['chart'] as Map;
+    return null;
+  }
+
+  void _giveFeedback(bool helpful) {
+    if (_feedback != null || widget.onFeedback == null) return;
+    setState(() => _feedback = helpful);
+    widget.onFeedback!(helpful);
+  }
 
   @override
   void initState() {
@@ -2422,6 +2469,8 @@ class _ReplyCardState extends State<_ReplyCard>
     final headline = _headline;
     final bullets = _bullets;
     final rows = _dataRows();
+    final basis = _basis();
+    final chart = _chart();
     final headProgress = _headShare <= 0
         ? 1.0
         : (t / _headShare).clamp(0.0, 1.0);
@@ -2534,6 +2583,19 @@ class _ReplyCardState extends State<_ReplyCard>
                     ),
                   ),
                 ],
+                if (chart != null && rows.length >= 2) ...[
+                  const SizedBox(height: 12),
+                  Opacity(
+                    opacity: tailProgress,
+                    child: _TrendChart(
+                      chart: chart,
+                      rows: rows,
+                      ink: c(_ink),
+                      muted: c(_muted),
+                      grid: c(_line, border: true),
+                    ),
+                  ),
+                ],
                 if (rows.isNotEmpty && _rowsOpen) ...[
                   const SizedBox(height: 12),
                   _QueryRowsPreview(
@@ -2571,6 +2633,53 @@ class _ReplyCardState extends State<_ReplyCard>
                     ),
                   ),
                 ],
+                if (basis.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => setState(() => _basisOpen = !_basisOpen),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 4,
+                        horizontal: 2,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            size: 13,
+                            color: c(_muted),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '查询口径',
+                            style: TextStyle(fontSize: 11.5, color: c(_muted)),
+                          ),
+                          Icon(
+                            _basisOpen
+                                ? Icons.expand_less_rounded
+                                : Icons.expand_more_rounded,
+                            size: 15,
+                            color: c(_muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_basisOpen)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
+                      child: SelectableText(
+                        basis.join('\n'),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          height: 1.55,
+                          color: c(_muted),
+                        ),
+                      ),
+                    ),
+                ],
                 const SizedBox(height: 6),
                 Opacity(
                   opacity: tailProgress,
@@ -2592,6 +2701,22 @@ class _ReplyCardState extends State<_ReplyCard>
                           icon: Icons.open_in_new_rounded,
                           label: '打开原页面',
                           onTap: widget.onOpenPage!,
+                        ),
+                      if (widget.onFeedback != null && _feedback != false)
+                        _MiniAction(
+                          icon: _feedback == true
+                              ? Icons.thumb_up_alt_rounded
+                              : Icons.thumb_up_alt_outlined,
+                          label: _feedback == true ? '已反馈' : '有用',
+                          onTap: () => _giveFeedback(true),
+                        ),
+                      if (widget.onFeedback != null && _feedback != true)
+                        _MiniAction(
+                          icon: _feedback == false
+                              ? Icons.thumb_down_alt_rounded
+                              : Icons.thumb_down_alt_outlined,
+                          label: _feedback == false ? '已反馈' : '答错了',
+                          onTap: () => _giveFeedback(false),
                         ),
                     ],
                   ),
@@ -2979,6 +3104,230 @@ class _BulletRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 按月趋势的简易折线图：x 轴是月份，每个指标（或每个分组）一条线。
+class _TrendChart extends StatelessWidget {
+  const _TrendChart({
+    required this.chart,
+    required this.rows,
+    required this.ink,
+    required this.muted,
+    required this.grid,
+  });
+
+  final Map chart;
+  final List<Map<String, dynamic>> rows;
+  final Color ink;
+  final Color muted;
+  final Color grid;
+
+  static const _palette = [
+    Color(0xFF6C5CE7),
+    Color(0xFF2F80ED),
+    Color(0xFF27AE60),
+    Color(0xFFF2994A),
+    Color(0xFFEB5757),
+    Color(0xFF13A8A8),
+  ];
+
+  static double? _num(dynamic v) => v is num ? v.toDouble() : null;
+
+  /// 线名 → 按 x 顺序的值（缺的为 null）。
+  ({List<String> xs, Map<String, List<double?>> lines}) _series() {
+    final xKey = '${chart['x'] ?? '月份'}';
+    final series = [
+      for (final s in (chart['series'] as List? ?? const [])) '$s',
+    ];
+    final group = chart['group'] == null ? null : '${chart['group']}';
+    final xs = <String>[];
+    for (final row in rows) {
+      final x = '${row[xKey] ?? ''}';
+      if (x.isNotEmpty && !xs.contains(x)) xs.add(x);
+    }
+    final lines = <String, List<double?>>{};
+    void put(String name, String x, double? v) {
+      if (!lines.containsKey(name) && lines.length >= _palette.length) return;
+      final list = lines.putIfAbsent(
+        name,
+        () => List<double?>.filled(xs.length, null),
+      );
+      final i = xs.indexOf(x);
+      if (i >= 0) list[i] = v;
+    }
+
+    for (final row in rows) {
+      final x = '${row[xKey] ?? ''}';
+      if (group != null && series.isNotEmpty) {
+        put('${row[group] ?? ''}', x, _num(row[series.first]));
+      } else {
+        for (final s in series) {
+          put(s, x, _num(row[s]));
+        }
+      }
+    }
+    return (xs: xs, lines: lines);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = _series();
+    if (data.xs.length < 2 || data.lines.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final names = data.lines.keys.toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          children: [
+            for (var i = 0; i < names.length; i++)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: _palette[i % _palette.length],
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(names[i], style: TextStyle(fontSize: 11, color: muted)),
+                ],
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 150,
+          width: double.infinity,
+          child: CustomPaint(
+            painter: _TrendPainter(
+              xs: data.xs,
+              lines: [for (final n in names) data.lines[n]!],
+              colors: [
+                for (var i = 0; i < names.length; i++)
+                  _palette[i % _palette.length],
+              ],
+              muted: muted,
+              grid: grid,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TrendPainter extends CustomPainter {
+  _TrendPainter({
+    required this.xs,
+    required this.lines,
+    required this.colors,
+    required this.muted,
+    required this.grid,
+  });
+
+  final List<String> xs;
+  final List<List<double?>> lines;
+  final List<Color> colors;
+  final Color muted;
+  final Color grid;
+
+  static String _fmt(double v) {
+    final a = v.abs();
+    if (a >= 10000) return '${(v / 10000).toStringAsFixed(1)}万';
+    if (a >= 100 || v == v.roundToDouble()) return v.toStringAsFixed(0);
+    return v.toStringAsFixed(1);
+  }
+
+  TextPainter _text(String s) => TextPainter(
+    text: TextSpan(
+      text: s,
+      style: TextStyle(fontSize: 10, color: muted),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    double? lo, hi;
+    for (final line in lines) {
+      for (final v in line) {
+        if (v == null) continue;
+        lo = lo == null || v < lo ? v : lo;
+        hi = hi == null || v > hi ? v : hi;
+      }
+    }
+    if (lo == null || hi == null) return;
+    final double low = lo > 0 ? 0 : lo;
+    final double high = hi == low ? low + 1 : hi;
+    final hiLabel = _text(_fmt(high));
+    final loLabel = _text(_fmt(low));
+    final left = (hiLabel.width > loLabel.width ? hiLabel.width : loLabel.width) + 6;
+    const bottom = 18.0;
+    const top = 6.0;
+    final plotW = size.width - left - 8;
+    final plotH = size.height - bottom - top;
+    final gridPaint = Paint()
+      ..color = grid
+      ..strokeWidth = 1;
+    for (var i = 0; i <= 2; i++) {
+      final y = top + plotH * i / 2;
+      canvas.drawLine(Offset(left, y), Offset(left + plotW, y), gridPaint);
+    }
+    hiLabel.paint(canvas, Offset(0, top - hiLabel.height / 2));
+    loLabel.paint(canvas, Offset(0, top + plotH - loLabel.height / 2));
+    double xAt(int i) =>
+        left + (xs.length == 1 ? plotW / 2 : plotW * i / (xs.length - 1));
+    double yAt(double v) => top + plotH * (1 - (v - low) / (high - low));
+    final step = (xs.length / 6).ceil();
+    for (var i = 0; i < xs.length; i += step) {
+      final raw = xs[i];
+      final label = _text(
+        RegExp(r'^\d{4}-\d{2}$').hasMatch(raw)
+            ? '${int.parse(raw.substring(5))}月'
+            : raw,
+      );
+      label.paint(
+        canvas,
+        Offset(xAt(i) - label.width / 2, top + plotH + 4),
+      );
+    }
+    for (var l = 0; l < lines.length; l++) {
+      final paint = Paint()
+        ..color = colors[l]
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke;
+      final dot = Paint()..color = colors[l];
+      final path = Path();
+      var started = false;
+      for (var i = 0; i < xs.length; i++) {
+        final v = lines[l][i];
+        if (v == null) {
+          started = false;
+          continue;
+        }
+        final p = Offset(xAt(i), yAt(v));
+        if (started) {
+          path.lineTo(p.dx, p.dy);
+        } else {
+          path.moveTo(p.dx, p.dy);
+          started = true;
+        }
+        canvas.drawCircle(p, 2.5, dot);
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrendPainter old) =>
+      old.xs != xs || old.lines != lines || old.muted != muted;
 }
 
 class _MiniAction extends StatelessWidget {

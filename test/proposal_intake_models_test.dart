@@ -365,18 +365,22 @@ void main() {
     }, source);
     expect(proposalIntakeFormSyncSourceCode(form), 'DIGITALG');
     expect(proposalIntakeSkuDetails(form).single.syncSourceCode, 'DIGITALG');
-    final supplied = proposalIntakeApplyFormSyncSource({
-      'supplyProducts': [
-        {
-          'id': 'sp-1',
-          'syncSourceRef': {'code': 'OLD', 'name': '旧平台'},
-          'supplierCode': 'S1',
-          'settlements': [
-            {'id': 'st-1', 'settleRatio': '0.1'},
-          ],
-        },
-      ],
-    }, source, overwriteSkus: true);
+    final supplied = proposalIntakeApplyFormSyncSource(
+      {
+        'supplyProducts': [
+          {
+            'id': 'sp-1',
+            'syncSourceRef': {'code': 'OLD', 'name': '旧平台'},
+            'supplierCode': 'S1',
+            'settlements': [
+              {'id': 'st-1', 'settleRatio': '0.1'},
+            ],
+          },
+        ],
+      },
+      source,
+      overwriteSkus: true,
+    );
     final supply = proposalIntakeSupplyProducts(supplied).single;
     expect(proposalIntakeFormSyncSourceCode(supplied), 'DIGITALG');
     expect(supply.syncSourceCode, 'OLD');
@@ -391,29 +395,85 @@ void main() {
     );
   });
 
-  test('platform change clears income and cost types without clearing amounts', () {
-    final original = <String, dynamic>{
-      'skuDetails': [{'id': 's1', 'settlements': [
-        {'id': 'i1', 'kind': 'income', 'billType': '收入类型', 'billTypeRef': {'code': 'I', 'name': '收入类型'}, 'settleRatio': '0.2'},
-        {'id': 'c1', 'kind': 'cost', 'billType': '成本类型', 'billTypeRef': {'code': 'C', 'name': '成本类型'}, 'settleUnitPrice': '2'},
-      ]}],
-      'childProducts': [{'id': 's2', 'settlements': [{'id': 'c2', 'billType': '子产品成本'}]}],
-      'supplyProducts': [{'id': 'p1', 'settlements': [{'id': 'c3', 'billType': '供给成本'}]}],
-      'sharedSettlements': [{'id': 'shared', 'billType': '共用收入'}],
-    };
-    final reset = proposalIntakeResetPlatformBillTypes(original);
-    final settlements = ((reset['skuDetails'] as List).first as Map)['settlements'] as List;
-    expect(settlements.map((row) => row['billType']), ['', '']);
-    expect(settlements.first['billTypeRef'], isNull);
-    expect(settlements.first['settleRatio'], '0.2');
-    expect(settlements.last['settleUnitPrice'], '2');
-    expect(((reset['supplyProducts'] as List).first['settlements'] as List).first['billType'], '');
-    expect((reset['sharedSettlements'] as List).first['billType'], '');
-    final child = proposalIntakeResetPlatformBillTypes(original, childOnly: true);
-    expect(((child['childProducts'] as List).first['settlements'] as List).first['billType'], '');
-    expect(((child['skuDetails'] as List).first['settlements'] as List).first['billType'], '收入类型');
-    expect(((original['skuDetails'] as List).first['settlements'] as List).first['billType'], '收入类型');
-  });
+  test(
+    'platform change clears income and cost types without clearing amounts',
+    () {
+      final original = <String, dynamic>{
+        'skuDetails': [
+          {
+            'id': 's1',
+            'settlements': [
+              {
+                'id': 'i1',
+                'kind': 'income',
+                'billType': '收入类型',
+                'billTypeRef': {'code': 'I', 'name': '收入类型'},
+                'settleRatio': '0.2',
+              },
+              {
+                'id': 'c1',
+                'kind': 'cost',
+                'billType': '成本类型',
+                'billTypeRef': {'code': 'C', 'name': '成本类型'},
+                'settleUnitPrice': '2',
+              },
+            ],
+          },
+        ],
+        'childProducts': [
+          {
+            'id': 's2',
+            'settlements': [
+              {'id': 'c2', 'billType': '子产品成本'},
+            ],
+          },
+        ],
+        'supplyProducts': [
+          {
+            'id': 'p1',
+            'settlements': [
+              {'id': 'c3', 'billType': '供给成本'},
+            ],
+          },
+        ],
+        'sharedSettlements': [
+          {'id': 'shared', 'billType': '共用收入'},
+        ],
+      };
+      final reset = proposalIntakeResetPlatformBillTypes(original);
+      final settlements =
+          ((reset['skuDetails'] as List).first as Map)['settlements'] as List;
+      expect(settlements.map((row) => row['billType']), ['', '']);
+      expect(settlements.first['billTypeRef'], isNull);
+      expect(settlements.first['settleRatio'], '0.2');
+      expect(settlements.last['settleUnitPrice'], '2');
+      expect(
+        ((reset['supplyProducts'] as List).first['settlements'] as List)
+            .first['billType'],
+        '',
+      );
+      expect((reset['sharedSettlements'] as List).first['billType'], '');
+      final child = proposalIntakeResetPlatformBillTypes(
+        original,
+        childOnly: true,
+      );
+      expect(
+        ((child['childProducts'] as List).first['settlements'] as List)
+            .first['billType'],
+        '',
+      );
+      expect(
+        ((child['skuDetails'] as List).first['settlements'] as List)
+            .first['billType'],
+        '收入类型',
+      );
+      expect(
+        ((original['skuDetails'] as List).first['settlements'] as List)
+            .first['billType'],
+        '收入类型',
+      );
+    },
+  );
 
   test('legacy sku platform yields to the tech platform shown on screen', () {
     final form = <String, dynamic>{
@@ -2668,7 +2728,11 @@ void main() {
       closeTo(0.12, 0.0001),
     );
     expect(
-      proposalSettleLineView(unitKeepsPrice, scale: 1200, face: 100).substitution,
+      proposalSettleLineView(
+        unitKeepsPrice,
+        scale: 1200,
+        face: 100,
+      ).substitution,
       '按面值：1200 ÷ 100 × 12 = 144 万元/年',
     );
 
@@ -2692,11 +2756,7 @@ void main() {
     expect(promo.copyWith(promoter: '吉林推广').promotionPromoterReady, isTrue);
     expect(
       promo
-          .copyWith(
-            promoter: '吉林推广',
-            ourParty: '沙丘',
-            counterparty: '中石油',
-          )
+          .copyWith(promoter: '吉林推广', ourParty: '沙丘', counterparty: '中石油')
           .isSkuComplete,
       isTrue,
     );
@@ -4043,7 +4103,10 @@ void main() {
     expect(proposalParseSettleRatio('1.0333333'), 1.0333333);
     expect(proposalParseSettleRatio('4'), 0.04);
     expect(proposalParseSettleRatio('98.5'), 0.985);
-    expect(proposalRatioDisplayPercent(1.0333333), closeTo(103.33333, 0.000001));
+    expect(
+      proposalRatioDisplayPercent(1.0333333),
+      closeTo(103.33333, 0.000001),
+    );
     expect(proposalRatioDisplayPercent(0.975), 97.5);
     expect(proposalRatioDisplayPercent(4), 4);
     expect(proposalIntakeSettleRatioFromCatalog(0.975), '0.975');
@@ -5325,9 +5388,7 @@ void main() {
         'stageEnteredAt': '2026-10-18T00:00:00Z',
         'marketCompleted': true,
         'technologyCompleted': false,
-        'itemRejectComments': {
-          'technologyItem:skuProducts': '内容需要填写完整',
-        },
+        'itemRejectComments': {'technologyItem:skuProducts': '内容需要填写完整'},
       },
     });
     final steps = proposalIntakeProgressSteps(row: row);
@@ -5370,25 +5431,28 @@ void main() {
     expect(proposalReviewWhoText(steps), '待朱子姝填写、待胡珏填写');
   });
 
-  test('list process line stays on the person who must act after a rejection', () {
-    final row = ProposalIntakeRow.fromJson({
-      'id': 21,
-      'kind': 'sales',
-      'status': 'filling',
-      'createdBy': 1,
-      'form': {'createdByName': '石淼', 'marketOwner1': '刘雨涵'},
-      'review': {
-        'stage': 'filling',
-        'reviewRejected': true,
-        'reviewRejectSection': 'marketCompleted',
-        'technologyCompleted': true,
-      },
-    });
-    expect(
-      proposalReviewWhoText(proposalIntakeProgressSteps(row: row)),
-      '待石淼填写',
-    );
-  });
+  test(
+    'list process line stays on the person who must act after a rejection',
+    () {
+      final row = ProposalIntakeRow.fromJson({
+        'id': 21,
+        'kind': 'sales',
+        'status': 'filling',
+        'createdBy': 1,
+        'form': {'createdByName': '石淼', 'marketOwner1': '刘雨涵'},
+        'review': {
+          'stage': 'filling',
+          'reviewRejected': true,
+          'reviewRejectSection': 'marketCompleted',
+          'technologyCompleted': true,
+        },
+      });
+      expect(
+        proposalReviewWhoText(proposalIntakeProgressSteps(row: row)),
+        '待石淼填写',
+      );
+    },
+  );
 
   test('finance rejection clears from the current process after resubmit', () {
     final row = ProposalIntakeRow.fromJson({
@@ -5409,9 +5473,7 @@ void main() {
         'reviewRejectSection': 'salesContractCompleted',
         'marketCompleted': true,
         'technologyCompleted': true,
-        'itemRejectComments': {
-          'contractItem:sales.no': '合同编号有误',
-        },
+        'itemRejectComments': {'contractItem:sales.no': '合同编号有误'},
       },
     });
     final steps = proposalIntakeProgressSteps(row: row);
@@ -5421,7 +5483,9 @@ void main() {
     );
     expect(proposalReviewWhoText(steps), isNot(contains('已驳回')));
     expect(
-      proposalReviewSegments(steps).firstWhere((step) => step.label == '财务部').state,
+      proposalReviewSegments(
+        steps,
+      ).firstWhere((step) => step.label == '财务部').state,
       ProposalListStepState.now,
     );
   });
@@ -5719,6 +5783,75 @@ void main() {
     expect(saved.displayName, '现金券');
     expect(saved.toJson()['couponKind'], '现金券');
     expect(saved.toJson()['productName'], '现金券');
+  });
+
+  test('product types come from proposal options', () {
+    final options = ProposalIntakeOptions.fromJson({
+      'market': {
+        'productTypes': [
+          {'name': '礼金券', 'behavior': 'cash'},
+          {'name': '满减礼包', 'behavior': 'discount'},
+          {'name': '会员权益', 'behavior': 'benefit'},
+        ],
+      },
+    });
+    expect(options.resolvedProductTypes.map((item) => item.name), [
+      '礼金券',
+      '满减礼包',
+      '会员权益',
+    ]);
+    expect(
+      proposalIntakeNormalizeCouponKind('现金券', options.resolvedProductTypes),
+      '礼金券',
+    );
+    expect(
+      proposalIntakeProductTypeIsDiscount('满减券', options.resolvedProductTypes),
+      isTrue,
+    );
+    expect(
+      proposalIntakeProductTypeIsBenefit('权益', options.resolvedProductTypes),
+      isTrue,
+    );
+    final form = {
+      'skuDetails': [
+        {'id': 'main-1', 'productName': '会员权益', 'couponKind': '会员权益'},
+      ],
+      'childProducts': [
+        {
+          'id': 'child-1',
+          'parentSkuId': 'main-1',
+          'productName': '加油券',
+          'couponKind': '加油券',
+        },
+      ],
+    };
+    expect(
+      proposalIntakeSkuSettleIssues(
+        form,
+        includeSettlements: false,
+        productTypes: options.resolvedProductTypes,
+      ),
+      contains('${kProposalChildProductLabel}「加油券」请选择类型'),
+    );
+    final accepted = {
+      ...form,
+      'childProducts': [
+        {
+          'id': 'child-1',
+          'parentSkuId': 'main-1',
+          'productName': '礼金券',
+          'couponKind': '现金券',
+        },
+      ],
+    };
+    expect(
+      proposalIntakeSkuSettleIssues(
+        accepted,
+        includeSettlements: false,
+        productTypes: options.resolvedProductTypes,
+      ),
+      isNot(contains('请选择类型')),
+    );
   });
 
   test('legacy multi sku details are not auto-promoted to child products', () {
@@ -6183,11 +6316,9 @@ void main() {
         isTrue,
       );
       expect(
-        proposalIntakeTaskRemainingCount(
-          'review_finance',
-          {'financeItems': {...items()}..remove('operatingCost')},
-          form: rowOf(items()).form,
-        ),
+        proposalIntakeTaskRemainingCount('review_finance', {
+          'financeItems': {...items()}..remove('operatingCost'),
+        }, form: rowOf(items()).form),
         0,
       );
       expect(

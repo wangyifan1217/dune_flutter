@@ -5904,10 +5904,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   void _prefetchSavedPlatformDicts() {
     final ref = proposalIntakeFormSyncSourceRef(_form);
-    final code = _boundSyncSourceCode(
-      ref?.code ?? '',
-      name: ref?.name ?? '',
-    );
+    final code = _boundSyncSourceCode(ref?.code ?? '', name: ref?.name ?? '');
     if (code.isEmpty) return;
     _prefetchSettle(code, 'CHANNEL');
     _prefetchSettle(code, 'SUPPLIER');
@@ -9293,7 +9290,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       issues.addAll(proposalIntakePurchaseMarketIssues(_form));
       issues.addAll(proposalIntakePurchaseTechIssues(_form));
     } else {
-      issues.addAll(proposalIntakeSkuSettleIssues(_form));
+      issues.addAll(
+        proposalIntakeSkuSettleIssues(
+          _form,
+          productTypes: widget.options.resolvedProductTypes,
+        ),
+      );
     }
     return issues;
   }
@@ -9337,7 +9339,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       issues.addAll(proposalIntakeTechFillIssues(_form, purchase: false));
       issues.addAll(proposalIntakeChildTechFillIssues(_form));
       issues.addAll(proposalIntakeSalesFinanceFillIssues(_form));
-      issues.addAll(proposalIntakeSkuSettleIssues(_form));
+      issues.addAll(
+        proposalIntakeSkuSettleIssues(
+          _form,
+          productTypes: widget.options.resolvedProductTypes,
+        ),
+      );
     }
     final reviewFlags = <String, String>{
       'marketCompleted': '市场部',
@@ -9443,7 +9450,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (!_isPurchase && action == 'notify_tech') {
       final issues = [
         ...proposalIntakeSalesMarketIssues(_form),
-        ...proposalIntakeSkuSettleIssues(_form, includeSettlements: false),
+        ...proposalIntakeSkuSettleIssues(
+          _form,
+          includeSettlements: false,
+          productTypes: widget.options.resolvedProductTypes,
+        ),
       ];
       if (issues.isNotEmpty) {
         setState(() => _issues = issues);
@@ -17216,106 +17227,110 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           listenable: _dictTick,
           builder: (ctx, _) {
             return StatefulBuilder(
-          builder: (ctx, setDialogState) {
-            final current =
-                (child
-                        ? proposalIntakeChildProducts(_form)
-                        : proposalIntakeSkuDetails(_form))
-                    .where((row) => row.id == sku.id)
-                    .firstOrNull;
-            if (current == null) {
-              return AlertDialog(
-                title: const Text('结算'),
-                content: const Text('产品已删除'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('关闭'),
-                  ),
-                ],
-              );
-            }
-            final titleBits = [
-              if (current.productName.trim().isNotEmpty)
-                current.productName.trim(),
-              if (current.faceValue.trim().isNotEmpty)
-                '面值 ${current.faceValue.trim()}',
-            ].join(' · ');
-            final wide = !ProposalLayout.isCompact(
-              MediaQuery.sizeOf(ctx).width,
-            );
-            void refresh() => setDialogState(() {});
-            return AlertDialog(
-              title: Text(
-                '${child ? '关联产品' : proposalIntakeProductKindLabel(child: false)}结算${titleBits.isEmpty ? '' : ' · $titleBits'}',
-              ),
-              content: SizedBox(
-                width: 760,
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 线上原版结算弹窗：销售（收入）+ 项目成本（采购成本），每条一张表格。
-                      _skuSettleProductCard(
-                        skuId: current.id,
-                        childProduct: child,
-                        product: current,
-                        title: titleBits,
-                        emptyTitle: child ? '未选择现金券或满减券' : '未填写产品名称',
-                        reviewPrefix: 'skuSettle',
-                        settlements: proposalIntakeSkuSettlements(current),
-                        wide: wide,
-                        enabled: enabled,
-                        syncSource: _skuSyncSource(current),
-                        productSource: 'CHANNEL',
-                        compact: false,
-                        showItemReview: false,
-                        onAdd: () {
-                          _addSkuSettle(current.id);
-                          refresh();
-                        },
-                        onAddKind: (kind) {
-                          _addSkuSettle(current.id, kind: kind);
-                          refresh();
-                        },
-                        onRemove: (settleId) {
-                          _removeSkuSettle(current.id, settleId);
-                          // 删收入时，挂在它下面的用券成本一起删。
-                          _removeCouponCost(current.id, settleId);
-                          refresh();
-                        },
-                        onPatch: (settleId, terms) {
-                          _patchSkuSettle(current.id, settleId, terms);
-                          refresh();
-                        },
-                        onReplace: (settlements) {
-                          _writeSkuSettlements(current.id, settlements);
-                          refresh();
-                        },
-                        onClipboardChanged: refresh,
-                        includeScale: false,
-                        scaleOnly: false,
-                        // 收入框里的「是否有用券成本」：选「是」加一条挂在这条收入下的项目成本。
-                        onAddCoupon: (incomeId) {
-                          _addCouponCost(current.id, incomeId);
-                          refresh();
-                        },
+              builder: (ctx, setDialogState) {
+                final current =
+                    (child
+                            ? proposalIntakeChildProducts(_form)
+                            : proposalIntakeSkuDetails(_form))
+                        .where((row) => row.id == sku.id)
+                        .firstOrNull;
+                if (current == null) {
+                  return AlertDialog(
+                    title: const Text('结算'),
+                    content: const Text('产品已删除'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('关闭'),
                       ),
-                      // 应付里有「推广费」时：可配阶梯，不配就按应付行比例算。
-                      ..._promotionPayableField(current.id, enabled, refresh),
                     ],
+                  );
+                }
+                final titleBits = [
+                  if (current.productName.trim().isNotEmpty)
+                    current.productName.trim(),
+                  if (current.faceValue.trim().isNotEmpty)
+                    '面值 ${current.faceValue.trim()}',
+                ].join(' · ');
+                final wide = !ProposalLayout.isCompact(
+                  MediaQuery.sizeOf(ctx).width,
+                );
+                void refresh() => setDialogState(() {});
+                return AlertDialog(
+                  title: Text(
+                    '${child ? '关联产品' : proposalIntakeProductKindLabel(child: false)}结算${titleBits.isEmpty ? '' : ' · $titleBits'}',
                   ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('关闭'),
-                ),
-              ],
-            );
-          },
+                  content: SizedBox(
+                    width: 760,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 线上原版结算弹窗：销售（收入）+ 项目成本（采购成本），每条一张表格。
+                          _skuSettleProductCard(
+                            skuId: current.id,
+                            childProduct: child,
+                            product: current,
+                            title: titleBits,
+                            emptyTitle: child ? '未选择现金券或满减券' : '未填写产品名称',
+                            reviewPrefix: 'skuSettle',
+                            settlements: proposalIntakeSkuSettlements(current),
+                            wide: wide,
+                            enabled: enabled,
+                            syncSource: _skuSyncSource(current),
+                            productSource: 'CHANNEL',
+                            compact: false,
+                            showItemReview: false,
+                            onAdd: () {
+                              _addSkuSettle(current.id);
+                              refresh();
+                            },
+                            onAddKind: (kind) {
+                              _addSkuSettle(current.id, kind: kind);
+                              refresh();
+                            },
+                            onRemove: (settleId) {
+                              _removeSkuSettle(current.id, settleId);
+                              // 删收入时，挂在它下面的用券成本一起删。
+                              _removeCouponCost(current.id, settleId);
+                              refresh();
+                            },
+                            onPatch: (settleId, terms) {
+                              _patchSkuSettle(current.id, settleId, terms);
+                              refresh();
+                            },
+                            onReplace: (settlements) {
+                              _writeSkuSettlements(current.id, settlements);
+                              refresh();
+                            },
+                            onClipboardChanged: refresh,
+                            includeScale: false,
+                            scaleOnly: false,
+                            // 收入框里的「是否有用券成本」：选「是」加一条挂在这条收入下的项目成本。
+                            onAddCoupon: (incomeId) {
+                              _addCouponCost(current.id, incomeId);
+                              refresh();
+                            },
+                          ),
+                          // 应付里有「推广费」时：可配阶梯，不配就按应付行比例算。
+                          ..._promotionPayableField(
+                            current.id,
+                            enabled,
+                            refresh,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('关闭'),
+                    ),
+                  ],
+                );
+              },
             );
           },
         );
@@ -17687,6 +17702,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             : 1,
         mainProducts: mains,
         rollbackOptions: widget.options.rollbackOptions,
+        productTypes: widget.options.resolvedProductTypes,
         readOnly: !_canEditProducts,
         proposalTitle: _row.title,
         syncSource: _selectedBusinessPlatform(
@@ -18436,7 +18452,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _form,
     ).where((item) => item.parentSkuId == parent.id).toList(growable: false);
     if (children.isEmpty) return const SizedBox.shrink();
-    if (parent.resolvedCouponKind != kProposalCouponKindBenefit) {
+    final typeRaw = parent.couponKind.trim().isNotEmpty
+        ? parent.couponKind
+        : parent.productName;
+    if (!proposalIntakeProductTypeIsBenefit(
+      typeRaw,
+      widget.options.resolvedProductTypes,
+    )) {
       return const SizedBox.shrink();
     }
     return Container(
@@ -18593,11 +18615,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   /// 现金券说「面值」，满减券说「满额」（满 200 减 20 按 200 算）。
-  String _skuFaceWord(ProposalSkuDetailRow sku) =>
-      sku.resolvedCouponKind == kProposalCouponKindDiscount ||
-          proposalIntakeIsDiscountFace(sku.faceValue.trim())
-      ? '满额'
-      : '面值';
+  String _skuFaceWord(ProposalSkuDetailRow sku) {
+    final typeRaw = sku.couponKind.trim().isNotEmpty
+        ? sku.couponKind
+        : sku.productName;
+    final discount =
+        proposalIntakeProductTypeIsDiscount(
+          typeRaw,
+          widget.options.resolvedProductTypes,
+        ) ||
+        proposalIntakeIsDiscountFace(sku.faceValue.trim());
+    return discount ? '满额' : '面值';
+  }
 
   /// 统计口径简称：资管公式名里带「核销 / 销售 / 下发」就取它。
   String _settleBasisShort(String formula) => proposalSettleBasisShort(formula);
@@ -27798,6 +27827,7 @@ class _SkuProductEditorDialog extends StatefulWidget {
     required this.quantity,
     required this.mainProducts,
     required this.rollbackOptions,
+    this.productTypes = const [],
     required this.readOnly,
     this.proposalTitle = '',
     this.initialLinked = const [],
@@ -27811,6 +27841,7 @@ class _SkuProductEditorDialog extends StatefulWidget {
   final int quantity;
   final List<ProposalSkuDetailRow> mainProducts;
   final List<String> rollbackOptions;
+  final List<ProposalProductType> productTypes;
   final bool readOnly;
   final String proposalTitle;
   final List<_SkuProductDraft> initialLinked;
@@ -27860,7 +27891,13 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     _syncZhongyouHaoke = widget.initial.syncZhongyouHaoke;
     _parentSkuId = widget.initial.parentSkuId;
     _rollback = proposalIntakeSkuRollbackValue(widget.initial);
-    _couponKind = widget.initial.resolvedCouponKind;
+    final storedKind = widget.initial.couponKind.trim().isNotEmpty
+        ? widget.initial.couponKind
+        : widget.initial.productName;
+    _couponKind = proposalIntakeNormalizeCouponKind(
+      storedKind,
+      widget.productTypes,
+    );
     _syncSource = widget.syncSource;
   }
 
@@ -27876,6 +27913,9 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     _quantity.dispose();
     super.dispose();
   }
+
+  List<ProposalProductType> get _productTypes =>
+      proposalIntakeResolvedProductTypes(widget.productTypes);
 
   void _submit() {
     if (widget.readOnly) {
@@ -27899,8 +27939,12 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
       }
     }
     final quantity = int.tryParse(_quantity.text.trim()) ?? 1;
-    final couponKind = proposalIntakeNormalizeCouponKind(_couponKind);
-    final faceValue = couponKind == kProposalCouponKindDiscount
+    final couponKind = proposalIntakeNormalizeCouponKind(
+      _couponKind,
+      _productTypes,
+    );
+    final faceValue =
+        proposalIntakeProductTypeIsDiscount(couponKind, _productTypes)
         ? proposalIntakeJoinDiscountFace(_faceThreshold.text, _faceOff.text)
         : _face.text.trim();
     final productName = widget.childProduct
@@ -27923,7 +27967,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
           remark: _remark.text.trim(),
         ),
         quantity: quantity < 1 ? 1 : quantity,
-        linked: couponKind == kProposalCouponKindBenefit
+        linked: proposalIntakeProductTypeIsBenefit(couponKind, _productTypes)
             ? [for (final item in _linked) item]
             : const [],
       ),
@@ -27949,6 +27993,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
         quantity: 1,
         mainProducts: widget.mainProducts,
         rollbackOptions: widget.rollbackOptions,
+        productTypes: widget.productTypes,
         readOnly: widget.readOnly,
         syncSource: widget.syncSource,
         channel: widget.channel,
@@ -28210,9 +28255,14 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     final title = widget.childProduct
         ? (widget.creating ? '新增关联' : '编辑关联')
         : '业务产品信息填写';
-    final face = _couponKind == kProposalCouponKindDiscount
+    final discountKind = proposalIntakeProductTypeIsDiscount(
+      _couponKind,
+      _productTypes,
+    );
+    final face = discountKind
         ? _discountFaceField()
         : _textField(label: '面值', controller: _face, hint: '手填');
+    final typeNames = [for (final item in _productTypes) item.name];
     return AlertDialog(
       title: Text(title),
       content: SizedBox(
@@ -28248,16 +28298,25 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                       : ProposalSelectField<String>(
                           value: _couponKind.isEmpty ? null : _couponKind,
                           title: '类型',
-                          hint: '请选择现金券、满减券或权益',
+                          hint: typeNames.isEmpty
+                              ? '请选择类型'
+                              : '请选择${typeNames.join('、')}',
                           options: [
-                            for (final value in kProposalCouponKinds)
-                              ProposalSelectOption(value: value, label: value),
+                            for (final item in _productTypes)
+                              ProposalSelectOption(
+                                value: item.name,
+                                label: item.name,
+                              ),
                           ],
                           onSelected: (value) => setState(() {
                             _couponKind = proposalIntakeNormalizeCouponKind(
                               value ?? '',
+                              _productTypes,
                             );
-                            if (_couponKind == kProposalCouponKindDiscount &&
+                            if (proposalIntakeProductTypeIsDiscount(
+                                  _couponKind,
+                                  _productTypes,
+                                ) &&
                                 _faceThreshold.text.trim().isEmpty &&
                                 _faceOff.text.trim().isEmpty &&
                                 _face.text.trim().isNotEmpty &&
@@ -28360,7 +28419,10 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                 ),
               ],
               if (!widget.childProduct &&
-                  _couponKind == kProposalCouponKindBenefit) ...[
+                  proposalIntakeProductTypeIsBenefit(
+                    _couponKind,
+                    _productTypes,
+                  )) ...[
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerLeft,

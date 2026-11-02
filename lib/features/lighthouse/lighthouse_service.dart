@@ -293,6 +293,7 @@ class LighthouseService {
     String? productL3,
     String? province,
     String? fundItem,
+    String? entity,
     bool drill = false,
   }) {
     return _getData('/lighthouse/visibility', {
@@ -301,9 +302,99 @@ class LighthouseService {
       if (productL3 != null && productL3.isNotEmpty) 'productL3': productL3,
       if (province != null && province.isNotEmpty) 'province': province,
       if (fundItem != null && fundItem.isNotEmpty) 'fundItem': fundItem,
+      if (entity != null && entity.isNotEmpty) 'entity': entity,
       'date': _fmtDate(DateTime.now()),
       if (drill) 'drill': 'true',
     }, '可见人员加载失败');
+  }
+
+  /// 许正阳在「谁能看到」里开 / 关某人对这一行（坐标全空 = 整个板块）的权限。
+  /// [validTo] 为空 = 永久；[reset] 去掉单独设置，回到板块授权 ∩ 数据规则。
+  Future<void> putVisibilityOverride({
+    required int userId,
+    required String module,
+    String? product,
+    String? productL3,
+    String? province,
+    String? entity,
+    required bool enabled,
+    String? validTo,
+    bool reset = false,
+  }) {
+    return putVisibilityOverrides([
+      {
+        'userId': userId,
+        'module': module,
+        'product': product ?? '',
+        'productL3': productL3 ?? '',
+        'province': province ?? '',
+        'entity': entity ?? '',
+        'enabled': enabled,
+        'validTo': validTo ?? '',
+        'reset': reset,
+      },
+    ]);
+  }
+
+  /// 批量写单独设置（一个事务）。每条：userId / module（"*" = 数据范围）/
+  /// product / productL3 / province / entity / enabled / validTo / reset / access。
+  /// [grantEntry]：从通讯录新加的人，顺带开通灯塔入口。
+  Future<void> putVisibilityOverrides(
+    List<Map<String, dynamic>> items, {
+    bool grantEntry = false,
+  }) async {
+    if (items.isEmpty) return;
+    late final http.Response resp;
+    try {
+      resp = await _client
+          .put(
+            _uri('/lighthouse/visibility/override'),
+            headers: _headers,
+            body: jsonEncode({'items': items, 'grantEntry': grantEntry}),
+          )
+          .timeout(requestTimeout);
+    } on TimeoutException {
+      throw Exception('权限保存超时，请重试');
+    }
+    Map<String, dynamic>? body;
+    try {
+      final decoded = jsonDecode(resp.body);
+      if (decoded is Map) body = Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    if (resp.statusCode < 200 || resp.statusCode >= 300 || body?['success'] == false) {
+      throw Exception((body?['message'] ?? body?['error'] ?? '权限保存失败（HTTP ${resp.statusCode}）').toString());
+    }
+    _inFlight.clear();
+  }
+
+  /// 「👥 N」：一次取一批行的可见人数（与 /visibility 同口径）。
+  /// [rows]：每行 {key, product?, productL3?, province?, entity?}；坐标全空 = 整个板块。
+  Future<Map<String, int>> fetchVisibilityCounts({
+    required String module,
+    required List<Map<String, String>> rows,
+    bool drill = false,
+  }) async {
+    if (rows.isEmpty) return const <String, int>{};
+    final resp = await _client
+        .post(
+          _uri('/lighthouse/visibility/counts'),
+          headers: _headers,
+          body: jsonEncode({'module': module, 'drill': drill, 'rows': rows}),
+        )
+        .timeout(requestTimeout);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('可见人数加载失败（HTTP ${resp.statusCode}）');
+    }
+    final decoded = jsonDecode(resp.body);
+    final data = decoded is Map ? decoded['data'] : null;
+    final raw = data is Map ? data['counts'] : null;
+    final out = <String, int>{};
+    if (raw is Map) {
+      raw.forEach((k, v) {
+        if (v is num) out['$k'] = v.toInt();
+      });
+    }
+    return out;
   }
 
   /// 资产走势三条线（总额 / 资产（本金）/ 累计利润）。
@@ -560,12 +651,13 @@ class LighthouseService {
     return LhPeopleBundle.fromJson(data);
   }
 
-  /// 资管未结账款快照（应收未回款 / 应付未付款）。不跟期间、不带专题。
-  Future<Map<String, dynamic>> fetchBillOutstanding() {
+  /// 资管未结往来（应收应付合计统计四个口径，资管 2.0）。不跟期间、不带专题。
+  /// [asOf] 只移动逾期判断线（结束日后超过 15 天），不查询历史。
+  Future<Map<String, dynamic>> fetchBillOutstanding({String? asOf}) {
     return _getData(
       '/lighthouse/bill-outstanding',
-      const <String, String>{},
-      '未结账款加载失败',
+      <String, String>{if (asOf != null && asOf.isNotEmpty) 'asOf': asOf},
+      '未结往来加载失败',
     );
   }
 

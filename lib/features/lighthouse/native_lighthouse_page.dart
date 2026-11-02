@@ -17,8 +17,6 @@ import '../../core/theme/dunes_island.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../conversation/comm_unread_notifier.dart';
-import '../conversation/conversation_service.dart';
-import '../chat/user_avatar_widget.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'lighthouse_asset_board.dart';
@@ -50,7 +48,9 @@ import 'lighthouse_product_l3.dart';
 import 'lighthouse_rank_badge.dart';
 import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
+import 'lighthouse_visibility_sheet.dart';
 import 'lighthouse_bill_outstanding.dart';
+import 'lighthouse_zg.dart';
 import 'lighthouse_pixel_mark.dart';
 import 'lighthouse_topic.dart';
 import 'lighthouse_business_finance.dart';
@@ -160,6 +160,8 @@ class _LhPlum {
   //   Hero 保留淡紫品牌环境，但用更高明度的雾紫承托白紫内容卡，避免整块发闷。
   static const Color heroFill = Color(0xFFF7F3FC); // 雾紫画布，保留品牌调性但不抢内容
   static const Color heroEdge = Color(0xFFE2D8F0); // 轻紫描边
+  static const Color heroPanelFill = Color(0xFFF9F8FC);
+  static const Color heroPanelEdge = Color(0xFFEAE6F1);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -188,14 +190,13 @@ const bool lighthouseTopBandDark = true;
 
 /// 主 Hero「本期合计」六段的颜色（2026-10-26）：分段色块、走势线、读数、左边大数共用。
 const Map<String, Color> lighthouseHeroSegmentColors = {
-  'verifiedSales': Color(0xFF6A4FC9), // 核销 紫
-  // 2026-10-27 · 蓝更亮、青更清楚、成本偏灰紫：六色明度拉开，叠在一起也分得清。
-  'sales': Color(0xFF4C8DF6), // 销售 蓝
-  'profit': Color(0xFFD0453A), // 利润 红
-  'revenue': Color(0xFFE8A23A), // 收入 琥珀
-  'gmv': Color(0xFF22A699), // GMV 青
-  'totalCost': Color(0xFF9A93B0), // 成本 灰紫
-  'costTotal': Color(0xFF9A93B0),
+  'verifiedSales': Color(0xFF7054C5), // 核销 紫
+  'sales': Color(0xFF5488DD), // 销售 蓝
+  'profit': Color(0xFFCE554B), // 利润 红
+  'revenue': Color(0xFFC88E52), // 收入 暖金
+  'gmv': Color(0xFF55A69F), // GMV 青
+  'totalCost': Color(0xFF928BA5), // 成本 灰紫
+  'costTotal': Color(0xFF928BA5),
 };
 // 和底部 App 金刚位胶囊同一种材质：#F9F8FF 40% + 模糊 18（上下呼应，见 _LhCapsuleGradientBorder）。
 const Color _kLhBand = Color(0x66F9F8FF);
@@ -14814,6 +14815,7 @@ class NativeLighthousePage extends StatefulWidget {
     this.active = true,
     this.service,
     this.sharedCard,
+    this.financeOnly = false,
   });
 
   final AuthSession session;
@@ -14823,6 +14825,10 @@ class NativeLighthousePage extends StatefulWidget {
 
   /// keep-alive 离屏时为 false，避免占用全局返回拦截把其它 Tab 拉回灯塔。
   final bool active;
+
+  /// 2026-11-02 · 资管入口：财务视角（主体 / 净TA）单独成页，从灯塔顶栏
+  /// 「资管入口」推进来。为 true 时整页只有财务侧，顶栏带返回。
+  final bool financeOnly;
 
   /// Injectable data source for offline widget regression tests.
   @visibleForTesting
@@ -14863,7 +14869,10 @@ class _LighthouseTopicHostState extends State<NativeLighthousePage> {
       sharedCard: widget.sharedCard,
       topic: _topic,
       handoff: _handoff,
-      onTopicChanged: widget.sharedCard == null ? _onTopicChanged : null,
+      onTopicChanged: widget.sharedCard == null && !widget.financeOnly
+          ? _onTopicChanged
+          : null,
+      financeOnly: widget.financeOnly,
     );
   }
 }
@@ -14881,7 +14890,11 @@ class _LighthouseTopicBody extends StatefulWidget {
     required this.topic,
     required this.handoff,
     required this.onTopicChanged,
+    this.financeOnly = false,
   });
+
+  /// 见 [NativeLighthousePage.financeOnly]。
+  final bool financeOnly;
 
   final AuthSession session;
   final DunesNavigationController navigation;
@@ -14936,8 +14949,14 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   late final LighthouseService _service;
 
   /// 业务 / 财务口径（2026-10-30）。净TA 归财务侧：_tab == 'netTa' 也算财务。
-  bool _financeLedger = false;
+  ///   2026-11-02 · 天平取消：灯塔本页只看业务；财务整块搬进「资管入口」页
+  ///   （financeOnly），那一页恒为财务。
+  late bool _financeLedger = widget.financeOnly;
   LighthouseBfController? _bf;
+
+  /// 资管「未结往来」板块权限探测（2026-11-02）：只开了未结往来的人也要看到顶栏资管入口。
+  /// null = 还没探到；true / false = 有无权限。
+  final ValueNotifier<bool?> _zgBillsAccess = ValueNotifier<bool?>(null);
 
   /// 从财务「主体」切去净TA 前的账本维度，回业务时还原。
   String _bfReturnTab = 'product';
@@ -15861,6 +15880,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     if (widget.sharedCard == null && widget.topic.trim().isEmpty) {
       _bf = LighthouseBfController(service: _service);
       unawaited(_bf!.load());
+      if (widget.financeOnly) _bf!.access.addListener(_onBfAccessForFinancePage);
+      if (!widget.financeOnly) {
+        unawaited(_probeZgBillsAccess());
+        // 标题里的「资管」随权限探测结果出现 / 消失。
+        _bf!.access.addListener(_onZgAccessChanged);
+        _zgBillsAccess.addListener(_onZgAccessChanged);
+      }
     }
     // 资金池先放回内存缓存那份（同一次打开 App 里再进灯塔，首帧就有总资产）。
     _restoreFundPoolFromMemory();
@@ -16434,6 +16460,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     _ledgerSwitchCompact.dispose();
     _ledgerBeamTick.dispose();
     _bf?.dispose();
+    _zgBillsAccess.dispose();
     _service.dispose();
     _heroFullscreenTick.dispose();
     _pixelCtl.dispose();
@@ -20042,10 +20069,22 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     Widget brand({bool showEn = true}) => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // 资管页：左上角带返回，标题换成「资管」。
+        if (widget.financeOnly) ...[
+          _buildEditorialBackButton(
+            onDark: onDark,
+            onTap: () => Navigator.of(context).maybePop(),
+          ),
+          const SizedBox(width: 8),
+        ],
         if (lighthouseAppBarShowsBrandMark) ...[
           const _LhAppBrandMark(size: 26),
           const SizedBox(width: 9),
         ],
+        // 2026-11-02 · 资管与灯塔同级：标题做成「灯塔  资管」切换，资管不再挂在右上角。
+        if (!widget.financeOnly && _zgTitleSwitchReady)
+          Flexible(child: _buildTitleSwitch(onDark: onDark))
+        else
         Flexible(
           child: RichText(
             maxLines: 1,
@@ -20053,7 +20092,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             text: TextSpan(
               children: [
                 TextSpan(
-                  text: '灯塔',
+                  text: widget.financeOnly ? '资管' : '灯塔',
                   style: LhTypography.sans(
                     size: lighthouseAppBarTitleFontSize,
                     weight: FontWeight.w600,
@@ -20069,7 +20108,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 ),
                 if (showEn)
                 TextSpan(
-                  text: '  LIGHTHOUSE',
+                  text: widget.financeOnly ? '  ASSET MGMT' : '  LIGHTHOUSE',
                   style: LhTypography.mono(
                     size: lighthouseAppBarEnglishFontSize,
                     color: onDark
@@ -20328,15 +20367,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildPinnedPeriodBar(),
-        // 业务 / 财务切换钉在顶栏下面，列表滚动时一直在。
-        ColoredBox(
-          color: DunesColors.resolve(
-            context,
-            lighthouseMainPageBg,
-            role: DunesColorRole.surface,
-          ),
-          child: _buildLedgerModeSwitch(),
-        ),
+        // 2026-11-02 · 业务 ⚖ 财务天平取消，财务走顶栏「资管入口」。
         Expanded(
           child: Stack(
             key: _mainListAreaKey,
@@ -20414,6 +20445,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   // ───── 业务 / 财务口径 ────────────────────────────────────────────────────
 
+  // ignore: unused_element
   Widget _buildLedgerModeSwitch() {
     final bf = _bf;
     if (bf == null) return const SizedBox.shrink();
@@ -20454,6 +20486,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   void _setFinanceLedger(bool finance) {
     if (finance == _isFinanceLedger) return;
+    if (widget.financeOnly && !finance) return;
     _closeDropdown();
     // 灯塔换光：页面上扫一道光，左上角像素灯塔也打一下光束。
     _ledgerBeamTick.value++;
@@ -20658,23 +20691,25 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     // 顶栏把本组放在最右侧、宽度不限时，按内容宽度排，避免把空白顶到组后面。
     // 2026-10-30 · 财务也按日 / 周 / 月 / 季 / 年：和业务共用同一颗周期岛。
     final period = _hasAccess ? _buildGlowingPeriodIsland() : null;
-    final ledger = _buildCompactLedgerIsland();
+    // 2026-11-02 · 资管入口挪到标题（「灯塔  资管」同级切换），右上只留周期和更多。
     return LayoutBuilder(
       builder: (context, constraints) {
         final bounded = constraints.maxWidth.isFinite;
         return Row(
           mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
           children: [
-            ledger,
-            if (period != null)
-              bounded
-                  ? Expanded(
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: period,
-                      ),
-                    )
-                  : period,
+            if (bounded)
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (period != null) Flexible(child: period),
+                  ],
+                ),
+              )
+            else ...[
+              if (period != null) period,
+            ],
             if (_hasAccess) const SizedBox(width: 8),
             _buildMoreIsland(),
           ],
@@ -20683,7 +20718,134 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     );
   }
 
-  /// 天平收起后的「业｜财」小浮岛，排在周期岛左边。
+  // ───── 资管入口（2026-11-02）────────────────────────────────────────────
+  //   轻量横向入口，贴在周期岛（今日 / 本月…）左边；点开推一整页财务视角
+  //   （主体 + 净TA）。资管页自己不再显示这个入口。
+
+  /// 探一次未结往来：403 / 受限账号（restricted）/ 未配置都算没有。
+  Future<void> _probeZgBillsAccess() async {
+    try {
+      final data = await _service.fetchBillOutstanding();
+      if (!mounted) return;
+      _zgBillsAccess.value = data['restricted'] != true && data['unavailable'] != true;
+    } catch (_) {
+      if (!mounted) return;
+      _zgBillsAccess.value = false;
+    }
+  }
+
+  void _onZgAccessChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// 标题切换是否出现：业财对照 / 未结往来 / 净TA 任一有权限。
+  bool get _zgTitleSwitchReady {
+    final bf = _bf;
+    if (bf == null || widget.sharedCard != null) return false;
+    return _hasNetTaAccess || bf.access.value == true || _zgBillsAccess.value == true;
+  }
+
+  /// 「灯塔  资管」：当前页大字加粗，另一个灰色，点一下切过去。
+  Widget _buildTitleSwitch({required bool onDark}) {
+    final on = onDark
+        ? _kLhBandInkStrong
+        : DunesColors.resolve(context, Color(lighthouseAppBarTitleColorValue));
+    final off = onDark ? _kLhBandMute : DunesColors.resolve(context, LhColors.mute2);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '灯塔',
+          maxLines: 1,
+          style: LhTypography.sans(
+            size: lighthouseAppBarTitleFontSize,
+            weight: FontWeight.w600,
+            color: on,
+            letterSpacing: onDark ? 0.8 : -0.3,
+            context: context,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Semantics(
+          button: true,
+          label: '切换到资管',
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
+              _openZgPage();
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text(
+                '资管',
+                maxLines: 1,
+                style: LhTypography.sans(
+                  size: lighthouseAppBarTitleFontSize,
+                  weight: FontWeight.w500,
+                  color: off,
+                  letterSpacing: onDark ? 0.8 : -0.3,
+                  context: context,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 资管入口（2026-11-02）：先到入口页，分「业财对照」「未结往来」两个板块；
+  /// 原资管页（主体明细 / 净TA）留作入口页底部的次级入口。
+  void _openZgPage() {
+    _closeDropdown();
+    _pixelCtl.fire(LighthousePixelEvent.sync);
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        settings: const RouteSettings(name: 'lighthouse/zg'),
+        transitionDuration: const Duration(milliseconds: 180),
+        reverseTransitionDuration: const Duration(milliseconds: 160),
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
+        pageBuilder: (_, __, ___) => LighthouseZgHubPage(
+          service: _service,
+          session: widget.session,
+          onOpenLegacy: _hasNetTaAccess || _bf?.access.value == true
+              ? _openZgLegacyPage
+              : null,
+        ),
+      ),
+    );
+  }
+
+  void _openZgLegacyPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'lighthouse/zg/legacy'),
+        builder: (_) => NativeLighthousePage(
+          session: widget.session,
+          navigation: widget.navigation,
+          commUnread: widget.commUnread,
+          workbenchBadge: widget.workbenchBadge,
+          // 不抢底部导航的全局返回拦截；页内返回走 PopScope。
+          active: false,
+          financeOnly: true,
+        ),
+      ),
+    );
+  }
+
+  /// 资管页：主体（业财标签二）没权限、只有净TA 权限时直接落到净TA。
+  void _onBfAccessForFinancePage() {
+    if (!mounted || !widget.financeOnly) return;
+    if (_bf?.access.value == false && _hasNetTaAccess && _tab != 'netTa') {
+      _enterNetTaTab();
+    }
+  }
+
+  /// 天平收起后的「业｜财」小浮岛（2026-11-02 起不再挂出）。
+  // ignore: unused_element
   Widget _buildCompactLedgerIsland() {
     final bf = _bf;
     if (bf == null) return const SizedBox.shrink();
@@ -23123,6 +23285,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   ? LighthouseBfHero(
                       controller: _bf!,
                       onOpenSubjects: _scrollToLedger,
+                      onShowVisibility: () => unawaited(
+                        _showModuleVisibility(module: 'business_finance'),
+                      ),
                     )
                   : _buildHero(),
             ),
@@ -23205,13 +23370,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 if (_bfSubjectView)
                   LighthouseBfSubjectList(
                     controller: _bf!,
-                    onWhoCanSee: widget.session.lighthouseAudienceAccess
-                        ? (row) => _showRowVisibility(
-                            const {},
-                            'business_finance',
-                            row.title,
-                            row.group,
-                          )
+                    onShowVisibility: widget.session.lighthouseAudienceAccess
+                        ? (row, title) =>
+                            unawaited(_showBfEntityVisibility(row, title))
                         : null,
                   )
                 else if (_tab != 'analysis') ...[
@@ -24171,6 +24332,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   void _onHeroPointSelected(int? i) {
     if (_heroPointIndex == i) return;
     if (!mounted) return;
+    // 拖动读点只给一次轻触感，读数和日期高亮负责视觉反馈。
+    LighthouseFeedback.instance.play(LighthouseFeedbackKind.select, sound: false);
     setState(() => _heroPointIndex = i);
   }
 
@@ -27018,7 +27181,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       line(
         'totalCost',
         '成本',
-        const Color(0xFF8F86A8),
+        lighthouseHeroSegmentColors['totalCost']!,
         _seriesForMetric('totalCost'),
         dash: const [6, 3],
       ),
@@ -29029,6 +29192,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 const SizedBox(width: 8),
                 _buildHeroSyncStamp(inline: true),
               ],
+              // 2026-11-02 · 汇总谁能看到（整个板块）；许正阳点开可开关、设期限。
+              if (totalsOverride == null && widget.sharedCard == null) ...[
+                const SizedBox(width: 2),
+                _heroVisibilityButton(
+                  onTap: () => unawaited(_showModuleVisibility()),
+                ),
+              ],
               const SizedBox(width: 4),
               shareIcon,
             ],
@@ -29139,9 +29309,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                       )
                                     : DunesColors.resolve(
                                         context,
-                                        const Color(
-                                          lighthouseLedgerSummaryNeutralPanelValue,
-                                        ),
+                                        _LhPlum.heroPanelFill,
                                         role: DunesColorRole.surface,
                                       ),
                                 border: Border.all(
@@ -29157,9 +29325,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                         )
                                       : DunesColors.resolve(
                                           context,
-                                          const Color(
-                                            lighthouseHeroPanelNeutralEdgeValue,
-                                          ),
+                                          _LhPlum.heroPanelEdge,
                                           role: DunesColorRole.border,
                                         ),
                                   width: lighthouseHeroPanelEdgeWidth,
@@ -29676,15 +29842,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       ? BoxDecoration(
                           color: DunesColors.resolve(
                             context,
-                            const Color(
-                              lighthouseLedgerSummaryNeutralPanelValue,
-                            ),
+                            _LhPlum.heroPanelFill,
                             role: DunesColorRole.surface,
                           ),
                           border: Border.all(
                             color: DunesColors.resolve(
                               context,
-                              const Color(lighthouseHeroPanelNeutralEdgeValue),
+                              _LhPlum.heroPanelEdge,
                               role: DunesColorRole.border,
                             ),
                             width: lighthouseHeroPanelEdgeWidth,
@@ -33492,7 +33656,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 ).withAlpha(lighthouseLedgerSummaryResultPanelAlpha)
               : DunesColors.resolve(
                   context,
-                  const Color(lighthouseLedgerSummaryNeutralPanelValue),
+                  heroHasOwnShare
+                      ? _LhPlum.heroPanelFill
+                      : const Color(lighthouseLedgerSummaryNeutralPanelValue),
                 ))
         : heroSurface
         ? DunesColors.resolve(context, const Color(0xFFFFFDFF))
@@ -33508,7 +33674,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 ).withAlpha(lighthouseHeroPanelResultEdgeAlpha)
               : DunesColors.resolve(
                   context,
-                  const Color(lighthouseHeroPanelNeutralEdgeValue),
+                  heroHasOwnShare
+                      ? _LhPlum.heroPanelEdge
+                      : const Color(lighthouseHeroPanelNeutralEdgeValue),
                 ))
         : heroSurface
         ? DunesColors.resolve(context, _LhPlum.heroEdge)
@@ -52185,30 +52353,57 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     if (!widget.session.lighthouseAudienceAccess) {
       return trailing ?? const SizedBox.shrink();
     }
+    // 2026-11-02 · 小人图标改成「👥 N」：一眼看出这一行几个人能看。
+    final t = _rowVisibilityTarget(tab, name);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Semantics(
-          button: true,
-          label: '查看$name谁能看到',
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _showRowVisibility(row, tab, name, group),
-            child: SizedBox(
-              width: _fs(25),
-              height: _fs(25),
-              child: Center(
-                child: Icon(
-                  Icons.group_outlined,
-                  size: _fs(13),
-                  color: DunesColors.resolve(context, LhColors.mute),
-                ),
-              ),
-            ),
-          ),
+        LhVisibilityChip(
+          service: _service,
+          module: t.module,
+          product: t.hasCoord ? t.product : null,
+          productL3: t.hasCoord ? t.productL3 : null,
+          province: t.hasCoord ? t.province : null,
+          drill: t.hasCoord && t.drill,
+          scale: _fs(1),
+          onTap: () => _showRowVisibility(row, tab, name, group),
         ),
+        SizedBox(width: _fs(3)),
         if (trailing != null) trailing,
       ],
+    );
+  }
+
+  /// 一行对应的权限坐标。二级页同时带上父行和当前子行，得到交叉口径下真正能看到的人。
+  /// 渠道 / 人效一级行没有可落地的数据坐标（hasCoord = false），按整个板块算。
+  ({String module, String? product, String? productL3, String? province, bool drill, bool hasCoord})
+  _rowVisibilityTarget(String tab, String name) {
+    var module = tab == 'netTa' ? 'net_ta' : tab;
+    String? product;
+    String? productL3;
+    String? province;
+    if (tab == 'product') product = name;
+    if (tab == 'supply') province = name;
+    final root = (_detailKey ?? '').split('::').first.trim();
+    if (_detailKey != null && root.isNotEmpty) {
+      final rootType = _detailType ?? tab;
+      module = rootType == 'netTa' ? 'net_ta' : rootType;
+      if (rootType == 'product') product = root;
+      if (rootType == 'supply') province = root;
+      if (_detailSubTab == 'product') product = name;
+      if (_detailSubTab == lighthouseProductL3SubTab) productL3 = name;
+      if (_detailSubTab == 'supply') province = name;
+    }
+    final hasCoord = (product ?? '').isNotEmpty ||
+        (productL3 ?? '').isNotEmpty ||
+        (province ?? '').isNotEmpty;
+    return (
+      module: module,
+      product: product,
+      productL3: productL3,
+      province: province,
+      drill: _detailKey != null,
+      hasCoord: hasCoord,
     );
   }
 
@@ -52218,218 +52413,70 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     String name,
     String group,
   ) async {
-    final financeSubject = tab == 'business_finance';
-    var module = tab == 'netTa' ? 'net_ta' : tab;
-    String? product;
-    String? productL3;
-    String? province;
-    String? fundItem;
-    if (financeSubject) {
-      module = 'business_finance';
-      // 主体行只认财务汇总的「主体和业财明细」。账本的产品、省份规则切不开这些行。
-      fundItem = 'assets_entity';
-    } else {
-      if (tab == 'product') product = name;
-      if (tab == 'supply') province = name;
-
-      // 二级页同时带上父行和当前子行，得到交叉口径下真正能看到的人。
-      final root = (_detailKey ?? '').split('::').first.trim();
-      if (_detailKey != null && root.isNotEmpty) {
-        final rootType = _detailType ?? tab;
-        module = rootType == 'netTa' ? 'net_ta' : rootType;
-        if (rootType == 'product') product = root;
-        if (rootType == 'supply') province = root;
-        if (_detailSubTab == 'product') product = name;
-        if (_detailSubTab == lighthouseProductL3SubTab) productL3 = name;
-        if (_detailSubTab == 'supply') province = name;
-      }
-    }
-
-    final future = _service.fetchRowVisibility(
-      module: module,
-      product: product,
-      productL3: productL3,
-      province: province,
-      fundItem: fundItem,
-      drill: !financeSubject && _detailKey != null,
+    final t = _rowVisibilityTarget(tab, name);
+    // 渠道 / 人效一级行没有可落地的数据坐标，只读（开关在汇总的「👥」里按板块调）。
+    await showLighthouseVisibilitySheet(
+      context,
+      service: _service,
+      session: widget.session,
+      title: name,
+      module: t.module,
+      product: t.product,
+      productL3: t.productL3,
+      province: t.province,
+      drill: t.drill,
+      manageable: t.hasCoord,
+      readOnlyNote: t.hasCoord ? null : '这一维度按整个板块计算，开关请在汇总卡的「👥」里调整。',
     );
-    if (!mounted) return;
-    final avatarService = ConversationService(session: widget.session);
-    try {
-    await showDialog<void>(
-      context: context,
-      barrierColor: const Color(0xFF241A3D).withAlpha(70),
-      builder: (dialogContext) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440, maxHeight: 560),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: DunesColors.resolve(dialogContext, Colors.white, role: DunesColorRole.surface),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: DunesColors.resolve(dialogContext, _LhPlum.line, role: DunesColorRole.border),
-                width: 0.8,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: _LhPlum.deep.withAlpha(28),
-                  blurRadius: 30,
-                  spreadRadius: -8,
-                  offset: const Offset(0, 14),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: FutureBuilder<Map<String, dynamic>>(
-            future: future,
-            builder: (context, snapshot) {
-              final data = snapshot.data;
-              final rawUsers = data?['users'];
-              final users = rawUsers is List
-                  ? rawUsers.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
-                  : const <Map<String, dynamic>>[];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(20, 17, 12, 15),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          DunesColors.resolve(context, _LhPlum.primary).withAlpha(18),
-                          DunesColors.resolve(context, Colors.white, role: DunesColorRole.surface),
-                        ],
-                      ),
-                      border: Border(
-                        bottom: BorderSide(color: DunesColors.resolve(context, _LhPlum.line), width: 0.6),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 34,
-                          height: 34,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: DunesColors.resolve(context, _LhPlum.primary).withAlpha(22),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(Icons.group_outlined, size: 18, color: DunesColors.resolve(context, _LhPlum.primary)),
-                        ),
-                        const SizedBox(width: 11),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$name · 谁能看到',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: LhTypography.sans(
-                                  size: 16,
-                                  weight: FontWeight.w700,
-                                  color: DunesColors.resolve(context, LhColors.ink),
-                                  height: 1.25,
-                                  context: context,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                snapshot.connectionState == ConnectionState.done && !snapshot.hasError
-                                    ? '${users.length} 人可见 · ${financeSubject ? '开了财务主体明细的人' : '板块权限与数据规则共同计算'}'
-                                    : (financeSubject ? '开了财务主体明细的人' : '板块权限与数据规则共同计算'),
-                                style: LhTypography.sans(size: 10.5, color: DunesColors.resolve(context, LhColors.mute), context: context),
-                              ),
-                            ],
-                          ),
-                        ),
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => Navigator.of(dialogContext).pop(),
-                          child: SizedBox(
-                            width: 34,
-                            height: 34,
-                            child: Icon(Icons.close_rounded, size: 18, color: DunesColors.resolve(context, LhColors.mute)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (snapshot.connectionState != ConnectionState.done)
-                    const Expanded(child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
-                  else if (snapshot.hasError)
-                    const Expanded(child: Center(child: Text('可见人员暂时加载失败')))
-                  else if (users.isEmpty)
-                    const Expanded(child: Center(child: Text('当前没有人能看到这一行')))
-                  else
-                    Expanded(
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-                        itemCount: users.length,
-                        separatorBuilder: (_, __) => Divider(
-                          height: 1,
-                          color: DunesColors.resolve(context, LhColors.line2),
-                        ),
-                        itemBuilder: (context, index) {
-                          final user = users[index];
-                          final source = user['source']?.toString() ?? '';
-                          final badge = source == 'view_all'
-                              ? '全部数据权限'
-                              : source == 'unrestricted'
-                              ? '无数据规则限制'
-                              : '规则命中';
-                          return ListTile(
-                            dense: true,
-                            minVerticalPadding: 10,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 5),
-                            leading: ImUserAvatar(
-                              initial: (user['userName']?.toString().trim().isNotEmpty ?? false)
-                                  ? user['userName'].toString().trim().substring(0, 1)
-                                  : '人',
-                              seed: (user['userId'] as num?)?.toInt() ?? 0,
-                              size: 34,
-                              avatarPreset: user['avatarPreset']?.toString(),
-                              avatarObjectKey: user['avatarObjectKey']?.toString(),
-                              avatarUrl: user['avatarUrl']?.toString(),
-                              avatarService: avatarService,
-                              fallbackBackground: DunesColors.resolve(context, _LhPlum.primary).withAlpha(20),
-                              fallbackForeground: DunesColors.resolve(context, _LhPlum.primary),
-                            ),
-                            title: Text(
-                              user['userName']?.toString() ?? '未命名用户',
-                              style: LhTypography.sans(size: 13, weight: FontWeight.w600, color: DunesColors.resolve(context, LhColors.ink), context: context),
-                            ),
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 3),
-                              child: Text(
-                                [
-                                  if ((user['department']?.toString() ?? '').isNotEmpty) user['department'].toString(),
-                                  badge,
-                                ].join(' · '),
-                                style: LhTypography.sans(size: 10.5, color: DunesColors.resolve(context, LhColors.mute), context: context),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              );
-            },
-              ),
-            ),
-          ),
-        ),
-      ),
+  }
+
+  Widget _heroVisibilityButton({required VoidCallback onTap, String? module}) {
+    final key = module ??
+        switch (_tab) {
+          'netTa' => 'net_ta',
+          'analysis' => 'product',
+          final t => t,
+        };
+    return LhVisibilityChip(service: _service, module: key, onTap: onTap);
+  }
+
+  /// 主 Hero / 资管 Hero：整个板块谁能看到（许正阳在这里开关整块）。
+  Future<void> _showModuleVisibility({String? module, String? title}) async {
+    final key = module ??
+        switch (_tab) {
+          'netTa' => 'net_ta',
+          'analysis' => 'product',
+          final t => t,
+        };
+    final label = title ??
+        switch (key) {
+          'product' => '产品汇总',
+          'supply' => '供给方汇总',
+          'channel' => '渠道汇总',
+          'people' => '人效汇总',
+          'net_ta' => '净TA',
+          'business_finance' => '资管 · 财务汇总',
+          _ => '灯塔汇总',
+        };
+    await showLighthouseVisibilitySheet(
+      context,
+      service: _service,
+      session: widget.session,
+      title: label,
+      module: key,
     );
-    } finally {
-      avatarService.close();
-    }
+  }
+
+  /// 资管主体行：按主体（subjectKey）开关。
+  Future<void> _showBfEntityVisibility(LhBfRow row, String title) async {
+    await showLighthouseVisibilitySheet(
+      context,
+      service: _service,
+      session: widget.session,
+      title: title,
+      module: 'business_finance',
+      entity: row.subjectKey,
+    );
   }
 
   void _togglePk(LhPkEntry entry, BuildContext buttonContext) {

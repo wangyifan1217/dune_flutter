@@ -28,17 +28,17 @@ import 'lighthouse_theme.dart';
 // ═════════════════════════════════════════════════════════════════════════════
 
 const Color _kInk = Color(0xFF2B2147);
-const Color _kSub = Color(0xFF7A6AB3);
+const Color _kSub = Color(0xFF716985);
 const Color _kMuteText = Color(0xFF5A5C56);
 const Color _kMute2 = Color(0xFF94938A);
 const Color _kFocus = Color(0xFF6A4FC9);
 const Color _kPlum = Color(0xFF7B5CD8);
 const Color _kDeep = Color(0xFF5A458F);
-const Color _kEdge = Color(0xFFE2D9F6);
+const Color _kEdge = Color(0xFFE9E5F0);
 const Color _kChipEdge = Color(0xFFECE9F2);
-const Color _kChipFocusEdge = Color(0xFFB9A6F0);
-const Color _kChipFocusFill = Color(0xFFF1ECFD);
-const Color _kGrid = Color(0xFFE8E1F7);
+const Color _kChipFocusEdge = Color(0xFFCBBDEB);
+const Color _kChipFocusFill = Color(0xFFF3F0FA);
+const Color _kGrid = Color(0xFFECE9F1);
 const Color _kBarPos = Color(0xFF9C82E6);
 const Color _kBarNeg = Color(0xFFD6CBF5);
 const Color _kBarPosSel = Color(0xFF5A458F);
@@ -513,7 +513,7 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
           end: Alignment.bottomCenter,
           colors: [
             _c(const Color(0xFFFFFFFF), DunesColorRole.surface),
-            _c(const Color(0xFFF6F2FE), DunesColorRole.surface),
+            _c(const Color(0xFFFAF9FD), DunesColorRole.surface),
           ],
         ),
         border: Border.all(color: _c(_kEdge, DunesColorRole.border), width: 0.8),
@@ -532,7 +532,7 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      _kPlum.withAlpha(26),
+                      _kPlum.withAlpha(14),
                       _kPlum.withAlpha(0),
                     ],
                     stops: const [0, 0.7],
@@ -1069,14 +1069,21 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
                   }),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 160),
+                    curve: Curves.easeOutCubic,
                     height: 22,
                     margin: const EdgeInsets.only(right: 4),
                     padding: const EdgeInsets.symmetric(horizontal: 9),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: l.key == focus
-                          ? _c(l.color, DunesColorRole.surface).withAlpha(26)
-                          : _c(const Color(0xFFF6F4FA), DunesColorRole.surface),
+                          ? _c(l.color, DunesColorRole.surface).withAlpha(20)
+                          : _c(const Color(0xFFF8F7FB), DunesColorRole.surface),
+                      border: Border.all(
+                        color: l.key == focus
+                            ? _c(l.color, DunesColorRole.border).withAlpha(86)
+                            : Colors.transparent,
+                        width: 0.8,
+                      ),
                       borderRadius: BorderRadius.circular(11),
                     ),
                     // 每段前面一小段线（和图里那根线同色），比色块更像图例。
@@ -1290,11 +1297,19 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
         ] else if (seg) ...[
           _segmentTabs(segTabs, focus),
           const SizedBox(height: 6),
-          _focusReadout(
-            sel ?? readIdx,
-            segTabs.firstWhere(
-              (l) => l.key == focus,
-              orElse: () => drawn.isEmpty ? segTabs.first : drawn.first,
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            child: KeyedSubtree(
+              key: ValueKey('${focus ?? ''}:${sel ?? readIdx}'),
+              child: _focusReadout(
+                sel ?? readIdx,
+                segTabs.firstWhere(
+                  (l) => l.key == focus,
+                  orElse: () => drawn.isEmpty ? segTabs.first : drawn.first,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 4),

@@ -195,10 +195,7 @@ void main() {
 
   test('salesScale locks after market review', () {
     const review = {'marketCompleted': true, 'salesContractCompleted': true};
-    expect(
-      proposalIntakeFormKeyLocked('salesScale', const {}, review),
-      isTrue,
-    );
+    expect(proposalIntakeFormKeyLocked('salesScale', const {}, review), isTrue);
     expect(
       proposalIntakeFormKeyLocked('salesScale', const {}, {
         'marketCompleted': false,
@@ -326,6 +323,45 @@ void main() {
     expect(
       proposalIntakeFormKeyLocked('supplySettleCycle', const {}, {
         'financeItems': {'main:supplySettleCycle': true},
+      }),
+      isTrue,
+    );
+  });
+
+  test('unreviewed channel stays after market review', () {
+    const review = {
+      'marketCompleted': true,
+      'technologyCompleted': false,
+      'technologyItems': {'syncSourceRef': true},
+    };
+    final got = proposalIntakeKeepUnreviewedForm(
+      baseline: {
+        'proposalName': '已复核名称',
+        'syncSourceRef': {'code': 'YD', 'name': '运营商券包'},
+      },
+      current: {
+        'proposalName': '不该改',
+        'syncSourceRef': {'code': 'OTHER', 'name': '别的平台'},
+        'channelRef': {'code': 'JL', 'name': '吉林移动'},
+      },
+      review: review,
+    );
+    expect(got['proposalName'], '已复核名称');
+    expect(got['syncSourceRef'], {'code': 'YD', 'name': '运营商券包'});
+    expect(got['channelRef'], {'code': 'JL', 'name': '吉林移动'});
+    expect(
+      proposalIntakeFormKeyLocked('channelRef', const {}, review),
+      isFalse,
+    );
+    expect(
+      proposalIntakeFormKeyLocked('channelRef', const {}, {
+        'technologyItems': {'channelRef': true},
+      }),
+      isTrue,
+    );
+    expect(
+      proposalIntakeFormKeyLocked('channelRef', const {}, {
+        'technologyCompleted': true,
       }),
       isTrue,
     );

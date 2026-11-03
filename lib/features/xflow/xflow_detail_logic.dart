@@ -254,7 +254,13 @@ String formatFieldValue(XflowField field, dynamic val) {
       return formatUserDisplay(val);
     case 'upload':
       final files = normalizeUploadItems(val).where((it) => it['status'] != 'error').toList();
-      return files.isEmpty ? '' : '${files.length} 个文件';
+      if (files.isEmpty) return '';
+      if (xflowIsInvoiceField(field)) {
+        final summary = xflowInvoiceSummary(files);
+        return '${files.length} 张 · ¥${summary.total.toStringAsFixed(2)}'
+            '${summary.unrecognized > 0 ? ' · ${summary.unrecognized} 张未识别' : ''}';
+      }
+      return '${files.length} 个文件';
     case 'multiSelect':
       final ms = val is List ? val : [val];
       return ms

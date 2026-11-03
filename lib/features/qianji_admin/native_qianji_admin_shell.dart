@@ -21,6 +21,8 @@ import '../payment_invoice/native_payment_invoice_page.dart';
 import '../payment_invoice/payment_invoice_preview.dart';
 import '../payroll/native_payroll_report_page.dart';
 import '../payroll/payroll_report_service.dart';
+import '../reimbursement/native_reimbursement_summary_page.dart';
+import '../reimbursement/reimbursement_summary_service.dart';
 import '../am_sso/am_sso_service.dart';
 import '../travel_import/native_travel_import_page.dart';
 import '../reconciliation/native_daily_reconciliation_page.dart';
@@ -97,6 +99,7 @@ enum _WorkbenchView {
   kpiPerformance,
   payrollReports,
   paymentInvoice,
+  reimbursementSummary,
 }
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
@@ -118,6 +121,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool? _canSeeKpiPerformance;
   bool? _canSeePayrollReports;
   bool? _canSeePaymentInvoice;
+  bool? _canSeeReimbursementSummary;
   List<WorkbenchSsoApp> _ssoApps = const [];
 
   static const _titles = {
@@ -138,6 +142,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.kpiPerformance: '月度绩效考评',
     _WorkbenchView.payrollReports: '工资报表',
     _WorkbenchView.paymentInvoice: '付款发票审批',
+    _WorkbenchView.reimbursementSummary: '报销汇总',
   };
 
   bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
@@ -156,6 +161,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveKpiPerformanceAccess());
     unawaited(_resolvePayrollReportAccess());
     unawaited(_resolvePaymentInvoiceAccess());
+    unawaited(_resolveReimbursementSummaryAccess());
     unawaited(_loadSsoApps());
     userAvatarRefresh.addListener(_onAvatarRefresh);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -188,6 +194,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       unawaited(_resolveKpiPerformanceAccess());
       unawaited(_resolvePayrollReportAccess());
       unawaited(_resolvePaymentInvoiceAccess());
+    unawaited(_resolveReimbursementSummaryAccess());
       unawaited(_loadSsoApps());
     }
     if (widget.active != oldWidget.active) {
@@ -228,6 +235,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveKpiPerformanceAccess());
     unawaited(_resolvePayrollReportAccess());
     unawaited(_resolvePaymentInvoiceAccess());
+    unawaited(_resolveReimbursementSummaryAccess());
     unawaited(_loadSsoApps());
   }
 
@@ -347,6 +355,24 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     }
     if (!mounted) return;
     setState(() => _canSeePayrollReports = allowed);
+  }
+
+  /// 报销汇总：权限开关只在后端（org_user.reimbursement_summary_access），每次进工作台探测一次。
+  Future<void> _resolveReimbursementSummaryAccess() async {
+    if (_session.isExternalUser) {
+      if (mounted) setState(() => _canSeeReimbursementSummary = false);
+      return;
+    }
+    var allowed = false;
+    try {
+      allowed = await ReimbursementSummaryService(
+        session: _session,
+      ).fetchAccess();
+    } catch (_) {
+      allowed = _canSeeReimbursementSummary ?? false;
+    }
+    if (!mounted) return;
+    setState(() => _canSeeReimbursementSummary = allowed);
   }
 
   Future<void> _resolvePaymentInvoiceAccess() async {
@@ -882,6 +908,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           key: const ValueKey<String>('workbench-payroll-reports'),
           session: _session,
         );
+      case _WorkbenchView.reimbursementSummary:
+        return NativeReimbursementSummaryPage(
+          key: const ValueKey<String>('workbench-reimbursement-summary'),
+          session: _session,
+        );
       case _WorkbenchView.paymentInvoice:
         return NativePaymentInvoicePage(
           key: const ValueKey<String>('workbench-payment-invoice'),
@@ -956,6 +987,15 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           color: DunesColors.resolve(context, const Color(0xFF0F766E)),
           enabled: true,
           onTap: () => _open(_WorkbenchView.paymentInvoice),
+        ),
+      if (!_session.isExternalUser && _canSeeReimbursementSummary == true)
+        _WorkbenchTile(
+          title: '报销汇总',
+          subtitle: '按报销人 · 报销主体 · 导出',
+          icon: Icons.request_quote_outlined,
+          color: DunesColors.resolve(context, const Color(0xFF0F766E)),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.reimbursementSummary),
         ),
       if (!_session.isExternalUser && _canSeeContracts == true)
         _WorkbenchTile(

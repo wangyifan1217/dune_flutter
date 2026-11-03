@@ -1531,12 +1531,13 @@ class _ExpandBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (item.field.type == 'upload') {
-      return XfDetFileList(
-        items: normalizeUploadItems(
-          item.rawValue,
-        ).where((e) => e['status'] != 'error').toList(growable: false),
-        service: service,
-      );
+      final files = normalizeUploadItems(
+        item.rawValue,
+      ).where((e) => e['status'] != 'error').toList(growable: false);
+      if (xflowIsInvoiceField(item.field)) {
+        return XfDetInvoiceList(items: files, service: service);
+      }
+      return XfDetFileList(items: files, service: service);
     }
     if (item.field.type == 'billCascade') {
       final cfg = XflowBillCascadeConfig.fromField(item.field.raw);
@@ -1941,6 +1942,105 @@ class XfDetTable extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// 审批页面的发票：识别结果逐张列出；识别不了的（扫描件、图片版 PDF）醒目提示审批人人工核对。
+class XfDetInvoiceList extends StatelessWidget {
+  const XfDetInvoiceList({
+    super.key,
+    required this.items,
+    required this.service,
+  });
+
+  final List<Map<String, dynamic>> items;
+  final XflowService service;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = xflowInvoiceSummary(items);
+    final unrecognized = [
+      for (final item in items)
+        if (xflowInvoiceUnrecognized(item)) xflowAttachmentFileName(item),
+    ];
+    const warn = Color(0xFFB45309);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (unrecognized.isNotEmpty)
+          Container(
+            key: const Key('xflow-invoice-unrecognized-banner'),
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFFFF7E6),
+                role: DunesColorRole.surface,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0x66F59E0B),
+                  role: DunesColorRole.border,
+                ),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 16,
+                  color: DunesColors.resolve(context, warn),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '${unrecognized.length} 张发票未能自动识别（可能是扫描件或图片版 PDF），'
+                    '金额没有计入发票合计，请打开文件人工核对：${unrecognized.join('、')}',
+                    style: DunesTypography.sans(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      height: 1.45,
+                      color: DunesColors.resolve(context, warn),
+                      context: context,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        for (final item in items)
+          if (!xflowInvoiceUnrecognized(item) && xflowInvoiceLine(item).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                xflowInvoiceLine(item),
+                style: DunesTypography.sans(
+                  fontSize: 11.5,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
+                ),
+              ),
+            ),
+        Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 8),
+          child: Text(
+            '已识别 ${summary.count} 张，合计 ¥${summary.total.toStringAsFixed(2)}'
+            '${summary.unrecognized > 0 ? ' · ${summary.unrecognized} 张未识别' : ''}',
+            style: DunesTypography.sans(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
+            ),
+          ),
+        ),
+        XfDetFileList(items: items, service: service),
+      ],
     );
   }
 }

@@ -129,6 +129,9 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
 
   XflowUploadTemplate? get _template => widget.field.uploadTemplate;
 
+  /// 报销发票：上传后识别发票号码和金额、查重、累计（字段 meta.invoiceOcr=true）。
+  bool get _invoiceMode => xflowIsInvoiceField(widget.field);
+
   bool get _supportsDesktopDrop {
     if (kIsWeb) return true;
     return !kIsWeb &&
@@ -358,6 +361,48 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
     }
     if (mounted) setState(() {});
     widget.onChanged(List<Map<String, dynamic>>.from(list));
+    if (_invoiceMode && item['status'] == 'done') {
+      await _recognizeInvoice(list, item, bytes, fileName);
+    }
+  }
+
+  Future<void> _recognizeInvoice(
+    List<Map<String, dynamic>> list,
+    Map<String, dynamic> item,
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    item['invoiceStatus'] = 'recognizing';
+    if (mounted) setState(() {});
+    widget.onChanged(List<Map<String, dynamic>>.from(list));
+    try {
+      final data = await widget.service.recognizeInvoice(
+        bytes: bytes,
+        fileName: fileName,
+        objectKey: '${item['objectKey'] ?? ''}',
+      );
+      final invoice = data['invoice'];
+      item
+        ..['invoiceStatus'] = 'done'
+        ..['invoice'] = invoice is Map ? Map<String, dynamic>.from(invoice) : {}
+        ..['invoiceRecordId'] = invoice is Map ? invoice['recordId'] : null
+        ..['invoiceBlocked'] = data['blocked'] == true
+        ..['invoiceUnrecognized'] = data['unrecognized'] == true
+        ..['invoiceMessage'] = '${data['message'] ?? ''}';
+      if (data['blocked'] == true) {
+        _toast('$fileName：${data['message'] ?? '这张发票不能提交'}');
+      }
+    } catch (e) {
+      // 识别服务失败也能提交，按识别不了处理，审批时人工核对。
+      item
+        ..['invoiceStatus'] = 'error'
+        ..['invoiceBlocked'] = false
+        ..['invoiceUnrecognized'] = true
+        ..['invoiceMessage'] =
+            '识别失败（${friendlyErrorText(e, fallback: '服务暂不可用')}），可以提交，审批时需人工核对';
+    }
+    if (mounted) setState(() {});
+    widget.onChanged(List<Map<String, dynamic>>.from(list));
   }
 
   void _remove(String id) {
@@ -581,8 +626,10 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
             _XflowUploadFileRow(
               item: item,
               service: widget.service,
+              invoiceMode: _invoiceMode,
               onRemove: () => _remove(item['id']?.toString() ?? ''),
             ),
+          if (_invoiceMode) _InvoiceSummary(items: widget.items),
         ],
       ],
     );
@@ -594,11 +641,13 @@ class _XflowUploadFileRow extends StatefulWidget {
     required this.item,
     required this.service,
     required this.onRemove,
+    this.invoiceMode = false,
   });
 
   final Map<String, dynamic> item;
   final XflowService service;
   final VoidCallback onRemove;
+  final bool invoiceMode;
 
   @override
   State<_XflowUploadFileRow> createState() => _XflowUploadFileRowState();
@@ -711,6 +760,20 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
         if (_statusChecked && _downloaded) '已下载',
       ].where((e) => e.isNotEmpty).join(' · '),
     };
+    final invoiceLine = widget.invoiceMode ? xflowInvoiceLine(item) : '';
+    final invoiceBlocked =
+        widget.invoiceMode && status == 'done' && xflowInvoiceBlocked(item);
+    final invoiceUnrecognized =
+        widget.invoiceMode &&
+        status == 'done' &&
+        !invoiceBlocked &&
+        xflowInvoiceUnrecognized(item);
+    final invoiceMessage = invoiceBlocked || invoiceUnrecognized
+        ? xflowInvoiceProblem(item)
+        : '';
+    final invoiceMessageColor = invoiceBlocked
+        ? DunesColors.coral
+        : const Color(0xFFB45309);
     Color borderColor = DunesColors.resolve(context, DunesColors.borderSoft);
     Color bg = DunesColors.resolve(
       context,
@@ -727,7 +790,7 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
         Colors.white,
         role: DunesColorRole.surface,
       );
-    } else if (status == 'error') {
+    } else if (status == 'error' || invoiceBlocked) {
       borderColor = DunesColors.resolve(
         context,
         DunesColors.coral,
@@ -784,6 +847,38 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
                         context: context,
                       ),
                     ),
+                    if (invoiceLine.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Text(
+                          invoiceLine,
+                          style: DunesTypography.sans(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w500,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
+                            context: context,
+                          ),
+                        ),
+                      ),
+                    if (invoiceMessage.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Text(
+                          invoiceMessage,
+                          style: DunesTypography.sans(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: DunesColors.resolve(
+                              context,
+                              invoiceMessageColor,
+                            ),
+                            context: context,
+                          ),
+                        ),
+                      ),
                     if (status == 'uploading' || status == 'error')
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
@@ -847,6 +942,198 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
       ),
     );
   }
+}
+
+/// 发票合计：已识别、能提交的发票张数和价税合计；不能提交的单独计数。
+class _InvoiceSummary extends StatelessWidget {
+  const _InvoiceSummary({required this.items});
+
+  final List<Map<String, dynamic>> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = xflowInvoiceSummary(items);
+    final parts = <String>[
+      '已识别 ${summary.count} 张，合计 ¥${summary.total.toStringAsFixed(2)}',
+      if (summary.unrecognized > 0) '${summary.unrecognized} 张未识别（不计入合计）',
+      if (summary.pending > 0) '${summary.pending} 张识别中',
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, left: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            parts.join(' · '),
+            style: DunesTypography.sans(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
+            ),
+          ),
+          if (summary.blocked > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '${summary.blocked} 张发票已报销过或重复上传，不能提交，请删除后再提交',
+                style: DunesTypography.sans(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.resolve(context, DunesColors.coral),
+                  context: context,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---- 报销发票（字段 meta.invoiceOcr=true）----
+
+bool xflowIsInvoiceField(XflowField field) {
+  final meta = field.raw['meta'];
+  if (meta is! Map) return false;
+  final v = meta['invoiceOcr'];
+  return v == true || '$v'.toLowerCase() == 'true' || v == 1;
+}
+
+Map<String, dynamic> _invoiceOf(Map<String, dynamic> item) {
+  final v = item['invoice'];
+  return v is Map ? Map<String, dynamic>.from(v) : const {};
+}
+
+double? _invoiceTotal(Map<String, dynamic> item) {
+  final v = _invoiceOf(item)['total'];
+  if (v is num) return v.toDouble();
+  return double.tryParse('${v ?? ''}'.replaceAll(',', '').trim());
+}
+
+/// 一张发票的识别摘要：发票号 · 日期 · 销售方 · 金额。
+String xflowInvoiceLine(Map<String, dynamic> item) {
+  if (item['invoiceStatus'] == 'recognizing') return '正在识别发票…';
+  final inv = _invoiceOf(item);
+  final no = '${inv['invoiceNo'] ?? ''}'.trim();
+  if (no.isEmpty) return '';
+  final total = _invoiceTotal(item);
+  return [
+    '发票号 $no',
+    '${inv['invoiceDate'] ?? ''}'.trim(),
+    '${inv['sellerName'] ?? ''}'.trim(),
+    if (total != null) '¥${total.toStringAsFixed(2)}',
+  ].where((e) => e.isNotEmpty).join(' · ');
+}
+
+/// 这张发票能不能提交：只有重复报销（已在审批中 / 已通过的单据里）不能提交。
+bool xflowInvoiceBlocked(Map<String, dynamic> item) {
+  if ('${item['status'] ?? 'done'}' != 'done') return false;
+  if (item['invoiceStatus'] == 'recognizing') return false;
+  return item['invoiceBlocked'] == true;
+}
+
+/// 识别不了（扫描件、图片版 PDF、识别服务失败）：可以提交，不计入合计，审批时人工核对。
+bool xflowInvoiceUnrecognized(Map<String, dynamic> item) {
+  if ('${item['status'] ?? 'done'}' != 'done') return false;
+  if (item['invoiceStatus'] == 'recognizing') return false;
+  if (item['invoiceUnrecognized'] == true) return true;
+  final id = item['invoiceRecordId'] ?? _invoiceOf(item)['recordId'];
+  if (id == null || '$id'.isEmpty) return true;
+  return '${_invoiceOf(item)['invoiceNo'] ?? ''}'.trim().isEmpty ||
+      _invoiceTotal(item) == null;
+}
+
+const kXflowInvoiceUnrecognizedHint =
+    '未能自动识别（可能是扫描件或图片版 PDF），可以提交，金额不计入发票合计，审批时需人工核对';
+
+String xflowInvoiceProblem(Map<String, dynamic> item) {
+  final msg = '${item['invoiceMessage'] ?? ''}'.trim();
+  if (msg.isNotEmpty) return msg;
+  if (xflowInvoiceBlocked(item)) return '这张发票已报销过，不能重复提交';
+  return kXflowInvoiceUnrecognizedHint;
+}
+
+class XflowInvoiceSummary {
+  const XflowInvoiceSummary(
+    this.count,
+    this.total,
+    this.blocked,
+    this.pending, [
+    this.unrecognized = 0,
+  ]);
+  final int count;
+  final double total;
+  final int blocked;
+  final int pending;
+  final int unrecognized;
+}
+
+XflowInvoiceSummary xflowInvoiceSummary(List<Map<String, dynamic>> items) {
+  var count = 0, blocked = 0, pending = 0, unrecognized = 0;
+  var total = 0.0;
+  final seen = <String>{};
+  for (final item in items) {
+    final status = '${item['status'] ?? 'done'}';
+    if (status == 'uploading' || item['invoiceStatus'] == 'recognizing') {
+      pending++;
+      continue;
+    }
+    if (status != 'done') continue;
+    if (xflowInvoiceBlocked(item)) {
+      blocked++;
+      continue;
+    }
+    final no = '${_invoiceOf(item)['invoiceNo'] ?? ''}'.trim();
+    if (no.isNotEmpty && !seen.add(no)) {
+      // 同一张发票传了两次：只算一次，提交时会被拦下。
+      blocked++;
+      continue;
+    }
+    if (xflowInvoiceUnrecognized(item)) {
+      unrecognized++;
+      continue;
+    }
+    count++;
+    total += _invoiceTotal(item) ?? 0;
+  }
+  return XflowInvoiceSummary(
+    count,
+    (total * 100).roundToDouble() / 100,
+    blocked,
+    pending,
+    unrecognized,
+  );
+}
+
+/// 提交前检查发票字段；有问题时返回提示，没问题返回 null。
+String? xflowInvoiceSubmitProblem(
+  List<XflowField> fields,
+  Map<String, dynamic> values,
+) {
+  for (final field in fields) {
+    if (!field.isUpload || !xflowIsInvoiceField(field)) continue;
+    if (!field.visibleIn(values)) continue;
+    final items = normalizeUploadItems(values[field.key]);
+    final seen = <String, String>{};
+    for (final item in items) {
+      final name = xflowAttachmentFileName(item);
+      if (item['invoiceStatus'] == 'recognizing') {
+        return '发票「$name」还在识别，请稍候再提交';
+      }
+      if (xflowInvoiceBlocked(item)) {
+        return '发票「$name」不能提交：${xflowInvoiceProblem(item)}';
+      }
+      final no = '${_invoiceOf(item)['invoiceNo'] ?? ''}'.trim();
+      if (no.isEmpty) continue; // 识别不了的可以提交，审批时人工核对
+      final prev = seen[no];
+      if (prev != null) {
+        return '发票 $no 重复上传了（「$prev」和「$name」），同一张发票只能报销一次';
+      }
+      seen[no] = name;
+    }
+  }
+  return null;
 }
 
 List<Map<String, dynamic>> normalizeUploadItems(dynamic val) {

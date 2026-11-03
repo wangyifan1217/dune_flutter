@@ -19,6 +19,7 @@ import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
 import 'proposal_upload_config.dart';
 import 'electronic_reimbursement_form.dart';
+import 'xflow_upload_field.dart' show xflowInvoiceSubmitProblem;
 
 class NativeXflowFormPage extends StatefulWidget {
   const NativeXflowFormPage({
@@ -718,6 +719,14 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         '请填写：${miss.take(3).join('、')}${miss.length > 3 ? '…' : ''}',
         kind: DunesToastKind.error,
       );
+      return;
+    }
+    final invoiceProblem = xflowInvoiceSubmitProblem(
+      _template?.fields ?? const [],
+      _values,
+    );
+    if (invoiceProblem != null) {
+      showDunesToast(context, invoiceProblem, kind: DunesToastKind.error);
       return;
     }
     final status = _editingStatus;

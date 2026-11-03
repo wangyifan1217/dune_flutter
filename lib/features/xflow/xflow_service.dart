@@ -1847,6 +1847,35 @@ class XflowService {
     throw Exception('上传失败: 返回数据异常');
   }
 
+  /// 报销发票识别：把已上传的发票 PDF 再发给服务端识别，返回识别字段和查重结果
+  /// （{invoice: {...recordId, invoiceNo, total...}, blocked, message, duplicate}）。
+  Future<Map<String, dynamic>> recognizeInvoice({
+    required Uint8List bytes,
+    required String fileName,
+    String objectKey = '',
+    String templateKey = '',
+  }) async {
+    final req = http.MultipartRequest('POST', _uri('/xflow/invoices/recognize'));
+    req.headers['Authorization'] = 'Bearer ${session.token}';
+    if (objectKey.isNotEmpty) req.fields['objectKey'] = objectKey;
+    if (templateKey.isNotEmpty) req.fields['templateKey'] = templateKey;
+    req.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+    );
+    final streamed = await _client.send(req);
+    final bodyText = await streamed.stream.bytesToString();
+    final map = _decode(bodyText);
+    if (streamed.statusCode < 200 ||
+        streamed.statusCode >= 300 ||
+        map['success'] == false) {
+      throw Exception(_apiMessage(map, '发票识别失败：HTTP ${streamed.statusCode}'));
+    }
+    final data = map['data'];
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    throw Exception('发票识别失败：返回数据异常');
+  }
+
   Future<List<Map<String, dynamic>>> fetchFunctionalApprovers() async {
     final rows = await _requestList('/xflow/functional-approvers');
     return rows.whereType<Map<String, dynamic>>().toList(growable: false);

@@ -3570,6 +3570,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   ProposalSkuDetailRow? _businessProductClipboard;
   ProposalSkuDetailRow? _linkedProductClipboard;
   List<ProposalSkuSettleRow>? _skuSettlementsClipboard;
+  String _skuSettlementsClipboardSourceId = '';
   final Map<String, int> _costAmountStamp = {};
   bool _deleting = false;
   bool _forwarding = false;
@@ -17301,7 +17302,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                               refresh();
                             },
                             onReplace: (settlements) {
-                              _writeSkuSettlements(current.id, settlements);
+                              _assignPastedSkuSettlements(
+                                current.id,
+                                settlements,
+                              );
                               refresh();
                             },
                             onClipboardChanged: refresh,
@@ -17434,6 +17438,38 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       return;
     }
     jump();
+  }
+
+  void _rememberSkuSettlementsClipboard(
+    List<ProposalSkuSettleRow> settlements, {
+    required String sourceSkuId,
+  }) {
+    _skuSettlementsClipboard = [
+      for (final item in settlements)
+        ProposalSkuSettleRow(id: item.id, kind: item.kind, terms: item.terms),
+    ];
+    _skuSettlementsClipboardSourceId = sourceSkuId.trim();
+  }
+
+  /// 粘贴结算后，把来源产品当前的收入公式一并写到目标产品。成本选择不动。
+  void _assignPastedSkuSettlements(
+    String skuId,
+    List<ProposalSkuSettleRow> settlements,
+  ) {
+    if (!_canEditSkuSettlements) return;
+    final sourceId = _skuSettlementsClipboardSourceId.trim();
+    _writeSkuSettlements(skuId, settlements);
+    if (sourceId.isEmpty || sourceId == skuId) return;
+    final form = proposalIntakeAssignCopiedProductFormulas(
+      _form,
+      newToSource: {skuId: sourceId},
+      fields: const ['revenueFormula', 'revenueFormulaGroup'],
+    );
+    setState(() {
+      _markFormDirty();
+      _row = _row.copyWith(status: _statusAfterEdit, form: form);
+    });
+    _emitChanged(_row);
   }
 
   List<ProposalSkuSettleRow> _pasteSkuSettlements(
@@ -17599,6 +17635,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     benefit['skuQuantities'] = copied.quantities;
     form['benefitProduct'] = benefit;
     form = proposalIntakeSyncChildProductMeta(form);
+    form = proposalIntakeAssignCopiedProductFormulas(
+      form,
+      newToSource: copied.formulaSources,
+    );
     form = _withEstimatedFinanceCosts(form);
     final review = _reviewAfterProductEdit('technologyCompleted');
     setState(() {
@@ -19019,14 +19059,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           '复制这个产品的结算',
           () {
             setState(
-              () => _skuSettlementsClipboard = [
-                for (final item in settlements)
-                  ProposalSkuSettleRow(
-                    id: item.id,
-                    kind: item.kind,
-                    terms: item.terms,
-                  ),
-              ],
+              () => _rememberSkuSettlementsClipboard(
+                settlements,
+                sourceSkuId: product?.id ?? '',
+              ),
             );
             onClipboardChanged?.call();
           },
@@ -20736,7 +20772,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 onPatch: (settleId, terms) =>
                     _patchSkuSettle(sku.id, settleId, terms),
                 onReplace: (settlements) =>
-                    _writeSkuSettlements(sku.id, settlements),
+                    _assignPastedSkuSettlements(sku.id, settlements),
                 onJumpToProduct: () => _jumpToSkuProduct(sku, child: true),
                 includeScale: false,
                 compact: true,
@@ -20840,8 +20876,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   _removeSkuSettle(channelRows[i].id, settleId),
               onPatch: (settleId, terms) =>
                   _patchSkuSettle(channelRows[i].id, settleId, terms),
-              onReplace: (settlements) =>
-                  _writeSkuSettlements(channelRows[i].id, settlements),
+              onReplace: (settlements) => _assignPastedSkuSettlements(
+                channelRows[i].id,
+                settlements,
+              ),
               onJumpToProduct: () =>
                   _jumpToSkuProduct(channelRows[i], child: false),
               includeScale: false,
@@ -21061,14 +21099,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 TextButton(
                   onPressed: () {
                     setState(
-                      () => _skuSettlementsClipboard = [
-                        for (final item in settlements)
-                          ProposalSkuSettleRow(
-                            id: item.id,
-                            kind: item.kind,
-                            terms: item.terms,
-                          ),
-                      ],
+                      () => _rememberSkuSettlementsClipboard(
+                        settlements,
+                        sourceSkuId: skuId,
+                      ),
                     );
                     onClipboardChanged?.call();
                   },
@@ -21563,14 +21597,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       ? null
                       : () {
                           setState(
-                            () => _skuSettlementsClipboard = [
-                              for (final item in settlements)
-                                ProposalSkuSettleRow(
-                                  id: item.id,
-                                  kind: item.kind,
-                                  terms: item.terms,
-                                ),
-                            ],
+                            () => _rememberSkuSettlementsClipboard(
+                              settlements,
+                              sourceSkuId: product.id,
+                            ),
                           );
                           refresh();
                         },
@@ -21585,7 +21615,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   onPressed: _skuSettlementsClipboard == null
                       ? null
                       : () {
-                          _writeSkuSettlements(
+                          _assignPastedSkuSettlements(
                             product.id,
                             _pasteSkuSettlements(settlements),
                           );

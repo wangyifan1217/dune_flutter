@@ -6180,8 +6180,13 @@ class ProposalSkuSettleRow {
   }
 }
 
-String proposalIntakeNewSkuSettleId() =>
-    'st-${DateTime.now().microsecondsSinceEpoch}';
+int _proposalIntakeSettleSeq = 0;
+
+/// 同一微秒里连建多条结算时，时间戳会重复，复制后几条结算挤成同一条。
+String proposalIntakeNewSkuSettleId() {
+  _proposalIntakeSettleSeq += 1;
+  return 'st-${DateTime.now().microsecondsSinceEpoch}-$_proposalIntakeSettleSeq';
+}
 
 String proposalIntakeNewSharedSettleId() =>
     'ss-${DateTime.now().microsecondsSinceEpoch}';
@@ -7278,15 +7283,34 @@ ProposalSkuDetailRow proposalIntakeCloneSkuProduct(
     platformStatus: '',
     partnerProductCode: '',
     platformMessage: '',
-    settlements: [
-      for (final item in proposalIntakeSkuSettlements(source))
-        ProposalSkuSettleRow(
-          id: proposalIntakeNewSkuSettleId(),
-          kind: item.kind,
-          terms: item.terms,
-        ),
-    ],
+    settlements: proposalIntakeRetagSettlements(
+      proposalIntakeSkuSettlements(source),
+      proposalIntakeNewSkuSettleId,
+    ),
   );
+}
+
+/// 复制结算并换成新 id。挂在收入下的用券成本仍用「新收入 id-coupon」。
+List<ProposalSkuSettleRow> proposalIntakeRetagSettlements(
+  List<ProposalSkuSettleRow> source,
+  String Function() nextId,
+) {
+  const suffix = '-coupon';
+  final idMap = <String, String>{};
+  for (final item in source) {
+    if (proposalIntakeIsIncomeCouponCost(item, source)) continue;
+    idMap[item.id] = nextId();
+  }
+  return [
+    for (final item in source)
+      ProposalSkuSettleRow(
+        id: proposalIntakeIsIncomeCouponCost(item, source)
+            ? '${idMap[item.id.substring(0, item.id.length - suffix.length)] ?? nextId()}$suffix'
+            : idMap[item.id]!,
+        kind: item.kind,
+        terms: item.terms,
+      ),
+  ];
 }
 
 String proposalIntakeCopiedProductName(
@@ -7310,11 +7334,15 @@ class ProposalIntakeProductCopy {
     required this.mains,
     required this.children,
     required this.quantities,
+    this.formulaSources = const {},
   });
 
   final List<ProposalSkuDetailRow> mains;
   final List<ProposalSkuDetailRow> children;
   final Map<String, int> quantities;
+
+  /// 新产品 id → 被复制的产品 id。收入公式按这个挂到新产品上。
+  final Map<String, String> formulaSources;
 }
 
 /// 按数量复制一条业务产品。关联产品和双方结算一并复制，并换成新 id。
@@ -7329,6 +7357,7 @@ ProposalIntakeProductCopy proposalIntakeCopyBusinessProducts({
   final nextMains = [...mains];
   final nextChildren = [...children];
   final nextQuantities = Map<String, int>.from(quantities);
+  final formulaSources = <String, String>{};
   if (count < 1) {
     return ProposalIntakeProductCopy(
       mains: nextMains,
@@ -7348,19 +7377,16 @@ ProposalIntakeProductCopy proposalIntakeCopyBusinessProducts({
 
   ProposalSkuDetailRow retagSettlements(ProposalSkuDetailRow row) {
     return row.copyWith(
-      settlements: [
-        for (final item in proposalIntakeSkuSettlements(row))
-          ProposalSkuSettleRow(
-            id: nid('st'),
-            kind: item.kind,
-            terms: item.terms,
-          ),
-      ],
+      settlements: proposalIntakeRetagSettlements(
+        proposalIntakeSkuSettlements(row),
+        () => nid('st'),
+      ),
     );
   }
 
   for (var i = 0; i < count; i++) {
     final mainId = nid('sku');
+    formulaSources[mainId] = source.id;
     nextMains.add(
       retagSettlements(
         proposalIntakeCloneSkuProduct(
@@ -7376,6 +7402,7 @@ ProposalIntakeProductCopy proposalIntakeCopyBusinessProducts({
     );
     for (final child in linked) {
       final childId = nid('child');
+      formulaSources[childId] = child.id;
       nextChildren.add(
         retagSettlements(
           proposalIntakeCloneSkuProduct(
@@ -7393,6 +7420,7 @@ ProposalIntakeProductCopy proposalIntakeCopyBusinessProducts({
     mains: nextMains,
     children: nextChildren,
     quantities: nextQuantities,
+    formulaSources: formulaSources,
   );
 }
 

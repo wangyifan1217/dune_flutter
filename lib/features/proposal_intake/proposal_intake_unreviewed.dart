@@ -502,8 +502,9 @@ Object? proposalIntakeMergeProductFormulas({
         : null;
     final entry = <String, dynamic>{};
     for (final field in {...before.keys, ...?after?.keys}) {
-      if (_productFormulaFieldLocked(review, id, field)) {
-        if (before.containsKey(field)) entry[field] = before[field];
+      if (_productFormulaFieldLocked(review, id, field) &&
+          before.containsKey(field)) {
+        entry[field] = before[field];
         continue;
       }
       if (after != null && after.containsKey(field)) {

@@ -1,3 +1,4 @@
+import 'package:dunes_app/features/proposal_intake/proposal_cost_estimate.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_finance_formula.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_finance_formula_board.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_models.dart';
@@ -218,5 +219,85 @@ void main() {
     expect(find.textContaining('产品A'), findsWidgets);
     expect(find.textContaining('产品B'), findsWidgets);
     expect(find.textContaining('万元'), findsNothing);
+  });
+
+  test('copying a product copies the income formula it shows', () {
+    final form = {
+      'skuDetails': [
+        _sku('sku-1', '原产品', '100'),
+        _sku('sku-2', '原产品（副本）', '100'),
+      ],
+      kProposalProductFormulasKey: {
+        'sku-1': {
+          kProposalRevenueFormulaKey: '15',
+          kProposalRevenueFormulaGroupKey: 'OPERATOR',
+          'costItems': ['推广费'],
+        },
+      },
+    };
+    final copied = proposalIntakeAssignCopiedProductFormulas(
+      form,
+      newToSource: const {'sku-2': 'sku-1'},
+    );
+    final entries = copied[kProposalProductFormulasKey] as Map;
+    final source = Map<String, dynamic>.from(entries['sku-1'] as Map);
+    final target = Map<String, dynamic>.from(entries['sku-2'] as Map);
+    expect(target[kProposalRevenueFormulaKey], '15');
+    expect(target[kProposalRevenueFormulaGroupKey], 'OPERATOR');
+    expect(target['costItems'], ['推广费']);
+    (target['costItems'] as List).add('支付手续费');
+    expect(source['costItems'], ['推广费']);
+
+    final pasted = proposalIntakeAssignCopiedProductFormulas(
+      form,
+      newToSource: const {'sku-2': 'sku-1'},
+      fields: const ['revenueFormula', 'revenueFormulaGroup'],
+    );
+    final pastedTarget = (pasted[kProposalProductFormulasKey] as Map)['sku-2'];
+    expect(pastedTarget['revenueFormula'], '15');
+    expect(pastedTarget['costItems'], isNull);
+  });
+
+  test('收入公式里的利差取收入类型为利差的结算', () {
+    Map<String, dynamic> form({required bool spread}) => {
+      'salesScale': 100,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'productName': '会员包',
+          'settlements': [
+            {'id': 'in', 'scale': '100', 'settleRatio': '1'},
+            if (spread)
+              {'id': 'spread', 'billType': '利差', 'settleRatio': '0.2'},
+            {
+              'id': 'promo',
+              'kind': 'cost',
+              'billType': '推广费',
+              'settleRatio': '0.1',
+            },
+          ],
+        },
+      ],
+      kProposalProductFormulasKey: {
+        'sku-1': {
+          kProposalRevenueFormulaKey: '15',
+          kProposalRevenueFormulaGroupKey: 'OPERATOR',
+        },
+      },
+    };
+
+    final without = proposalEvaluateFinance(
+      form(spread: false),
+      catalog: ProposalFinanceFormulaCatalog.fallback,
+    ).revenue;
+    final withSpread = proposalEvaluateFinance(
+      form(spread: true),
+      catalog: ProposalFinanceFormulaCatalog.fallback,
+    ).revenue;
+    expect(proposalSpreadIncomeAmount(form(spread: false)), isNull);
+    expect(proposalSpreadIncomeAmount(form(spread: true)), closeTo(20, 0.05));
+    expect(without.missing, contains('利差'));
+    expect(withSpread.missing, isNot(contains('利差')));
+    expect(withSpread.amount, isNot(closeTo(without.amount, 0.01)));
   });
 }

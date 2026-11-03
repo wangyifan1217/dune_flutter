@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'proposal_cost_estimate.dart';
@@ -1509,6 +1510,7 @@ const _kCostPhrases = <String>[
   '支付手续费',
   '机构返佣',
   '推广费',
+  '利差',
   '渠道侧N',
   '渠道侧H',
   '供给侧N',
@@ -1811,6 +1813,50 @@ Map<String, dynamic> proposalProductFormulaEntry(
     proposalProductFormulaRawEntry(form, skuId),
     proposalIntakeProductFinance(form, owner: owner),
   );
+}
+
+Map<String, dynamic> _cloneFormulaEntry(Map<String, dynamic> entry) {
+  try {
+    final raw = jsonDecode(jsonEncode(entry));
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+  } catch (_) {}
+  return Map<String, dynamic>.from(entry);
+}
+
+/// 把源产品当前看到的公式选择抄到新产品上。
+///
+/// [fields] 为空时整份抄过去（复制产品）。只粘贴结算时传收入公式字段，
+/// 不覆盖目标产品已经选好的成本。
+Map<String, dynamic> proposalIntakeAssignCopiedProductFormulas(
+  Map<String, dynamic> form, {
+  required Map<String, String> newToSource,
+  List<String> fields = const [],
+}) {
+  if (newToSource.isEmpty) return form;
+  final next = Map<String, dynamic>.from(_productFormulasOf(form));
+  for (final item in newToSource.entries) {
+    final newId = item.key.trim();
+    final sourceId = item.value.trim();
+    if (newId.isEmpty || sourceId.isEmpty || newId == sourceId) continue;
+    final incoming = _cloneFormulaEntry(
+      proposalProductFormulaEntry(form, sourceId),
+    );
+    if (incoming.isEmpty) continue;
+    if (fields.isEmpty) {
+      next[newId] = incoming;
+      continue;
+    }
+    final current = Map<String, dynamic>.from(_mapOf(next[newId]));
+    for (final field in fields) {
+      if (!incoming.containsKey(field)) continue;
+      final value = incoming[field];
+      if (value == null || (value is String && value.trim().isEmpty)) continue;
+      current[field] = value;
+    }
+    if (current.isNotEmpty) next[newId] = current;
+  }
+  return Map<String, dynamic>.from(form)..[kProposalProductFormulasKey] = next;
 }
 
 /// 把每个产品的选择补全写进 `productFormulas`，并清掉已删除产品的条目。
@@ -2330,6 +2376,10 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
       base: scale,
       ratio: ratio,
       costOf: (name) {
+        if (name == '利差') {
+          final income = proposalSpreadIncomeAmount(form);
+          if (income != null) return income;
+        }
         for (final alias in proposalProjectCostNamesOf(name)) {
           final value = settleCost(alias);
           if (value != null) return value;

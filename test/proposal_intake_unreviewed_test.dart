@@ -391,4 +391,21 @@ void main() {
       );
     },
   );
+
+  test('copied product keeps its income formula after finance review', () {
+    final got = proposalIntakeMergeProductFormulas(
+      existing: {
+        'sku-1': {'revenueFormula': '3'},
+      },
+      incoming: {
+        'sku-1': {'revenueFormula': '9'},
+        'sku-new': {'revenueFormula': '15', 'revenueFormulaGroup': 'OPERATOR'},
+      },
+      review: const {'financeCompleted': true},
+    );
+    final entries = Map<String, dynamic>.from(got as Map);
+    expect(entries['sku-1']['revenueFormula'], '3');
+    expect(entries['sku-new']['revenueFormula'], '15');
+    expect(entries['sku-new']['revenueFormulaGroup'], 'OPERATOR');
+  });
 }

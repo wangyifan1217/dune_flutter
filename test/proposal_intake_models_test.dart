@@ -3844,6 +3844,11 @@ void main() {
             id: 'st-main',
             terms: ProposalFinanceSettleTerms(settleRatio: '0.9'),
           ),
+          ProposalSkuSettleRow(
+            id: 'st-main-coupon',
+            kind: 'cost',
+            terms: ProposalFinanceSettleTerms(settleRatio: '0.1'),
+          ),
         ],
       );
       const child = ProposalSkuDetailRow(
@@ -3875,12 +3880,18 @@ void main() {
       expect(copied.mains[2].productName, '湖北中石油50元加油券包（副本2）');
       expect(copied.mains[1].platformStatus, isEmpty);
       expect(copied.mains[1].partnerProductCode, isEmpty);
-      expect(copied.mains[1].settlements.single.id, isNot('st-main'));
-      expect(copied.mains[1].settlements.single.terms.settleRatio, '0.9');
-      expect(
-        copied.mains[2].settlements.single.id,
-        isNot(copied.mains[1].settlements.single.id),
+      final copiedSettlements = copied.mains[1].settlements;
+      expect(copiedSettlements, hasLength(2));
+      final copiedIncome = copiedSettlements.firstWhere((row) => !row.isCost);
+      final copiedCoupon = copiedSettlements.firstWhere((row) => row.isCost);
+      expect(copiedIncome.id, isNot('st-main'));
+      expect(copiedCoupon.id, '${copiedIncome.id}-coupon');
+      expect(copiedIncome.terms.settleRatio, '0.9');
+      expect(copied.formulaSources[copied.mains[1].id], source.id);
+      final secondIncome = copied.mains[2].settlements.firstWhere(
+        (row) => !row.isCost,
       );
+      expect(secondIncome.id, isNot(copiedIncome.id));
 
       final firstChildren = copied.children
           .where((row) => row.parentSkuId == copied.mains[1].id)
@@ -3902,6 +3913,7 @@ void main() {
         isNot(firstChildren.single.settlements.single.id),
       );
       expect(copied.quantities[firstChildren.single.id], 2);
+      expect(copied.formulaSources[firstChildren.single.id], child.id);
       expect(copied.quantities[secondChildren.single.id], 2);
       expect(copied.children.where((row) => row.id == 'child-1'), hasLength(1));
     },

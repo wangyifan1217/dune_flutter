@@ -1209,6 +1209,25 @@ String proposalSettleBillTypeL3(ProposalFinanceSettleTerms terms) {
   return path;
 }
 
+/// 收入类型选了「利差」时，公式里的利差用这条收入的年化金额，不再按 0。
+double? proposalSpreadIncomeAmount(Map<String, dynamic> form) {
+  var sum = 0.0;
+  var found = false;
+  for (final sku in proposalIntakeAllSellableSkus(form)) {
+    final face = proposalIntakeSkuSettleFace(sku);
+    final scale = proposalSkuFaceShareScale(sku, form: form);
+    for (final settle in proposalIntakeSkuSettlements(sku)) {
+      if (settle.isCost) continue;
+      if (proposalSettleBillTypeL3(settle.terms) != '利差') continue;
+      found = true;
+      final share = proposalIntakeSettleShare(settle.terms, face: face);
+      sum += scale * share;
+    }
+  }
+  if (!found) return null;
+  return proposalRoundWan(sum);
+}
+
 String? proposalPayableBillCostName(
   ProposalFinanceSettleTerms terms, {
   List<String> costNames = const [],
@@ -1308,8 +1327,7 @@ String proposalPromotionVolumeText({
   required double scale,
   required double share,
   String price = '',
-}) =>
-    '计费基数：${_promotionSettlementBase(scale, share, price: price)}';
+}) => '计费基数：${_promotionSettlementBase(scale, share, price: price)}';
 
 /// 推广费阶梯的计费基数（万元/年）：各关联产品的结算金额加总。
 ({double volume, String detail, bool missing}) proposalPromotionVolume(
@@ -1364,13 +1382,14 @@ String proposalPromotionSubstitution({
   String price = '',
 }) {
   final settled = proposalRoundWan(scale * share);
-  final amount = proposalRoundWan(
-    settled * proposalParseSettleRatio(rateText),
-  );
+  final amount = proposalRoundWan(settled * proposalParseSettleRatio(rateText));
   if (share <= 0) return '推广费：主产品还没填结算金额，按 0 计';
   final r = rateText.trim();
-  final base = _promotionSettlementBase(scale, share, price: price)
-      .replaceAll(' 万/年', ' 万');
+  final base = _promotionSettlementBase(
+    scale,
+    share,
+    price: price,
+  ).replaceAll(' 万/年', ' 万');
   return '推广费：$base × $r = ${proposalFormatWan(amount)} 万元/年';
 }
 

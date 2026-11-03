@@ -41,6 +41,33 @@ void main() {
     expect(xflowInvoiceLine(items[0]), '发票号 26440000000000000001 · 2026-10-08 · 某酒店 · ¥120.50');
   });
 
+  test('fills amount, detail and tax from recognized invoices', () {
+    final items = [
+      _invoice('1', '46.00'),
+      _invoice('2', '6.52'),
+    ];
+    items[0]['invoice']['goodsDesc'] = '*运输服务';
+    items[0]['invoice']['taxAmount'] = '2.60';
+    items[1]['invoice']['goodsDesc'] = '*运输服务';
+    items[1]['invoice']['taxAmount'] = '0.37';
+    expect(xflowInvoiceFormFill(items), {
+      'invoiceAmount': '52.52',
+      'taxAmount': '2.97',
+      'invoiceDetail': '*运输服务 ¥46.00\n*运输服务 ¥6.52',
+    });
+    expect(
+      xflowInvoiceFormFill([
+        {'fileName': 'scan.pdf', 'status': 'done', 'invoiceUnrecognized': true},
+      ]),
+      isEmpty,
+    );
+    expect(xflowInvoiceFormFill(const []), {
+      'invoiceAmount': '',
+      'invoiceDetail': '',
+      'taxAmount': '',
+    });
+  });
+
   test('blocks submit on duplicates or recognizing invoices, allows unrecognized ones', () {
     expect(xflowIsInvoiceField(field), isTrue);
     final ok = {'reimbursementType': '日常报销', 'invoiceFiles': [_invoice('1', '1.00'), _invoice('2', '2.00')]};

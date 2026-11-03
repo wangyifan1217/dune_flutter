@@ -1051,6 +1051,70 @@ double? _invoiceTotal(Map<String, dynamic> item) {
   return double.tryParse('${v ?? ''}'.replaceAll(',', '').trim());
 }
 
+double? _invoiceMoney(dynamic value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse('${value ?? ''}'.replaceAll(',', '').trim());
+}
+
+double? _invoiceFaceAmount(Map<String, dynamic> invoice) {
+  final total = _invoiceMoney(invoice['total']);
+  if (total != null) return total;
+  final amount = _invoiceMoney(invoice['amount']);
+  final tax = _invoiceMoney(invoice['taxAmount']);
+  if (amount != null && tax != null) return amount + tax;
+  return amount;
+}
+
+String _moneyText(double value) => value.toStringAsFixed(2);
+
+/// 同一组报销明细里，已识别发票回填发票金额、发票明细、税额。
+/// 多张发票金额和税额相加；明细一行一张。识别不了或重复报销的不计入。
+Map<String, String> xflowInvoiceFormFill(List<Map<String, dynamic>> items) {
+  final active = items.where((item) => '${item['status'] ?? 'done'}' != 'error');
+  if (active.isEmpty) {
+    return const {
+      'invoiceAmount': '',
+      'invoiceDetail': '',
+      'taxAmount': '',
+    };
+  }
+  var total = 0.0;
+  var tax = 0.0;
+  var hasTotal = false;
+  var hasTax = false;
+  final details = <String>[];
+  for (final item in items) {
+    if ('${item['status'] ?? 'done'}' != 'done') continue;
+    if (item['invoiceStatus'] == 'recognizing') continue;
+    if (xflowInvoiceBlocked(item) || xflowInvoiceUnrecognized(item)) continue;
+    final invoice = _invoiceOf(item);
+    final face = _invoiceFaceAmount(invoice);
+    if (face != null) {
+      total += face;
+      hasTotal = true;
+    }
+    final taxValue = _invoiceMoney(invoice['taxAmount']);
+    if (taxValue != null) {
+      tax += taxValue;
+      hasTax = true;
+    }
+    final goods = '${invoice['goodsDesc'] ?? ''}'.trim();
+    final seller = '${invoice['sellerName'] ?? ''}'.trim();
+    final title = goods.isNotEmpty ? goods : seller;
+    if (title.isEmpty && face == null) continue;
+    final line = [
+      title,
+      if (face != null) '¥${_moneyText(face)}',
+    ].where((part) => part.isNotEmpty).join(' ');
+    if (line.isNotEmpty) details.add(line);
+  }
+  return {
+    if (hasTotal) 'invoiceAmount': _moneyText(total),
+    if (hasTax) 'taxAmount': _moneyText(tax),
+    if (details.isNotEmpty) 'invoiceDetail': details.join('\n'),
+  };
+}
+
 /// 一张发票的识别摘要：发票号 · 日期 · 销售方 · 金额。
 String xflowInvoiceLine(Map<String, dynamic> item) {
   if (item['invoiceStatus'] == 'recognizing') return '正在识别发票…';

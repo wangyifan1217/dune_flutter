@@ -1385,7 +1385,16 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         field: col,
         service: widget.service!,
         items: normalizeUploadItems(group[col.key]),
-        onChanged: (items) => patch({col.key: items}),
+        onChanged: (items) {
+          final updates = <String, dynamic>{col.key: items};
+          if (xflowIsInvoiceField(col)) {
+            final columnKeys = listField.columnsAsFields.map((item) => item.key).toSet();
+            for (final entry in xflowInvoiceFormFill(items).entries) {
+              if (columnKeys.contains(entry.key)) updates[entry.key] = entry.value;
+            }
+          }
+          patch(updates);
+        },
       );
     }
     if (col.type == 'select') {

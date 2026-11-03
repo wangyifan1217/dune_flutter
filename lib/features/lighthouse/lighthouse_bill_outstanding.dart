@@ -28,7 +28,10 @@ import 'lighthouse_theme.dart';
 
 /// 未结账款开关。2026-10-28：对齐 1.0、嵌进资金页后打开。
 /// 财务没确认口径前要上线，改回 false：资金页不出面板、也不去拉接口。
-const bool lighthouseBillOutstandingEnabled = true;
+// 2026-11-02：资管 2.0 改成四个口径（dimensions / diffAmount），本文件按 1.0 的
+// 应收 / 应付 / 净额设计，已不成立。资金页面板关掉，未结往来改到「资管 → 未结往来」
+// （lighthouse_zg.dart）。
+const bool lighthouseBillOutstandingEnabled = false;
 
 // ── 模型 ──────────────────────────────────────────────────────────────────
 

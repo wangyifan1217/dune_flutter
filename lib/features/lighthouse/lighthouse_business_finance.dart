@@ -10,6 +10,7 @@ import '../../core/theme/dunes_theme.dart';
 import 'lighthouse_hero_swipe.dart';
 import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
+import 'lighthouse_visibility_sheet.dart';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 灯塔 · 财务视角（2026-10-30）
@@ -1357,10 +1358,14 @@ class LighthouseBfHero extends StatelessWidget {
     super.key,
     required this.controller,
     this.onOpenSubjects,
+    this.onShowVisibility,
   });
 
   final LighthouseBfController controller;
   final VoidCallback? onOpenSubjects;
+
+  /// 2026-11-02 · 财务汇总「谁能看到」（整个板块，许正阳可开关）。
+  final VoidCallback? onShowVisibility;
 
   @override
   Widget build(BuildContext context) {
@@ -1464,6 +1469,14 @@ class LighthouseBfHero extends StatelessWidget {
               ],
             ),
           ),
+        if (onShowVisibility != null) ...[
+          const SizedBox(width: 4),
+          LhVisibilityChip(
+            service: controller.service,
+            module: 'business_finance',
+            onTap: onShowVisibility!,
+          ),
+        ],
       ],
     );
   }
@@ -1984,10 +1997,12 @@ const _kDrillTitles = <String, String>{
 };
 
 class LighthouseBfSubjectList extends StatelessWidget {
-  const LighthouseBfSubjectList({super.key, required this.controller, this.onWhoCanSee});
+  const LighthouseBfSubjectList({super.key, required this.controller, this.onShowVisibility});
 
   final LighthouseBfController controller;
-  final void Function(LhBfRow row)? onWhoCanSee;
+
+  /// 2026-11-02 · 主体行「谁能看到」（按主体开关，许正阳可设期限）。
+  final void Function(LhBfRow row, String title)? onShowVisibility;
 
   @override
   Widget build(BuildContext context) {
@@ -2014,7 +2029,12 @@ class LighthouseBfSubjectList extends StatelessWidget {
         } else {
           final rows = controller.visibleRows;
           for (var i = 0; i < rows.length; i++) {
-            children.add(_BfSubjectRow(controller: controller, row: rows[i], index: i + 1, onWhoCanSee: onWhoCanSee));
+            children.add(_BfSubjectRow(
+              controller: controller,
+              row: rows[i],
+              index: i + 1,
+              onShowVisibility: onShowVisibility,
+            ));
           }
           if (rows.isEmpty && s.note.isNotEmpty) {
             children.add(center(Text(s.note, style: _label(context, size: 12.5))));
@@ -2103,12 +2123,12 @@ class LighthouseBfSubjectList extends StatelessWidget {
 }
 
 class _BfSubjectRow extends StatelessWidget {
-  const _BfSubjectRow({required this.controller, required this.row, required this.index, this.onWhoCanSee});
+  const _BfSubjectRow({required this.controller, required this.row, required this.index, this.onShowVisibility});
 
   final LighthouseBfController controller;
   final LhBfRow row;
   final int index;
-  final void Function(LhBfRow row)? onWhoCanSee;
+  final void Function(LhBfRow row, String title)? onShowVisibility;
 
   @override
   Widget build(BuildContext context) {
@@ -2209,20 +2229,6 @@ class _BfSubjectRow extends StatelessWidget {
                                 style: LhTypography.sans(size: 13, weight: FontWeight.w700, height: 1.3, color: _c(context, LhColors.ink), context: context),
                               ),
                             ),
-                            if (onWhoCanSee != null)
-                              Semantics(
-                                button: true,
-                                label: '查看${r.title}谁能看到',
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => onWhoCanSee!(r),
-                                  child: SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: Icon(Icons.group_outlined, size: 14, color: _c(context, LhColors.mute)),
-                                  ),
-                                ),
-                              ),
                           ],
                         ),
                         if (!r.isTail) ...[
@@ -2241,6 +2247,16 @@ class _BfSubjectRow extends StatelessWidget {
                           Text(who, maxLines: 2, overflow: TextOverflow.ellipsis, style: _label(context, size: 10)),
                         ],
                         const Spacer(),
+                        if (onShowVisibility != null && !r.isTail && r.subjectKey.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: LhVisibilityChip(
+                              service: controller.service,
+                              module: 'business_finance',
+                              entity: r.subjectKey,
+                              onTap: () => onShowVisibility!(r, r.title),
+                            ),
+                          ),
                       ],
                     ),
                   ),

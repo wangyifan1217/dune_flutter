@@ -43,7 +43,7 @@ const double lighthousePixelMarkHeight =
     lighthousePixelSize * lighthousePixelRows;
 
 /// 顶栏像素灯塔开关。
-const bool lighthousePixelMarkEnabled = true;
+const bool lighthousePixelMarkEnabled = false;
 
 enum LighthousePixelEvent { sync, profit, date, ship, clear }
 

@@ -2240,19 +2240,92 @@ Widget _promotionInput(
 }) {
   return SizedBox(
     height: 32,
-    child: TextFormField(
+    child: _PromotionTextField(
       key: ValueKey(key),
-      initialValue: initial,
-      keyboardType: TextInputType.numberWithOptions(decimal: !integer),
+      value: initial,
+      hint: hint,
+      integer: integer,
+      onText: onText,
+    ),
+  );
+}
+
+/// 阶梯里的数字输入框。
+///
+/// 输入时只把文字交出去，不被外部值打断；失焦或外部值变了（别的格子改了、
+/// 保存后重载）时再把框里的字对齐到当前数据。原来用 initialValue，
+/// 数据变了框里还是旧字，接着再改就会把旧值写回去，表现为保存后丢档位。
+class _PromotionTextField extends StatefulWidget {
+  const _PromotionTextField({
+    super.key,
+    required this.value,
+    required this.hint,
+    required this.onText,
+    this.integer = false,
+  });
+
+  final String value;
+  final String hint;
+  final bool integer;
+  final ValueChanged<String> onText;
+
+  @override
+  State<_PromotionTextField> createState() => _PromotionTextFieldState();
+}
+
+class _PromotionTextFieldState extends State<_PromotionTextField> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.value,
+  );
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (!_focus.hasFocus) _syncText();
+  }
+
+  void _syncText() {
+    if (_controller.text == widget.value) return;
+    _controller.value = TextEditingValue(
+      text: widget.value,
+      selection: TextSelection.collapsed(offset: widget.value.length),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _PromotionTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_focus.hasFocus && oldWidget.value != widget.value) _syncText();
+  }
+
+  @override
+  void dispose() {
+    _focus.removeListener(_onFocusChange);
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      focusNode: _focus,
+      keyboardType: TextInputType.numberWithOptions(decimal: !widget.integer),
       style: _mono(context, size: 12, weight: FontWeight.w500),
       decoration: proposalInputDecoration(
         context: context,
-        hint: hint,
+        hint: widget.hint,
         forceUnderline: true,
       ),
-      onChanged: (text) => onText(text.trim()),
-    ),
-  );
+      onChanged: (text) => widget.onText(text.trim()),
+    );
+  }
 }
 
 Widget _promotionAddButton(
@@ -2566,8 +2639,11 @@ class _PromotionSegmentEditor extends StatelessWidget {
   void _setTiers(List<ProposalPromotionTier> tiers) =>
       onChanged?.call(segment.copyWith(tiers: tiers));
 
+  /// 按录入顺序改第 [index] 档。不在这里排序：边输边排会让输入框和档位错位，
+  /// 后面的输入写到别的档上。计算时用 [ProposalPromotionSegment.sorted]，顺序不影响结果。
   void _setTier(int index, {double? from, double? rate}) {
-    final tiers = [...segment.sorted];
+    final tiers = [...segment.tiers];
+    if (index < 0 || index >= tiers.length) return;
     tiers[index] = ProposalPromotionTier(
       from: from ?? tiers[index].from,
       rate: rate ?? tiers[index].rate,
@@ -2577,8 +2653,14 @@ class _PromotionSegmentEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hit = volume == null ? -1 : segment.hitIndex(volume!);
-    final tiers = segment.sorted;
+    final tiers = segment.tiers;
+    final sortedHit = volume == null ? -1 : segment.hitIndex(volume!);
+    // hitIndex 是排序后的下标，换回录入顺序里的那一档来打勾。
+    final hit = sortedHit < 0
+        ? -1
+        : tiers.indexWhere(
+            (tier) => identical(tier, segment.sorted[sortedHit]),
+          );
     final openEnded = segment.toMonth == null;
     Widget cell(String text, {bool head = false, bool strong = false}) => Text(
       text,
@@ -2626,6 +2708,7 @@ class _PromotionSegmentEditor extends StatelessWidget {
                           hint: '1',
                           integer: true,
                           onText: (text) {
+                            if (text.isEmpty) return;
                             final from = _promotionMonth(text);
                             final to = segment.toMonth;
                             onChanged!(
@@ -2657,10 +2740,9 @@ class _PromotionSegmentEditor extends StatelessWidget {
                             hint: '3',
                             integer: true,
                             onText: (text) {
-                              if (text.isEmpty) {
-                                onChanged!(segment.copyWith(toMonth: null));
-                                return;
-                              }
+                              // 删空只是在改字，不当成「及以后」：
+                              // 否则这个框当场消失，月份段被改成开放区间。
+                              if (text.isEmpty) return;
                               final to = _promotionMonth(
                                 text,
                                 fallback: segment.fromMonth,
@@ -2880,7 +2962,8 @@ class _PromotionSegmentEditor extends StatelessWidget {
                 context,
                 label: '添加档位',
                 onPressed: () {
-                  final last = tiers.isEmpty ? null : tiers.last;
+                  final sorted = segment.sorted;
+                  final last = sorted.isEmpty ? null : sorted.last;
                   _setTiers([
                     ...tiers,
                     ProposalPromotionTier(

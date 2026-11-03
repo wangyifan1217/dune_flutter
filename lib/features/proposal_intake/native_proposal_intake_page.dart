@@ -17386,9 +17386,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final stored = proposalPromotionPlansOf(
       proposalProductFormulaRawEntry(_form, skuId),
     );
-    final plans = product != null && product.promotionPlans.isNotEmpty
-        ? product.promotionPlans
-        : stored;
+    // 以表单里存的为准：测算结果是异步回来的，里面的方案会比刚输入的旧，
+    // 拿它来编辑会把上一次的输入盖掉。只有表单里还没存过方案时才用测算带出的。
+    final plans = stored.isNotEmpty
+        ? stored
+        : (product?.promotionPlans ?? const <ProposalPromotionTierPlan>[]);
     final line = product?.evaluation
         .bucket(kProposalCostCategoryProject)
         ?.lines
@@ -17636,6 +17638,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     form['benefitProduct'] = benefit;
     form = proposalIntakeSyncChildProductMeta(form);
     form = proposalIntakeAssignCopiedProductFormulas(
+      form,
+      newToSource: copied.formulaSources,
+    );
+    form = proposalIntakeLinkCopiedSupplySkus(
       form,
       newToSource: copied.formulaSources,
     );
@@ -22122,7 +22128,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (remoteLine == null) {
       estimate = _remoteFinance.loading ? '正在测算…' : '测算暂不可用，请重试。';
     } else if (way == _settleWayTier) {
-      estimate = '按阶梯分档算，金额见市场部「成本测算」。';
+      // 后端按这个产品的年化规模套档算出了金额就直接显示（利差、电子券采购款按阶梯都靠这一行看数）。
+      final amount = (remoteLine['amount'] as num?)?.toDouble() ?? 0;
+      if (amount > 0) {
+        estimateReady = true;
+        estimate = '测算：${remoteLine['substitution']}';
+      } else {
+        estimate = scale <= 0
+            ? '按阶梯分档算；产品年化规模填好后自动算出金额。'
+            : '按阶梯分档算，档位填好后自动算出金额。';
+      }
     } else if (way == _settleWayUnit &&
         terms.displayUnitPrice.trim().isNotEmpty &&
         face <= 0) {
@@ -22955,7 +22970,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   child: ProposalField(
                     label: '起点（万元）',
                     child: TextFormField(
-                      key: ValueKey('tier-$keyPrefix-$i-from'),
+                      // 带上档位数：删掉中间一档后各行重新建框，不会把上一行的旧字留在框里。
+                      key: ValueKey('tier-$keyPrefix-$i-${tiers.length}-from'),
                       initialValue: tiers[i].from,
                       enabled: enabled,
                       keyboardType: const TextInputType.numberWithOptions(
@@ -22977,7 +22993,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   child: ProposalField(
                     label: '比例',
                     child: TextFormField(
-                      key: ValueKey('tier-$keyPrefix-$i-rate'),
+                      key: ValueKey('tier-$keyPrefix-$i-${tiers.length}-rate'),
                       initialValue: tiers[i].rate,
                       enabled: enabled,
                       keyboardType: const TextInputType.numberWithOptions(

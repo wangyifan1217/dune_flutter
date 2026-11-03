@@ -5268,7 +5268,10 @@ class ProposalFinanceSettleTerms {
       settleUnitPrice.isEmpty &&
       priceMode.isEmpty &&
       promoter.isEmpty &&
+      expectedRedemptionRate.trim().isEmpty &&
       settleTiers.every((item) => item.isEmpty) &&
+      // 只配了推广费阶梯方案的结算行也是有内容的，不能当空行跳过。
+      tierPlans.every((plan) => plan.isEmpty) &&
       scale.isEmpty &&
       scalePeriod.isEmpty &&
       skuIds.isEmpty &&
@@ -7384,9 +7387,37 @@ ProposalIntakeProductCopy proposalIntakeCopyBusinessProducts({
     );
   }
 
+  /// 结算里勾的「适用产品」指向源产品和它的关联产品时，换成这一份副本自己的 id。
+  ProposalSkuDetailRow remapSkuRefs(
+    ProposalSkuDetailRow row,
+    Map<String, String> ids,
+  ) {
+    final settlements = proposalIntakeSkuSettlements(row);
+    if (!settlements.any((item) => item.terms.skuIds.any(ids.containsKey))) {
+      return row;
+    }
+    return row.copyWith(
+      settlements: [
+        for (final item in settlements)
+          item.terms.skuIds.any(ids.containsKey)
+              ? item.copyWith(
+                  terms: item.terms.copyWith(
+                    skuIds: [
+                      for (final id in item.terms.skuIds) ids[id] ?? id,
+                    ],
+                  ),
+                )
+              : item,
+      ],
+    );
+  }
+
   for (var i = 0; i < count; i++) {
     final mainId = nid('sku');
     formulaSources[mainId] = source.id;
+    final mainIndex = nextMains.length;
+    final childStart = nextChildren.length;
+    final ids = <String, String>{source.id: mainId};
     nextMains.add(
       retagSettlements(
         proposalIntakeCloneSkuProduct(
@@ -7412,8 +7443,13 @@ ProposalIntakeProductCopy proposalIntakeCopyBusinessProducts({
           ),
         ),
       );
+      ids[child.id] = childId;
       final qty = quantities[child.id];
       nextQuantities[childId] = qty == null || qty < 1 ? 1 : qty;
+    }
+    nextMains[mainIndex] = remapSkuRefs(nextMains[mainIndex], ids);
+    for (var c = childStart; c < nextChildren.length; c++) {
+      nextChildren[c] = remapSkuRefs(nextChildren[c], ids);
     }
   }
   return ProposalIntakeProductCopy(
@@ -7422,6 +7458,54 @@ ProposalIntakeProductCopy proposalIntakeCopyBusinessProducts({
     quantities: nextQuantities,
     formulaSources: formulaSources,
   );
+}
+
+/// 复制产品后，供给结算里勾了源产品的「适用产品」，把副本也勾上。
+///
+/// 不勾的话，副本不在任何一条供给结算的适用范围里，采购成本和源产品对不上。
+/// [newToSource] 是新产品 id → 被复制的产品 id。
+Map<String, dynamic> proposalIntakeLinkCopiedSupplySkus(
+  Map<String, dynamic> form, {
+  required Map<String, String> newToSource,
+}) {
+  if (newToSource.isEmpty) return form;
+  final copiesOf = <String, List<String>>{};
+  for (final item in newToSource.entries) {
+    copiesOf.putIfAbsent(item.value, () => []).add(item.key);
+  }
+  final products = proposalIntakeSupplyProducts(form);
+  var changed = false;
+  final next = [
+    for (final product in products)
+      () {
+        final settlements = proposalIntakeSupplySettlements(product);
+        if (!settlements.any(
+          (item) => item.terms.skuIds.any(copiesOf.containsKey),
+        )) {
+          return product;
+        }
+        changed = true;
+        return product.copyWith(
+          settlements: [
+            for (final item in settlements)
+              item.terms.skuIds.any(copiesOf.containsKey)
+                  ? item.copyWith(
+                      terms: item.terms.copyWith(
+                        skuIds: {
+                          ...item.terms.skuIds,
+                          for (final id in item.terms.skuIds)
+                            ...?copiesOf[id],
+                        }.toList(),
+                      ),
+                    )
+                  : item,
+          ],
+        );
+      }(),
+  ];
+  if (!changed) return form;
+  return Map<String, dynamic>.from(form)
+    ..['supplyProducts'] = [for (final row in next) row.toJson()];
 }
 
 bool proposalIntakeSkuHasManualDetails(ProposalSkuDetailRow sku) {

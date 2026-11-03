@@ -5,6 +5,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -40,6 +41,15 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
   bool _picking = false;
   bool _dragging = false;
   bool _downloadingTemplate = false;
+  final _recognizingIds = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_recognizeExistingInvoices());
+    });
+  }
 
   static const _meta = <String, Map<String, dynamic>>{
     'planFiles': {
@@ -309,7 +319,8 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
   }
 
   bool _needsPhotosPermission(List<String> exts) {
-    if (!Platform.isIOS) return false;
+    // 网页没有 dart:io 的 Platform，一查就会抛错，文件选择器也就打不开。
+    if (kIsWeb || !Platform.isIOS) return false;
     const imageExts = {'jpg', 'jpeg', 'png', 'heic', 'heif', 'gif', 'webp'};
     return exts.any((ext) => imageExts.contains(ext.toLowerCase()));
   }
@@ -363,6 +374,35 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
     widget.onChanged(List<Map<String, dynamic>>.from(list));
     if (_invoiceMode && item['status'] == 'done') {
       await _recognizeInvoice(list, item, bytes, fileName);
+    }
+  }
+
+  /// 打开表单时，已经传过的发票不会再走上传回调，这里补一次识别。
+  Future<void> _recognizeExistingInvoices() async {
+    if (!_invoiceMode || !mounted) return;
+    final list = [
+      for (final item in widget.items) Map<String, dynamic>.from(item),
+    ];
+    for (final item in list) {
+      final status = '${item['status'] ?? ''}';
+      if (status == 'uploading' || status == 'error') continue;
+      if ('${item['invoiceStatus'] ?? ''}'.isNotEmpty) continue;
+      final id = '${item['id'] ?? item['objectKey'] ?? item['fileName'] ?? ''}';
+      if (id.isEmpty || !_recognizingIds.add(id)) continue;
+      final name = '${item['fileName'] ?? item['name'] ?? 'invoice.pdf'}'.trim();
+      try {
+        final url = await widget.service.resolveFileUrl(item);
+        if (url.isEmpty || !mounted) continue;
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode < 200 || response.statusCode >= 300) continue;
+        if (!mounted || response.bodyBytes.isEmpty) continue;
+        await _recognizeInvoice(
+          list,
+          item,
+          response.bodyBytes,
+          name.isEmpty ? 'invoice.pdf' : name,
+        );
+      } catch (_) {}
     }
   }
 

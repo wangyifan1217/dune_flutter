@@ -1442,7 +1442,7 @@ class _NativeMyWorkProfileCenterPageState
               ],
             ),
 
-            // 更多：提案、审批与 App 常用办公入口。PC 侧栏已有工作台，这里不重复放。
+            // 更多：提案、审批、绩效与 App 常用办公入口。PC 侧栏已有工作台，这里不重复放。
             Positioned(
               right: 20,
               bottom: navExtent + 16,
@@ -1455,6 +1455,9 @@ class _NativeMyWorkProfileCenterPageState
                   onApproval: () => widget.onOpenB3(),
                   onMeeting: () => widget.navigation.go('MM-L'),
                   onKnowledge: () => widget.navigation.go('K1'),
+                  onPerformance: widget.session.isExternalUser
+                      ? null
+                      : () => widget.navigation.go('B2PERF'),
                   onWorkbench:
                       !isDesktopCommOnly && !widget.session.isExternalUser
                       ? () {

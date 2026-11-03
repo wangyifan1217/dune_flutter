@@ -8,6 +8,7 @@ void main() {
     WidgetTester tester, {
     required Size surface,
     VoidCallback? onWorkbench,
+    VoidCallback? onPerformance,
     bool showProposals = true,
   }) async {
     await tester.binding.setSurfaceSize(surface);
@@ -28,6 +29,7 @@ void main() {
                       onApproval: () {},
                       onMeeting: () {},
                       onKnowledge: () {},
+                      onPerformance: onPerformance,
                       onWorkbench: onWorkbench == null
                           ? null
                           : () {
@@ -56,6 +58,7 @@ void main() {
       tester,
       surface: const Size(390, 640),
       onWorkbench: () {},
+      onPerformance: () {},
     );
 
     expect(find.text('更多'), findsOneWidget);
@@ -84,6 +87,14 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('企业知识库'), findsOneWidget);
     expect(find.byIcon(Icons.auto_stories_rounded), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('绩效'),
+      80,
+      scrollable: find.byType(Scrollable),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('绩效'), findsOneWidget);
+    expect(find.text('查看已发布的月度绩效与得分'), findsOneWidget);
   });
 
   testWidgets('点面板外收起更多', (tester) async {

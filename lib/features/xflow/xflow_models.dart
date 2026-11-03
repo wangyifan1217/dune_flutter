@@ -363,6 +363,8 @@ class XflowField {
       .map((c) => c.key)
       .toList(growable: false);
 
+  bool get isUpload => type.trim().toLowerCase() == 'upload';
+
   bool visibleIn(Map<String, dynamic> values) {
     if (raw['hiddenOnCreate'] == true) return false;
     return matchesVisibleWhen(values);

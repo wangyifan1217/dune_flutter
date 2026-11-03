@@ -504,7 +504,7 @@ class MineCreateFab extends StatelessWidget {
   }
 }
 
-/// 更多面板：提案、审批与常用办公入口。PC 不放工作台。
+/// 更多面板：提案、审批、绩效与常用办公入口。PC 不放工作台。
 Future<void> showMineCreateSheet(
   BuildContext context, {
   required VoidCallback onSales,
@@ -513,6 +513,7 @@ Future<void> showMineCreateSheet(
   required VoidCallback onMeeting,
   required VoidCallback onKnowledge,
   VoidCallback? onWorkbench,
+  VoidCallback? onPerformance,
   bool showProposals = true,
 }) {
   return showModalBottomSheet<void>(
@@ -736,6 +737,18 @@ Future<void> showMineCreateSheet(
                     subtitle: '查看组织文档与知识沉淀',
                     onTap: onKnowledge,
                   ),
+                  if (onPerformance != null)
+                    option(
+                      icon: Icons.insights_outlined,
+                      iconGradient: const [
+                        Color(0xFF8C5A91),
+                        Color(0xFF6D4574),
+                      ],
+                      bg: MinePalette.wash,
+                      title: '绩效',
+                      subtitle: '查看已发布的月度绩效与得分',
+                      onTap: onPerformance,
+                    ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
                     child: Text(

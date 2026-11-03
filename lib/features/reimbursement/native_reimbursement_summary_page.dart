@@ -14,7 +14,13 @@ import '../profile/work_profile_controls.dart';
 import '../shell/dunes_toast.dart';
 import 'reimbursement_summary_service.dart';
 
-const _accent = Color(0xFF0F766E);
+const _accent = Color(0xFF7B5CD8);
+const _pageBg = Color(0xFFF7F5FA);
+const _line = Color(0xFFE6DCF0);
+const _lineStrong = Color(0xFFD2BBE8);
+const _chipBg = Color(0xFFF6F0FC);
+const _chipInk = Color(0xFF6B46A8);
+const _inkSoft = Color(0xFF5D536B);
 
 enum _SummaryView { combo, person, entity, details }
 
@@ -96,6 +102,7 @@ class _NativeReimbursementSummaryPageState
   }
 
   void _onKeyword(String _) {
+    setState(() {});
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () => unawaited(_load()));
   }
@@ -184,13 +191,55 @@ class _NativeReimbursementSummaryPageState
     return '${v < 0 ? '-' : ''}¥$buf.${parts[1]}';
   }
 
+  InputDecoration _searchDecoration(String hint) {
+    OutlineInputBorder border(Color color) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: BorderSide(
+        color: DunesColors.resolve(context, color, role: DunesColorRole.border),
+      ),
+    );
+    return InputDecoration(
+      hintText: hint,
+      isDense: true,
+      prefixIcon: Icon(
+        Icons.search,
+        size: 20,
+        color: DunesColors.resolve(context, _inkSoft),
+      ),
+      suffixIcon: _keyword.text.isEmpty
+          ? null
+          : IconButton(
+              onPressed: () {
+                _keyword.clear();
+                _onKeyword('');
+              },
+              icon: Icon(
+                Icons.close,
+                size: 18,
+                color: DunesColors.resolve(context, _inkSoft),
+              ),
+            ),
+      filled: true,
+      fillColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: border(_line),
+      enabledBorder: border(_line),
+      focusedBorder: border(const Color(0xFFC2AEE7)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = _data;
+    final entityLabel = data?.entityLabel ?? '报销主体';
     return Material(
       color: DunesColors.resolve(
         context,
-        const Color(0xFFF6F8F8),
+        _pageBg,
         role: DunesColorRole.surface,
       ),
       child: Column(
@@ -218,85 +267,76 @@ class _NativeReimbursementSummaryPageState
                   prevKey: const Key('reimbursement-month-prev'),
                   nextKey: const Key('reimbursement-month-next'),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        key: const Key('reimbursement-search'),
-                        controller: _keyword,
-                        onChanged: _onKeyword,
-                        decoration: InputDecoration(
-                          isDense: true,
-                          prefixIcon: const Icon(Icons.search, size: 18),
-                          hintText:
-                              '搜索报销人、部门或${data?.entityLabel ?? '报销主体'}',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilterChip(
-                      key: const Key('reimbursement-all-time'),
-                      label: const Text('全部时间'),
-                      selected: _allTime,
-                      onSelected: _busy
-                          ? null
-                          : (v) {
-                              setState(() => _allTime = v);
-                              unawaited(_load());
-                            },
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      key: const Key('reimbursement-export'),
-                      style: FilledButton.styleFrom(backgroundColor: _accent),
-                      onPressed: _busy || _exporting || (data?.count ?? 0) == 0
-                          ? null
-                          : () => unawaited(_export()),
-                      icon: _exporting
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.file_download_outlined, size: 18),
-                      label: const Text('导出 Excel'),
-                    ),
-                  ],
+                const SizedBox(height: 10),
+                TextField(
+                  key: const Key('reimbursement-search'),
+                  controller: _keyword,
+                  onChanged: _onKeyword,
+                  onTapOutside: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
+                  style: DunesTypography.sans(
+                    fontSize: 14,
+                    color: DunesColors.resolve(context, const Color(0xFF312249)),
+                    context: context,
+                  ),
+                  decoration: _searchDecoration('搜索报销人、部门或$entityLabel'),
                 ),
-                const SizedBox(height: 8),
-                if (data != null) _totals(context, data),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: SegmentedButton<_SummaryView>(
-                    segments: [
-                      const ButtonSegment(
-                        value: _SummaryView.combo,
-                        label: Text('报销人 × 主体'),
+                  child: Row(
+                    children: [
+                      _ToolbarChip(
+                        key: const Key('reimbursement-all-time'),
+                        label: '全部时间',
+                        selected: _allTime,
+                        onPressed: _busy
+                            ? null
+                            : () {
+                                setState(() => _allTime = !_allTime);
+                                unawaited(_load());
+                              },
                       ),
-                      const ButtonSegment(
-                        value: _SummaryView.person,
-                        label: Text('按报销人'),
+                      const SizedBox(width: 8),
+                      _ToolbarChip(
+                        key: const Key('reimbursement-export'),
+                        icon: Icons.file_download_outlined,
+                        label: _exporting ? '导出中' : '导出',
+                        filled: true,
+                        busy: _exporting,
+                        onPressed: _busy || _exporting || (data?.count ?? 0) == 0
+                            ? null
+                            : () => unawaited(_export()),
                       ),
-                      ButtonSegment(
-                        value: _SummaryView.entity,
-                        label: Text('按${data?.entityLabel ?? '报销主体'}'),
+                      const SizedBox(width: 16),
+                      _ToolbarChip(
+                        label: '报销人 × 主体',
+                        selected: _view == _SummaryView.combo,
+                        onPressed: () =>
+                            setState(() => _view = _SummaryView.combo),
                       ),
-                      const ButtonSegment(
-                        value: _SummaryView.details,
-                        label: Text('明细'),
+                      const SizedBox(width: 8),
+                      _ToolbarChip(
+                        label: '按报销人',
+                        selected: _view == _SummaryView.person,
+                        onPressed: () =>
+                            setState(() => _view = _SummaryView.person),
+                      ),
+                      const SizedBox(width: 8),
+                      _ToolbarChip(
+                        label: '按$entityLabel',
+                        selected: _view == _SummaryView.entity,
+                        onPressed: () =>
+                            setState(() => _view = _SummaryView.entity),
+                      ),
+                      const SizedBox(width: 8),
+                      _ToolbarChip(
+                        label: '明细',
+                        selected: _view == _SummaryView.details,
+                        onPressed: () =>
+                            setState(() => _view = _SummaryView.details),
                       ),
                     ],
-                    selected: {_view},
-                    showSelectedIcon: false,
-                    onSelectionChanged: (v) => setState(() => _view = v.first),
                   ),
                 ),
               ],
@@ -310,37 +350,69 @@ class _NativeReimbursementSummaryPageState
 
   Widget _totals(BuildContext context, ReimbursementSummary data) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
+        color: DunesColors.resolveNullable(
           context,
-          Colors.white,
+          _accent,
           role: DunesColorRole.surface,
         ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: DunesColors.resolve(context, DunesColors.borderSoft),
-        ),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
+          Icon(
+            Icons.request_quote_outlined,
+            color: DunesColors.resolve(context, Colors.white),
+            size: 24,
+          ),
+          const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              '$_periodLabel · 已审批通过 ${data.count} 单 · ${data.byPerson.length} 人',
-              style: DunesTypography.sans(
-                fontSize: 12,
-                color: DunesColors.resolve(context, DunesColors.text2),
-                context: context,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$_periodLabel · 已审批通过',
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      Colors.white.withValues(alpha: 0.76),
+                    ),
+                    context: context,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _money(data.amount),
+                  style: DunesTypography.sans(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.resolve(context, Colors.white),
+                    context: context,
+                  ),
+                ),
+              ],
             ),
           ),
-          Text(
-            '${data.amountLabel}合计 ${_money(data.amount)}',
-            style: DunesTypography.sans(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: DunesColors.resolve(context, _accent),
-              context: context,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: DunesColors.resolveNullable(
+                context,
+                Colors.white.withValues(alpha: 0.16),
+                role: DunesColorRole.surface,
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${data.count} 单 · ${data.byPerson.length} 人',
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: DunesColors.resolve(context, Colors.white),
+                context: context,
+              ),
             ),
           ),
         ],
@@ -356,13 +428,22 @@ class _NativeReimbursementSummaryPageState
           children: [
             Text(_error, textAlign: TextAlign.center),
             const SizedBox(height: 8),
-            TextButton(onPressed: () => unawaited(_load()), child: const Text('重试')),
+            TextButton(
+              onPressed: () => unawaited(_load()),
+              style: TextButton.styleFrom(foregroundColor: _accent),
+              child: const Text('重试'),
+            ),
           ],
         ),
       );
     }
     if (data == null) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: DunesColors.resolve(context, _accent),
+        ),
+      );
     }
     if (data.count == 0) {
       return Center(
@@ -376,7 +457,7 @@ class _NativeReimbursementSummaryPageState
         ),
       );
     }
-    final rows = <Widget>[];
+    final rows = <Widget>[_totals(context, data)];
     switch (_view) {
       case _SummaryView.combo:
         for (final g in data.groups) {
@@ -441,17 +522,21 @@ class _NativeReimbursementSummaryPageState
     required String meta,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: DunesColors.resolve(context, DunesColors.borderSoft),
+          color: DunesColors.resolve(
+            context,
+            _line,
+            role: DunesColorRole.border,
+          ),
         ),
       ),
       child: Row(
@@ -465,9 +550,9 @@ class _NativeReimbursementSummaryPageState
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: DunesTypography.sans(
-                    fontSize: 13,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.resolve(context, DunesColors.text),
+                    color: DunesColors.resolve(context, const Color(0xFF312249)),
                     context: context,
                   ),
                 ),
@@ -478,7 +563,7 @@ class _NativeReimbursementSummaryPageState
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: DunesTypography.sans(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: DunesColors.resolve(context, DunesColors.text3),
                       context: context,
                     ),
@@ -487,16 +572,16 @@ class _NativeReimbursementSummaryPageState
               ],
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
                 trailing,
                 style: DunesTypography.sans(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                  color: DunesColors.resolve(context, DunesColors.text),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.resolve(context, _accent),
                   context: context,
                 ),
               ),
@@ -504,7 +589,7 @@ class _NativeReimbursementSummaryPageState
               Text(
                 meta,
                 style: DunesTypography.sans(
-                  fontSize: 10.5,
+                  fontSize: 11,
                   color: DunesColors.resolve(context, DunesColors.text3),
                   context: context,
                 ),
@@ -512,6 +597,110 @@ class _NativeReimbursementSummaryPageState
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ToolbarChip extends StatelessWidget {
+  const _ToolbarChip({
+    super.key,
+    required this.label,
+    this.icon,
+    this.selected = false,
+    this.filled = false,
+    this.busy = false,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final bool filled;
+  final bool busy;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    final Color background;
+    final Color foreground;
+    final Color border;
+    if (filled) {
+      background = enabled
+          ? DunesColors.resolve(context, _accent, role: DunesColorRole.surface)
+          : DunesColors.resolve(
+              context,
+              _accent,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.4);
+      foreground = DunesColors.resolve(context, Colors.white);
+      border = background;
+    } else if (selected) {
+      background = DunesColors.resolve(
+        context,
+        _chipBg,
+        role: DunesColorRole.surface,
+      );
+      foreground = DunesColors.resolve(context, _chipInk);
+      border = DunesColors.resolve(
+        context,
+        _lineStrong,
+        role: DunesColorRole.border,
+      );
+    } else {
+      background = DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      );
+      foreground = DunesColors.resolve(context, _inkSoft);
+      border = DunesColors.resolve(context, _line, role: DunesColorRole.border);
+    }
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onPressed,
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (busy) ...[
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: foreground,
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ] else if (icon != null) ...[
+                Icon(icon, size: 16, color: foreground),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                label,
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  fontWeight: selected || filled
+                      ? FontWeight.w700
+                      : FontWeight.w600,
+                  color: foreground,
+                  context: context,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

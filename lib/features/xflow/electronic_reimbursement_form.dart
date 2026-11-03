@@ -120,8 +120,52 @@ List<XflowField> applyElectronicReimbursementFieldRules(
       else if (_overlayKeys.contains(field.key))
         XflowField.fromJson({...field.raw, ...?_fieldOverlays[field.key]})
       else
-        field,
+        _withInvoiceOcrUploads(field),
   ];
+}
+
+/// 电子报销「关联发票」固定走识别。模板设计器里的开关写在列的 meta 上，
+/// 旧模板或未重新进单时 App 拿不到这个标记，上传后就只显示文件名。
+XflowField _withInvoiceOcrUploads(XflowField field) {
+  final raw = Map<String, dynamic>.from(field.raw);
+  var changed = _stampInvoiceOcr(raw);
+  final columns = raw['columns'];
+  if (columns is List) {
+    final next = <dynamic>[];
+    for (final col in columns) {
+      if (col is! Map) {
+        next.add(col);
+        continue;
+      }
+      final map = Map<String, dynamic>.from(col);
+      if (_stampInvoiceOcr(map)) changed = true;
+      next.add(map);
+    }
+    raw['columns'] = next;
+  }
+  if (!changed) return field;
+  return XflowField.fromJson(raw);
+}
+
+bool _stampInvoiceOcr(Map<String, dynamic> field) {
+  final key = '${field['key'] ?? ''}';
+  final type = '${field['type'] ?? ''}'.trim().toLowerCase();
+  final label = '${field['label'] ?? ''}';
+  final invoiceUpload =
+      type == 'upload' &&
+      (key == 'invoiceAttachments' || label.contains('关联发票'));
+  if (!invoiceUpload) return false;
+  final meta = field['meta'] is Map
+      ? Map<String, dynamic>.from(field['meta'] as Map)
+      : <String, dynamic>{};
+  if (meta['invoiceOcr'] == true ||
+      '${meta['invoiceOcr']}'.toLowerCase() == 'true') {
+    field['meta'] = meta;
+    return false;
+  }
+  meta['invoiceOcr'] = true;
+  field['meta'] = meta;
+  return true;
 }
 
 XflowField _withAttachmentTemplateMeta(XflowField field) {

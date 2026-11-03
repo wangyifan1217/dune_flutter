@@ -993,7 +993,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           title: '报销汇总',
           subtitle: '按报销人 · 报销主体 · 导出',
           icon: Icons.request_quote_outlined,
-          color: DunesColors.resolve(context, const Color(0xFF0F766E)),
+          color: _themePurple,
           enabled: true,
           onTap: () => _open(_WorkbenchView.reimbursementSummary),
         ),

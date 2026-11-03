@@ -1,5 +1,6 @@
 import 'package:dunes_app/features/xflow/electronic_reimbursement_form.dart';
 import 'package:dunes_app/features/xflow/xflow_models.dart';
+import 'package:dunes_app/features/xflow/xflow_upload_field.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -187,6 +188,29 @@ void main() {
     );
     expect(fields.single.uploadTemplate?.name, '自定义模板.xlsx');
     expect(fields.single.uploadTemplate?.label, '下载费用模板');
+  });
+
+  test('turns on invoice recognition for linked invoice uploads', () {
+    final fields = applyElectronicReimbursementFieldRules(
+      'electronic-reimbursement',
+      [
+        XflowField.fromJson({
+          'key': 'expenseItems',
+          'type': 'dynamicList',
+          'label': '报销项目',
+          'columns': [
+            {
+              'key': 'invoiceAttachments',
+              'label': '关联发票',
+              'type': 'upload',
+              'meta': {'accept': '.pdf,.jpg,.jpeg'},
+            },
+          ],
+        }),
+      ],
+    );
+    final column = fields.single.columnsAsFields.single;
+    expect(xflowIsInvoiceField(column), isTrue);
   });
 
   test('parses content-disposition chinese filename', () {

@@ -59,6 +59,7 @@ const _kTechnologyReviewKeys = {
   'outputForms',
   'syncSourceRef',
   'syncSource',
+  'channelRef',
   'developmentTypes',
   'hasRdCost',
   'rdAmount',

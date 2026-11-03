@@ -14916,6 +14916,21 @@ class _LighthouseTopicBody extends StatefulWidget {
   State<_LighthouseTopicBody> createState() => _NativeLighthousePageState();
 }
 
+class _ZgNavObserver extends NavigatorObserver {
+  _ZgNavObserver(this.onChanged);
+
+  final VoidCallback onChanged;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => onChanged();
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => onChanged();
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) => onChanged();
+}
+
 enum _DdMode { none, category, metric }
 
 /// 预警这一路查得怎么样。「查成功没有」和「压根没查到」必须分得开：
@@ -14957,6 +14972,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// 资管「未结往来」板块权限探测（2026-11-02）：只开了未结往来的人也要看到顶栏资管入口。
   /// null = 还没探到；true / false = 有无权限。
   final ValueNotifier<bool?> _zgBillsAccess = ValueNotifier<bool?>(null);
+
+  /// 资管嵌在灯塔内容区里切换，不另开一页盖住 PC 侧栏和手机底栏。
+  final GlobalKey<NavigatorState> _zgNav = GlobalKey<NavigatorState>();
+  late final NavigatorObserver _zgObserver = _ZgNavObserver(_onZgNavChanged);
+  bool _zgOpen = false;
+  bool _zgSubpage = false;
 
   /// 从财务「主体」切去净TA 前的账本维度，回业务时还原。
   String _bfReturnTab = 'product';
@@ -16484,7 +16505,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   bool _hasInternalBackStack() =>
-      _detailKey != null || _metricPageKey != null || _biViewOpen;
+      _zgOpen || _detailKey != null || _metricPageKey != null || _biViewOpen;
 
   String _detailRouteKey() {
     final detail = '${_detailType ?? ''}:${_detailKey ?? ''}';
@@ -16523,6 +16544,18 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   bool _handleInternalBack() {
+    if (_zgOpen) {
+      final nav = _zgNav.currentState;
+      if (nav != null && nav.canPop()) {
+        nav.pop();
+        return true;
+      }
+      setState(() {
+        _zgOpen = false;
+        _zgSubpage = false;
+      });
+      return true;
+    }
     if (_biViewOpen) {
       _closeDropdown();
       _restoreErrorProbe();
@@ -19938,11 +19971,19 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   children: [
                     // L2/L3 详情自带 sticky header（返回·灯塔·缩放/更新），
                     // 若再挂一级 AppBar 会叠出双份标题与右侧按钮。
-                    if (_detailKey == null && !_biViewOpen) _buildAppBar(),
+                    if (_detailKey == null && !_biViewOpen && !(_zgOpen && _zgSubpage))
+                      _buildAppBar(),
                     Expanded(
-                      child: !_hasAccess
-                          ? _buildNoAccessView()
-                          : Stack(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Offstage(
+                            offstage: _zgOpen,
+                            child: TickerMode(
+                              enabled: !_zgOpen,
+                              child: !_hasAccess
+                                  ? _buildNoAccessView()
+                                  : Stack(
                               children: [
                                 // 撑满整块区域 —— 别删。
                                 //
@@ -20047,6 +20088,26 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                   ),
                               ],
                             ),
+                            ),
+                          ),
+                          if (_zgOpen)
+                            Positioned.fill(
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween(begin: 0, end: 1),
+                                duration: const Duration(milliseconds: 240),
+                                curve: Curves.easeOutCubic,
+                                builder: (context, t, child) => Opacity(
+                                  opacity: t,
+                                  child: Transform.translate(
+                                    offset: Offset(16 * (1 - t), 0),
+                                    child: child,
+                                  ),
+                                ),
+                                child: _buildZgHost(),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -20130,6 +20191,21 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       builder: (context, c) {
         // 2026-10-26 · 方案 E：顶栏只剩一行 —— 左品牌，右「周期浮岛 + ⋯」。
         // 日周月季年收进浮岛，点开再选；缩放 / 刷新 / 声音收进 ⋯。
+        if (onDark && _zgOpen && !_zgSubpage) {
+          return _lhBand(
+            shadow: true,
+            padding: const EdgeInsets.fromLTRB(
+              lighthouseAppBarPaddingH,
+              10,
+              8,
+              10,
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _buildTitleSwitch(onDark: true),
+            ),
+          );
+        }
         if (onDark) {
           return _lhBand(
             shadow: true,
@@ -20745,95 +20821,109 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     return _hasNetTaAccess || bf.access.value == true || _zgBillsAccess.value == true;
   }
 
-  /// 「灯塔  资管」：当前页大字加粗，另一个灰色，点一下切过去。
+  /// 「灯塔  资管」：滑动选中块，点另一侧就地切换，不盖住外侧导航。
   Widget _buildTitleSwitch({required bool onDark}) {
     final on = onDark
         ? _kLhBandInkStrong
         : DunesColors.resolve(context, Color(lighthouseAppBarTitleColorValue));
     final off = onDark ? _kLhBandMute : DunesColors.resolve(context, LhColors.mute2);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '灯塔',
-          maxLines: 1,
-          style: LhTypography.sans(
-            size: lighthouseAppBarTitleFontSize,
-            weight: FontWeight.w600,
-            color: on,
-            letterSpacing: onDark ? 0.8 : -0.3,
-            context: context,
-          ),
-        ),
-        const SizedBox(width: 14),
-        Semantics(
-          button: true,
-          label: '切换到资管',
-          excludeSemantics: true,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
-              _openZgPage();
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Text(
-                '资管',
-                maxLines: 1,
-                style: LhTypography.sans(
-                  size: lighthouseAppBarTitleFontSize,
-                  weight: FontWeight.w500,
-                  color: off,
-                  letterSpacing: onDark ? 0.8 : -0.3,
-                  context: context,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+    return LhBrandSwitch(
+      assetSelected: _zgOpen,
+      onLighthouse: () {
+        if (!_zgOpen) return;
+        LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
+        _closeZgPage();
+      },
+      onAsset: () {
+        LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
+        if (_zgOpen && _zgSubpage) {
+          _zgNav.currentState?.popUntil((route) => route.isFirst);
+          return;
+        }
+        if (_zgOpen) return;
+        _openZgPage();
+      },
+      selectedColor: on,
+      idleColor: off,
+      trackColor: onDark ? const Color(0x1A2B2147) : const Color(0x142B2147),
+      thumbColor: Colors.white,
     );
+  }
+
+  void _onZgNavChanged() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_zgOpen) return;
+      final sub = _zgNav.currentState?.canPop() ?? false;
+      if (sub == _zgSubpage) return;
+      setState(() => _zgSubpage = sub);
+    });
+  }
+
+  void _closeZgPage() {
+    if (!_zgOpen) return;
+    setState(() {
+      _zgOpen = false;
+      _zgSubpage = false;
+    });
   }
 
   /// 资管入口（2026-11-02）：先到入口页，分「业财对照」「未结往来」两个板块；
   /// 原资管页（主体明细 / 净TA）留作入口页底部的次级入口。
+  /// 内容区内部导航，PC 左侧 Tab 和手机底栏都留着。
   void _openZgPage() {
     _closeDropdown();
     _pixelCtl.fire(LighthousePixelEvent.sync);
-    Navigator.of(context).push(
-      PageRouteBuilder<void>(
-        settings: const RouteSettings(name: 'lighthouse/zg'),
-        transitionDuration: const Duration(milliseconds: 180),
-        reverseTransitionDuration: const Duration(milliseconds: 160),
-        transitionsBuilder: (_, animation, __, child) =>
-            FadeTransition(opacity: animation, child: child),
-        pageBuilder: (_, __, ___) => LighthouseZgHubPage(
-          service: _service,
-          session: widget.session,
-          onOpenLegacy: _hasNetTaAccess || _bf?.access.value == true
-              ? _openZgLegacyPage
-              : null,
-        ),
-      ),
+    setState(() => _zgOpen = true);
+  }
+
+  Widget _buildZgHost() {
+    return Navigator(
+      key: _zgNav,
+      observers: [_zgObserver],
+      onGenerateRoute: (settings) {
+        final name = settings.name ?? '/';
+        final Widget page = switch (name) {
+          '/bf' => LighthouseBfLinkedPage(service: _service, session: widget.session),
+          '/bills' => LighthouseLedgerPage(service: _service, session: widget.session),
+          '/legacy' => NativeLighthousePage(
+            session: widget.session,
+            navigation: widget.navigation,
+            commUnread: widget.commUnread,
+            workbenchBadge: widget.workbenchBadge,
+            active: false,
+            financeOnly: true,
+          ),
+          _ => LighthouseZgHubPage(
+            service: _service,
+            session: widget.session,
+            embedded: true,
+            onOpenLegacy: _hasNetTaAccess || _bf?.access.value == true
+                ? _openZgLegacyPage
+                : null,
+          ),
+        };
+        return PageRouteBuilder<void>(
+          settings: settings,
+          transitionDuration: const Duration(milliseconds: 220),
+          reverseTransitionDuration: const Duration(milliseconds: 180),
+          pageBuilder: (_, __, ___) => page,
+          transitionsBuilder: (_, animation, __, child) {
+            final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+            return FadeTransition(
+              opacity: curved,
+              child: SlideTransition(
+                position: Tween<Offset>(begin: const Offset(0.03, 0), end: Offset.zero).animate(curved),
+                child: child,
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
   void _openZgLegacyPage() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'lighthouse/zg/legacy'),
-        builder: (_) => NativeLighthousePage(
-          session: widget.session,
-          navigation: widget.navigation,
-          commUnread: widget.commUnread,
-          workbenchBadge: widget.workbenchBadge,
-          // 不抢底部导航的全局返回拦截；页内返回走 PopScope。
-          active: false,
-          financeOnly: true,
-        ),
-      ),
-    );
+    _zgNav.currentState?.pushNamed('/legacy');
   }
 
   /// 资管页：主体（业财标签二）没权限、只有净TA 权限时直接落到净TA。

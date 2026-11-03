@@ -1542,8 +1542,9 @@ _RevenueEval _evaluateRevenueExpression(
   required double base,
   required double ratio,
   required double? Function(String name) costOf,
+  double? couponReceivableRatio,
 }) {
-  final text = _normalizeExpression(expression);
+  final text = _normalizeExpression(expression).replaceAll('的', '');
   final phrases = <(String, _TokKind)>[
     for (final p in _kBasePhrases) (p, _TokKind.base),
     for (final p in _kRatioPhrases) (p, _TokKind.ratio),
@@ -1618,7 +1619,13 @@ _RevenueEval _evaluateRevenueExpression(
       case _TokKind.base:
         valued.add(_Tok(tok.kind, tok.text, base));
       case _TokKind.ratio:
-        valued.add(_Tok(tok.kind, tok.text, ratio));
+        {
+          final value =
+              tok.text == '电子券销售款结算比例' && couponReceivableRatio != null
+              ? couponReceivableRatio!
+              : ratio;
+          valued.add(_Tok(tok.kind, tok.text, value));
+        }
       case _TokKind.zero:
         valued.add(_Tok(tok.kind, tok.text, 0));
       case _TokKind.cost:
@@ -2153,6 +2160,10 @@ ProposalFinanceEvaluation _aggregateFinance({
                 scale: scale,
                 measure: measure,
                 redacted: redacted,
+                couponReceivableRatio: proposalCouponSalesReceivableRatio(
+                  proposalForm,
+                  const [],
+                ),
               ),
         ],
       );
@@ -2263,6 +2274,7 @@ ProposalFinanceLine _proposalBusinessFormulaLine(
   required double scale,
   required _BusinessMeasure measure,
   required bool redacted,
+  double? couponReceivableRatio,
 }) {
   if (redacted) {
     return ProposalFinanceLine(
@@ -2288,6 +2300,7 @@ ProposalFinanceLine _proposalBusinessFormulaLine(
     base: measure.base,
     ratio: measure.ratio,
     costOf: (_) => null,
+    couponReceivableRatio: couponReceivableRatio,
   );
   final amount = eval.ok
       ? eval.amount
@@ -2375,6 +2388,7 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
           : revenueFormula.expression,
       base: scale,
       ratio: ratio,
+      couponReceivableRatio: proposalCouponSalesReceivableRatio(form, const []),
       costOf: (name) {
         if (name == '利差') {
           final income = proposalSpreadIncomeAmount(form);

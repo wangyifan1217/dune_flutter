@@ -211,230 +211,12 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
   }
 
   Future<XflowTemplateCard?> _pickTemplate(List<XflowTemplateCard> templates) {
-    final groups = xflowPopulatedApprovalGroups(
-      templates,
-      category: 'biz',
-      catalog: _catalog,
-    ).where((g) => g.templates.isNotEmpty && g.id != 'biz-initiative').toList();
-    var index = groups.indexWhere((g) => g.id == 'biz-payment');
-    if (index < 0) index = 0;
-    return showDialog<XflowTemplateCard>(
+    return showProposalBusinessTemplatePicker(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) {
-          final group = groups.isEmpty ? null : groups[index];
-          return Dialog(
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 24,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: 640,
-                maxHeight: MediaQuery.sizeOf(ctx).height * .86,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
-                    child: Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            '发起审批',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: '关闭',
-                          onPressed: () => Navigator.pop(ctx),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: DunesColors.resolve(
-                        ctx,
-                        const Color(0xFFF6F5FB),
-                        role: DunesColorRole.surface,
-                      ),
-                      border: Border.all(
-                        color: DunesColors.resolve(
-                          ctx,
-                          const Color(0xFFE6E3F2),
-                          role: DunesColorRole.border,
-                        ),
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          '所属提案',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: DunesColors.resolve(ctx, DunesColors.text3),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            [
-                              widget.proposal.code,
-                              widget.proposal.title,
-                            ].where((s) => s.trim().isNotEmpty).join(' · '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Icon(
-                          Icons.lock_outline_rounded,
-                          size: 14,
-                          color: DunesColors.resolve(ctx, DunesColors.text3),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '自动关联',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: DunesColors.resolve(ctx, DunesColors.text3),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        for (var i = 0; i < groups.length; i++)
-                          _tabButton(
-                            ctx,
-                            label:
-                                '${groups[i].title} ${groups[i].templates.length}',
-                            selected: i == index,
-                            onTap: () => setLocal(() => index = i),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Divider(
-                    height: 1,
-                    color: DunesColors.resolve(
-                      ctx,
-                      _kLine,
-                      role: DunesColorRole.border,
-                    ),
-                  ),
-                  Flexible(
-                    child: group == null
-                        ? const Padding(
-                            padding: EdgeInsets.all(24),
-                            child: Text('暂无可用业务审批模板'),
-                          )
-                        : ListView(
-                            shrinkWrap: true,
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            children: [
-                              for (var i = 0; i < group.templates.length; i++)
-                                ListTile(
-                                  onTap: () =>
-                                      Navigator.pop(ctx, group.templates[i]),
-                                  leading: Container(
-                                    width: 34,
-                                    height: 34,
-                                    decoration: BoxDecoration(
-                                      color: DunesColors.resolve(
-                                        ctx,
-                                        const Color(0xFFEEEBFB),
-                                        role: DunesColorRole.surface,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Icon(
-                                      xflowApprovalIcon(
-                                        group.templates[i].icon,
-                                      ),
-                                      size: 18,
-                                      color: DunesColors.resolve(ctx, _kAccent),
-                                    ),
-                                  ),
-                                  title: Text(
-                                    group.templates[i].title,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    '${(i + 1).toString().padLeft(2, '0')} · '
-                                    '${group.templates[i].subtitle}',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _bucketChip(
-                                        ctx,
-                                        proposalApprovalBucketLabel(
-                                          group.templates[i].templateKey,
-                                        ),
-                                      ),
-                                      const Icon(
-                                        Icons.chevron_right_rounded,
-                                        size: 18,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          '审批通过后归入提案：',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: DunesColors.resolve(ctx, DunesColors.text3),
-                          ),
-                        ),
-                        for (final label in kXflowProposalBucketLegend)
-                          _bucketChip(ctx, label),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+      templates: templates,
+      catalog: _catalog,
+      proposalCode: widget.proposal.code,
+      proposalTitle: widget.proposal.title,
     );
   }
 
@@ -1622,6 +1404,357 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
         : '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} '
               '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
+}
+
+Widget _proposalTemplateTab(
+  BuildContext context, {
+  required String label,
+  required bool selected,
+  required VoidCallback onTap,
+}) {
+  return InkWell(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: selected
+                ? DunesColors.resolve(context, _kAccent)
+                : Colors.transparent,
+            width: 2,
+          ),
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          color: DunesColors.resolve(
+            context,
+            selected ? _kAccent : const Color(0xFF5F5D70),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _proposalBucketChip(BuildContext context, String label) => Padding(
+  padding: const EdgeInsets.only(right: 4),
+  child: XflowCostBucketChip(label),
+);
+
+/// 从提案列表发起业务审批。只有已完成、且当前用户可发起的提案会打开模板选择。
+/// 返回 true 表示已经打开过审批表单。
+Future<bool> launchProposalBusinessApproval({
+  required BuildContext context,
+  required AuthSession session,
+  required ProposalIntakeRow proposal,
+}) async {
+  void toast(String message) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger != null) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  if (proposal.status != 'done') {
+    toast('提案完成并通过后，才能从这里发起审批');
+    return false;
+  }
+  final service = XflowService(session: session);
+  try {
+    final preview = await service.fetchProposalRelatedApprovals(proposal.id);
+    if (!context.mounted) return false;
+    if (preview['canLaunch'] != true) {
+      toast('当前账号不能从这份提案发起审批');
+      return false;
+    }
+    final templates = (await service.fetchTemplatesByCategory('biz'))
+        .where(
+          (t) => t.enabled && t.templateKey != XflowService.salesTemplateKey,
+        )
+        .toList();
+    if (!context.mounted) return false;
+    List<XflowApprovalGroup>? catalog;
+    try {
+      catalog = await service.fetchApprovalGroups();
+    } catch (_) {
+      catalog = null;
+    }
+    if (!context.mounted) return false;
+    final selected = await showProposalBusinessTemplatePicker(
+      context: context,
+      templates: templates,
+      catalog: catalog,
+      proposalCode: proposal.code,
+      proposalTitle: proposal.title,
+    );
+    if (selected == null || !context.mounted) return false;
+    await showProposalBusinessForm(
+      context: context,
+      session: session,
+      templateKey: selected.templateKey,
+      proposal: linkedProposalIntakePayload(
+        id: proposal.id,
+        code: proposal.code,
+        title: proposal.title,
+        kind: proposal.kind,
+        projectName: '${proposal.form['projectName'] ?? ''}',
+      ),
+    );
+    return true;
+  } catch (e) {
+    if (context.mounted) toast(friendlyErrorText(e));
+    return false;
+  }
+}
+
+Future<XflowTemplateCard?> showProposalBusinessTemplatePicker({
+  required BuildContext context,
+  required List<XflowTemplateCard> templates,
+  required List<XflowApprovalGroup>? catalog,
+  required String proposalCode,
+  required String proposalTitle,
+}) {
+  final groups = xflowPopulatedApprovalGroups(
+    templates,
+    category: 'biz',
+    catalog: catalog,
+  ).where((g) => g.templates.isNotEmpty && g.id != 'biz-initiative').toList();
+  var index = groups.indexWhere((g) => g.id == 'biz-payment');
+  if (index < 0) index = 0;
+  return showDialog<XflowTemplateCard>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setLocal) {
+        final group = groups.isEmpty ? null : groups[index];
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 640,
+              maxHeight: MediaQuery.sizeOf(ctx).height * .86,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          '发起审批',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '关闭',
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolve(
+                      ctx,
+                      const Color(0xFFF6F5FB),
+                      role: DunesColorRole.surface,
+                    ),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        ctx,
+                        const Color(0xFFE6E3F2),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '所属提案',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.resolve(ctx, DunesColors.text3),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          [
+                            proposalCode,
+                            proposalTitle,
+                          ].where((s) => s.trim().isNotEmpty).join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.lock_outline_rounded,
+                        size: 14,
+                        color: DunesColors.resolve(ctx, DunesColors.text3),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '自动关联',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.resolve(ctx, DunesColors.text3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < groups.length; i++)
+                        _proposalTemplateTab(
+                          ctx,
+                          label:
+                              '${groups[i].title} ${groups[i].templates.length}',
+                          selected: i == index,
+                          onTap: () => setLocal(() => index = i),
+                        ),
+                    ],
+                  ),
+                ),
+                Divider(
+                  height: 1,
+                  color: DunesColors.resolve(
+                    ctx,
+                    _kLine,
+                    role: DunesColorRole.border,
+                  ),
+                ),
+                Flexible(
+                  child: group == null
+                      ? const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text('暂无可用业务审批模板'),
+                        )
+                      : ListView(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          children: [
+                            for (var i = 0; i < group.templates.length; i++)
+                              ListTile(
+                                onTap: () =>
+                                    Navigator.pop(ctx, group.templates[i]),
+                                leading: Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: DunesColors.resolve(
+                                      ctx,
+                                      const Color(0xFFEEEBFB),
+                                      role: DunesColorRole.surface,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    xflowApprovalIcon(group.templates[i].icon),
+                                    size: 18,
+                                    color: DunesColors.resolve(ctx, _kAccent),
+                                  ),
+                                ),
+                                title: Text(
+                                  group.templates[i].title,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  '${(i + 1).toString().padLeft(2, '0')} · '
+                                  '${group.templates[i].subtitle}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _proposalBucketChip(
+                                      ctx,
+                                      proposalApprovalBucketLabel(
+                                        group.templates[i].templateKey,
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.chevron_right_rounded,
+                                      size: 18,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        '审批通过后归入提案：',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.resolve(ctx, DunesColors.text3),
+                        ),
+                      ),
+                      for (final label in kXflowProposalBucketLegend)
+                        _proposalBucketChip(ctx, label),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
 }
 
 Future<void> showProposalBusinessForm({

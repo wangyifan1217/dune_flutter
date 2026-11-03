@@ -294,11 +294,93 @@ ProposalSettleLineView _withExpectedRedemption(
   );
 }
 
+/// 机构返佣这条资管公式：引流金额*结算比例-(销售-退款)*(1-电子券销售款结算比例)。
+/// 测算时引流金额、销售都按年化规模，退款按 0。括号里的电子券销售款结算比例
+/// 取应收「电子券销售款」的结算比例，再和 1 相减。应收是 100% 时，后半段是 1−1 = 0。
+bool proposalIsDrainCouponOffsetFormula(String formula) {
+  final text = formula
+      .replaceAll('（', '(')
+      .replaceAll('）', ')')
+      .replaceAll('的', '')
+      .replaceAll(RegExp(r'\s+'), '');
+  return text.contains('引流金额*结算比例') &&
+      text.contains('销售-退款') &&
+      text.contains('(1-电子券销售款结算比例)');
+}
+
+bool _isCouponSalesReceivable(ProposalFinanceSettleTerms terms) {
+  final path = proposalSettleBillPath(terms);
+  if (path.contains('应付')) return false;
+  return proposalSettleBillTypeL3(terms).contains('电子券销售款') ||
+      path.contains('电子券销售款');
+}
+
+/// 关联产品上应收「电子券销售款」的结算比例。多条相加。没有则返回 null。
+double? proposalCouponSalesReceivableRatio(
+  Map<String, dynamic> form,
+  List<String> skuIds,
+) {
+  final want = skuIds.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet();
+  var sum = 0.0;
+  var found = false;
+  void take(ProposalFinanceSettleTerms terms, double face) {
+    if (!_isCouponSalesReceivable(terms)) return;
+    final share = proposalIntakeSettleShare(terms, face: face);
+    if (share <= 0) return;
+    found = true;
+    sum += share;
+  }
+
+  for (final sku in proposalIntakeAllSellableSkus(form)) {
+    if (want.isNotEmpty && !want.contains(sku.id)) continue;
+    final face = proposalIntakeSkuSettleFace(sku);
+    for (final settle in proposalIntakeSkuSettlements(sku)) {
+      if (settle.isCost) continue;
+      take(settle.terms, face);
+    }
+  }
+  for (final group in proposalIntakeSharedSettlements(form)) {
+    if (want.isNotEmpty && !group.skuIds.any(want.contains)) continue;
+    take(group.terms, 0);
+  }
+  if (!found) return null;
+  return sum;
+}
+
+({double amount, String substitution}) proposalDrainCouponOffsetLine({
+  required double scale,
+  required double lineRatio,
+  required double? receivableRatio,
+}) {
+  final head = proposalRoundWan(scale * lineRatio);
+  final scaleText = proposalFormatWan(scale);
+  if (receivableRatio == null) {
+    return (
+      amount: head,
+      substitution:
+          '$scaleText × $lineRatio = ${proposalFormatWan(head)} 万元/年（应收电子券销售款结算比例未填，后半段按 0）',
+    );
+  }
+  final factor = 1 - receivableRatio;
+  final tail = proposalRoundWan(scale * factor);
+  final amount = proposalRoundWan(head - tail);
+  final receivableText = receivableRatio == receivableRatio.roundToDouble()
+      ? receivableRatio.toStringAsFixed(0)
+      : '$receivableRatio';
+  return (
+    amount: amount,
+    substitution:
+        '$scaleText × $lineRatio − $scaleText × (1 − $receivableText) = ${proposalFormatWan(amount)} 万元/年',
+  );
+}
+
 ProposalSettleLineView proposalSettleLineView(
   ProposalFinanceSettleTerms terms, {
   required double scale,
   required double face,
   ({double face, double share, String price})? promotionMain,
+  Map<String, dynamic>? form,
+  List<String> skuIds = const [],
 }) {
   if (promotionMain != null && proposalPromotionByRatio(terms)) {
     final ratioText = terms.displayRatio.trim();
@@ -384,6 +466,29 @@ ProposalSettleLineView proposalSettleLineView(
   }
   final ratioText = terms.displayRatio.trim();
   final share = ratioText.isEmpty ? 0.0 : proposalParseSettleRatio(ratioText);
+  if (form != null &&
+      ratioText.isNotEmpty &&
+      scale > 0 &&
+      proposalIsDrainCouponOffsetFormula(terms.displayFormula)) {
+    final calc = proposalDrainCouponOffsetLine(
+      scale: scale,
+      lineRatio: share,
+      receivableRatio: proposalCouponSalesReceivableRatio(form, skuIds),
+    );
+    return _withExpectedRedemption(
+      terms,
+      ProposalSettleLineView(
+        share: calc.amount / scale,
+        amount: calc.amount,
+        substitution: calc.substitution,
+        ratioText: ratioText,
+        perUnit: face > 0 && share > 0
+            ? '${proposalFormatWan(face * share)} 元'
+            : '',
+        unfilled: false,
+      ),
+    );
+  }
   final amount = proposalRoundWan(scale * share);
   return _withExpectedRedemption(
     terms,
@@ -1442,6 +1547,13 @@ double proposalPayableCostLineAmount(
   if (share <= 0) return 0;
   final scale = proposalAssociatedSalesScale(form, skuIds);
   if (scale <= 0) return 0;
+  if (proposalIsDrainCouponOffsetFormula(terms.displayFormula)) {
+    return proposalDrainCouponOffsetLine(
+      scale: scale,
+      lineRatio: share,
+      receivableRatio: proposalCouponSalesReceivableRatio(form, skuIds),
+    ).amount;
+  }
   return scale * share;
 }
 
@@ -1589,6 +1701,23 @@ String proposalProjectCostFormulaSubstitution(
       }
       continue;
     }
+    if (proposalIsDrainCouponOffsetFormula(hit.terms.displayFormula)) {
+      final scale = proposalAssociatedSalesScale(form, hit.skuIds);
+      final ratio = _projectCostSettleShare(form, hit.terms, hit.skuIds);
+      if (scale > 0 && ratio > 0) {
+        promotion.add(
+          proposalDrainCouponOffsetLine(
+            scale: scale,
+            lineRatio: ratio,
+            receivableRatio: proposalCouponSalesReceivableRatio(
+              form,
+              hit.skuIds,
+            ),
+          ).substitution,
+        );
+      }
+      continue;
+    }
     final ratio = _projectCostSettleShare(form, hit.terms, hit.skuIds);
     if (ratio <= 0) continue;
     final label = _projectCostRatioLabel(hit.terms);
@@ -1711,7 +1840,13 @@ double? proposalEstimateProjectCostAmount(
   )) {
     if (!aliases.contains(hit.costName)) continue;
     final amount = proposalPayableCostLineAmount(form, hit.terms, hit.skuIds);
-    if (amount <= 0) continue;
+    final offset = proposalIsDrainCouponOffsetFormula(hit.terms.displayFormula);
+    if (!offset && amount <= 0) continue;
+    if (offset &&
+        amount == 0 &&
+        _projectCostSettleShare(form, hit.terms, hit.skuIds) <= 0) {
+      continue;
+    }
     any = true;
     sum += amount;
   }

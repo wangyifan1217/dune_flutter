@@ -18728,6 +18728,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               promotionMain: cost
                   ? proposalPromotionMain(_form, product)
                   : null,
+              form: _form,
+              skuIds: [product.id],
             );
             final formula = t.displayFormula.trim();
             return ProposalProductCardLine(

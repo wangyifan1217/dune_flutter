@@ -537,4 +537,121 @@ void main() {
       expect((right - edge).abs(), lessThan(2));
     }
   });
+
+  test('机构返佣减去应收电子券销售款结算比例', () {
+    const formula = '引流金额*结算比例-(销售-退款)*(1-电子券销售款结算比例)';
+    final form = <String, dynamic>{
+      'salesScale': 139.53,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'settlements': [
+            {
+              'id': 'income-1',
+              'kind': 'income',
+              'billType': '应收/电子券销售款',
+              'settleRatio': '13%',
+            },
+            {
+              'id': 'cost-1',
+              'kind': 'cost',
+              'billType': '机构返佣',
+              'settleRatio': '2.5%',
+              'formula': formula,
+            },
+          ],
+        },
+      ],
+    };
+    // 139.53×0.025 − 139.53×(1−0.13) = 3.49 − 121.39 = -117.90
+    expect(
+      proposalEstimateProjectCostAmount(form, '机构返佣'),
+      closeTo(-117.90, 0.01),
+    );
+    expect(
+      proposalProjectCostFormulaSubstitution(form, '机构返佣'),
+      contains('139.53 × 0.025 − 139.53 × (1 − 0.13)'),
+    );
+    final sku = proposalIntakeSkuDetails(form).single;
+    final cost = proposalIntakeSkuSettlements(sku).last.terms;
+    final line = proposalSettleLineView(
+      cost,
+      scale: 139.53,
+      face: 100,
+      form: form,
+      skuIds: const ['sku-1'],
+    );
+    expect(line.amount, closeTo(-117.90, 0.01));
+    expect(line.ratioText, '0.025');
+    expect(line.unfilled, isFalse);
+    expect(line.substitution, contains('139.53 × 0.025 − 139.53 × (1 − 0.13)'));
+
+    final missing = <String, dynamic>{
+      'salesScale': 139.53,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'settlements': [
+            {
+              'id': 'cost-1',
+              'kind': 'cost',
+              'billType': '机构返佣',
+              'settleRatio': '2.5%',
+              'formula': formula,
+            },
+          ],
+        },
+      ],
+    };
+    expect(
+      proposalEstimateProjectCostAmount(missing, '机构返佣'),
+      closeTo(3.49, 0.01),
+    );
+    final missingLine = proposalSettleLineView(
+      proposalIntakeSkuSettlements(proposalIntakeSkuDetails(missing).single)
+          .single
+          .terms,
+      scale: 139.53,
+      face: 100,
+      form: missing,
+      skuIds: const ['sku-1'],
+    );
+    expect(missingLine.amount, closeTo(3.49, 0.01));
+    expect(missingLine.substitution, contains('未填'));
+
+    final full = <String, dynamic>{
+      'salesScale': 139.53,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'settlements': [
+            {
+              'id': 'income-1',
+              'kind': 'income',
+              'billType': '应收/电子券销售款',
+              'settleRatio': '100%',
+            },
+            {
+              'id': 'cost-1',
+              'kind': 'cost',
+              'billType': '机构返佣',
+              'settleRatio': '2.5%',
+              'formula': formula,
+            },
+          ],
+        },
+      ],
+    };
+    // 100% 时后半段是 1−1 = 0，只剩 139.53×0.025 = 3.49
+    expect(proposalEstimateProjectCostAmount(full, '机构返佣'), closeTo(3.49, 0.01));
+    final fullLine = proposalSettleLineView(
+      proposalIntakeSkuSettlements(proposalIntakeSkuDetails(full).single).last.terms,
+      scale: 139.53,
+      face: 100,
+      form: full,
+      skuIds: const ['sku-1'],
+    );
+    expect(fullLine.amount, closeTo(3.49, 0.01));
+    expect(fullLine.substitution, contains('139.53 × 0.025 − 139.53 × (1 − 1)'));
+  });
 }

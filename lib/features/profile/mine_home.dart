@@ -13,6 +13,7 @@ import '../lighthouse/lighthouse_hero_metric.dart'
     show lighthouseHeroShellMarginH, lighthouseMainPageBg;
 import '../lighthouse/lighthouse_service.dart';
 import '../proposal_intake/native_proposal_intake_page.dart';
+import '../proposal_intake/proposal_business_approvals.dart';
 import '../proposal_intake/proposal_intake_models.dart';
 import '../proposal_intake/proposal_intake_service.dart';
 import '../proposal_intake/proposal_list_card.dart';
@@ -32,6 +33,7 @@ import '../xflow/xflow_service.dart';
 //   营收目标：半圆仪表（第一责任深紫 / 第二责任浅紫）+ 我相关提案数据池；
 //   审批：待我审 / 待办理 / 我发起 / 抄送我 四格；
 //   我的提案：已完成 / 进行中 / 待我处理 三段，行可展开；右下角宫格打开「更多」。
+//     每行在原信息后带审批中、已完成张数，右侧图标发起审批。
 //
 //   数据：
 //     · 提案列表走 /proposal-intakes（related=1 我相关、不带 related 全公司、actionable=1 待我处理）；
@@ -198,7 +200,12 @@ class MineHomeTitleBar extends StatelessWidget {
     return ColoredBox(
       color: _r(context, MinePalette.page, DunesColorRole.surface),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(kMinePageGutter, 18, kMinePageGutter, 8),
+        padding: const EdgeInsets.fromLTRB(
+          kMinePageGutter,
+          18,
+          kMinePageGutter,
+          8,
+        ),
         child: Row(
           children: [
             Text(
@@ -258,8 +265,7 @@ class MineHomeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final selected = month ?? DateTime(now.year, now.month);
-    final isCurrent =
-        selected.year == now.year && selected.month == now.month;
+    final isCurrent = selected.year == now.year && selected.month == now.month;
     final monthLabel = selected.year == now.year
         ? '${selected.month}月'
         : '${selected.year % 100}年${selected.month}月';
@@ -398,7 +404,11 @@ class MineWorkbenchChip extends StatelessWidget {
               height: 36,
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: _r(context, MinePalette.purpleSoft, DunesColorRole.surface),
+                color: _r(
+                  context,
+                  MinePalette.purpleSoft,
+                  DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Row(
@@ -452,7 +462,11 @@ class MineRoundAction extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: _cardDecoration(context, radius: 999),
-              child: Icon(icon, size: 19, color: _r(context, MinePalette.night)),
+              child: Icon(
+                icon,
+                size: 19,
+                color: _r(context, MinePalette.night),
+              ),
             ),
           ),
         ),
@@ -626,147 +640,149 @@ Future<void> showMineCreateSheet(
             ),
           ),
           ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: Material(
-            color: _r(ctx, MinePalette.card, DunesColorRole.surface),
-            clipBehavior: Clip.antiAlias,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                10,
-                16,
-                18 + media.viewPadding.bottom,
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: Material(
+              color: _r(ctx, MinePalette.card, DunesColorRole.surface),
+              clipBehavior: Clip.antiAlias,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 14),
-                      decoration: BoxDecoration(
-                        color: _r(
-                          ctx,
-                          const Color(0xFFDCD6E8),
-                          DunesColorRole.border,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  10,
+                  16,
+                  18 + media.viewPadding.bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: _r(
+                            ctx,
+                            const Color(0xFFDCD6E8),
+                            DunesColorRole.border,
+                          ),
+                          borderRadius: BorderRadius.circular(999),
                         ),
-                        borderRadius: BorderRadius.circular(999),
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
-                    child: Text(
-                      '更多',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: _r(ctx, MinePalette.ink),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+                      child: Text(
+                        '更多',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: _r(ctx, MinePalette.ink),
+                        ),
                       ),
                     ),
-                  ),
-                  if (onWorkbench != null)
+                    if (onWorkbench != null)
+                      option(
+                        icon: Icons.apps_rounded,
+                        iconGradient: const [
+                          Color(0xFF6366F1),
+                          Color(0xFF4338CA),
+                        ],
+                        bg: MinePalette.wash,
+                        title: '工作台',
+                        subtitle: '打开任务与协作工作台',
+                        onTap: onWorkbench,
+                      ),
+                    if (showProposals) ...[
+                      option(
+                        icon: Icons.request_quote_outlined,
+                        iconGradient: const [
+                          Color(0xFF0EA5E9),
+                          Color(0xFF0369A1),
+                        ],
+                        bg: MinePalette.wash,
+                        title: '销售提案',
+                        subtitle: '完成后在提案内发起业务审批',
+                        onTap: onSales,
+                      ),
+                      option(
+                        icon: Icons.shopping_bag_outlined,
+                        iconGradient: const [
+                          Color(0xFFF59E0B),
+                          Color(0xFFB45309),
+                        ],
+                        bg: MinePalette.wash,
+                        title: '采购提案',
+                        subtitle: '完成后在提案内发起业务审批',
+                        onTap: onPurchase,
+                      ),
+                    ],
                     option(
-                      icon: Icons.apps_rounded,
+                      icon: Icons.add_task_rounded,
                       iconGradient: const [
-                        Color(0xFF6366F1),
-                        Color(0xFF4338CA),
+                        Color(0xFF7C5CE6),
+                        Color(0xFF552D8E),
                       ],
-                      bg: MinePalette.wash,
-                      title: '工作台',
-                      subtitle: '打开任务与协作工作台',
-                      onTap: onWorkbench,
+                      bg: MinePalette.page,
+                      title: '审批',
+                      subtitle: '进入后选择业务审批或非业务审批',
+                      onTap: onApproval,
                     ),
-                  if (showProposals) ...[
                     option(
-                      icon: Icons.request_quote_outlined,
+                      icon: Icons.article_rounded,
                       iconGradient: const [
-                        Color(0xFF0EA5E9),
-                        Color(0xFF0369A1),
+                        Color(0xFF3880FF),
+                        Color(0xFF1E40AF),
                       ],
                       bg: MinePalette.wash,
-                      title: '销售提案',
-                      subtitle: '完成后在提案内发起业务审批',
-                      onTap: onSales,
+                      title: '会议纪要',
+                      subtitle: '录制、上传并查看 AI 会议纪要',
+                      onTap: onMeeting,
                     ),
                     option(
-                      icon: Icons.shopping_bag_outlined,
+                      icon: Icons.auto_stories_rounded,
                       iconGradient: const [
-                        Color(0xFFF59E0B),
-                        Color(0xFFB45309),
+                        Color(0xFF10B981),
+                        Color(0xFF047857),
                       ],
                       bg: MinePalette.wash,
-                      title: '采购提案',
-                      subtitle: '完成后在提案内发起业务审批',
-                      onTap: onPurchase,
+                      title: '企业知识库',
+                      subtitle: '查看组织文档与知识沉淀',
+                      onTap: onKnowledge,
+                    ),
+                    if (onPerformance != null)
+                      option(
+                        icon: Icons.insights_outlined,
+                        iconGradient: const [
+                          Color(0xFF8C5A91),
+                          Color(0xFF6D4574),
+                        ],
+                        bg: MinePalette.wash,
+                        title: '绩效',
+                        subtitle: '查看已发布的月度绩效与得分',
+                        onTap: onPerformance,
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                      child: Text(
+                        '付款、开票、保证金等业务审批，请进入对应提案发起。',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          height: 1.5,
+                          color: _r(ctx, MinePalette.ink2),
+                        ),
+                      ),
                     ),
                   ],
-                  option(
-                    icon: Icons.add_task_rounded,
-                    iconGradient: const [
-                      Color(0xFF7C5CE6),
-                      Color(0xFF552D8E),
-                    ],
-                    bg: MinePalette.page,
-                    title: '审批',
-                    subtitle: '进入后选择业务审批或非业务审批',
-                    onTap: onApproval,
-                  ),
-                  option(
-                    icon: Icons.article_rounded,
-                    iconGradient: const [
-                      Color(0xFF3880FF),
-                      Color(0xFF1E40AF),
-                    ],
-                    bg: MinePalette.wash,
-                    title: '会议纪要',
-                    subtitle: '录制、上传并查看 AI 会议纪要',
-                    onTap: onMeeting,
-                  ),
-                  option(
-                    icon: Icons.auto_stories_rounded,
-                    iconGradient: const [
-                      Color(0xFF10B981),
-                      Color(0xFF047857),
-                    ],
-                    bg: MinePalette.wash,
-                    title: '企业知识库',
-                    subtitle: '查看组织文档与知识沉淀',
-                    onTap: onKnowledge,
-                  ),
-                  if (onPerformance != null)
-                    option(
-                      icon: Icons.insights_outlined,
-                      iconGradient: const [
-                        Color(0xFF8C5A91),
-                        Color(0xFF6D4574),
-                      ],
-                      bg: MinePalette.wash,
-                      title: '绩效',
-                      subtitle: '查看已发布的月度绩效与得分',
-                      onTap: onPerformance,
-                    ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-                    child: Text(
-                      '付款、开票、保证金等业务审批，请进入对应提案发起。',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        height: 1.5,
-                        color: _r(ctx, MinePalette.ink2),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
-          ],
-        );
+        ],
+      );
     },
   );
 }
@@ -806,6 +822,10 @@ class _MinePool {
   double revenue = 0;
   int approvals = 0;
 
+  /// 关联审批里仍在走流程的张数、已通过的张数。按单据去重。
+  int pendingApprovals = 0;
+  int approvedApprovals = 0;
+
   /// 本月开票审批：已通过、审批中（元）。全公司营收达成用。
   double invoicedMonth = 0;
   double invoicingMonth = 0;
@@ -821,6 +841,8 @@ class _MinePool {
     working += other.working;
     revenue += other.revenue;
     approvals += other.approvals;
+    pendingApprovals += other.pendingApprovals;
+    approvedApprovals += other.approvedApprovals;
     invoicedMonth += other.invoicedMonth;
     invoicingMonth += other.invoicingMonth;
   }
@@ -872,29 +894,73 @@ class _MinePool {
       }
     }
     final buckets = data['buckets'];
-    if (buckets is! List) return pool;
-    for (final raw in buckets) {
-      if (raw is! Map) continue;
-      final total = (raw['total'] as num?)?.toDouble() ?? 0;
-      pool.approvals += (raw['count'] as num?)?.toInt() ?? 0;
-      switch ('${raw['bucket'] ?? ''}') {
-        case 'projectCost':
-          pool.project += total;
-        case 'businessCost':
-          pool.business += total;
-        case 'operatingCost':
-          pool.operating += total;
-        case 'taxCost':
-          pool.tax += total;
-        case 'workingCapital':
-          pool.working += total;
-        case 'revenue':
-          pool.revenue += total;
-        case 'revenueOffset':
-          pool.revenue -= total;
+    if (buckets is List) {
+      for (final raw in buckets) {
+        if (raw is! Map) continue;
+        final total = (raw['total'] as num?)?.toDouble() ?? 0;
+        pool.approvals += (raw['count'] as num?)?.toInt() ?? 0;
+        switch ('${raw['bucket'] ?? ''}') {
+          case 'projectCost':
+            pool.project += total;
+          case 'businessCost':
+            pool.business += total;
+          case 'operatingCost':
+            pool.operating += total;
+          case 'taxCost':
+            pool.tax += total;
+          case 'workingCapital':
+            pool.working += total;
+          case 'revenue':
+            pool.revenue += total;
+          case 'revenueOffset':
+            pool.revenue -= total;
+        }
       }
     }
+    _countApprovalStatuses(pool, data);
     return pool;
+  }
+
+  /// 审批中、已完成按单据去重。发票会同时出现在分桶和 invoices 里，只计一次。
+  static void _countApprovalStatuses(
+    _MinePool pool,
+    Map<String, dynamic> data,
+  ) {
+    final seen = <String>{};
+    void take(Object? raw) {
+      if (raw is! Map) return;
+      final id = (raw['approvalId'] as num?)?.toInt() ?? 0;
+      final biz = '${raw['businessType'] ?? ''}:${raw['businessId'] ?? ''}'
+          .trim();
+      final key = id > 0 ? 'id:$id' : biz;
+      if (key == ':' || !seen.add(key)) return;
+      switch ('${raw['status'] ?? ''}'.trim().toUpperCase()) {
+        case 'APPROVED':
+          pool.approvedApprovals++;
+        case 'PENDING':
+        case 'PENDING_INITIATE':
+          pool.pendingApprovals++;
+      }
+    }
+
+    final buckets = data['buckets'];
+    if (buckets is List) {
+      for (final raw in buckets) {
+        if (raw is! Map) continue;
+        final items = raw['items'];
+        if (items is List) {
+          for (final item in items) {
+            take(item);
+          }
+        }
+      }
+    }
+    final invoices = data['invoices'];
+    if (invoices is List) {
+      for (final item in invoices) {
+        take(item);
+      }
+    }
   }
 }
 
@@ -933,7 +999,8 @@ class _MineCostApproval {
     status: '${raw['status'] ?? ''}'.trim().toUpperCase(),
     amount: (raw['amount'] as num?)?.toDouble() ?? 0,
     occurredAt: DateTime.tryParse('${raw['occurredAt'] ?? ''}')?.toLocal(),
-    initiatorName: '${raw['initiatorName'] ?? raw['submitterName'] ?? ''}'.trim(),
+    initiatorName: '${raw['initiatorName'] ?? raw['submitterName'] ?? ''}'
+        .trim(),
   );
 }
 
@@ -1104,6 +1171,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
   /// 全公司收入接灯塔（业务口径，元）。取不到时退回发票不含税。
   double? _lhRevenueMonth;
   final Set<int> _poolLoading = {};
+  final Set<int> _launchingApproval = {};
 
   _MineTaskTab _taskTab = _MineTaskTab.doing;
   bool _tasksLoading = true;
@@ -1142,7 +1210,9 @@ class _MineHomeBodyState extends State<MineHomeBody> {
   DateTime get _selectedMonth {
     final now = DateTime.now();
     final m = widget.month;
-    return m == null ? DateTime(now.year, now.month) : DateTime(m.year, m.month);
+    return m == null
+        ? DateTime(now.year, now.month)
+        : DateTime(m.year, m.month);
   }
 
   bool get _isCurrentMonth {
@@ -1275,11 +1345,9 @@ class _MineHomeBodyState extends State<MineHomeBody> {
   Future<void> _loadTasks() async {
     if (widget.session.isExternalUser) return;
     try {
-      final items = await TaskApi(widget.session).listTasks(
-        scope: 'mine',
-        size: 80,
-        maxPages: 1,
-      );
+      final items = await TaskApi(
+        widget.session,
+      ).listTasks(scope: 'mine', size: 80, maxPages: 1);
       if (!mounted) return;
       setState(() {
         _mineTasks = items;
@@ -1352,6 +1420,27 @@ class _MineHomeBodyState extends State<MineHomeBody> {
 
   String _meta(List<String> parts) =>
       parts.where((p) => p.trim().isNotEmpty).join(' · ');
+
+  String _approvalMeta(_MinePool? pool) => pool == null
+      ? '审批中 … · 已完成 …'
+      : '审批中 ${pool.pendingApprovals} · 已完成 ${pool.approvedApprovals}';
+
+  Future<void> _launchApproval(ProposalIntakeRow row) async {
+    if (!_launchingApproval.add(row.id)) return;
+    setState(() {});
+    try {
+      final started = await launchProposalBusinessApproval(
+        context: context,
+        session: widget.session,
+        proposal: row,
+      );
+      if (!mounted || !started) return;
+      _pools.remove(row.id);
+      await _loadPools([row], limit: 1);
+    } finally {
+      if (mounted) setState(() => _launchingApproval.remove(row.id));
+    }
+  }
 
   // ── build ──
 
@@ -1460,7 +1549,9 @@ class _MineHomeBodyState extends State<MineHomeBody> {
   Future<void> _loadLighthouseRevenue() async {
     final service = LighthouseService(session: widget.session);
     double? read(Map<String, dynamic> summary) {
-      final metrics = summary['metrics'] is Map ? summary['metrics'] as Map : summary;
+      final metrics = summary['metrics'] is Map
+          ? summary['metrics'] as Map
+          : summary;
       final value = metrics['revenue'];
       return value is num ? value.toDouble() : null;
     }
@@ -1657,7 +1748,12 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                _chip(context, chip, MinePalette.purpleSoft, MinePalette.purple),
+                _chip(
+                  context,
+                  chip,
+                  MinePalette.purpleSoft,
+                  MinePalette.purple,
+                ),
                 const Spacer(),
                 Text(
                   trailing,
@@ -1830,7 +1926,8 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     final margin = sales > 0 ? profit / sales * 100 : null;
     final ink2 = _r(context, MinePalette.ink2);
     final muted = _r(context, MinePalette.working);
-    String amt(double yuan) => show ? _wan(yuan) : (ready || failed ? '—' : '…');
+    String amt(double yuan) =>
+        show ? _wan(yuan) : (ready || failed ? '—' : '…');
 
     Widget stat(String label, double value, Color color, {String? sub}) {
       return Column(
@@ -1973,7 +2070,11 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                   Container(
                     padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
-                      color: _r(context, MinePalette.track, DunesColorRole.surface),
+                      color: _r(
+                        context,
+                        MinePalette.track,
+                        DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Row(
@@ -2040,7 +2141,11 @@ class _MineHomeBodyState extends State<MineHomeBody> {
               color: _r(context, MinePalette.wash, DunesColorRole.surface),
               border: Border(
                 top: BorderSide(
-                  color: _r(context, MinePalette.washLine, DunesColorRole.border),
+                  color: _r(
+                    context,
+                    MinePalette.washLine,
+                    DunesColorRole.border,
+                  ),
                 ),
               ),
             ),
@@ -2052,11 +2157,41 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: cell('项目', 'projectCost', MinePalette.project, p.project)),
-                      Expanded(child: cell('业务', 'businessCost', MinePalette.business, p.business)),
-                      Expanded(child: cell('税务', 'taxCost', MinePalette.tax, p.tax)),
-                      Expanded(child: cell('经营', 'operatingCost', MinePalette.operating, p.operating)),
-                      Expanded(child: cell('周转', 'workingCapital', MinePalette.working, p.working)),
+                      Expanded(
+                        child: cell(
+                          '项目',
+                          'projectCost',
+                          MinePalette.project,
+                          p.project,
+                        ),
+                      ),
+                      Expanded(
+                        child: cell(
+                          '业务',
+                          'businessCost',
+                          MinePalette.business,
+                          p.business,
+                        ),
+                      ),
+                      Expanded(
+                        child: cell('税务', 'taxCost', MinePalette.tax, p.tax),
+                      ),
+                      Expanded(
+                        child: cell(
+                          '经营',
+                          'operatingCost',
+                          MinePalette.operating,
+                          p.operating,
+                        ),
+                      ),
+                      Expanded(
+                        child: cell(
+                          '周转',
+                          'workingCapital',
+                          MinePalette.working,
+                          p.working,
+                        ),
+                      ),
                     ],
                   )
                 else
@@ -2102,7 +2237,9 @@ class _MineHomeBodyState extends State<MineHomeBody> {
             ),
             decoration: BoxDecoration(
               color: _r(ctx, MinePalette.page, DunesColorRole.surface),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -2131,9 +2268,16 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: _r(ctx, MinePalette.card, DunesColorRole.surface),
+                          color: _r(
+                            ctx,
+                            MinePalette.card,
+                            DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
@@ -2167,7 +2311,10 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                         ),
                         TextSpan(text: ' 万  ·  已通过 ${items.length} 张'),
                         if (items.isNotEmpty)
-                          TextSpan(text: '（业务 $bizCount · 非业务 ${items.length - bizCount}）'),
+                          TextSpan(
+                            text:
+                                '（业务 $bizCount · 非业务 ${items.length - bizCount}）',
+                          ),
                       ],
                     ),
                     style: TextStyle(fontSize: 12, color: ink2),
@@ -2178,7 +2325,9 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                       ? Padding(
                           padding: const EdgeInsets.fromLTRB(18, 20, 18, 40),
                           child: Text(
-                            _poolMonthly ? '$_monthText暂无已通过的$label成本审批' : '暂无已通过的$label成本审批',
+                            _poolMonthly
+                                ? '$_monthText暂无已通过的$label成本审批'
+                                : '暂无已通过的$label成本审批',
                             style: TextStyle(color: ink2),
                           ),
                         )
@@ -2189,7 +2338,11 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                           child: Container(
                             margin: const EdgeInsets.fromLTRB(12, 0, 12, 16),
                             decoration: BoxDecoration(
-                              color: _r(ctx, MinePalette.card, DunesColorRole.surface),
+                              color: _r(
+                                ctx,
+                                MinePalette.card,
+                                DunesColorRole.surface,
+                              ),
                               borderRadius: BorderRadius.circular(18),
                             ),
                             clipBehavior: Clip.antiAlias,
@@ -2207,7 +2360,8 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                               itemBuilder: (_, index) {
                                 final item = items[index];
                                 final canOpen =
-                                    item.businessType.isNotEmpty && item.businessId > 0;
+                                    item.businessType.isNotEmpty &&
+                                    item.businessId > 0;
                                 final when = date(item.occurredAt);
                                 return InkWell(
                                   onTap: !canOpen
@@ -2229,15 +2383,23 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                                           );
                                         },
                                   child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(14, 11, 8, 11),
+                                    padding: const EdgeInsets.fromLTRB(
+                                      14,
+                                      11,
+                                      8,
+                                      11,
+                                    ),
                                     child: Row(
                                       children: [
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                item.title.isEmpty ? '审批单' : item.title,
+                                                item.title.isEmpty
+                                                    ? '审批单'
+                                                    : item.title,
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
@@ -2251,7 +2413,9 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                                                 children: [
                                                   _chip(
                                                     ctx,
-                                                    item.isBusiness ? '业务' : '非业务',
+                                                    item.isBusiness
+                                                        ? '业务'
+                                                        : '非业务',
                                                     item.isBusiness
                                                         ? MinePalette.purpleSoft
                                                         : MinePalette.steelSoft,
@@ -2263,24 +2427,37 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                                                   Icon(
                                                     Icons.check_circle_rounded,
                                                     size: 12,
-                                                    color: _r(ctx, MinePalette.purple),
+                                                    color: _r(
+                                                      ctx,
+                                                      MinePalette.purple,
+                                                    ),
                                                   ),
                                                   const SizedBox(width: 2),
                                                   Text(
                                                     '已通过',
-                                                    style: TextStyle(fontSize: 11, color: ink2),
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: ink2,
+                                                    ),
                                                   ),
                                                   Expanded(
                                                     child: Text(
                                                       [
                                                         '',
-                                                        if (item.initiatorName.isNotEmpty)
+                                                        if (item
+                                                            .initiatorName
+                                                            .isNotEmpty)
                                                           item.initiatorName,
-                                                        if (when.isNotEmpty) when,
+                                                        if (when.isNotEmpty)
+                                                          when,
                                                       ].join(' · '),
                                                       maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: TextStyle(fontSize: 11, color: ink2),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: ink2,
+                                                      ),
                                                     ),
                                                   ),
                                                 ],
@@ -2295,7 +2472,10 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                                               TextSpan(text: _wan(item.amount)),
                                               TextSpan(
                                                 text: ' 万',
-                                                style: TextStyle(fontSize: 10.5, color: ink2),
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  color: ink2,
+                                                ),
                                               ),
                                             ],
                                           ),
@@ -2396,7 +2576,11 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                     decoration: BoxDecoration(
                       color: highlight
                           ? _r(context, MinePalette.purple)
-                          : _r(context, MinePalette.page, DunesColorRole.surface),
+                          : _r(
+                              context,
+                              MinePalette.page,
+                              DunesColorRole.surface,
+                            ),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
@@ -2481,7 +2665,9 @@ class _MineHomeBodyState extends State<MineHomeBody> {
 
   Widget _buildProposalSection(BuildContext context) {
     final todos = _todoItems();
-    final doneRows = _scopeAll ? (_doneAll ?? const <ProposalIntakeRow>[]) : _doneMine;
+    final doneRows = _scopeAll
+        ? (_doneAll ?? const <ProposalIntakeRow>[])
+        : _doneMine;
     final tabs = <(_MineTab, String, int)>[
       if (widget.showProposals) (_MineTab.done, '已完成', doneRows.length),
       if (widget.showProposals) (_MineTab.doing, '进行中', _doing.length),
@@ -2528,7 +2714,8 @@ class _MineHomeBodyState extends State<MineHomeBody> {
       _MineTab.doing => _doing.length,
       _MineTab.todo => todos.length,
     };
-    final donePending = _tab == _MineTab.done &&
+    final donePending =
+        _tab == _MineTab.done &&
         _scopeAll &&
         _doneAll == null &&
         (_loading || _allLoading);
@@ -2560,8 +2747,18 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _scopeButton(context, '我相关', !_scopeAll, () => _setScope(false)),
-                      _scopeButton(context, '全公司', _scopeAll, () => _setScope(true)),
+                      _scopeButton(
+                        context,
+                        '我相关',
+                        !_scopeAll,
+                        () => _setScope(false),
+                      ),
+                      _scopeButton(
+                        context,
+                        '全公司',
+                        _scopeAll,
+                        () => _setScope(true),
+                      ),
                     ],
                   ),
                 ),
@@ -2792,7 +2989,10 @@ class _MineHomeBodyState extends State<MineHomeBody> {
         child: Text(
           text,
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12.5, color: _r(context, MinePalette.ink2)),
+          style: TextStyle(
+            fontSize: 12.5,
+            color: _r(context, MinePalette.ink2),
+          ),
         ),
       ),
     );
@@ -2897,17 +3097,16 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     } else if (_tasksError != null && _mineTasks.isEmpty) {
       body = _empty(context, _tasksError!);
     } else if (rows.isEmpty) {
-      body = _empty(
-        context,
-        switch (_taskTab) {
-          _MineTaskTab.doing => '没有进行中的任务',
-          _MineTaskTab.pending => '没有待确认、待接收或被驳回的任务',
-          _MineTaskTab.done => '还没有已完成的任务',
-        },
-      );
+      body = _empty(context, switch (_taskTab) {
+        _MineTaskTab.doing => '没有进行中的任务',
+        _MineTaskTab.pending => '没有待确认、待接收或被驳回的任务',
+        _MineTaskTab.done => '还没有已完成的任务',
+      });
     } else {
       body = _divided(context, [
-        for (final task in rows.take(_tasksOpen ? _kListExpanded : _kListPreview))
+        for (final task in rows.take(
+          _tasksOpen ? _kListExpanded : _kListPreview,
+        ))
           _buildTaskRow(context, task),
       ]);
     }
@@ -3080,7 +3279,8 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                   const SizedBox(height: 2),
                   Text(
                     _meta([
-                      if (task.ownerName.trim().isNotEmpty) '负责 ${task.ownerName.trim()}',
+                      if (task.ownerName.trim().isNotEmpty)
+                        '负责 ${task.ownerName.trim()}',
                       if (due.isNotEmpty) '截止 $due',
                       '进度 ${task.progressPct}%',
                       if (task.subtaskCount > 0)
@@ -3122,13 +3322,12 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     required int limit,
   }) {
     if (rows.isEmpty) {
-      return _empty(
-        context,
-        _scopeAll ? '全公司暂无已完成提案' : '还没有你参与的已完成提案',
-      );
+      return _empty(context, _scopeAll ? '全公司暂无已完成提案' : '还没有你参与的已完成提案');
     }
     final shown = rows.take(limit).toList(growable: false);
-    if (shown.any((r) => !_pools.containsKey(r.id) && !_poolLoading.contains(r.id))) {
+    if (shown.any(
+      (r) => !_pools.containsKey(r.id) && !_poolLoading.contains(r.id),
+    )) {
       unawaited(_loadPools(shown));
     }
     return _divided(context, [
@@ -3139,11 +3338,13 @@ class _MineHomeBodyState extends State<MineHomeBody> {
   Widget _buildDoneRow(BuildContext context, ProposalIntakeRow row) {
     final pool = _pools[row.id];
     final role = _roleOf(row);
-    final approvals = pool?.approvals ?? row.relatedApprovalCount ?? 0;
     final completedRaw = '${row.review['presidentDecidedAt'] ?? ''}'.trim();
-    final completed = _monthDay(completedRaw.isNotEmpty ? completedRaw : row.updatedAt);
-    final owner = '${row.form['createdByName'] ?? row.form['initiatorName'] ?? ''}'
-        .trim();
+    final completed = _monthDay(
+      completedRaw.isNotEmpty ? completedRaw : row.updatedAt,
+    );
+    final owner =
+        '${row.form['createdByName'] ?? row.form['initiatorName'] ?? ''}'
+            .trim();
     final sector = '${row.form['sector'] ?? ''}'.trim();
 
     final value = pool == null ? '…' : '${_wan(pool.costs)} 万';
@@ -3151,7 +3352,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     final detail = _meta([
       if (owner.isNotEmpty) '发起 $owner',
       if (completed.isNotEmpty) '完成 $completed',
-      if (pool != null && approvals > 0) '$approvals 张已通过',
+      _approvalMeta(pool),
     ]);
 
     return Column(
@@ -3159,7 +3360,12 @@ class _MineHomeBodyState extends State<MineHomeBody> {
       children: [
         _rowHeader(
           context,
-          ring: _Ring(progress: 1, color: MinePalette.purple, label: '', done: true),
+          ring: _Ring(
+            progress: 1,
+            color: MinePalette.purple,
+            label: '',
+            done: true,
+          ),
           title: _title(row),
           kind: _kindLabel(row),
           meta: _meta([
@@ -3172,6 +3378,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
           valueLabel: valueLabel,
           valueColor: MinePalette.ink,
           onTap: () => _openProposal(row),
+          action: _launchButton(context, row),
         ),
         if (pool != null && pool.bandTotal > 0)
           Padding(
@@ -3186,8 +3393,14 @@ class _MineHomeBodyState extends State<MineHomeBody> {
 
   Widget _buildDoingList(BuildContext context, {required int limit}) {
     if (_doing.isEmpty) return _empty(context, '没有进行中的提案');
+    final shown = _doing.take(limit).toList(growable: false);
+    if (shown.any(
+      (r) => !_pools.containsKey(r.id) && !_poolLoading.contains(r.id),
+    )) {
+      unawaited(_loadPools(shown));
+    }
     return _divided(context, [
-      for (final row in _doing.take(limit)) _buildDoingRow(context, row),
+      for (final row in shown) _buildDoingRow(context, row),
     ]);
   }
 
@@ -3227,19 +3440,17 @@ class _MineHomeBodyState extends State<MineHomeBody> {
           ),
           title: _title(row),
           kind: _kindLabel(row),
-          meta: _meta([
-            _roleOf(row),
-            mine ? '轮到你' : who,
-            now,
-          ]),
+          meta: _meta([_roleOf(row), mine ? '轮到你' : who, now]),
           detail: _meta([
             '${row.form['sector'] ?? ''}'.trim(),
             row.status == 'draft' ? '草稿' : '',
+            _approvalMeta(_pools[row.id]),
           ]),
           value: value,
           valueLabel: valueLabel,
           valueColor: late ? MinePalette.copper : MinePalette.ink,
           onTap: () => _openProposal(row),
+          action: _launchButton(context, row),
         ),
       ],
     );
@@ -3389,6 +3600,35 @@ class _MineHomeBodyState extends State<MineHomeBody> {
 
   // ── 行的公共部分 ──
 
+  Widget _launchButton(BuildContext context, ProposalIntakeRow row) {
+    final busy = _launchingApproval.contains(row.id);
+    return IconButton(
+      key: ValueKey('mine-launch-approval-${row.id}'),
+      tooltip: '发起审批',
+      onPressed: busy ? null : () => _launchApproval(row),
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      style: IconButton.styleFrom(
+        backgroundColor: _r(context, MinePalette.purple),
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: _r(context, MinePalette.lavender),
+        disabledForegroundColor: Colors.white70,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      icon: busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : const Icon(Icons.add_rounded, size: 18),
+    );
+  }
+
   Widget _rowHeader(
     BuildContext context, {
     required _Ring ring,
@@ -3400,44 +3640,66 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     required String valueLabel,
     required Color valueColor,
     required VoidCallback onTap,
+    Widget? action,
   }) {
     final purchase = kind == '采购';
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 9),
-        child: Row(
-          children: [
-            SizedBox(width: 30, height: 30, child: ring),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
+              child: Row(
                 children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: _r(context, MinePalette.ink),
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      _chip(
-                        context,
-                        kind,
-                        purchase ? MinePalette.steelSoft : MinePalette.purpleSoft,
-                        purchase ? MinePalette.steel : MinePalette.purple,
-                      ),
-                      if (meta.isNotEmpty) ...[
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(
-                            meta,
+                  SizedBox(width: 30, height: 30, child: ring),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _r(context, MinePalette.ink),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            _chip(
+                              context,
+                              kind,
+                              purchase
+                                  ? MinePalette.steelSoft
+                                  : MinePalette.purpleSoft,
+                              purchase ? MinePalette.steel : MinePalette.purple,
+                            ),
+                            if (meta.isNotEmpty) ...[
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  meta,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: _r(context, MinePalette.ink2),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (detail.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            detail,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -3445,50 +3707,42 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                               color: _r(context, MinePalette.ink2),
                             ),
                           ),
-                        ),
+                        ],
                       ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        value,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: _tnum,
+                          color: _r(context, valueColor),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        valueLabel,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: _r(context, MinePalette.ink2),
+                        ),
+                      ),
                     ],
                   ),
-                  if (detail.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      detail,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        color: _r(context, MinePalette.ink2),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: _tnum,
-                    color: _r(context, valueColor),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  valueLabel,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: _r(context, MinePalette.ink2),
-                  ),
-                ),
-              ],
-            ),
+          ),
+          if (action != null) ...[
+            const SizedBox(width: 4),
+            action,
           ],
-        ),
+        ],
       ),
     );
   }
@@ -3568,7 +3822,10 @@ class _PoolBand extends StatelessWidget {
                   for (var i = 0; i < segments.length; i++) ...[
                     if (i > 0) const SizedBox(width: 2),
                     Expanded(
-                      flex: math.max(1, (segments[i].$2 * 1000 / pool.bandTotal).round()),
+                      flex: math.max(
+                        1,
+                        (segments[i].$2 * 1000 / pool.bandTotal).round(),
+                      ),
                       child: ColoredBox(color: _r(context, segments[i].$1)),
                     ),
                   ],
@@ -3777,7 +4034,11 @@ class _MineProposalDetailState extends State<MineProposalDetail> {
     final purchase = proposalIntakeIsPurchase(widget.row.kind);
     final title = widget.row.title.trim();
     return Scaffold(
-      backgroundColor: _r(context, const Color(0xFFF5F6F8), DunesColorRole.surface),
+      backgroundColor: _r(
+        context,
+        const Color(0xFFF5F6F8),
+        DunesColorRole.surface,
+      ),
       appBar: AppBar(
         title: Text(
           title.isEmpty ? (purchase ? '采购提案' : '销售提案') : title,
@@ -3804,7 +4065,11 @@ class _MineProposalDetailState extends State<MineProposalDetail> {
           if (!_formOpened && !_coverTimedOut)
             Positioned.fill(
               child: ColoredBox(
-                color: _r(context, const Color(0xFFF5F6F8), DunesColorRole.surface),
+                color: _r(
+                  context,
+                  const Color(0xFFF5F6F8),
+                  DunesColorRole.surface,
+                ),
                 child: const Center(
                   child: SizedBox(
                     width: 22,

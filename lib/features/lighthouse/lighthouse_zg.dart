@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../shell/dunes_main_tab_bar.dart';
 import 'lighthouse_business_finance.dart';
 import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
@@ -481,7 +482,12 @@ Widget _scaffold(
       child: RefreshIndicator(
         onRefresh: onRefresh,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
+          padding: EdgeInsets.fromLTRB(
+            0,
+            0,
+            0,
+            dunesAppBottomNavContentPadding(context, fallback: 32),
+          ),
           children: [
             header,
             Padding(
@@ -543,46 +549,139 @@ DateTime _overdueFrom(DateTime end, int grace) => end.add(Duration(days: grace +
 /// 统计日这天，账期截至哪天及以前的已逾期 = 统计日 − (宽限天数 + 1)。
 DateTime _overdueCutoff(DateTime asOf, int grace) => asOf.subtract(Duration(days: grace + 1));
 
+/// 灯塔 / 资管同级切换：滑动的选中块，当前项深色，另一项点一下过去。
+class LhBrandSwitch extends StatelessWidget {
+  const LhBrandSwitch({
+    super.key,
+    required this.assetSelected,
+    required this.onLighthouse,
+    required this.onAsset,
+    required this.selectedColor,
+    required this.idleColor,
+    required this.trackColor,
+    required this.thumbColor,
+  });
+
+  final bool assetSelected;
+  final VoidCallback onLighthouse;
+  final VoidCallback onAsset;
+  final Color selectedColor;
+  final Color idleColor;
+  final Color trackColor;
+  final Color thumbColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 148,
+      height: 34,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: trackColor,
+          borderRadius: BorderRadius.circular(17),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth / 2;
+              return Stack(
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutCubic,
+                    left: assetSelected ? width : 0,
+                    top: 0,
+                    bottom: 0,
+                    width: width,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: thumbColor,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF7B5CD8).withValues(alpha: 0.22),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      _segment(
+                        context,
+                        label: '灯塔',
+                        selected: !assetSelected,
+                        onTap: onLighthouse,
+                      ),
+                      _segment(
+                        context,
+                        label: '资管',
+                        selected: assetSelected,
+                        onTap: onAsset,
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _segment(
+    BuildContext context, {
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Center(
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              style: LhTypography.sans(
+                context: context,
+                size: 14,
+                weight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: selected ? selectedColor : idleColor,
+                letterSpacing: 0.2,
+              ),
+              child: Text(label),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 资管入口页顶栏：「灯塔  资管」同级切换（资管选中），点「灯塔」回去。
 Widget _switchHeader(BuildContext context) {
   return Padding(
     padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
-    child: Row(
-      children: [
-        Semantics(
-          button: true,
-          label: '切换到灯塔',
-          excludeSemantics: true,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => Navigator.of(context).maybePop(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Text(
-                '灯塔',
-                style: LhTypography.sans(
-                  context: context,
-                  size: 20,
-                  weight: FontWeight.w500,
-                  color: _fg(context, LhColors.mute2),
-                  letterSpacing: -0.3,
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 14),
-        Text(
-          '资管',
-          style: LhTypography.sans(
-            context: context,
-            size: 20,
-            weight: FontWeight.w600,
-            color: _fg(context, const Color(0xFF7C5CE6)),
-            letterSpacing: -0.3,
-          ),
-        ),
-      ],
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: LhBrandSwitch(
+        assetSelected: true,
+        onLighthouse: () => Navigator.of(context).maybePop(),
+        onAsset: () {},
+        selectedColor: _fg(context, const Color(0xFF2B2147)),
+        idleColor: _fg(context, const Color(0xFF8A80AE)),
+        trackColor: const Color(0x142B2147),
+        thumbColor: _bg(context, Colors.white),
+      ),
     ),
   );
 }
@@ -843,6 +942,7 @@ class LighthouseZgHubPage extends StatefulWidget {
     required this.service,
     required this.session,
     this.onOpenLegacy,
+    this.embedded = false,
   });
 
   final LighthouseService service;
@@ -850,6 +950,9 @@ class LighthouseZgHubPage extends StatefulWidget {
 
   /// 原资管页（主体明细 / 净TA）。为空则不显示入口。
   final VoidCallback? onOpenLegacy;
+
+  /// 嵌在灯塔页里时，顶栏切换由灯塔自己画，这里不再重复一条。
+  final bool embedded;
 
   @override
   State<LighthouseZgHubPage> createState() => _ZgHubState();
@@ -1116,7 +1219,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> {
     return _scaffold(
       context,
       onRefresh: _refresh,
-      header: _switchHeader(context),
+      header: widget.embedded ? const SizedBox(height: 8) : _switchHeader(context),
       children: [
         if (cards.isEmpty) _statusBox(context, '暂无资管板块权限'),
         for (var i = 0; i < cards.length; i++) ...[

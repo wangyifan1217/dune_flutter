@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
@@ -29,7 +30,6 @@ import '../reconciliation/native_daily_reconciliation_page.dart';
 import '../reconciliation/reconciliation_shucai_service.dart';
 import '../tasks/native_task_home_pane.dart';
 import '../tasks/native_task_hrbp_pane.dart';
-import '../tasks/task_api.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/widgets/dunes_choice_panel.dart';
 import '../shell/dunes_toast.dart';
@@ -103,7 +103,7 @@ enum _WorkbenchView {
 }
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
-  late final PageController _pageController;
+  final ScrollController _overviewScroll = ScrollController();
   late AuthSession _session;
   int _pageIndex = 0;
   _WorkbenchView _contentView = _WorkbenchView.tasks;
@@ -150,19 +150,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
     _session = AuthSessionCoordinator.instance.resolve(widget.session);
+    _seedAccessFromSession();
+    // 权限先按当前登录态查，不等刷新令牌。刷新卡住时下面的板块也不会一直空着。
+    unawaited(_loadWorkbenchAccess());
     unawaited(_refreshSessionOnEnter());
-    unawaited(_resolveAdministrativeNoticeAccess());
-    unawaited(_resolveBroadcastAccess());
-    unawaited(_resolveDailyReconAccess());
-    unawaited(_resolveContractAccess());
-    unawaited(_resolveProposalIntakeAccess());
-    unawaited(_resolveKpiPerformanceAccess());
-    unawaited(_resolvePayrollReportAccess());
-    unawaited(_resolvePaymentInvoiceAccess());
-    unawaited(_resolveReimbursementSummaryAccess());
-    unawaited(_loadSsoApps());
     userAvatarRefresh.addListener(_onAvatarRefresh);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -175,35 +167,18 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   void didUpdateWidget(covariant NativeQianjiAdminShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     final incoming = AuthSessionCoordinator.instance.resolve(widget.session);
-    if (incoming.token != _session.token ||
-        incoming.roles.join('|') != _session.roles.join('|') ||
-        incoming.effectiveAdministrativeNoticeAccess !=
-            _session.effectiveAdministrativeNoticeAccess ||
-        incoming.effectiveBroadcastAccess !=
-            _session.effectiveBroadcastAccess ||
-        incoming.effectivePayrollReportAccess !=
-            _session.effectivePayrollReportAccess ||
-        incoming.effectivePaymentInvoiceAccess !=
-            _session.effectivePaymentInvoiceAccess) {
+    final accessChanged = _sessionAccessChanged(_session, incoming);
+    if (incoming.token != _session.token || accessChanged) {
       _session = incoming;
-      unawaited(_resolveAdministrativeNoticeAccess());
-      unawaited(_resolveBroadcastAccess());
-      unawaited(_resolveDailyReconAccess());
-      unawaited(_resolveContractAccess());
-      unawaited(_resolveProposalIntakeAccess());
-      unawaited(_resolveKpiPerformanceAccess());
-      unawaited(_resolvePayrollReportAccess());
-      unawaited(_resolvePaymentInvoiceAccess());
-    unawaited(_resolveReimbursementSummaryAccess());
-      unawaited(_loadSsoApps());
+      // 只换令牌不重查。重查会把板块再刷一遍。
+      if (accessChanged) {
+        _sessionPaintPending = true;
+        unawaited(_loadWorkbenchAccess());
+      }
     }
     if (widget.active != oldWidget.active) {
       if (widget.active) {
         _syncBackInterceptor();
-        if (_pageController.hasClients &&
-            _pageController.page?.round() != _pageIndex) {
-          _pageController.jumpToPage(_pageIndex);
-        }
       } else {
         _clearBackInterceptor();
       }
@@ -221,184 +196,266 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     }
   }
 
+  /// 后一次加载作废前一次，单个慢接口不能阻塞其他入口。
+  int _accessEpoch = 0;
+  bool _sessionPaintPending = false;
+
+  void _seedAccessFromSession() {
+    final session = _session;
+    if (session.isExternalUser) return;
+    _canSeeAdministrativeNotice = session.effectiveAdministrativeNoticeAccess;
+    _canSeeCompanyBroadcast = session.effectiveBroadcastAccess;
+    _canSeeContracts = session.effectiveContractViewAccess;
+    _canSeeProposalIntake = session.effectiveProposalIntakeAccess;
+    _canSeeKpiPerformance = session.effectiveKpiPerformanceAccess;
+    _canSeePayrollReports = session.effectivePayrollReportAccess;
+    _canSeePaymentInvoice = session.effectivePaymentInvoiceAccess;
+  }
+
+  bool _sessionAccessChanged(AuthSession a, AuthSession b) {
+    return a.isExternalUser != b.isExternalUser ||
+        a.roles.join('|') != b.roles.join('|') ||
+        a.effectiveAdministrativeNoticeAccess !=
+            b.effectiveAdministrativeNoticeAccess ||
+        a.effectiveBroadcastAccess != b.effectiveBroadcastAccess ||
+        a.effectiveContractViewAccess != b.effectiveContractViewAccess ||
+        a.effectiveProposalIntakeAccess != b.effectiveProposalIntakeAccess ||
+        a.effectiveKpiPerformanceAccess != b.effectiveKpiPerformanceAccess ||
+        a.effectivePayrollReportAccess != b.effectivePayrollReportAccess ||
+        a.effectivePaymentInvoiceAccess != b.effectivePaymentInvoiceAccess;
+  }
+
   Future<void> _refreshSessionOnEnter() async {
+    final before = _session;
     final refreshed = await AuthSessionCoordinator.instance.refreshToken();
     if (!mounted) return;
-    setState(() {
-      _session = refreshed ?? AuthSessionCoordinator.instance.resolve(_session);
-    });
-    unawaited(_resolveAdministrativeNoticeAccess());
-    unawaited(_resolveBroadcastAccess());
-    unawaited(_resolveDailyReconAccess());
-    unawaited(_resolveContractAccess());
-    unawaited(_resolveProposalIntakeAccess());
-    unawaited(_resolveKpiPerformanceAccess());
-    unawaited(_resolvePayrollReportAccess());
-    unawaited(_resolvePaymentInvoiceAccess());
-    unawaited(_resolveReimbursementSummaryAccess());
-    unawaited(_loadSsoApps());
+    final next = refreshed ?? AuthSessionCoordinator.instance.resolve(_session);
+    _session = next;
+    // 令牌刷新不改入口权限时，不再查第二轮，避免板块再跳一次。
+    if (!_sessionAccessChanged(before, next)) return;
+    _sessionPaintPending = true;
+    await _loadWorkbenchAccess();
   }
 
-  Future<void> _resolveAdministrativeNoticeAccess() async {
-    final fallback = _session.effectiveAdministrativeNoticeAccess;
-    final service = AdministrativeNoticeService(session: _session);
-    bool allowed = fallback;
-    try {
-      allowed = await service.canAccess();
-    } catch (_) {
-      // 网络异常时沿用登录态，避免入口因一次探测失败闪退；发布接口仍由后端鉴权。
-      allowed = fallback;
-    } finally {
-      service.close();
-    }
-    if (!mounted) return;
-    setState(() => _canSeeAdministrativeNotice = allowed);
+  Future<bool> _probeBool(Future<bool> request, bool fallback) {
+    return request.timeout(const Duration(seconds: 8), onTimeout: () => fallback);
   }
 
-  Future<void> _resolveBroadcastAccess() async {
-    final fallback = _session.effectiveBroadcastAccess;
-    final service = BroadcastService(session: _session);
-    bool allowed = fallback;
-    try {
-      allowed = await service.canAccess();
-    } catch (_) {
-      allowed = fallback;
-    } finally {
-      service.close();
-    }
-    if (!mounted) return;
-    setState(() => _canSeeCompanyBroadcast = allowed);
+  Future<List<WorkbenchSsoApp>> _probeAppList(
+    Future<List<WorkbenchSsoApp>> request,
+  ) {
+    return request.timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => const <WorkbenchSsoApp>[],
+    );
   }
 
-  Future<void> _resolveDailyReconAccess() async {
-    if (_session.isExternalUser) {
-      if (mounted) setState(() => _canSeeDailyRecon = false);
+  Future<void> _loadWorkbenchAccess() async {
+    final epoch = ++_accessEpoch;
+    final session = _session;
+    if (session.isExternalUser) {
+      _publishWorkbenchAccess(
+        epoch: epoch,
+        notice: false,
+        broadcast: false,
+        dailyRecon: false,
+        contracts: false,
+        proposal: false,
+        kpi: false,
+        payroll: false,
+        payment: false,
+        reimbursement: false,
+        ssoApps: const [],
+      );
       return;
     }
-    final service = ReconciliationShucaiService(session: _session);
-    bool allowed = false;
+    final previousReimbursement = _canSeeReimbursementSummary ?? false;
+    // 各接口各自超时，但只在全部落地后重绘一次。
+    final results = await Future.wait<Object>([
+      _probeBool(
+        _probeAdministrativeNotice(session),
+        session.effectiveAdministrativeNoticeAccess,
+      ),
+      _probeBool(_probeBroadcast(session), session.effectiveBroadcastAccess),
+      _probeBool(_probeDailyRecon(session), false),
+      _probeBool(_probeContracts(session), session.effectiveContractViewAccess),
+      _probeBool(
+        _probeProposalIntake(session),
+        session.effectiveProposalIntakeAccess,
+      ),
+      _probeBool(_probeKpi(session), session.effectiveKpiPerformanceAccess),
+      _probeBool(_probePayroll(session), session.effectivePayrollReportAccess),
+      _probeBool(
+        _probeReimbursement(session, previousReimbursement),
+        previousReimbursement,
+      ),
+      _probeAppList(_probeSsoApps(session)),
+    ]);
+    if (!mounted || epoch != _accessEpoch) return;
+    _publishWorkbenchAccess(
+      epoch: epoch,
+      notice: results[0] as bool,
+      broadcast: results[1] as bool,
+      dailyRecon: results[2] as bool,
+      contracts: results[3] as bool,
+      proposal: results[4] as bool,
+      kpi: results[5] as bool,
+      payroll: results[6] as bool,
+      payment: session.effectivePaymentInvoiceAccess,
+      reimbursement: results[7] as bool,
+      ssoApps: results[8] as List<WorkbenchSsoApp>,
+    );
+  }
+
+  void _publishWorkbenchAccess({
+    required int epoch,
+    required bool notice,
+    required bool broadcast,
+    required bool dailyRecon,
+    required bool contracts,
+    required bool proposal,
+    required bool kpi,
+    required bool payroll,
+    required bool payment,
+    required bool reimbursement,
+    required List<WorkbenchSsoApp> ssoApps,
+  }) {
+    if (!mounted || epoch != _accessEpoch) return;
+    if (_canSeeAdministrativeNotice == notice &&
+        _canSeeCompanyBroadcast == broadcast &&
+        _canSeeDailyRecon == dailyRecon &&
+        _canSeeContracts == contracts &&
+        _canSeeProposalIntake == proposal &&
+        _canSeeKpiPerformance == kpi &&
+        _canSeePayrollReports == payroll &&
+        _canSeePaymentInvoice == payment &&
+        _canSeeReimbursementSummary == reimbursement &&
+        _sameSsoApps(_ssoApps, ssoApps) &&
+        !_sessionPaintPending) {
+      return;
+    }
+    setState(() {
+      _sessionPaintPending = false;
+      _canSeeAdministrativeNotice = notice;
+      _canSeeCompanyBroadcast = broadcast;
+      _canSeeDailyRecon = dailyRecon;
+      _canSeeContracts = contracts;
+      _canSeeProposalIntake = proposal;
+      _canSeeKpiPerformance = kpi;
+      _canSeePayrollReports = payroll;
+      _canSeePaymentInvoice = payment;
+      _canSeeReimbursementSummary = reimbursement;
+      _ssoApps = ssoApps;
+    });
+  }
+
+  bool _sameSsoApps(List<WorkbenchSsoApp> a, List<WorkbenchSsoApp> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].appKey != b[i].appKey ||
+          a[i].title != b[i].title ||
+          a[i].subtitle != b[i].subtitle) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<bool> _probeAdministrativeNotice(AuthSession session) async {
+    final fallback = session.effectiveAdministrativeNoticeAccess;
+    final service = AdministrativeNoticeService(session: session);
     try {
-      allowed = await service.canView();
+      return await service.canAccess();
     } catch (_) {
-      allowed = false;
+      // 网络异常时沿用登录态，避免入口因一次探测失败闪退；发布接口仍由后端鉴权。
+      return fallback;
+    } finally {
+      service.close();
+    }
+  }
+
+  Future<bool> _probeBroadcast(AuthSession session) async {
+    final fallback = session.effectiveBroadcastAccess;
+    final service = BroadcastService(session: session);
+    try {
+      return await service.canAccess();
+    } catch (_) {
+      return fallback;
+    } finally {
+      service.close();
+    }
+  }
+
+  Future<bool> _probeDailyRecon(AuthSession session) async {
+    final service = ReconciliationShucaiService(session: session);
+    try {
+      return await service.canView();
+    } catch (_) {
+      return false;
     } finally {
       service.dispose();
     }
-    if (!mounted) return;
-    setState(() => _canSeeDailyRecon = allowed);
   }
 
-  Future<void> _resolveContractAccess() async {
-    if (_session.isExternalUser) {
-      if (mounted) setState(() => _canSeeContracts = false);
-      return;
-    }
-    final fallback = _session.effectiveContractViewAccess;
-    final service = ContractRegisterService(session: _session);
-    bool allowed = fallback;
+  Future<bool> _probeContracts(AuthSession session) async {
+    final fallback = session.effectiveContractViewAccess;
+    final service = ContractRegisterService(session: session);
     try {
       final access = await service.fetchAccess();
-      allowed = access.view || access.config;
+      return access.view || access.config;
     } catch (_) {
-      allowed = fallback;
+      return fallback;
     }
-    if (!mounted) return;
-    setState(() => _canSeeContracts = allowed);
   }
 
-  Future<void> _resolveProposalIntakeAccess() async {
-    if (_session.isExternalUser) {
-      if (mounted) setState(() => _canSeeProposalIntake = false);
-      return;
-    }
-    bool allowed = _session.effectiveProposalIntakeAccess;
+  Future<bool> _probeProposalIntake(AuthSession session) async {
+    final fallback = session.effectiveProposalIntakeAccess;
     try {
       final access = await ProposalIntakeService(
-        session: _session,
+        session: session,
       ).fetchAccess();
-      allowed = access.view;
+      return access.view;
     } catch (_) {
-      allowed = _session.effectiveProposalIntakeAccess;
+      return fallback;
     }
-    if (!mounted) return;
-    setState(() => _canSeeProposalIntake = allowed);
   }
 
-  Future<void> _resolveKpiPerformanceAccess() async {
-    if (_session.isExternalUser) {
-      if (mounted) setState(() => _canSeeKpiPerformance = false);
-      return;
-    }
-    bool allowed = _session.effectiveKpiPerformanceAccess;
+  Future<bool> _probeKpi(AuthSession session) async {
+    final fallback = session.effectiveKpiPerformanceAccess;
     try {
-      final access = await WorkbenchKpiService(session: _session).fetchAccess();
-      allowed = access.allowed;
+      final access = await WorkbenchKpiService(session: session).fetchAccess();
+      return access.allowed;
     } catch (_) {
-      allowed = _session.effectiveKpiPerformanceAccess;
+      return fallback;
     }
-    if (!mounted) return;
-    setState(() => _canSeeKpiPerformance = allowed);
   }
 
-  Future<void> _resolvePayrollReportAccess() async {
-    if (_session.isExternalUser) {
-      if (mounted) setState(() => _canSeePayrollReports = false);
-      return;
-    }
-    var allowed = _session.effectivePayrollReportAccess;
+  Future<bool> _probePayroll(AuthSession session) async {
+    final fallback = session.effectivePayrollReportAccess;
     try {
-      allowed = await PayrollReportService(
-        session: _session,
-      ).fetchAccess().then((access) => access.allowed);
+      final access = await PayrollReportService(session: session).fetchAccess();
+      return access.allowed;
     } catch (_) {
-      // Keep the session grant if the availability probe is temporarily unavailable.
+      // 探测暂时失败时保留登录态里的授予。
+      return fallback;
     }
-    if (!mounted) return;
-    setState(() => _canSeePayrollReports = allowed);
   }
 
-  /// 报销汇总：权限开关只在后端（org_user.reimbursement_summary_access），每次进工作台探测一次。
-  Future<void> _resolveReimbursementSummaryAccess() async {
-    if (_session.isExternalUser) {
-      if (mounted) setState(() => _canSeeReimbursementSummary = false);
-      return;
-    }
-    var allowed = false;
+  /// 报销汇总的开关只在后端，探测失败时留着上一轮结果。
+  Future<bool> _probeReimbursement(AuthSession session, bool previous) async {
     try {
-      allowed = await ReimbursementSummaryService(
-        session: _session,
-      ).fetchAccess();
+      return await ReimbursementSummaryService(session: session).fetchAccess();
     } catch (_) {
-      allowed = _canSeeReimbursementSummary ?? false;
-    }
-    if (!mounted) return;
-    setState(() => _canSeeReimbursementSummary = allowed);
-  }
-
-  Future<void> _resolvePaymentInvoiceAccess() async {
-    if (_session.isExternalUser) {
-      if (mounted) setState(() => _canSeePaymentInvoice = false);
-      return;
-    }
-    if (mounted) {
-      setState(
-        () => _canSeePaymentInvoice = _session.effectivePaymentInvoiceAccess,
-      );
+      return previous;
     }
   }
 
-  Future<void> _loadSsoApps() async {
-    if (_session.isExternalUser) {
-      if (mounted) setState(() => _ssoApps = const []);
-      return;
-    }
+  Future<List<WorkbenchSsoApp>> _probeSsoApps(AuthSession session) async {
     try {
-      final apps = await AmSsoService(_session).listApps();
-      if (!mounted) return;
-      setState(() => _ssoApps = apps);
+      return await AmSsoService(session).listApps();
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _ssoApps = const []);
+      return const [];
     }
   }
 
@@ -412,7 +469,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   void dispose() {
     userAvatarRefresh.removeListener(_onAvatarRefresh);
     _clearBackInterceptor();
-    _pageController.dispose();
+    _overviewScroll.dispose();
     super.dispose();
   }
 
@@ -421,13 +478,6 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   }
 
   bool get _isOverview => _pageIndex == 0;
-
-  /// 详情/调整进度等内页：禁用 PageView 横滑，避免一滑就跳出任务栈。
-  bool get _lockPageSwipe =>
-      !_isOverview &&
-      (_onShellBackOverride != null ||
-          _hideShellHeader ||
-          (_contentChrome?.lockPageSwipe ?? false));
 
   void _installBackInterceptor() {
     widget.navigation.canBackInterceptor = _canHandleInternalBack;
@@ -491,6 +541,10 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _goPage(1);
   }
 
+  late final VoidCallback _stableOpenTaskSummary = _openTaskSummary;
+
+  void _openTaskSummary() => _open(_WorkbenchView.hrbp);
+
   void _openMergedChoices({
     required String title,
     required List<_WorkbenchTile> choices,
@@ -530,24 +584,12 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   }
 
   void _goPage(int index) {
+    if (_pageIndex == index) return;
     setState(() {
       _pageIndex = index;
       _applyShellChrome(overview: index == 0);
     });
     _syncBackInterceptor();
-    if (!_pageController.hasClients) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_pageController.hasClients) {
-          _pageController.jumpToPage(index);
-        }
-      });
-      return;
-    }
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
-    );
   }
 
   void _showNoAccess(String name) {
@@ -782,19 +824,19 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
               ),
             Expanded(
               key: const ValueKey('workbench-pager-slot'),
-              child: PageView(
-                controller: _pageController,
-                physics: _lockPageSwipe
-                    ? const NeverScrollableScrollPhysics()
-                    : const PageScrollPhysics(),
-                onPageChanged: (i) {
-                  setState(() {
-                    _pageIndex = i;
-                    _applyShellChrome(overview: i == 0);
-                  });
-                  _syncBackInterceptor();
-                },
-                children: [_buildOverviewPage(), _buildContentPage()],
+              // 不用 PageView。那一层会在 Windows 上接走滚轮，总览就滑不动，点击也会被拖拽抢走。
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Offstage(
+                    offstage: _pageIndex != 0,
+                    child: TickerMode(
+                      enabled: _pageIndex == 0,
+                      child: _buildOverviewPage(),
+                    ),
+                  ),
+                  if (_pageIndex != 0) _buildContentPage(),
+                ],
               ),
             ),
           ],
@@ -806,19 +848,26 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   void _onTaskChrome(TaskShellChrome chrome) {
     if (!mounted) return;
     _contentChrome = chrome;
+    final nextHide = _pageIndex == 0 ? false : chrome.hideShellHeader;
+    final Widget? nextTrailing = _pageIndex == 0 ? null : chrome.trailing;
+    final VoidCallback? nextBack = _pageIndex == 0 ? null : chrome.onBack;
+    if (_hideShellHeader == nextHide &&
+        identical(_shellTrailing, nextTrailing) &&
+        identical(_onShellBackOverride, nextBack)) {
+      return;
+    }
     // 子页 dispose 时也会清 chrome；finalizeTree 期间不能 setState。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (_hideShellHeader == nextHide &&
+          identical(_shellTrailing, nextTrailing) &&
+          identical(_onShellBackOverride, nextBack)) {
+        return;
+      }
       setState(() {
-        if (_pageIndex == 0) {
-          _hideShellHeader = false;
-          _shellTrailing = null;
-          _onShellBackOverride = null;
-        } else {
-          _hideShellHeader = chrome.hideShellHeader;
-          _shellTrailing = chrome.trailing;
-          _onShellBackOverride = chrome.onBack;
-        }
+        _hideShellHeader = nextHide;
+        _shellTrailing = nextTrailing;
+        _onShellBackOverride = nextBack;
       });
       _syncBackInterceptor();
     });
@@ -832,7 +881,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           session: _session,
           embedded: true,
           onChromeChanged: _onTaskChrome,
-          onOpenSummary: () => _open(_WorkbenchView.hrbp),
+          onOpenSummary: _stableOpenTaskSummary,
         );
       case _WorkbenchView.hrbp:
         return NativeTaskHrbpPane(
@@ -1104,14 +1153,31 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           ),
     ];
 
-    return ListView(
-      padding: EdgeInsets.fromLTRB(
-        isDesktopCommOnly ? 24 : 16,
-        10,
-        isDesktopCommOnly ? 24 : 16,
-        40,
-      ),
-      children: [
+    return Scrollbar(
+      controller: _overviewScroll,
+      thumbVisibility: true,
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(
+          scrollbars: false,
+          dragDevices: <PointerDeviceKind>{
+            PointerDeviceKind.touch,
+            PointerDeviceKind.mouse,
+            PointerDeviceKind.trackpad,
+            PointerDeviceKind.stylus,
+            PointerDeviceKind.unknown,
+          },
+        ),
+        child: ListView(
+          controller: _overviewScroll,
+          primary: false,
+          physics: const ClampingScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(
+            isDesktopCommOnly ? 24 : 16,
+            10,
+            isDesktopCommOnly ? 24 : 16,
+            40,
+          ),
+          children: [
         _buildSuperHeroCard(
           collaborationCount: collabTiles.length,
           toolCount: toolTiles.length,
@@ -1153,7 +1219,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
             children: toolTiles,
           ),
         ],
-      ],
+          ],
+        ),
+      ),
     );
   }
 

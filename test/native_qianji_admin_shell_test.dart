@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dunes_app/core/navigation/navigation_controller.dart';
 import 'package:dunes_app/features/auth/auth_session.dart';
 import 'package:dunes_app/features/qianji_admin/native_qianji_admin_shell.dart';
+import 'package:dunes_app/features/tasks/native_task_home_pane.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   const session = AuthSession(
@@ -99,5 +102,55 @@ void main() {
     expect(find.text('待我处理 · 我发起的'), findsOneWidget);
     expect(find.text('携程商旅'), findsOneWidget);
     expect(find.text('薪人薪事'), findsOneWidget);
+  });
+
+  testWidgets('task page does not repeatedly publish chrome after rebuilds', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(createShellWidget(size: const Size(1200, 800)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('任务').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final taskFinder = find.byType(NativeTaskHomePane);
+    expect(taskFinder, findsOneWidget);
+    final first = tester.widget<NativeTaskHomePane>(taskFinder).onOpenSummary;
+    await tester.pumpWidget(createShellWidget(size: const Size(1200, 800)));
+    await tester.pump();
+    final second = tester.widget<NativeTaskHomePane>(taskFinder).onOpenSummary;
+    expect(second, equals(first));
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 3),
+    );
+  });
+
+  testWidgets('overview scrolls with touch, mouse drag and wheel', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(400, 500));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(createShellWidget(size: const Size(400, 500)));
+    await tester.pumpAndSettle();
+    final list = find.byType(ListView).first;
+    final controller = tester.widget<ListView>(list).controller!;
+    expect(controller.position.maxScrollExtent, greaterThan(0));
+
+    await tester.drag(list, const Offset(0, -180));
+    await tester.pumpAndSettle();
+    expect(controller.offset, greaterThan(0));
+    controller.jumpTo(0);
+    final gesture = await tester.startGesture(tester.getCenter(list), kind: PointerDeviceKind.mouse);
+    await gesture.moveBy(const Offset(0, -150));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(controller.offset, greaterThan(0));
+    controller.jumpTo(0);
+    await tester.sendEventToBinding(PointerScrollEvent(position: tester.getCenter(list), scrollDelta: const Offset(0, 150)));
+    await tester.pumpAndSettle();
+    expect(controller.offset, greaterThan(0));
   });
 }

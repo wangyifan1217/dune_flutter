@@ -145,7 +145,8 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
                   if (isDesktopCommOnly) const AppUpdateTopBanner(),
                   Expanded(
                     child: NovaPresenceHost(
-                      key: ObjectKey(widget.session),
+                      // 换票不换用户，不能销毁工作台并再次触发其入场换票。
+                      key: ValueKey((widget.session.apiBase, widget.session.userId)),
                       session: widget.session,
                       handle: _presence,
                       navigation: _navigation,

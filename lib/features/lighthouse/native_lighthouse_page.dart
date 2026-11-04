@@ -9030,7 +9030,12 @@ class _TrendChart extends StatefulWidget {
     this.initialVisible,
     this.candleUnit = 'day',
     this.statusStamp,
+    this.compareSameDayPrevMonth = false,
   });
+
+  /// 日线：点选某天时的环比、K 线读数「较…」都对上月同日那一格（11.02 对 10.02），
+  /// 不对前一天。横轴上还没有上月同日（历史没拉到）就不出环比。
+  final bool compareSameDayPrevMonth;
 
   /// 没点中某天时，图例行最左边写什么（全屏大图传数据时间；null = 「本期合计」）。
   final String? statusStamp;
@@ -9464,6 +9469,21 @@ class _TrendChartState extends State<_TrendChart>
   /// 每个点的年份：标签只有「月.日」，从最新一天（今年）往回推，
   /// 月份往回走时突然变大（1 月 → 12 月）就是跨年了。
   List<int?> _labelYears = const [];
+
+  /// 每个点的日期（年 + 月日），日线找「上月同日」用。
+  List<DateTime?> _labelDates = const [];
+
+  /// 点第 i 格拿哪一格比：日线 → 上月同日那一格（没有就 null）；其余 → 前一格。
+  int? _compareIndexOf(int i) {
+    if (widget.compareSameDayPrevMonth) {
+      return lighthouseSameDayPrevMonthIndex(_labelDates, i);
+    }
+    return i > 0 ? i - 1 : null;
+  }
+
+  /// 传给 lighthouseTrendMomPct：日线才换对照格，其余保持前一格。
+  int? Function(int)? get _momCompareIndexOf =>
+      widget.compareSameDayPrevMonth ? _compareIndexOf : null;
 
   static List<int?> _inferYears(
     List<({int month, int day})?> md,
@@ -9924,6 +9944,13 @@ class _TrendChartState extends State<_TrendChart>
     );
     _labelMD = [for (final l in widget.labels) _parseMonthDay(l)];
     _labelYears = _inferYears(_labelMD, DateTime.now().year);
+    _labelDates = [
+      for (var i = 0; i < _labelMD.length; i++)
+        if (_labelMD[i] case final md? when _labelYears[i] != null)
+          DateTime(_labelYears[i]!, md.month, md.day)
+        else
+          null,
+    ];
     // K 线不再削峰（会把 3 万和 22 万的顶压得差不多高）：画真值，
     // 极端日交给 _robustCandleRange 裁在图沿。
     if (widget.zoomable && !widget.candles) {
@@ -10416,7 +10443,8 @@ class _TrendChartState extends State<_TrendChart>
     if (i < 0 || i >= real.length) return const SizedBox.shrink();
     final u = _unit;
     final v = real[i];
-    final prev = i > 0 ? real[i - 1] : double.nan;
+    final ci = _compareIndexOf(i);
+    final prev = ci != null && ci < real.length ? real[ci] : double.nan;
     final w = _nxWindows;
     final f = _trendEma(real, w.fa)[i];
     final sl = _trendEma(real, w.sa)[i];
@@ -10512,7 +10540,7 @@ class _TrendChartState extends State<_TrendChart>
                 ),
                 row('当${u.avg.substring(0, 1)}', _money(v)),
                 row(
-                  '较${u.prevAny}',
+                  widget.compareSameDayPrevMonth ? '较上月同日' : '较${u.prevAny}',
                   chg(),
                   color: prev.isFinite
                       ? DunesColors.resolve(
@@ -10624,17 +10652,20 @@ class _TrendChartState extends State<_TrendChart>
       context: context,
     );
     if (n == 0) return const SizedBox.shrink();
-    if (i < 1 || !pts[i].isFinite || !pts[i - 1].isFinite) {
+    final ci = _compareIndexOf(i);
+    if (ci == null || ci >= n || !pts[i].isFinite || !pts[ci].isFinite) {
       return const SizedBox.shrink();
     }
-    final d = pts[i] - pts[i - 1];
-    final base = pts[i - 1].abs();
+    final d = pts[i] - pts[ci];
+    final base = pts[ci].abs();
     final up = d >= 0;
     final c = DunesColors.resolve(context, up ? LhKColors.up : LhKColors.down);
     final pct = base > 1e-9
         ? ' ${up ? '+' : '−'}${(d.abs() / base * 100).toStringAsFixed(d.abs() / base >= 1 ? 0 : 1)}%'
         : '';
-    final vs = picked ? u.prevAny : u.prevLatest;
+    final vs = widget.compareSameDayPrevMonth
+        ? '上月同日'
+        : (picked ? u.prevAny : u.prevLatest);
     // 一颗淡底胶囊：「较前一日」灰字 + 箭头和金额 + 百分比，三段同一基线。
     final strong = LhTypography.mono(
       size: 10.5,
@@ -12847,6 +12878,7 @@ class _TrendChartState extends State<_TrendChart>
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
                     suppressPointMom: widget.suppressPointMom,
+                    compareIndexOf: _momCompareIndexOf,
                     series: _series.scale,
                   ),
                 ),
@@ -12862,6 +12894,7 @@ class _TrendChartState extends State<_TrendChart>
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
                     suppressPointMom: widget.suppressPointMom,
+                    compareIndexOf: _momCompareIndexOf,
                     series: _series.stock,
                   ),
                 ),
@@ -12877,6 +12910,7 @@ class _TrendChartState extends State<_TrendChart>
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
                     suppressPointMom: widget.suppressPointMom,
+                    compareIndexOf: _momCompareIndexOf,
                     series: _series.profit,
                   ),
                 ),
@@ -12892,6 +12926,7 @@ class _TrendChartState extends State<_TrendChart>
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
                     suppressPointMom: widget.suppressPointMom,
+                    compareIndexOf: _momCompareIndexOf,
                     series: _series.costAlt,
                   ),
                 ),
@@ -12907,6 +12942,7 @@ class _TrendChartState extends State<_TrendChart>
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
                     suppressPointMom: widget.suppressPointMom,
+                    compareIndexOf: _momCompareIndexOf,
                     series: _series.revenue,
                   ),
                 ),
@@ -12922,6 +12958,7 @@ class _TrendChartState extends State<_TrendChart>
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
                     suppressPointMom: widget.suppressPointMom,
+                    compareIndexOf: _momCompareIndexOf,
                     series: _series.cost,
                   ),
                 ),
@@ -12937,6 +12974,7 @@ class _TrendChartState extends State<_TrendChart>
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
                     suppressPointMom: widget.suppressPointMom,
+                    compareIndexOf: _momCompareIndexOf,
                     series: _series.scaleAlt,
                   ),
                 ),
@@ -13326,11 +13364,15 @@ class _HeroMetricTrendChart extends StatefulWidget {
     this.chartHeight = 168,
     this.onInteractionChanged,
     this.grossMarginFormula,
+    this.compareSameDayPrevMonth = false,
   });
 
   final List<String> labels;
   final List<double> data;
   final String metricLabel;
+
+  /// 日线：点某天 / 序列末位的环比对上月同日那一格，不对前一天。
+  final bool compareSameDayPrevMonth;
   final String? grossMarginFormula;
   final Color color;
   final bool isRate;
@@ -13545,6 +13587,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
         // 单指标弹层直接复用主 Hero 的线、网格、渐变和点选逻辑。
         _TrendChart(
           labels: widget.labels,
+          compareSameDayPrevMonth: widget.compareSameDayPrevMonth,
           grossMarginFormula: widget.grossMarginFormula,
           revenue: const <double>[],
           cost: const <double>[],
@@ -14137,12 +14180,18 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     }
 
     late double base;
-    if (isSelected) {
-      final i = _selectedIndex!;
-      if (i <= 0) return null;
-      base = data[i - 1];
+    final at = isSelected ? _selectedIndex! : data.length - 1;
+    if (widget.compareSameDayPrevMonth) {
+      // 日线：对上月同日那一格；轴上没有就不出环比，不拿前一天顶。
+      final j = lighthouseSameDayPrevMonthIndex(
+        lighthouseDayAxisDates(widget.labels),
+        at,
+      );
+      if (j == null || j >= data.length) return null;
+      base = data[j];
     } else {
-      base = data[data.length - 2];
+      if (at <= 0) return null;
+      base = data[at - 1];
     }
     if (widget.isRate) {
       final pp = displayValue - base;
@@ -15071,9 +15120,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// 账本行点开现金流后，走势图上点中的那一格（键 = trendKey）。上面的拆解跟着换。
   final Map<String, int> _cashFlowPointByTrendKey = <String, int>{};
 
-  /// 走势卡读数后面那几个字：只写「vs 上日 / vs 上月」这种。
+  /// 走势卡读数后面那几个字：只写「vs 上月同日 / vs 上月」这种。
+  /// 日线一律对上月同日（11.02 对 10.02），不对上日。
   String get _heroCompareLabel => switch (_period) {
-    'day' => 'vs 上日',
+    'day' => _isCustomRange ? 'vs 上日' : lighthouseDayCompareLabel,
     'week' => 'vs 上周',
     'month' => 'vs 上月',
     'quarter' => 'vs 上季',
@@ -15087,9 +15137,16 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// 规模 / 成本 / 利润那块上滑收起（2026-10-26 起只收这一块，大数和走势不动）。
   bool _heroFolded = false;
 
+  /// 日线（非自定义区间）的点选环比对上月同日；自定义区间的日格仍对相邻一天。
+  bool get _dayComparesPrevMonth => _period == 'day' && !_isCustomRange;
+
   /// 资金与资产走势要几格：日 / 周拉满 31 格，月 / 季 / 年 12 个月（后端上限）。
-  int get _heroAssetTrendCount =>
-      const {'day', 'week'}.contains(_period) ? 31 : 12;
+  /// 日线 40 格：走势上点最近 7 天里任一天，都要能取到它的上月同日（后端上限 40）。
+  int get _heroAssetTrendCount => switch (_period) {
+    'day' => 40,
+    'week' => 31,
+    _ => 12,
+  };
 
   /// 供给二级（省）页面的资产走势：选中哪一格（null = 本省总资产）。
   String? _detailAssetLineKey;
@@ -25411,6 +25468,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           final periodStock = (_bundle?.metrics['netTaBankBalance'] as num?)
               ?.toDouble();
           return _TrendChart(
+            compareSameDayPrevMonth: _dayComparesPrevMonth,
             key: const ValueKey('hero-overview-netTa'),
             legendNamesOnly: true,
             onSelectedIndexChanged: _onHeroPointSelected,
@@ -25542,6 +25600,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               _heroMetricEmptyTrend(focus!);
         }
         return _TrendChart(
+          compareSameDayPrevMonth: _dayComparesPrevMonth,
           key: fullscreen
               ? _heroFullscreenChartKey
               : const ValueKey('hero-overview'),
@@ -26950,10 +27009,19 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       final vals = _heroFundsAxisValues(labels, trend);
       pickTotal = pick < vals.length ? vals[pick] : null;
       double? prev;
-      for (var k = pick - 1; k >= 0 && k < vals.length; k--) {
-        if (vals[k] != null) {
-          prev = vals[k];
-          break;
+      if (_dayComparesPrevMonth) {
+        // 日线：对上月同日（和利润页、总资产本期环比同一口径），不对前一天。
+        final j = lighthouseSameDayPrevMonthIndex(
+          lighthouseDayAxisDates(labels),
+          pick,
+        );
+        prev = j != null && j < vals.length ? vals[j] : null;
+      } else {
+        for (var k = pick - 1; k >= 0 && k < vals.length; k--) {
+          if (vals[k] != null) {
+            prev = vals[k];
+            break;
+          }
         }
       }
       final cur = pickTotal;
@@ -27298,6 +27366,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       // 原型 A 的排布：分段按钮选主线 + 一行大读数，图里照样多线叠画。
       segmented: true,
       compareLabel: _heroCompareLabel,
+      compareSameDayPrevMonth: _dayComparesPrevMonth,
       // 没点过别的指标 → 停在利润（原来落到第一根线核销额上，和左边的利润对不上）。
       focusKey: focus ?? 'profit',
       // 点上面那排分段：左边大数跟着换成同一个指标（利润 = 回到默认）。
@@ -27475,6 +27544,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       defaultVisible: const {'total'},
       segmented: true,
       compareLabel: _heroCompareLabel,
+      compareSameDayPrevMonth: _dayComparesPrevMonth,
       focusKey: _heroFundsFocus,
       // 点哪一天，左边资金页跟着换（和利润卡共用一个选中点）。
       selectedIndex: _heroPointIndex,
@@ -30666,7 +30736,40 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     return _deltaForMetric(mastheadKey);
   }
 
-  /// 点选走势图某一期：该点对前一点。率用 pp，金额用相对涨幅。
+  /// 日线点选 / 读数的对照格：上月同日那一格（11.02 对 10.02）。
+  ///
+  /// 轴用和 [_seriesForMetric] 同一根：一级主 Hero 是拼好历史的 heroSeriesKeys
+  ///（带年份，最准），二级详情是实体走势自己的 keys / labels，其余退到走势标签。
+  /// 轴上没有上月同日（历史还没拉到那么早）→ null，不出环比，绝不拿前一天顶。
+  /// 非日线 → 前一格。
+  int? _heroCompareIndexOf(int i, int seriesLength) {
+    if (!_dayComparesPrevMonth) return i > 0 ? i - 1 : null;
+    final axis = _heroCompareAxis(seriesLength);
+    if (axis.length != seriesLength) return null;
+    return lighthouseSameDayPrevMonthIndex(lighthouseDayAxisDates(axis), i);
+  }
+
+  List<String> _heroCompareAxis(int n) {
+    List<String>? strings(Object? raw) =>
+        raw is List && raw.length == n ? [for (final e in raw) '$e'] : null;
+    if (_detailKey != null) {
+      final detail = _currentDetailSummaryForTrend();
+      final t = detail == null ? null : _resolvedDetailTrend(detail);
+      if (t == null) return const <String>[];
+      return strings(t['keys']) ??
+          strings(t['labels']) ??
+          strings(t['xLabels']) ??
+          const <String>[];
+    }
+    if (_tab != 'netTa' && !_supplyTradeTypeFilterActive) {
+      final keys = strings(_heroSeriesMetrics['heroSeriesKeys']);
+      if (keys != null) return keys;
+    }
+    final labels = _heroTrendLabels(n);
+    return labels.length == n ? labels : const <String>[];
+  }
+
+  /// 点选走势图某一期：日线对上月同日，其余对前一点。率用 pp，金额用相对涨幅。
   ({double pct, bool isUp})? _deltaAtHeroPoint(String key) {
     final i = _heroPointIndex;
     if (i == null) return null;
@@ -30683,6 +30786,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       selectedIndex: i,
       suppressPointMom: lighthouseHeroSuppressPointMom,
       asPercentagePoints: lighthouseHeroMetricIsRate(key),
+      compareIndexOf: _dayComparesPrevMonth
+          ? (idx) => _heroCompareIndexOf(idx, series.length)
+          : null,
     );
     if (pct == null) return null;
     return (pct: pct, isUp: pct >= 0);
@@ -30704,7 +30810,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     }
     return lighthouseHeroPointVsLabel(
       _bundle?.metrics['heroSeriesGranularity']?.toString(),
-      period: _period,
+      period: _isCustomRange ? 'custom' : _period,
     );
   }
 
@@ -35812,6 +35918,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           bankValues.last;
       final bankChange = _netTABankBalanceChange();
       return _TrendChart(
+        compareSameDayPrevMonth: _dayComparesPrevMonth,
         key: const ValueKey('hero-swap-netTaBankBalance'),
         onSelectedIndexChanged: _onHeroPointSelected,
         lastPointIsPeriod: _heroLastPointIsPeriod,
@@ -35895,6 +36002,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     final ctxScaleName = ctxScaleKey == 'verifiedSales' ? '核销规模' : '销售规模';
 
     return _TrendChart(
+      compareSameDayPrevMonth: _dayComparesPrevMonth,
       key: ValueKey('hero-swap-$metricKey'),
       grossMarginFormula: metricKey == 'grossMargin'
           ? _grossMarginFormula()
@@ -35969,6 +36077,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     if (n < 2) return null;
     final labels = _heroTrendLabels(n);
     return _TrendChart(
+      compareSameDayPrevMonth: _dayComparesPrevMonth,
       key: const ValueKey('hero-swap-projectCost-l3'),
       viewportCount: _heroViewportCount,
       initialViewEnd: widget.sharedCard?.viewEnd,
@@ -37131,6 +37240,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                           paceDays: isRateLike ? null : _monthPaceDays,
                           periodDeltaPct: apiDeltaPct,
                           partialPeriod: _periodInProgress,
+                          compareSameDayPrevMonth: _dayComparesPrevMonth,
                           chartHeight: 168,
                           onInteractionChanged: (active) {
                             if (chartScrollLocked == active) return;
@@ -49384,6 +49494,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             const SizedBox(height: 4),
             Expanded(
               child: _TrendChart(
+                compareSameDayPrevMonth: _dayComparesPrevMonth,
                 labels: labels,
                 scale: total,
                 scaleLabel: '总资产',
@@ -55471,6 +55582,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     // 规模环比走后端 deltas[规模字段]，跟列表行同一个数；前端不自己造窗口。
     final periodScaleDeltaPct = _ledgerDelta(r, scaleKey);
     return _TrendChart(
+      compareSameDayPrevMonth: _dayComparesPrevMonth,
       labels: labels,
       revenue: _seriesFromTrendMap(t, 'revenue'),
       cost: costSeries,
@@ -55573,6 +55685,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     final slot = lighthouseHeroTrendChartSlot(metricKey);
     final label = _ledgerSummaryMetricLabel(metricKey);
     return _TrendChart(
+      compareSameDayPrevMonth: _dayComparesPrevMonth,
       labels: labels,
       revenue: slot == 'revenue' ? series : empty,
       grossMarginFormula: metricKey == 'grossMargin'
@@ -57391,7 +57504,14 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           : num0('totalCost');
       double? delta;
       if (usePoint) {
-        final prev = pi > 0 ? at('prepaid', pi - 1) : null;
+        // 日线对上月同日那一格，其余对前一格。
+        final pj = _dayComparesPrevMonth
+            ? lighthouseSameDayPrevMonthIndex(
+                lighthouseDayAxisDates([for (final l in pointLabels) '$l']),
+                pi,
+              )
+            : (pi > 0 ? pi - 1 : null);
+        final prev = pj != null ? at('prepaid', pj) : null;
         if (prev != null && prev.abs() > 1e-9) {
           delta = (cf - prev) / prev.abs() * 100;
         }

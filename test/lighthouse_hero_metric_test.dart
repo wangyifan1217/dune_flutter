@@ -3229,11 +3229,12 @@ void main() {
       );
       expect(lighthouseHeroSuppressPointMom, isFalse);
       expect(lighthouseHeroPointVsLabel('monthly'), 'vs 上月');
-      expect(lighthouseHeroPointVsLabel('daily'), 'vs 上日');
+      expect(lighthouseHeroPointVsLabel('daily'), 'vs 上月同日');
+      expect(lighthouseHeroPointVsLabel('daily', period: 'custom'), 'vs 上日');
       expect(lighthouseHeroPointVsLabel('weekly'), 'vs 上周');
       expect(lighthouseHeroPointVsLabel('quarterly'), 'vs 上季');
       expect(lighthouseHeroPointVsLabel('yearly'), 'vs 上年');
-      expect(lighthouseHeroPointVsLabel(null, period: 'day'), 'vs 上日');
+      expect(lighthouseHeroPointVsLabel(null, period: 'day'), 'vs 上月同日');
       expect(lighthouseHeroPointVsLabel(null, period: 'month'), 'vs 上月');
       // 点 6 月（下标 3）对 5 月，不要因为 Hero 就关掉环比。
       expect(
@@ -3295,6 +3296,59 @@ void main() {
           suppressPointMom: true,
         ),
         3.9,
+      );
+    });
+
+    test('日线点选对上月同日，不对上日', () {
+      expect(lighthouseSameDayPrevMonth(DateTime(2026, 11, 2)), DateTime(2026, 10, 2));
+      expect(lighthouseSameDayPrevMonth(DateTime(2026, 1, 15)), DateTime(2025, 12, 15));
+      // 上月没有 31 号：取上月最后一天（和后端 sameDayPrevMonth 一致）。
+      expect(lighthouseSameDayPrevMonth(DateTime(2026, 3, 31)), DateTime(2026, 2, 28));
+      expect(lighthouseSameDayPrevMonth(DateTime(2028, 3, 30)), DateTime(2028, 2, 29));
+
+      final dates = lighthouseDayAxisDates(
+        const ['12.31', '1.01', '1.31', '2.01'],
+        latestYear: 2027,
+      );
+      expect(dates.first, DateTime(2026, 12, 31));
+      expect(dates.last, DateTime(2027, 2, 1));
+      expect(
+        lighthouseDayAxisDates(const ['2026-10-02', '11.02'], latestYear: 2026),
+        [DateTime(2026, 10, 2), DateTime(2026, 11, 2)],
+      );
+
+      final axis = lighthouseDayAxisDates(const [
+        '2026-10-01',
+        '2026-10-02',
+        '2026-10-03',
+        '2026-11-01',
+        '2026-11-02',
+        '2026-11-03',
+      ]);
+      expect(lighthouseSameDayPrevMonthIndex(axis, 4), 1);
+      // 轴上没有 9.03：不拿前一天顶。
+      expect(lighthouseSameDayPrevMonthIndex(axis, 2), isNull);
+
+      // 点 11.02（下标 4）：对 10.02（下标 1），不是 11.01。
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 9.9,
+          partialPeriod: true,
+          selectedIndex: 4,
+          series: const [10, 20, 30, 40, 25, 50],
+          compareIndexOf: (i) => lighthouseSameDayPrevMonthIndex(axis, i),
+        ),
+        closeTo((25 - 20) / 20 * 100, 1e-6),
+      );
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 9.9,
+          partialPeriod: true,
+          selectedIndex: 2,
+          series: const [10, 20, 30, 40, 25, 50],
+          compareIndexOf: (i) => lighthouseSameDayPrevMonthIndex(axis, i),
+        ),
+        isNull,
       );
     });
   });

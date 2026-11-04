@@ -4,7 +4,10 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'lighthouse_day_compare.dart';
 import 'lighthouse_product_rules.dart';
+
+export 'lighthouse_day_compare.dart';
 
 /// Whether [key] should render as a percentage in the Hero masthead.
 bool lighthouseHeroMetricIsRate(String key) =>
@@ -319,15 +322,17 @@ bool lighthouseTrendLegendShouldWrap({
   return width + 1e-6 < need;
 }
 
-/// Hero 点选月份 / 日时仍然算环比：该点对前一点（6 月对 5 月，当天对昨天）。
+/// Hero 点选月份 / 日时仍然算环比：月对前一月（6 月对 5 月），日对上月同日（11.02 对 10.02）。
 /// 只有显式打开 [suppressPointMom] 才关掉——默认关上。
 const bool lighthouseHeroSuppressPointMom = false;
 
 /// 点选某一期时的对照文案，跟走势粒度走。
+/// 日线是「上月同日」；自定义区间的日格仍是相邻一天（区间本身对的是上期）。
 String lighthouseHeroPointVsLabel(String? granularity, {String? period}) {
+  final p = (period ?? '').trim().toLowerCase();
   switch ((granularity ?? '').trim().toLowerCase()) {
     case 'daily':
-      return 'vs 上日';
+      return p == 'custom' ? 'vs 上日' : lighthouseDayCompareLabel;
     case 'weekly':
       return 'vs 上周';
     case 'quarterly':
@@ -338,8 +343,9 @@ String lighthouseHeroPointVsLabel(String? granularity, {String? period}) {
     case 'mom':
       return 'vs 上月';
   }
-  switch ((period ?? '').trim().toLowerCase()) {
+  switch (p) {
     case 'day':
+      return lighthouseDayCompareLabel;
     case 'custom':
       return 'vs 上日';
     case 'week':
@@ -364,6 +370,9 @@ bool lighthouseHeroPointUsesAlignedPeriodDelta({
 /// 点在未走完的最后一期时仍用后端同期值，避免 MTD 去对上期整期。
 ///
 /// [asPercentagePoints]：毛利率 / ROI 这类率，相邻点差是 pp，不是相对涨幅。
+/// [compareIndexOf]：点选第 i 格时拿哪一格比。日线传「上月同日」那一格
+///（[lighthouseSameDayPrevMonthIndex]），返回 null = 没有可比的格子、不出环比；
+/// 不传就是前一格。
 double? lighthouseTrendMomPct({
   required double? periodDeltaPct,
   required bool partialPeriod,
@@ -371,6 +380,7 @@ double? lighthouseTrendMomPct({
   int? selectedIndex,
   bool suppressPointMom = false,
   bool asPercentagePoints = false,
+  int? Function(int index)? compareIndexOf,
 }) {
   double? cap(double? pct) {
     if (pct == null || asPercentagePoints) return pct;
@@ -386,8 +396,14 @@ double? lighthouseTrendMomPct({
     )) {
       return cap(periodDeltaPct);
     }
-    if (selectedIndex <= 0 || selectedIndex >= series.length) return null;
-    final prev = series[selectedIndex - 1];
+    if (selectedIndex < 0 || selectedIndex >= series.length) return null;
+    final j = compareIndexOf != null
+        ? compareIndexOf(selectedIndex)
+        : selectedIndex - 1;
+    if (j == null || j < 0 || j >= series.length || j == selectedIndex) {
+      return null;
+    }
+    final prev = series[j];
     final cur = series[selectedIndex];
     if (asPercentagePoints) {
       final pp = cur - prev;

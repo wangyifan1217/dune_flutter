@@ -30,6 +30,13 @@ part 'lighthouse_fund_plan.dart';
 //   页面用语保持正式：应收 / 应付 / 预收、多收 / 多付，不用口语化描述。
 // ════════════════════════════════════════════════════════════════════════
 
+
+/// 资管页宽于这个就左右排（左时钟、右板块），窄于它照旧上下排。
+const double _kZgWideBreakpoint = 900;
+
+/// 超宽屏才封顶居中；常见 PC 宽度（1280–1680）都是铺满的。
+const double _kZgMaxContentWidth = 1680;
+
 const _kInk = Color(0xFF1F2421);
 const _kInk2 = Color(0xFF5A5C56);
 const _kMute = Color(0xFF94938A);
@@ -1230,35 +1237,64 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
                 padding: EdgeInsets.fromLTRB(0, 0, 0, dunesAppBottomNavContentPadding(context, fallback: 32)),
                 children: [
                   if (widget.embedded) const SizedBox(height: 8) else _switchHeader(context),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 720),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                  // 2026-11-04 · PC 上铺满屏：原来整页锁在 720 宽居中，大屏两边空一大片。
+                  //   窄屏（手机）照旧上下排：时钟在上、板块两列在下。
+                  //   宽屏（≥ 900）左右排：左边资管时钟，右边「板块」2×2，整屏用满；
+                  //   超宽屏（> 1680）才封顶居中，免得卡片被拉成长条。
+                  LayoutBuilder(
+                    builder: (context, box) {
+                      final wide = box.maxWidth >= _kZgWideBreakpoint;
+                      final padH = wide ? 24.0 : 14.0;
+                      final inner = math.min(box.maxWidth, _kZgMaxContentWidth) - padH * 2;
+                      final boardHeader = Padding(
+                        padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+                        child: Row(
                           children: [
-                            if (allForbidden)
-                              _statusBox(context, '暂无资管板块权限')
-                            else ...[
-                              _clockCard(context),
-                              const SizedBox(height: 14),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
-                                child: Row(
-                                  children: [
-                                    Text('板块', style: _sans(context, size: 13, weight: FontWeight.w700)),
-                                    const Spacer(),
-                                    Text('余额截至当日 · 单位：万元', style: _sans(context, size: 10, color: _kMute)),
-                                  ],
-                                ),
-                              ),
-                              ...rows,
-                            ],
+                            Text('板块', style: _sans(context, size: 13, weight: FontWeight.w700)),
+                            const Spacer(),
+                            Text('余额截至当日 · 单位：万元', style: _sans(context, size: 10, color: _kMute)),
                           ],
                         ),
-                      ),
-                    ),
+                      );
+                      final Widget content;
+                      if (allForbidden) {
+                        content = _statusBox(context, '暂无资管板块权限');
+                      } else if (!wide) {
+                        content = Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _clockCard(context),
+                            const SizedBox(height: 14),
+                            boardHeader,
+                            ...rows,
+                          ],
+                        );
+                      } else {
+                        final clockW = (inner * 0.36).clamp(340.0, 520.0);
+                        content = Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(width: clockW, child: _clockCard(context)),
+                            const SizedBox(width: 18),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [boardHeader, ...rows],
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      return Center(
+                        child: SizedBox(
+                          width: inner + padH * 2,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: padH),
+                            child: content,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -2637,23 +2673,41 @@ class _BfLinkedState extends State<LighthouseBfLinkedPage> {
           children: [
             _Eclipse(biz: r.business['assetPrincipal'], fin: r.finance['assetPrincipal'], size: 34),
             const SizedBox(width: 8),
-            _indexBadge(context, index),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                r.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: _sans(context, size: 12, weight: FontWeight.w700),
+            // 序号 + 主体名一行，标签另起一行（可折行）：左栏再窄也不会把整行顶出界
+            //（PC 上曾报 RIGHT OVERFLOWED，主体名也被挤没了）。
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      _indexBadge(context, index),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          r.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _sans(context, size: 12, weight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 3,
+                    children: [
+                      _tag(context, r.group, Colors.white, _groupColor(r.group), solid: true),
+                      if (r.isSpecial ? (r.subjectKey != 'UNASSIGNED' && r.subjectKey != 'OTHER') : r.title != r.scopeLabel)
+                        _tag(context, r.scopeLabel, _kInk2, _kGreySoft),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 6),
-            _tag(context, r.group, Colors.white, _groupColor(r.group), solid: true),
-            if (r.isSpecial ? (r.subjectKey != 'UNASSIGNED' && r.subjectKey != 'OTHER') : r.title != r.scopeLabel) ...[
-              const SizedBox(width: 4),
-              _tag(context, r.scopeLabel, _kInk2, _kGreySoft),
-            ],
-            const Spacer(),
+            const SizedBox(width: 4),
             Text(
               _overlapText(r.business['assetPrincipal'], r.finance['assetPrincipal']),
               style: _mono(
@@ -2701,10 +2755,12 @@ class _BfLinkedState extends State<LighthouseBfLinkedPage> {
                         children: [identity, const SizedBox(height: 8), panels],
                       );
                     }
+                    // 左栏随卡宽放宽（140 → 最多 240），PC 上主体名不再被挤没。
+                    final idW = (c.maxWidth * 0.26).clamp(140.0, 240.0);
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(width: 140, child: identity),
+                        SizedBox(width: idW, child: identity),
                         const SizedBox(width: 10),
                         Expanded(child: panels),
                       ],

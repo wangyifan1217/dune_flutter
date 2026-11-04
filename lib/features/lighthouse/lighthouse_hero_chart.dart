@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import 'lighthouse_day_compare.dart';
 import 'lighthouse_hero_swipe.dart';
 import 'lighthouse_theme.dart';
 
@@ -116,6 +117,7 @@ class LighthouseHeroTrendCard extends StatefulWidget {
     this.comboRatioLabels = const <String, String>{},
     this.segmented = false,
     this.compareLabel,
+    this.compareSameDayPrevMonth = false,
     this.onFocusChanged,
   });
 
@@ -175,8 +177,12 @@ class LighthouseHeroTrendCard extends StatefulWidget {
   /// 那天，同时照旧浮那张列全字段的小卡片。
   final bool segmented;
 
-  /// 分段读数里环比后面那几个字（「vs 上日」「vs 上月」）。null = 按横轴标签猜。
+  /// 分段读数里环比后面那几个字（「vs 上月同日」「vs 上月」）。null = 按横轴标签猜。
   final String? compareLabel;
+
+  /// 日线：读数的环比对「上月同日」那一格（labels 里找那一天），不对前一天。
+  /// 轴上还没有上月同日（历史没拉到）就不出环比。
+  final bool compareSameDayPrevMonth;
 
   /// 分段模式里点了某一段（线的 key）。主 Hero 用它把左边大数换成同一个指标。
   final ValueChanged<String>? onFocusChanged;
@@ -1126,22 +1132,33 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
     }
     final v = idx < line.values.length ? line.values[idx] : null;
     double? prev;
-    for (var k = idx - 1; k >= 0 && k >= idx - 3; k--) {
-      final p = k < line.values.length ? line.values[k] : null;
-      if (p != null) {
-        prev = p;
-        break;
+    if (widget.compareSameDayPrevMonth) {
+      // 日线：对上月同日（11.02 对 10.02），不对前一天。
+      final j = lighthouseSameDayPrevMonthIndex(
+        lighthouseDayAxisDates(widget.labels),
+        idx,
+      );
+      if (j != null && j < line.values.length) prev = line.values[j];
+    } else {
+      for (var k = idx - 1; k >= 0 && k >= idx - 3; k--) {
+        final p = k < line.values.length ? line.values[k] : null;
+        if (p != null) {
+          prev = p;
+          break;
+        }
       }
     }
     final partial = widget.lastIsPartial && idx == _len - 1;
     final label = widget.labels[idx].trim();
     final isDay = RegExp(r'^\d{1,2}\.\d{1,2}$').hasMatch(label);
     final isMonth = RegExp(r'^\d{4}[.\-/]\d{1,2}$').hasMatch(label);
-    // 2026-10-26 · 读数后面只写「vs 上日 / vs 上月」，日期和「整天」都不写了
+    // 2026-10-26 · 读数后面只写「vs 上月同日 / vs 上月」，日期和「整天」都不写了
     // （点了哪天，浮出来的小卡片上有日期）。
     final vs =
         widget.compareLabel ??
-        (isDay ? 'vs 上日' : (isMonth ? 'vs 上月' : 'vs 上期'));
+        (widget.compareSameDayPrevMonth
+            ? lighthouseDayCompareLabel
+            : (isDay ? 'vs 上日' : (isMonth ? 'vs 上月' : 'vs 上期')));
     // 值拆成「数 + 单位」：数大、单位小一号降色（2.68 亿）。
     final text = v == null ? '—' : line.format(v);
     final m = RegExp(r'^([−\-+]?[\d.,]+)(.*)$').firstMatch(text);

@@ -1200,104 +1200,139 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
 
   // ── 布局 ───────────────────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    final tiles = <Widget>[
-      if (!_bfForbidden) _bfTile(context),
-      if (!_billForbidden) _billTile(context),
-      if (!_planForbidden) _planTile(context),
-      if (!_flowForbidden) _flowTile(context),
-    ];
+  List<Widget> _boardTiles(BuildContext context, {required bool fill}) => [
+    if (!_bfForbidden) _bfTile(context, fill: fill),
+    if (!_billForbidden) _billTile(context, fill: fill),
+    if (!_planForbidden) _planTile(context, fill: fill),
+    if (!_flowForbidden) _flowTile(context, fill: fill),
+  ];
+
+  List<Widget> _tileRows(List<Widget> tiles, {required bool stretch}) {
     final rows = <Widget>[];
     for (var i = 0; i < tiles.length; i += 2) {
-      if (i > 0) rows.add(const SizedBox(height: 10));
+      if (i > 0) rows.add(SizedBox(height: stretch ? 12 : 10));
+      final row = Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _fadeIn(0.25 + i * 0.05, tiles[i])),
+          SizedBox(width: stretch ? 12 : 10),
+          Expanded(child: i + 1 < tiles.length ? _fadeIn(0.3 + i * 0.05, tiles[i + 1]) : const SizedBox.shrink()),
+        ],
+      );
       rows.add(
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: _fadeIn(0.25 + i * 0.05, tiles[i])),
-              const SizedBox(width: 10),
-              Expanded(child: i + 1 < tiles.length ? _fadeIn(0.3 + i * 0.05, tiles[i + 1]) : const SizedBox.shrink()),
-            ],
-          ),
-        ),
+        stretch
+            ? Expanded(child: row)
+            : IntrinsicHeight(child: row),
       );
     }
-    final allForbidden = tiles.isEmpty;
+    return rows;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final allForbidden = _bfForbidden && _billForbidden && _planForbidden && _flowForbidden;
     return Scaffold(
       backgroundColor: _bg(context, const Color(0xFFF6F4F9)),
       body: Stack(
         children: [
           ..._glows(context),
           SafeArea(
-            child: RefreshIndicator(
-              onRefresh: _refresh,
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(0, 0, 0, dunesAppBottomNavContentPadding(context, fallback: 32)),
-                children: [
-                  if (widget.embedded) const SizedBox(height: 8) else _switchHeader(context),
-                  // 2026-11-04 · PC 上铺满屏：原来整页锁在 720 宽居中，大屏两边空一大片。
-                  //   窄屏（手机）照旧上下排：时钟在上、板块两列在下。
-                  //   宽屏（≥ 900）左右排：左边资管时钟，右边「板块」2×2，整屏用满；
-                  //   超宽屏（> 1680）才封顶居中，免得卡片被拉成长条。
-                  LayoutBuilder(
-                    builder: (context, box) {
-                      final wide = box.maxWidth >= _kZgWideBreakpoint;
-                      final padH = wide ? 24.0 : 14.0;
-                      final inner = math.min(box.maxWidth, _kZgMaxContentWidth) - padH * 2;
-                      final boardHeader = Padding(
-                        padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
-                        child: Row(
-                          children: [
-                            Text('板块', style: _sans(context, size: 13, weight: FontWeight.w700)),
-                            const Spacer(),
-                            Text('余额截至当日 · 单位：万元', style: _sans(context, size: 10, color: _kMute)),
-                          ],
-                        ),
-                      );
-                      final Widget content;
-                      if (allForbidden) {
-                        content = _statusBox(context, '暂无资管板块权限');
-                      } else if (!wide) {
-                        content = Column(
+            child: LayoutBuilder(
+              builder: (context, box) {
+                // 窄屏上下排，跟着内容滚。宽屏左右排，并且撑满当前窗口高度：
+                // 时钟放大，右边 2×2 跟时钟一样高，不再在屏幕下半截留一块空白。
+                final wide = box.maxWidth.isFinite && box.maxWidth >= _kZgWideBreakpoint && box.maxHeight.isFinite;
+                final bottom = dunesAppBottomNavContentPadding(context, fallback: 24);
+                final padH = wide ? 28.0 : 14.0;
+                final inner = math.min(box.maxWidth, _kZgMaxContentWidth) - padH * 2;
+                final boardHeader = Padding(
+                  padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+                  child: Row(
+                    children: [
+                      Text('板块', style: _sans(context, size: 13, weight: FontWeight.w700)),
+                      const Spacer(),
+                      Text('余额截至当日 · 单位：万元', style: _sans(context, size: 10, color: _kMute)),
+                    ],
+                  ),
+                );
+                final Widget board;
+                if (allForbidden) {
+                  board = _statusBox(context, '暂无资管板块权限');
+                } else if (!wide) {
+                  board = Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _clockCard(context),
+                      const SizedBox(height: 14),
+                      boardHeader,
+                      ..._tileRows(_boardTiles(context, fill: false), stretch: false),
+                    ],
+                  );
+                } else {
+                  final clockW = (inner * 0.40).clamp(400.0, 560.0);
+                  board = Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(width: clockW, child: _clockCard(context, expand: true)),
+                      const SizedBox(width: 18),
+                      Expanded(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            _clockCard(context),
-                            const SizedBox(height: 14),
                             boardHeader,
-                            ...rows,
-                          ],
-                        );
-                      } else {
-                        final clockW = (inner * 0.36).clamp(340.0, 520.0);
-                        content = Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(width: clockW, child: _clockCard(context)),
-                            const SizedBox(width: 18),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [boardHeader, ...rows],
+                                children: _tileRows(_boardTiles(context, fill: true), stretch: true),
                               ),
                             ),
                           ],
-                        );
-                      }
-                      return Center(
-                        child: SizedBox(
-                          width: inner + padH * 2,
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(horizontal: padH),
-                            child: content,
-                          ),
                         ),
-                      );
-                    },
+                      ),
+                    ],
+                  );
+                }
+                final framed = Center(
+                  child: SizedBox(
+                    width: inner + padH * 2,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: padH),
+                      child: board,
+                    ),
                   ),
-                ],
-              ),
+                );
+                final header = widget.embedded ? null : _switchHeader(context);
+                final Widget page;
+                if (wide) {
+                  final minH = math.max(640.0, box.maxHeight - bottom);
+                  page = SizedBox(
+                    height: minH,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (header != null) header else const SizedBox(height: 12),
+                        Expanded(child: framed),
+                      ],
+                    ),
+                  );
+                } else {
+                  page = Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (header != null) header else const SizedBox(height: 8),
+                      framed,
+                    ],
+                  );
+                }
+                return RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.only(bottom: bottom),
+                    child: page,
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -1352,7 +1387,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
 
   // ── 资管时钟 ───────────────────────────────────────────────────────────
 
-  Widget _clockCard(BuildContext context) {
+  Widget _clockCard(BuildContext context, {bool expand = false}) {
     final now = DateTime.now();
     final days = DateTime(now.year, now.month + 1, 0).day;
     final alerts = _alerts;
@@ -1451,35 +1486,9 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
                   ),
               ],
             ),
-            const SizedBox(height: 8),
-            Center(
-              child: SizedBox(
-                width: 236,
-                height: 236,
-                child: AnimatedBuilder(
-                  animation: Listenable.merge([_intro, _sweep]),
-                  builder: (context, _) => CustomPaint(
-                    painter: _ClockPainter(
-                      rings: rings,
-                      days: days,
-                      today: now.day,
-                      intro: Curves.easeOutCubic.transform(_intro.value),
-                      sweep: _sweep.value,
-                      ink: _fg(context, const Color(0xFF2B2147)),
-                      faint: _fg(context, const Color(0xFFC9C4D6)),
-                      accent: _fg(context, LhColors.neg),
-                      face: _bg(context, Colors.white),
-                      tickLabel: _mono(context, size: 8.5, weight: FontWeight.w600, color: _kMute),
-                      dateLabel: _mono(context, size: 15, weight: FontWeight.w700, color: const Color(0xFF2B2147)),
-                      subLabel: _sans(context, size: 9.5, color: _kInk2),
-                      date: _fpMd(now),
-                      sub: '第 ${now.day} 天 / $days',
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
+            SizedBox(height: expand ? 12 : 8),
+            _clockDial(context, rings: rings, days: days, today: now.day, expand: expand),
+            SizedBox(height: expand ? 12 : 8),
             IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1495,6 +1504,55 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _clockDial(
+    BuildContext context, {
+    required List<_ClockRing> rings,
+    required int days,
+    required int today,
+    required bool expand,
+  }) {
+    Widget paint(double size) {
+      final roomy = size >= 300;
+      return Center(
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: AnimatedBuilder(
+            animation: Listenable.merge([_intro, _sweep]),
+            builder: (context, _) => CustomPaint(
+              painter: _ClockPainter(
+                rings: rings,
+                days: days,
+                today: today,
+                intro: Curves.easeOutCubic.transform(_intro.value),
+                sweep: _sweep.value,
+                ink: _fg(context, const Color(0xFF2B2147)),
+                faint: _fg(context, const Color(0xFFC9C4D6)),
+                accent: _fg(context, LhColors.neg),
+                face: _bg(context, Colors.white),
+                tickLabel: _mono(context, size: roomy ? 11 : 8.5, weight: FontWeight.w600, color: _kMute),
+                dateLabel: _mono(context, size: roomy ? 22 : 15, weight: FontWeight.w700, color: const Color(0xFF2B2147)),
+                subLabel: _sans(context, size: roomy ? 12 : 9.5, color: _kInk2),
+                date: _fpMd(DateTime.now()),
+                sub: '第 $today 天 / $days',
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (!expand) return paint(236);
+    return Expanded(
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final room = math.max(0.0, math.min(c.maxWidth - 8, c.maxHeight - 4));
+          return paint(room.clamp(0.0, 440.0));
+        },
       ),
     );
   }
@@ -1526,7 +1584,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
                 Container(width: 12, height: 4, decoration: BoxDecoration(color: _fg(context, c), borderRadius: BorderRadius.circular(2))),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10, color: _kInk2)),
+                  child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10, color: _kInk2)),
                 ),
               ],
             ),
@@ -1561,6 +1619,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
     String? foot,
     VoidCallback? onTap,
     bool muted = false,
+    bool fill = false,
   }) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1592,10 +1651,17 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
             const SizedBox(height: 8),
             Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10.5, color: _kInk2)),
             const SizedBox(height: 4),
-            value,
-            if (visual != null) ...[const SizedBox(height: 8), visual],
-            const Spacer(),
-            if (foot != null) ...[
+            if (visual != null) ...[
+              value,
+              const SizedBox(height: 8),
+              if (fill) Expanded(child: visual) else visual,
+            ] else if (fill)
+              Expanded(
+                child: Align(alignment: Alignment.centerLeft, child: value),
+              )
+            else
+              value,
+            if (foot != null && foot.isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(foot, maxLines: 2, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10, color: _kMute, height: 1.4)),
             ],
@@ -1610,7 +1676,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
   Widget _hintText(BuildContext context, String text) =>
       Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: _sans(context, size: 11, color: _kInk2));
 
-  Widget _bfTile(BuildContext context) {
+  Widget _bfTile(BuildContext context, {bool fill = false}) {
     final diff = _assetDiff;
     final pts = _bfSeries.where((p) => p.hasData && p.values['assetDiff'] != null).toList();
     Widget value;
@@ -1631,22 +1697,29 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
       label: pts.length >= 2 ? '业务减财务 · 近 ${pts.length} 天' : '业务资产减财务资产',
       value: value,
       visual: pts.length >= 2
-          ? SizedBox(
-              height: 34,
-              child: AnimatedBuilder(
-                animation: _intro,
-                builder: (context, _) => CustomPaint(
-                  painter: _SparkPainter(
-                    values: [for (final p in pts) p.values['assetDiff']!],
-                    color: _fg(context, LhColors.neg),
-                    t: Curves.easeOut.transform(((_intro.value - 0.3) / 0.7).clamp(0.0, 1.0)),
+          ? LayoutBuilder(
+              builder: (context, c) {
+                final h = c.maxHeight.isFinite && c.maxHeight > 0 ? c.maxHeight : 36.0;
+                return SizedBox(
+                  height: math.max(h, 36),
+                  width: double.infinity,
+                  child: AnimatedBuilder(
+                    animation: _intro,
+                    builder: (context, _) => CustomPaint(
+                      painter: _SparkPainter(
+                        values: [for (final p in pts) p.values['assetDiff']!],
+                        color: _fg(context, LhColors.neg),
+                        t: Curves.easeOut.transform(((_intro.value - 0.3) / 0.7).clamp(0.0, 1.0)),
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             )
           : null,
       foot: _overlap == null ? null : '重合 ${(_overlap! * 100).round()}% · ${_bf?.rows.length ?? 0} 个主体',
       onTap: _openBf,
+      fill: fill,
     );
   }
 
@@ -1684,7 +1757,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
     );
   }
 
-  Widget _billTile(BuildContext context) {
+  Widget _billTile(BuildContext context, {bool fill = false}) {
     final b = _bills;
     final ch = b?.dim('CHANNEL');
     Widget value;
@@ -1718,10 +1791,11 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
             ),
       foot: asOf == null ? '条 = 逾期占比' : '条 = 逾期占比 · 账期 ≤ ${_mdDate(_overdueCutoff(asOf, b!.graceDays), asOf)}',
       onTap: _openBills,
+      fill: fill,
     );
   }
 
-  Widget _planTile(BuildContext context) {
+  Widget _planTile(BuildContext context, {bool fill = false}) {
     final p = _plan;
     Widget value;
     Widget? visual;
@@ -1760,10 +1834,11 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
       visual: visual,
       foot: p?.exists == true ? '时间进度 ${(_timeProgress * 100).round()}%${p!.fixture ? ' · 样例数据' : ''}' : null,
       onTap: _openPlan,
+      fill: fill,
     );
   }
 
-  Widget _flowTile(BuildContext context) {
+  Widget _flowTile(BuildContext context, {bool fill = false}) {
     final f = _flow;
     Widget value;
     Widget? visual;
@@ -1835,6 +1910,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         if (f?.fixture == true) '样例数据',
       ].join(' · '),
       onTap: _openFlow,
+      fill: fill,
     );
   }
 }

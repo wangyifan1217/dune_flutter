@@ -791,6 +791,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   Widget _metaLine(String label, String value) {
     final icon = switch (label) {
       '负责人' => Icons.person_outline,
+      '参与人' => Icons.groups_2_outlined,
       '任务周期' => Icons.event_outlined,
       '来源' => Icons.link_outlined,
       '填报进度' => Icons.donut_large_outlined,
@@ -833,6 +834,76 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                 color: DunesColors.resolve(context, DunesColors.text),
                 height: 1.35,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _participantLine(List<TaskAssignee> people) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF7F8FA),
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.groups_2_outlined,
+            size: 16,
+            color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+          const SizedBox(width: 7),
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text(
+              '参与人：',
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
+            ),
+          ),
+          const SizedBox(width: 2),
+          Expanded(
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 6,
+              children: [
+                for (final person in people)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      buildTaskUserAvatar(
+                        session: widget.session,
+                        name: person.displayName,
+                        userId: person.id,
+                        avatarPreset: person.avatarPreset,
+                        avatarObjectKey: person.avatarObjectKey,
+                        avatarUrl: person.avatarUrl,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        person.displayName,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
           ),
         ],
@@ -1670,6 +1741,8 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                             '负责人',
                             d.task.ownerName.isEmpty ? '未指定' : d.task.ownerName,
                           ),
+                          if (d.task.participants.isNotEmpty)
+                            _participantLine(d.task.participants),
                           if (d.task.startAt != null || d.task.dueAt != null)
                             _metaLine(
                               '任务周期',

@@ -36,6 +36,7 @@ class TaskItem {
     this.overdue = false,
     this.coOwnerUserIds = const [],
     this.participantUserIds = const [],
+    this.participants = const [],
     this.aiState = '',
     this.completedAt,
     this.completedAtInferred = false,
@@ -86,6 +87,7 @@ class TaskItem {
   final bool overdue;
   final List<int> coOwnerUserIds;
   final List<int> participantUserIds;
+  final List<TaskAssignee> participants;
 
   /// 服务端展示态：analyzing = AI 分析中，binding = AI 匹配知识库中。
   final String aiState;
@@ -165,6 +167,7 @@ class TaskItem {
               ?.map((e) => (e as num).toInt())
               .toList(growable: false) ??
           const [],
+      participants: _taskParticipants(json['participants']),
       aiState: '${json['aiState'] ?? ''}',
       completedAt: parseTime(json['completedAt']),
       completedAtInferred: json['completedAtInferred'] == true,
@@ -180,6 +183,29 @@ class TaskItem {
       canEvaluate: json['canEvaluate'] == true,
     );
   }
+}
+
+List<TaskAssignee> _taskParticipants(dynamic raw) {
+  if (raw is! List) return const [];
+  final people = <TaskAssignee>[];
+  for (final item in raw) {
+    if (item is! Map) continue;
+    final json = Map<String, dynamic>.from(item);
+    final id =
+        (json['userId'] as num?)?.toInt() ?? (json['id'] as num?)?.toInt() ?? 0;
+    if (id <= 0) continue;
+    final name = '${json['displayName'] ?? json['name'] ?? ''}'.trim();
+    people.add(
+      TaskAssignee(
+        id: id,
+        displayName: name.isEmpty ? '用户$id' : name,
+        avatarPreset: '${json['avatarPreset'] ?? ''}',
+        avatarObjectKey: '${json['avatarObjectKey'] ?? ''}',
+        avatarUrl: '${json['avatarUrl'] ?? ''}',
+      ),
+    );
+  }
+  return List<TaskAssignee>.unmodifiable(people);
 }
 
 class TaskAttachment {

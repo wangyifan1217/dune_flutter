@@ -115,6 +115,25 @@ double? _num(Object? v) {
 
 String _str(Object? v) => v == null ? '' : v.toString().trim();
 
+bool _hasName(String v) => v.isNotEmpty && v != '—' && v != '-' && v != '–';
+
+const _kProvinceByCode = <String, String>{
+  '11': '北京', '12': '天津', '13': '河北', '14': '山西', '15': '内蒙古',
+  '21': '辽宁', '22': '吉林', '23': '黑龙江',
+  '31': '上海', '32': '江苏', '33': '浙江', '34': '安徽', '35': '福建', '36': '江西', '37': '山东',
+  '41': '河南', '42': '湖北', '43': '湖南', '44': '广东', '45': '广西', '46': '海南',
+  '50': '重庆', '51': '四川', '52': '贵州', '53': '云南', '54': '西藏',
+  '61': '陕西', '62': '甘肃', '63': '青海', '64': '宁夏', '65': '新疆',
+  '71': '台湾', '81': '香港', '82': '澳门',
+};
+
+/// 省码（6 位行政区划码或前 2 位）→ 省名；识别不了返回空。
+String lhProvinceByCode(String code) {
+  final c = code.trim();
+  if (c.length < 2 || int.tryParse(c.substring(0, 2)) == null) return '';
+  return _kProvinceByCode[c.substring(0, 2)] ?? '';
+}
+
 // ───── 模型 ──────────────────────────────────────────────────────────────────
 
 class LhBfBlock {
@@ -219,9 +238,42 @@ class LhBfRow {
 
   String get title {
     if (subjectKey == 'UNASSIGNED') return '待归属';
-    if (provinceName.isNotEmpty) return provinceName;
+    if (_hasName(provinceName)) return provinceName;
+    final p = province;
+    if (p.isNotEmpty) return p;
     return subjectKey;
   }
+
+  /// subjectKey 里的省码（普通行 `{省码}||{对方主体}`）。特殊行为空。
+  String get provinceCode {
+    final i = subjectKey.indexOf('||');
+    if (i <= 0) return '';
+    return subjectKey.substring(0, i).trim();
+  }
+
+  /// 是否是不分省的特殊行（中石化全国、中油BP、全国、待归属、其它）。
+  bool get isSpecial => const {'SINOPEC', 'ZYBP', 'ALL', 'UNASSIGNED', 'OTHER'}.contains(subjectKey);
+
+  /// 省份：普通行优先用 provinceName，空了用省码兜底；特殊行为空。
+  String get province {
+    if (isSpecial) return '';
+    if (_hasName(provinceName)) return provinceName;
+    return lhProvinceByCode(provinceCode);
+  }
+
+  /// 省份角标：普通行 = 省份；特殊行写范围（全国 / 未归属 / 其它）。
+  String get scopeLabel => switch (subjectKey) {
+    'SINOPEC' || 'ZYBP' || 'ALL' => '全国',
+    'UNASSIGNED' => '未归属',
+    'OTHER' => '其它',
+    _ => province.isEmpty ? '未识别省份' : province,
+  };
+
+  /// 供应商拆成列表（资管用顿号拼多家）。
+  List<String> get suppliers => [
+    for (final x in supplierName.split(RegExp('[、,，]')))
+      if (x.trim().isNotEmpty) x.trim(),
+  ];
 
   /// 业务券池 = 资金池 + 库存券 + 同步券（任一 null 就是 null）。
   double? get businessCouponPool {

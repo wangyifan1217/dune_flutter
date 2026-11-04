@@ -661,6 +661,56 @@ class LighthouseService {
     );
   }
 
+  /// 资管资金计划（/out/lighthouse/fund-plan）。不传 [planDate] = 整月汇总（带期初）；
+  /// 传 [planDate] = 当天，必须落在 [planMonth] 里。金额是元，空 = 没有这笔数。
+  Future<Map<String, dynamic>> fetchFundPlan({String? planMonth, String? planDate}) {
+    return _getData(
+      '/lighthouse/fund-plan',
+      <String, String>{
+        if (planMonth != null && planMonth.isNotEmpty) 'planMonth': planMonth,
+        if (planDate != null && planDate.isNotEmpty) 'planDate': planDate,
+      },
+      '资金计划加载失败',
+    );
+  }
+
+  /// 资管资金流水 · 流水分类。[period] = yyyy-MM-dd（当天快照）或 yyyy-MM（该月相加）。
+  Future<Map<String, dynamic>> fetchFlowCategory({required String period}) {
+    return _getData('/lighthouse/fund-flow/category', <String, String>{'period': period}, '流水分类加载失败');
+  }
+
+  /// 资管资金流水 · 资金调动月汇总（账号属性 × 资金属性）。
+  Future<Map<String, dynamic>> fetchFundTransfer({String? yearMonth}) {
+    return _getData(
+      '/lighthouse/fund-flow/transfer',
+      <String, String>{if (yearMonth != null && yearMonth.isNotEmpty) 'yearMonth': yearMonth},
+      '资金调动加载失败',
+    );
+  }
+
+  /// 资管资金流水 · 资金调动明细。[direction] = IN / OUT / ALL。
+  Future<Map<String, dynamic>> fetchFundTransferDetail({
+    required String yearMonth,
+    required String accountAttr,
+    required String fundAttr,
+    String direction = 'ALL',
+  }) {
+    return _getData(
+      '/lighthouse/fund-flow/transfer-detail',
+      <String, String>{'yearMonth': yearMonth, 'accountAttr': accountAttr, 'fundAttr': fundAttr, 'direction': direction},
+      '资金调动明细加载失败',
+    );
+  }
+
+  /// 资金日历：该月每天的查日结果（后端逐日拉、缓存 5 分钟）。
+  Future<Map<String, dynamic>> fetchFundPlanDays({String? planMonth}) {
+    return _getData(
+      '/lighthouse/fund-plan/days',
+      <String, String>{if (planMonth != null && planMonth.isNotEmpty) 'planMonth': planMonth},
+      '资金日历加载失败',
+    );
+  }
+
   // ── 业财标签二（财务视角）──────────────────────────────────────────────
   //   后端：/lighthouse/business-finance(/series | /detail/:kind)。
   //   错误要带后端 message（资管的「明细与汇总尚未同步」等），缓存兜底带 _stale。

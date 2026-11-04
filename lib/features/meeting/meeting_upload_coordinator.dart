@@ -46,6 +46,9 @@ class MeetingUploadCoordinator extends ChangeNotifier {
   NativeMeetingService? _service;
   List<MeetingUploadJob> _jobs = const [];
   final Set<int> _runningMeetingIds = <int>{};
+
+  /// 已上传完、已丢弃或离线草稿转正前的旧 id。读盘拿到的旧数据不能把它们复活。
+  final Set<int> _retiredMeetingIds = <int>{};
   Timer? _retryTimer;
 
   List<MeetingUploadJob> get jobs => List.unmodifiable(_jobs);
@@ -125,8 +128,12 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     }
     final srcFile = File(src);
     if (!await srcFile.exists()) {
+      debugPrint('MeetingUpload enqueue missing source path=$src');
       throw Exception('录音文件不存在');
     }
+    debugPrint(
+      'MeetingUpload enqueue source=$src bytes=${await srcFile.length()}',
+    );
 
     // 先落盘到 Documents，再创建服务端记录，避免「有草稿无录音」。
     // 使用 copy 保留源文件：创建失败时可重试，且不破坏创建页持有的路径。
@@ -157,6 +164,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
         meetingId: meetingId,
         userId: userId,
         localFilePath: destPath,
+        sourceFilePath: src,
         title: trimmedTitle,
         meetingDate: meetingDate,
         generate: generate,
@@ -182,6 +190,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
           meetingId: localId,
           userId: userId,
           localFilePath: stagingPath,
+          sourceFilePath: src,
           title: trimmedTitle,
           meetingDate: meetingDate,
           generate: generate,
@@ -206,6 +215,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
           await _deleteLocalFile(destPath);
         }
         if (meetingId > 0) {
+          _retiredMeetingIds.add(meetingId);
           _jobs = _jobs
               .where((job) => job.meetingId != meetingId)
               .toList(growable: false);
@@ -258,6 +268,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     if (idx < 0) return;
     final job = _jobs[idx];
     _runningMeetingIds.remove(meetingId);
+    _retiredMeetingIds.add(meetingId);
     await _deleteLocalFile(job.localFilePath);
     _jobs = List<MeetingUploadJob>.from(_jobs)..removeAt(idx);
     await _persistJobs();
@@ -287,6 +298,12 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       return;
     }
     final loaded = await MeetingUploadStorage.load(userId);
+    // 读盘期间内存里的任务可能已经更新（换了文件路径、离线草稿已转正、已上传完）。
+    // 同一任务以内存为准；已退役的 id 不能被读到的旧数据复活。
+    final memoryById = <int, MeetingUploadJob>{
+      for (final job in _jobs)
+        if (_jobBelongsToUser(job, userId)) job.meetingId: job,
+    };
     final loadedIds = loaded.map((job) => job.meetingId).toSet();
     final memoryExtra = _jobs
         .where(
@@ -298,9 +315,13 @@ class MeetingUploadCoordinator extends ChangeNotifier {
         .toList(growable: false);
     _jobs = <MeetingUploadJob>[
       ...loaded
+          .where((job) => !_retiredMeetingIds.contains(job.meetingId))
+          .map((job) => memoryById[job.meetingId] ?? job)
           .where((job) => job.phase != MeetingUploadPhase.done)
           .map((job) => _normalizeJobUserId(job, userId)),
-      ...memoryExtra.map((job) => _normalizeJobUserId(job, userId)),
+      ...memoryExtra
+          .where((job) => !_retiredMeetingIds.contains(job.meetingId))
+          .map((job) => _normalizeJobUserId(job, userId)),
     ];
     for (var i = 0; i < _jobs.length; i++) {
       final job = _jobs[i];
@@ -347,19 +368,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
   MeetingUploadJob _normalizeJobUserId(MeetingUploadJob job, int userId) {
     if (userId <= 0 || job.userId == userId) return job;
     if (job.userId <= 0) {
-      return MeetingUploadJob(
-        meetingId: job.meetingId,
-        userId: userId,
-        localFilePath: job.localFilePath,
-        title: job.title,
-        meetingDate: job.meetingDate,
-        generate: job.generate,
-        createdAtMs: job.createdAtMs,
-        phase: job.phase,
-        uploadProgressPercent: job.uploadProgressPercent,
-        retryCount: job.retryCount,
-        error: job.error,
-      );
+      return job.copyWith(userId: userId);
     }
     return job;
   }
@@ -395,10 +404,23 @@ class MeetingUploadCoordinator extends ChangeNotifier {
         return;
       }
     }
-    final file = File(job.localFilePath);
-    if (!await file.exists()) {
-      await _markFailed(index, job, '本地录音文件已丢失，请重新录制', permanent: true);
-      return;
+    if (!await File(job.localFilePath).exists()) {
+      final recovered = await _locateLocalAudio(job);
+      debugPrint(
+        'MeetingUpload missing file meetingId=${job.meetingId} '
+        'path=${job.localFilePath} source=${job.sourceFilePath} '
+        'recovered=$recovered',
+      );
+      if (recovered == null) {
+        await _markFailed(index, job, '本地录音文件已丢失，请重新录制', permanent: true);
+        return;
+      }
+      final recoveredIdx = _indexOfJob(job.meetingId);
+      if (recoveredIdx < 0) return;
+      index = recoveredIdx;
+      job = _jobs[recoveredIdx].copyWith(localFilePath: recovered);
+      _jobs = List<MeetingUploadJob>.from(_jobs)..[recoveredIdx] = job;
+      await _persistJobs();
     }
 
     debugPrint(
@@ -467,6 +489,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       // 上传成功后保留 App 本地录音，仅清掉后台上传任务。
       final doneIdx = _indexOfJob(job.meetingId);
       if (doneIdx < 0) return;
+      _retiredMeetingIds.add(job.meetingId);
       _jobs = List<MeetingUploadJob>.from(_jobs)..removeAt(doneIdx);
       await _persistJobs();
       notifyListeners();
@@ -485,6 +508,15 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     NativeMeetingService svc,
   ) async {
     final current = _jobs[index];
+    final oldId = current.meetingId;
+    var stagingPath = current.localFilePath;
+    if (!await File(stagingPath).exists()) {
+      final recovered = await _locateLocalAudio(current);
+      if (recovered == null) {
+        throw Exception('本地录音文件已丢失，请重新录制');
+      }
+      stagingPath = recovered;
+    }
     final meetingId = await svc.createMeeting(
       title: current.title,
       meetingDate: current.meetingDate,
@@ -493,20 +525,26 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       throw Exception('创建会议记录失败，请重试');
     }
     final destPath = await _renamePersistedCopy(
-      stagingPath: current.localFilePath,
+      stagingPath: stagingPath,
       meetingId: meetingId,
     );
-    final promoted = current.copyWith(
+    // createMeeting 期间任务列表可能被重新读盘或追加，原来的下标不可靠。
+    final latestIdx = _indexOfJob(oldId);
+    final base = latestIdx >= 0 ? _jobs[latestIdx] : current;
+    final promoted = base.copyWith(
       meetingId: meetingId,
       localFilePath: destPath,
       phase: MeetingUploadPhase.uploading,
       uploadProgressPercent: 0,
       clearError: true,
     );
-    _jobs = List<MeetingUploadJob>.from(_jobs)..[index] = promoted;
+    _retiredMeetingIds.add(oldId);
+    _jobs = latestIdx >= 0
+        ? (List<MeetingUploadJob>.from(_jobs)..[latestIdx] = promoted)
+        : <MeetingUploadJob>[..._jobs, promoted];
     await _persistJobs();
     notifyListeners();
-    return (index: index, job: promoted);
+    return (index: _indexOfJob(meetingId), job: promoted);
   }
 
   Future<void> _markWaitingForNetwork(int index, MeetingUploadJob job) async {
@@ -671,6 +709,73 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       await sink.close();
       await raf.close();
     }
+    final srcLen = await src.length();
+    final destLen = await dest.exists() ? await dest.length() : -1;
+    if (destLen != srcLen) {
+      debugPrint(
+        'MeetingUpload copy size mismatch $sourcePath($srcLen) -> $destPath($destLen)',
+      );
+      throw Exception('录音保存到本机不完整，请重试');
+    }
+  }
+
+  /// 任务记录的文件不在时，按顺序找回：同名 m4a/wav、同一会议的其它拷贝、原生原始文件。
+  Future<String?> _locateLocalAudio(MeetingUploadJob job) async {
+    Future<bool> usable(String path) async {
+      if (path.trim().isEmpty) return false;
+      final f = File(path);
+      return await f.exists() && await f.length() > 0;
+    }
+
+    final path = job.localFilePath.trim().replaceAll('\\', '/');
+    if (path.isNotEmpty) {
+      final dot = path.lastIndexOf('.');
+      final slash = path.lastIndexOf('/');
+      final candidates = <String>[
+        if (dot > slash) '${path.substring(0, dot)}.m4a',
+        if (dot > slash) '${path.substring(0, dot)}.wav',
+        '${path}_compressed.m4a',
+      ];
+      for (final candidate in candidates) {
+        if (candidate != path && await usable(candidate)) return candidate;
+      }
+    }
+
+    if (job.meetingId > 0) {
+      try {
+        final docs = await getApplicationDocumentsDirectory();
+        final dir = Directory('${docs.path}/meeting_uploads');
+        if (await dir.exists()) {
+          String? best;
+          var bestSize = 0;
+          await for (final entity in dir.list(followLinks: false)) {
+            if (entity is! File) continue;
+            final name = entity.path.replaceAll('\\', '/').split('/').last;
+            if (!name.startsWith('meeting_${job.meetingId}_')) continue;
+            final size = await entity.length();
+            if (size > bestSize) {
+              best = entity.path;
+              bestSize = size;
+            }
+          }
+          if (best != null) return best;
+        }
+      } catch (_) {}
+    }
+
+    final source = job.sourceFilePath.trim();
+    if (await usable(source)) {
+      try {
+        return await _persistLocalCopy(
+          meetingId: job.meetingId > 0 ? job.meetingId : 0,
+          sourcePath: source,
+          move: false,
+        );
+      } catch (_) {
+        return source;
+      }
+    }
+    return null;
   }
 
   Future<void> _moveFile(String sourcePath, String destPath) async {

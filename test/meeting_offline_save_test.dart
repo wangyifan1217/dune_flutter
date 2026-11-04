@@ -46,4 +46,25 @@ void main() {
     expect(restored.error, '网络不可用，已保存在本机');
     expect(restored.copyWith(meetingId: 9).meetingId, 9);
   });
+
+  test('original recording path survives the upload queue', () {
+    const job = MeetingUploadJob(
+      meetingId: 12,
+      userId: 0,
+      localFilePath: '/docs/meeting_uploads/meeting_12_1.m4a',
+      sourceFilePath: '/files/voice_recordings/voice-1.m4a',
+      title: '周会',
+      meetingDate: '2026-11-04',
+      generate: true,
+      createdAtMs: 1,
+      recordingDurationSeconds: 60,
+    );
+
+    final restored = MeetingUploadJob.fromJson(job.toJson());
+    expect(restored.sourceFilePath, '/files/voice_recordings/voice-1.m4a');
+    final owned = restored.copyWith(userId: 7);
+    expect(owned.userId, 7);
+    expect(owned.sourceFilePath, '/files/voice_recordings/voice-1.m4a');
+    expect(owned.recordingDurationSeconds, 60);
+  });
 }

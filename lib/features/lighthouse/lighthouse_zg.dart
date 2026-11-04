@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -9,6 +10,9 @@ import 'lighthouse_business_finance.dart';
 import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
 import 'lighthouse_visibility_sheet.dart';
+
+part 'lighthouse_fund_flow.dart';
+part 'lighthouse_fund_plan.dart';
 
 // ════════════════════════════════════════════════════════════════════════
 // 资管（2026-11-02 重做 · v2 对齐灯塔账本字阶）
@@ -958,19 +962,56 @@ class LighthouseZgHubPage extends StatefulWidget {
   State<LighthouseZgHubPage> createState() => _ZgHubState();
 }
 
-class _ZgHubState extends State<LighthouseZgHubPage> {
+class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMixin {
   LhBfSummary? _bf;
   String? _bfError;
   bool _bfLoading = true;
+  List<LhBfPoint> _bfSeries = const [];
   LhLedger? _bills;
   String? _billError;
   bool _billLoading = true;
+  LhFundPlan? _plan;
+  String? _planError;
+  bool _planLoading = true;
+  LhFlowCategory? _flow;
+  String? _flowError;
+  bool _flowLoading = true;
+  LhTransfer? _transfer;
+
+  /// 入场：圆环画出来、指针转到今天、卡片依次浮现。
+  late final AnimationController _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800));
+
+  /// 秒针：一分钟一圈，表示数据是活的。
+  late final AnimationController _sweep = AnimationController(vsync: this, duration: const Duration(seconds: 60));
 
   @override
   void initState() {
     super.initState();
     unawaited(_fetchBf());
     unawaited(_fetchBills());
+    unawaited(_fetchPlan());
+    unawaited(_fetchFlow());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+        _intro.value = 1;
+      } else {
+        unawaited(_intro.forward());
+        unawaited(_sweep.repeat());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _intro.dispose();
+    _sweep.dispose();
+    super.dispose();
+  }
+
+  String get _monthParam {
+    final now = DateTime.now();
+    return _fpMonthParam(DateTime(now.year, now.month));
   }
 
   Future<void> _fetchBf() async {
@@ -988,12 +1029,27 @@ class _ZgHubState extends State<LighthouseZgHubPage> {
         _bfError = e.forbidden ? '暂无权限' : e.message;
         _bfLoading = false;
       });
+      return;
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _bfError = '$e'.replaceFirst('Exception: ', '');
         _bfLoading = false;
       });
+      return;
+    }
+    try {
+      final data = await widget.service.fetchBusinessFinanceSeries(days: 14);
+      final raw = data['points'];
+      final pts = <LhBfPoint>[
+        if (raw is List)
+          for (final p in raw)
+            if (p is Map) LhBfPoint.from(p),
+      ];
+      if (!mounted) return;
+      setState(() => _bfSeries = pts);
+    } catch (_) {
+      // 走势只是装饰，拿不到就不画。
     }
   }
 
@@ -1015,241 +1071,947 @@ class _ZgHubState extends State<LighthouseZgHubPage> {
     }
   }
 
+  Future<void> _fetchPlan() async {
+    try {
+      final data = await widget.service.fetchFundPlan(planMonth: _monthParam);
+      if (!mounted) return;
+      setState(() {
+        _plan = LhFundPlan.fromJson(data);
+        _planError = null;
+        _planLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _planError = '$e'.replaceFirst('Exception: ', '');
+        _planLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchFlow() async {
+    try {
+      final results = await Future.wait([
+        widget.service.fetchFlowCategory(period: _monthParam),
+        widget.service.fetchFundTransfer(yearMonth: _monthParam).catchError((Object _) => <String, dynamic>{}),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _flow = LhFlowCategory.fromJson(results[0]);
+        _transfer = results[1].isEmpty ? null : LhTransfer.fromJson(results[1]);
+        _flowError = null;
+        _flowLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _flowError = '$e'.replaceFirst('Exception: ', '');
+        _flowLoading = false;
+      });
+    }
+  }
+
   Future<void> _refresh() async {
-    await Future.wait([_fetchBf(), _fetchBills()]);
+    await Future.wait([_fetchBf(), _fetchBills(), _fetchPlan(), _fetchFlow()]);
   }
 
-  void _openBf() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'lighthouse/zg/bf'),
-        builder: (_) => LighthouseBfLinkedPage(service: widget.service, session: widget.session),
-      ),
-    );
+  void _push(String name, Widget page) {
+    Navigator.of(context).push(MaterialPageRoute<void>(settings: RouteSettings(name: name), builder: (_) => page));
   }
 
-  void _openBills() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'lighthouse/zg/bills'),
-        builder: (_) => LighthouseLedgerPage(service: widget.service, session: widget.session, initial: _bills),
-      ),
-    );
-  }
-
-  Widget _hint(BuildContext context, String text) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 14),
-    child: Text(text, style: _sans(context, size: 11.5, color: _kInk2)),
+  void _openBf() => _push('lighthouse/zg/bf', LighthouseBfLinkedPage(service: widget.service, session: widget.session));
+  void _openBills() =>
+      _push('lighthouse/zg/bills', LighthouseLedgerPage(service: widget.service, session: widget.session, initial: _bills));
+  void _openPlan() =>
+      _push('lighthouse/zg/fund-plan', LighthouseFundPlanPage(service: widget.service, session: widget.session, initial: _plan));
+  void _openFlow() => _push(
+    'lighthouse/zg/fund-flow',
+    LighthouseFundFlowPage(service: widget.service, session: widget.session, initialMonth: _flow, initialTransfer: _transfer),
   );
 
-  Widget _bfBody(BuildContext context) {
-    if (_bfLoading && _bf == null) return _hint(context, '加载中…');
-    final t = _bf?.total;
-    if (_bf == null) return _hint(context, _bfError ?? '暂无数据');
-    if (t == null) return _hint(context, '当日暂无快照');
-    final d = t.difference['assetPrincipal'];
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: _panel(context, [
-            _cell(context, label: '业务资产', value: lhBfWan(t.business['assetPrincipal']), color: _kPurple),
-            _cell(context, label: '电子券销售额', value: lhBfWan(t.business['salesAmount']), color: _kPurple),
-          ], title: '业务', titleColor: _kPurple),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _panel(context, [
-            _cell(
-              context,
-              label: '财务资产',
-              value: lhBfWan(t.finance['assetPrincipal']),
-              color: _kFin,
-              badge: '差 ${_signedWan(d)}',
-              badgeColor: _diffColor(d),
-            ),
-            _cell(
-              context,
-              label: '销售回款',
-              value: lhBfWan(t.finance['salesAmount']),
-              color: _kFin,
-              badge: '差 ${_signedWan(t.difference['salesAmount'])}',
-              badgeColor: _diffColor(t.difference['salesAmount']),
-            ),
-          ], tint: _kFin, title: '财务', titleColor: _kFin),
-        ),
-      ],
-    );
-  }
-
-  Widget _billBody(BuildContext context) {
-    if (_billLoading && _bills == null) return _hint(context, '加载中…');
-    final b = _bills;
-    if (b == null) return _hint(context, _billError ?? '暂无数据');
-    if (b.restricted) return _hint(context, '暂无权限');
-    if (b.unavailable) return _hint(context, '资管接口未配置');
-    Widget cell(String code) {
-      final m = _kDimMeta[code]!;
-      final d = b.dim(code);
-      return _cell(
-        context,
-        label: m.title,
-        value: d == null ? '—' : lhBfWan(d.diffAmount),
-        color: (d?.diffAmount ?? 0) < 0 ? LhColors.pos : _kInk,
-        badge: d == null ? null : '逾期 ${lhBfWan(d.overdueAmount)}',
-        badgeColor: _kCopper,
-      );
-    }
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: _panel(context, [cell('CHANNEL'), cell('SUPPLY')], title: '应收', titleColor: _kCopper)),
-        const SizedBox(width: 8),
-        Expanded(child: _panel(context, [cell('PREPAID'), cell('PAYABLE')], tint: _kFin, title: '预收与应付', titleColor: _kFin)),
-      ],
-    );
-  }
-
-  Widget _entry(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String chip,
-    required String subtitle,
-    required Widget body,
-    required String foot,
-    required VoidCallback onTap,
-    required String module,
-    required VoidCallback onVisibility,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-          decoration: _cardDeco(context),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _sectionHead(
-                context,
-                icon: icon,
-                title: title,
-                chip: chip.isEmpty ? null : chip,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _visButton(context, widget.service, module, onVisibility),
-                    const SizedBox(width: 8),
-                    Text('进入', style: _sans(context, size: 11, weight: FontWeight.w600, color: _kPurple)),
-                    Icon(Icons.chevron_right_rounded, size: 16, color: _fg(context, _kPurple)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.only(left: 30),
-                child: Text(subtitle, style: _sans(context, size: 10.5, color: _kInk2)),
-              ),
-              const SizedBox(height: 10),
-              body,
-              const SizedBox(height: 8),
-              Text(foot, style: _sans(context, size: 10, color: _kMute)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  bool get _bfForbidden => _bf == null && _bfError == '暂无权限';
-  bool get _billForbidden => _bills == null && (_billError ?? '').contains('暂无权限') || (_bills?.restricted ?? false);
-
   void _visibility(String module, String title) {
-    unawaited(
-      _openVisibility(context, service: widget.service, session: widget.session, module: module, title: title),
-    );
+    unawaited(_openVisibility(context, service: widget.service, session: widget.session, module: module, title: title));
   }
+
+  bool _forbidden(String? error, bool restricted) => restricted || (error ?? '').contains('暂无权限');
+  bool get _bfForbidden => _bf == null && _bfError == '暂无权限';
+  bool get _billForbidden => _forbidden(_bills == null ? _billError : null, _bills?.restricted ?? false);
+  bool get _planForbidden => _forbidden(_plan == null ? _planError : null, _plan?.restricted ?? false);
+  bool get _flowForbidden => _forbidden(_flow == null ? _flowError : null, _flow?.restricted ?? false);
+
+  // ── 指标（时钟四环 + 板块卡共用）────────────────────────────────────────
+
+  /// 时间进度：今天是本月第几天 / 本月天数。
+  double get _timeProgress {
+    final now = DateTime.now();
+    return now.day / DateTime(now.year, now.month + 1, 0).day;
+  }
+
+  /// 业财资产重合率 = 小的一边 ÷ 大的一边。
+  double? get _overlap {
+    final t = _bf?.total;
+    final b = t?.business['assetPrincipal'];
+    final f = t?.finance['assetPrincipal'];
+    if (b == null || f == null || b <= 0 || f <= 0) return null;
+    return math.min(b, f) / math.max(b, f);
+  }
+
+  double? get _assetDiff => _bf?.total?.difference['assetPrincipal'];
+
+  /// 渠道应收逾期占比（只看渠道应收，四个口径不相加）。
+  double? _overdueShare(String code) => _bills?.dim(code)?.overdueShare;
+
+  /// 计划已建、但回款和付款一笔都没填（资管返回的合计是 0 或空）。
+  bool _planEmpty(LhFundPlan p) => (p.inPlan ?? 0).abs() < 0.5 && (p.outPlan ?? 0).abs() < 0.5;
+
+  /// 接口错误转成人话：503 = 资管那边没取到，不是这边坏了。
+  String _errText(String? e, String fallback) {
+    final t = (e ?? '').trim();
+    if (t.isEmpty) return fallback;
+    if (t.contains('HTTP 503')) return '资管接口暂时没取到，下拉刷新重试';
+    if (t.contains('HTTP 404')) return '后端还没有这个接口，需要重建灯塔服务';
+    if (t.contains('超时')) return '资管接口响应超时，下拉刷新重试';
+    return t;
+  }
+
+  double? get _planInProgress {
+    final p = _plan;
+    if (p == null || !p.exists || p.inKindPlan <= 0) return null;
+    return p.inKindActual / p.inKindPlan;
+  }
+
+  double? get _flowCoverage => _flow != null && _flow!.generated ? _flow!.coverage : null;
+
+  /// 「要看」的规则（待许总确认阈值）：重合 < 80%、渠道应收逾期 > 50%、
+  /// 回款进度落后时间 10 个点以上、本月流入覆盖不了流出的 80%。
+  List<String> get _alerts => [
+    if ((_overlap ?? 1) < 0.8) 'bf',
+    if ((_overdueShare('CHANNEL') ?? 0) > 0.5) 'bills',
+    if (_planInProgress != null && _planInProgress! < _timeProgress - 0.1) 'plan',
+    if (_flowCoverage != null && _flowCoverage! < 0.8) 'flow',
+  ];
+
+  // ── 布局 ───────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final bf = _bf;
-    final bills = _bills;
-    final bfChip = bf == null || bf.asOfDate.isEmpty ? '' : lhBfShortDate(bf.asOfDate);
-    final billChip = bills == null || bills.asOf.isEmpty ? '' : lhBfShortDate(bills.asOf);
-    final bfFoot = bf == null || bf.rowsRestricted
-        ? '单位：万元'
-        : '${bf.rows.length} 个主体 · 余额截至当日，发生额 1 月 1 日起累计 · 单位：万元';
-    final billAsOf = DateTime.tryParse(bills?.asOf ?? '');
-    final billFoot = billAsOf == null
-        ? '当前未结 · 账期结束日后第 ${(bills?.graceDays ?? 15) + 1} 天起逾期 · 单位：万元'
-        : '当前未结 · 账期截至 ${_mdDate(_overdueCutoff(billAsOf, bills!.graceDays), billAsOf)} 及以前的已逾期 · 单位：万元';
-    final cards = <Widget>[
-      // 没有板块权限的人不出入口（许正阳在「谁能看到」里开关）。
-      if (!_bfForbidden)
-        _entry(
-          context,
-          icon: Icons.view_column_outlined,
-          title: '业财对照',
-          chip: bfChip,
-          subtitle: '业务数据与财务数据按指标对照，选中指标显示业财差额',
-          body: _bfBody(context),
-          foot: bfFoot,
-          onTap: _openBf,
-          module: 'business_finance',
-          onVisibility: () => _visibility('business_finance', '资管 · 业财对照'),
-        ),
-      if (!_billForbidden)
-        _entry(
-          context,
-          icon: Icons.swap_horiz_rounded,
-          title: '未结往来',
-          chip: billChip,
-          subtitle: '渠道应收、供给应收、渠道预收、渠道应付的未结差额与逾期',
-          body: _billBody(context),
-          foot: billFoot,
-          onTap: _openBills,
-          module: 'bills',
-          onVisibility: () => _visibility('bills', '资管 · 未结往来'),
-        ),
+    final tiles = <Widget>[
+      if (!_bfForbidden) _bfTile(context),
+      if (!_billForbidden) _billTile(context),
+      if (!_planForbidden) _planTile(context),
+      if (!_flowForbidden) _flowTile(context),
     ];
-    return _scaffold(
-      context,
-      onRefresh: _refresh,
-      header: widget.embedded ? const SizedBox(height: 8) : _switchHeader(context),
-      children: [
-        if (cards.isEmpty) _statusBox(context, '暂无资管板块权限'),
-        for (var i = 0; i < cards.length; i++) ...[
-          if (i > 0) const SizedBox(height: 10),
-          cards[i],
-        ],
-        if (widget.onOpenLegacy != null) ...[
-          const SizedBox(height: 10),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: widget.onOpenLegacy,
-              child: Container(
-                height: 44,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: _cardDeco(context),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text('主体明细与净TA', style: _sans(context, size: 12.5, weight: FontWeight.w600)),
+    final rows = <Widget>[];
+    for (var i = 0; i < tiles.length; i += 2) {
+      if (i > 0) rows.add(const SizedBox(height: 10));
+      rows.add(
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _fadeIn(0.25 + i * 0.05, tiles[i])),
+              const SizedBox(width: 10),
+              Expanded(child: i + 1 < tiles.length ? _fadeIn(0.3 + i * 0.05, tiles[i + 1]) : const SizedBox.shrink()),
+            ],
+          ),
+        ),
+      );
+    }
+    final allForbidden = tiles.isEmpty;
+    return Scaffold(
+      backgroundColor: _bg(context, const Color(0xFFF6F4F9)),
+      body: Stack(
+        children: [
+          ..._glows(context),
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(0, 0, 0, dunesAppBottomNavContentPadding(context, fallback: 32)),
+                children: [
+                  if (widget.embedded) const SizedBox(height: 8) else _switchHeader(context),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 720),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (allForbidden)
+                              _statusBox(context, '暂无资管板块权限')
+                            else ...[
+                              _clockCard(context),
+                              const SizedBox(height: 14),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+                                child: Row(
+                                  children: [
+                                    Text('板块', style: _sans(context, size: 13, weight: FontWeight.w700)),
+                                    const Spacer(),
+                                    Text('余额截至当日 · 单位：万元', style: _sans(context, size: 10, color: _kMute)),
+                                  ],
+                                ),
+                              ),
+                              ...rows,
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
-                    Icon(Icons.chevron_right_rounded, size: 18, color: _fg(context, _kMute)),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 背景柔光：卡片半透明，透出底下的颜色。
+  List<Widget> _glows(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    if (dark) return const [];
+    Widget glow(double? left, double? right, double top, double size, Color c) => Positioned(
+      left: left,
+      right: right,
+      top: top,
+      child: IgnorePointer(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(colors: [c.withValues(alpha: 0.55), c.withValues(alpha: 0)]),
+          ),
+        ),
+      ),
+    );
+    return [
+      glow(-80, null, 40, 320, const Color(0xFFE4DAFB)),
+      glow(null, -90, 220, 300, const Color(0xFFFBE1D6)),
+      glow(60, null, 600, 320, const Color(0xFFDCEAF7)),
+    ];
+  }
+
+  Widget _fadeIn(double start, Widget child) {
+    final anim = CurvedAnimation(parent: _intro, curve: Interval(start.clamp(0.0, 0.9), (start + 0.35).clamp(0.1, 1.0), curve: Curves.easeOut));
+    return AnimatedBuilder(
+      animation: anim,
+      builder: (context, c) => Opacity(
+        opacity: anim.value,
+        child: Transform.translate(offset: Offset(0, 8 * (1 - anim.value)), child: c),
+      ),
+      child: child,
+    );
+  }
+
+  BoxDecoration _glass(BuildContext context, {double radius = 16, bool dashed = false}) => BoxDecoration(
+    color: _bg(context, Colors.white).withValues(alpha: dashed ? 0.45 : 0.72),
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: _bg(context, Colors.white).withValues(alpha: 0.95), width: 1),
+    boxShadow: [BoxShadow(color: const Color(0xFF3C2878).withValues(alpha: 0.07), blurRadius: 24, offset: const Offset(0, 8))],
+  );
+
+  // ── 资管时钟 ───────────────────────────────────────────────────────────
+
+  Widget _clockCard(BuildContext context) {
+    final now = DateTime.now();
+    final days = DateTime(now.year, now.month + 1, 0).day;
+    final alerts = _alerts;
+    final bfAt = _bf?.fetchedAt;
+    final rings = <_ClockRing>[
+      _ClockRing(_overlap, const Color(0xFFA48DEB)),
+      _ClockRing(_overdueShare('CHANNEL'), const Color(0xFFE2A45E)),
+      _ClockRing(_planInProgress, const Color(0xFF72A6D4)),
+      _ClockRing(_flowCoverage == null ? null : math.min(_flowCoverage!, 1), const Color(0xFFE8968C)),
+    ];
+    String pct(double? v) => v == null ? '—' : '${(v * 100).round()}%';
+    final legend = <Widget>[
+      _legendCell(
+        context,
+        const Color(0xFFA48DEB),
+        '业财 · 资产重合',
+        pct(_overlap),
+        _assetDiff == null ? (_bfLoading ? '加载中' : '—') : '差 ${_swu(_assetDiff)}',
+        alert: alerts.contains('bf'),
+        onTap: _bfForbidden ? null : _openBf,
+      ),
+      _legendCell(
+        context,
+        const Color(0xFFE2A45E),
+        '未结 · 渠道应收逾期',
+        pct(_overdueShare('CHANNEL')),
+        _bills?.dim('CHANNEL') == null ? (_billLoading ? '加载中' : (_billError != null ? '没取到' : '—')) : '${lhBfWan(_bills!.dim('CHANNEL')!.overdueAmount)} 万',
+        alert: alerts.contains('bills'),
+        onTap: _billForbidden ? null : _openBills,
+      ),
+      _legendCell(
+        context,
+        const Color(0xFF72A6D4),
+        '计划 · 回款进度',
+        pct(_planInProgress),
+        _planInProgress == null
+            ? (_planLoading
+                  ? '加载中'
+                  : (_plan?.exists == false ? '本月未建计划' : (_plan != null && _planEmpty(_plan!) ? '计划金额未填' : '—')))
+            : '${_planInProgress! >= _timeProgress ? '快于' : '慢于'}时间 ${(_timeProgress * 100).round()}%',
+        alert: alerts.contains('plan'),
+        onTap: _planForbidden ? null : _openPlan,
+      ),
+      _legendCell(
+        context,
+        const Color(0xFFE8968C),
+        '流水 · 流入覆盖流出',
+        pct(_flowCoverage),
+        _flow == null ? (_flowLoading ? '加载中' : '—') : (_flow!.generated ? '净 ${_swu(_flow!.net)}' : '本月未生成快照'),
+        alert: alerts.contains('flow'),
+        onTap: _flowForbidden ? null : _openFlow,
+      ),
+    ];
+    return _fadeIn(
+      0,
+      Container(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+        decoration: _glass(context, radius: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(color: _fg(context, _kPurple).withValues(alpha: 0.10), shape: BoxShape.circle),
+                  child: Icon(Icons.schedule_rounded, size: 16, color: _fg(context, _kPurple)),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('资管时钟', style: _sans(context, size: 13.5, weight: FontWeight.w700)),
+                      Text(
+                        '${now.month} 月走到第 ${now.day} 天'
+                        '${bfAt == null ? '' : ' · ${bfAt.hour.toString().padLeft(2, '0')}:${bfAt.minute.toString().padLeft(2, '0')} 落表'}',
+                        style: _sans(context, size: 10.5, color: _kInk2),
+                      ),
+                    ],
+                  ),
+                ),
+                if (alerts.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(color: _fg(context, LhColors.neg).withValues(alpha: 0.08), borderRadius: BorderRadius.circular(999)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _PulseDot(color: _fg(context, LhColors.neg), controller: _sweep),
+                        const SizedBox(width: 6),
+                        Text('要看 ${alerts.length} 项', style: _sans(context, size: 10.5, weight: FontWeight.w600, color: LhColors.neg)),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: SizedBox(
+                width: 236,
+                height: 236,
+                child: AnimatedBuilder(
+                  animation: Listenable.merge([_intro, _sweep]),
+                  builder: (context, _) => CustomPaint(
+                    painter: _ClockPainter(
+                      rings: rings,
+                      days: days,
+                      today: now.day,
+                      intro: Curves.easeOutCubic.transform(_intro.value),
+                      sweep: _sweep.value,
+                      ink: _fg(context, const Color(0xFF2B2147)),
+                      faint: _fg(context, const Color(0xFFC9C4D6)),
+                      accent: _fg(context, LhColors.neg),
+                      face: _bg(context, Colors.white),
+                      tickLabel: _mono(context, size: 8.5, weight: FontWeight.w600, color: _kMute),
+                      dateLabel: _mono(context, size: 15, weight: FontWeight.w700, color: const Color(0xFF2B2147)),
+                      subLabel: _sans(context, size: 9.5, color: _kInk2),
+                      date: _fpMd(now),
+                      sub: '第 ${now.day} 天 / $days',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [Expanded(child: legend[0]), const SizedBox(width: 6), Expanded(child: legend[1])],
+              ),
+            ),
+            const SizedBox(height: 6),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [Expanded(child: legend[2]), const SizedBox(width: 6), Expanded(child: legend[3])],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _legendCell(
+    BuildContext context,
+    Color c,
+    String title,
+    String value,
+    String sub, {
+    bool alert = false,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+        decoration: BoxDecoration(
+          color: _bg(context, Colors.white).withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: alert ? _fg(context, LhColors.neg).withValues(alpha: 0.35) : _ln(context, _kLine), width: 0.8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(width: 12, height: 4, decoration: BoxDecoration(color: _fg(context, c), borderRadius: BorderRadius.circular(2))),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10, color: _kInk2)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(value, style: _mono(context, size: 15, weight: FontWeight.w700, color: const Color(0xFF2B2147))),
+            const SizedBox(height: 2),
+            Text(
+              sub,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _mono(context, size: 9.5, color: alert ? LhColors.neg : _kInk2),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 板块卡（两列）──────────────────────────────────────────────────────
+
+  Widget _tile(
+    BuildContext context, {
+    required IconData icon,
+    required Color tint,
+    required String title,
+    String? module,
+    String? moduleTitle,
+    String? badge,
+    required String label,
+    required Widget value,
+    Widget? visual,
+    String? foot,
+    VoidCallback? onTap,
+    bool muted = false,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        constraints: const BoxConstraints(minHeight: 150),
+        decoration: _glass(context, dashed: muted),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(color: _fg(context, tint).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                  child: Icon(icon, size: 14, color: _fg(context, tint)),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 13, weight: FontWeight.w700)),
+                ),
+                if (badge != null) _tag(context, badge, tint, _kLavender),
+                if (module != null)
+                  _visButton(context, widget.service, module, () => _visibility(module, moduleTitle ?? title)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10.5, color: _kInk2)),
+            const SizedBox(height: 4),
+            value,
+            if (visual != null) ...[const SizedBox(height: 8), visual],
+            const Spacer(),
+            if (foot != null) ...[
+              const SizedBox(height: 6),
+              Text(foot, maxLines: 2, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10, color: _kMute, height: 1.4)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _big(BuildContext context, String text, {Color color = const Color(0xFF2B2147)}) => _amount(context, text, color: color, size: 20);
+
+  Widget _hintText(BuildContext context, String text) =>
+      Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: _sans(context, size: 11, color: _kInk2));
+
+  Widget _bfTile(BuildContext context) {
+    final diff = _assetDiff;
+    final pts = _bfSeries.where((p) => p.hasData && p.values['assetDiff'] != null).toList();
+    Widget value;
+    if (_bfLoading && _bf == null) {
+      value = _hintText(context, '加载中…');
+    } else if (_bf == null || _bf!.total == null) {
+      value = _hintText(context, _bf == null ? _errText(_bfError, '暂无数据') : '当日暂无快照');
+    } else {
+      value = _big(context, _signedWan(diff), color: (diff ?? 0) > 0 ? LhColors.neg : const Color(0xFF2B2147));
+    }
+    return _tile(
+      context,
+      icon: Icons.view_column_outlined,
+      tint: _kPurple,
+      title: '业财对照',
+      module: 'business_finance',
+      moduleTitle: '资管 · 业财对照',
+      label: pts.length >= 2 ? '业务减财务 · 近 ${pts.length} 天' : '业务资产减财务资产',
+      value: value,
+      visual: pts.length >= 2
+          ? SizedBox(
+              height: 34,
+              child: AnimatedBuilder(
+                animation: _intro,
+                builder: (context, _) => CustomPaint(
+                  painter: _SparkPainter(
+                    values: [for (final p in pts) p.values['assetDiff']!],
+                    color: _fg(context, LhColors.neg),
+                    t: Curves.easeOut.transform(((_intro.value - 0.3) / 0.7).clamp(0.0, 1.0)),
+                  ),
+                ),
+              ),
+            )
+          : null,
+      foot: _overlap == null ? null : '重合 ${(_overlap! * 100).round()}% · ${_bf?.rows.length ?? 0} 个主体',
+      onTap: _openBf,
+    );
+  }
+
+  Widget _shareBar(BuildContext context, String label, double? share, Color c) {
+    return Row(
+      children: [
+        SizedBox(width: 26, child: Text(label, style: _sans(context, size: 10, color: _kInk2))),
+        Expanded(
+          child: AnimatedBuilder(
+            animation: _intro,
+            builder: (context, _) {
+              final t = Curves.easeOutCubic.transform(((_intro.value - 0.35) / 0.65).clamp(0.0, 1.0));
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  value: (share ?? 0) * t,
+                  minHeight: 5,
+                  backgroundColor: _fg(context, c).withValues(alpha: 0.16),
+                  valueColor: AlwaysStoppedAnimation(_fg(context, c)),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 6),
+        SizedBox(
+          width: 34,
+          child: Text(
+            share == null ? '—' : '${(share * 100).round()}%',
+            textAlign: TextAlign.right,
+            style: _mono(context, size: 10, weight: FontWeight.w700, color: c),
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _billTile(BuildContext context) {
+    final b = _bills;
+    final ch = b?.dim('CHANNEL');
+    Widget value;
+    if (_billLoading && b == null) {
+      value = _hintText(context, '加载中…');
+    } else if (b == null) {
+      value = _hintText(context, _errText(_billError, '暂无数据'));
+    } else if (b.unavailable) {
+      value = _hintText(context, '资管接口未配置');
+    } else {
+      value = _big(context, ch == null ? '—' : lhBfWan(ch.diffAmount));
+    }
+    final asOf = DateTime.tryParse(b?.asOf ?? '');
+    return _tile(
+      context,
+      icon: Icons.swap_horiz_rounded,
+      tint: _kCopper,
+      title: '未结往来',
+      module: 'bills',
+      moduleTitle: '资管 · 未结往来',
+      label: '渠道应收',
+      value: value,
+      visual: b == null || b.unavailable
+          ? null
+          : Column(
+              children: [
+                _shareBar(context, '应收', _overdueShare('CHANNEL'), const Color(0xFFE2A45E)),
+                const SizedBox(height: 5),
+                _shareBar(context, '应付', _overdueShare('PAYABLE'), const Color(0xFF72A6D4)),
+              ],
+            ),
+      foot: asOf == null ? '条 = 逾期占比' : '条 = 逾期占比 · 账期 ≤ ${_mdDate(_overdueCutoff(asOf, b!.graceDays), asOf)}',
+      onTap: _openBills,
+    );
+  }
+
+  Widget _planTile(BuildContext context) {
+    final p = _plan;
+    Widget value;
+    Widget? visual;
+    if (_planLoading && p == null) {
+      value = _hintText(context, '加载中…');
+    } else if (p == null) {
+      value = _hintText(context, _errText(_planError, '暂无数据'));
+    } else if (p.unavailable) {
+      value = _hintText(context, '资管接口未配置');
+    } else if (!p.exists) {
+      value = _hintText(context, '本月还没有建资金计划');
+    } else if (_planEmpty(p)) {
+      value = _hintText(context, '计划已建，回款 / 付款金额还没填');
+    } else {
+      value = _big(context, _signedWan(p.net), color: (p.net ?? 0) < 0 ? _kFpOut : const Color(0xFF2B2147));
+      final inR = p.inKindPlan > 0 ? p.inKindActual / p.inKindPlan : null;
+      final outR = p.outKindPlan > 0 ? p.outKindActual / p.outKindPlan : null;
+      visual = Column(
+        children: [
+          _shareBar(context, '回款', inR == null ? null : math.min(inR, 1), const Color(0xFF72A6D4)),
+          const SizedBox(height: 5),
+          _shareBar(context, '付款', outR == null ? null : math.min(outR, 1), _kFpOut),
+        ],
+      );
+    }
+    return _tile(
+      context,
+      icon: Icons.event_note_outlined,
+      tint: const Color(0xFF3B6E96),
+      title: '资金计划',
+      module: 'fund_plan',
+      moduleTitle: '资管 · 资金计划',
+      badge: p?.exists == true && p!.statusLabel.isNotEmpty ? p.statusLabel : null,
+      label: '计划净流入',
+      value: value,
+      visual: visual,
+      foot: p?.exists == true ? '时间进度 ${(_timeProgress * 100).round()}%${p!.fixture ? ' · 样例数据' : ''}' : null,
+      onTap: _openPlan,
+    );
+  }
+
+  Widget _flowTile(BuildContext context) {
+    final f = _flow;
+    Widget value;
+    Widget? visual;
+    if (_flowLoading && f == null) {
+      value = _hintText(context, '加载中…');
+    } else if (f == null) {
+      value = _hintText(context, _errText(_flowError, '暂无数据'));
+    } else if (f.unavailable) {
+      value = _hintText(context, '资管接口未配置');
+    } else if (!f.generated) {
+      value = _hintText(context, '本月还没有生成快照');
+    } else {
+      value = _big(context, _signedWan(f.net), color: f.net < 0 ? _kFpOut : const Color(0xFF2B2147));
+      final total = f.inflow + f.outflow;
+      visual = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AnimatedBuilder(
+            animation: _intro,
+            builder: (context, _) {
+              final t = Curves.easeOutCubic.transform(((_intro.value - 0.4) / 0.6).clamp(0.0, 1.0));
+              final inFlex = total <= 0 ? 1 : math.max(1, (f.inflow / total * 1000).round());
+              final outFlex = total <= 0 ? 1 : math.max(1, (f.outflow / total * 1000).round());
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: math.max(t, 0.001),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: SizedBox(
+                      height: 8,
+                      child: Row(
+                        children: [
+                          Expanded(flex: inFlex, child: Container(color: _fg(context, _kFlIn))),
+                          const SizedBox(width: 2),
+                          Expanded(flex: outFlex, child: Container(color: _fg(context, _kFlOut))),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 5),
+          Row(
+            children: [
+              Text('流入 ${_wu(f.inflow)}', style: _mono(context, size: 9.5, color: _kInk2)),
+              const Spacer(),
+              Text('流出 ${_wu(f.outflow)}', style: _mono(context, size: 9.5, color: _kInk2)),
+            ],
+          ),
+        ],
+      );
+    }
+    final share = _transfer?.crossShare;
+    return _tile(
+      context,
+      icon: Icons.waves_rounded,
+      tint: const Color(0xFF9C82E6),
+      title: '资金流水',
+      module: 'fund_flow',
+      moduleTitle: '资管 · 资金流水',
+      label: '本月净流入',
+      value: value,
+      visual: visual,
+      foot: [
+        if (share != null) '跨板块调动 ${(share * 100).toStringAsFixed(1)}%',
+        if (f?.fixture == true) '样例数据',
+      ].join(' · '),
+      onTap: _openFlow,
+    );
+  }
+}
+
+// ═════════════════════════════ 资管时钟 · 画法 ═════════════════════════════
+
+class _ClockRing {
+  const _ClockRing(this.value, this.color);
+
+  /// 0–1；null = 没数，只画底环。
+  final double? value;
+  final Color color;
+}
+
+/// 表盘 = 本月天数（每天一格，五天一长格），指针 = 今天；四个环由外到内。
+class _ClockPainter extends CustomPainter {
+  _ClockPainter({
+    required this.rings,
+    required this.days,
+    required this.today,
+    required this.intro,
+    required this.sweep,
+    required this.ink,
+    required this.faint,
+    required this.accent,
+    required this.face,
+    required this.tickLabel,
+    required this.dateLabel,
+    required this.subLabel,
+    required this.date,
+    required this.sub,
+  });
+
+  final List<_ClockRing> rings;
+  final int days;
+  final int today;
+  final double intro;
+  final double sweep;
+  final Color ink;
+  final Color faint;
+  final Color accent;
+  final Color face;
+  final TextStyle tickLabel;
+  final TextStyle dateLabel;
+  final TextStyle subLabel;
+  final String date;
+  final String sub;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.shortestSide / 2;
+    Offset at(double radius, double frac) {
+      final a = -math.pi / 2 + 2 * math.pi * frac;
+      return c + Offset(math.cos(a), math.sin(a)) * radius;
+    }
+
+    // 日刻度
+    for (var d = 0; d < days; d++) {
+      final f = d / days;
+      final major = d % 5 == 0;
+      final past = d < today;
+      canvas.drawLine(
+        at(r * 0.86, f),
+        at(major ? r * 0.93 : r * 0.9, f),
+        Paint()
+          ..color = past ? ink.withValues(alpha: 0.7) : faint
+          ..strokeWidth = major ? 1.6 : 1
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+    for (final d in <int>{0, 7, 14, 21, days - 1}) {
+      final tp = TextPainter(text: TextSpan(text: '${d + 1}', style: tickLabel), textDirection: TextDirection.ltr)..layout();
+      final p = at(r * 0.985, d / days);
+      tp.paint(canvas, p - Offset(tp.width / 2, tp.height / 2));
+    }
+
+    // 四个环
+    final stroke = r * 0.05;
+    for (var i = 0; i < rings.length; i++) {
+      final ring = rings[i];
+      final rr = r * (0.76 - i * 0.1);
+      final rect = Rect.fromCircle(center: c, radius: rr);
+      canvas.drawCircle(
+        c,
+        rr,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..color = ring.color.withValues(alpha: 0.16),
+      );
+      final v = ring.value;
+      if (v == null) continue;
+      final t = ((intro - i * 0.08) / 0.75).clamp(0.0, 1.0);
+      final sweepAngle = 2 * math.pi * v.clamp(0.0, 1.0) * t;
+      if (sweepAngle <= 0) continue;
+      canvas.drawArc(
+        rect,
+        -math.pi / 2,
+        sweepAngle,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..color = ring.color,
+      );
+    }
+
+    // 秒针（一分钟一圈）
+    canvas.drawLine(
+      c,
+      at(r * 0.84, sweep),
+      Paint()
+        ..color = const Color(0xFFA48DEB).withValues(alpha: 0.35)
+        ..strokeWidth = 1,
+    );
+
+    // 指针：今天在本月的位置
+    final handFrac = ((today - 0.5) / days) * intro;
+    final tip = at(r * 0.82, handFrac);
+    canvas.drawLine(
+      c,
+      tip,
+      Paint()
+        ..color = ink
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round,
+    );
+    final pulse = 0.5 + 0.5 * math.sin(sweep * math.pi * 2 * 20);
+    canvas.drawCircle(tip, 3.4 + pulse * 1.2, Paint()..color = accent.withValues(alpha: 0.75 + 0.25 * pulse));
+
+    // 表心
+    canvas.drawCircle(c, r * 0.27, Paint()..color = face.withValues(alpha: 0.88));
+    canvas.drawCircle(c, 2.6, Paint()..color = ink);
+    final dp = TextPainter(text: TextSpan(text: date, style: dateLabel), textDirection: TextDirection.ltr)..layout();
+    dp.paint(canvas, c - Offset(dp.width / 2, dp.height + 4));
+    final sp = TextPainter(text: TextSpan(text: sub, style: subLabel), textDirection: TextDirection.ltr)..layout();
+    sp.paint(canvas, c + Offset(-sp.width / 2, 6));
+  }
+
+  @override
+  bool shouldRepaint(covariant _ClockPainter old) =>
+      old.intro != intro || old.sweep != sweep || old.today != today || old.rings != rings || old.ink != ink;
+}
+
+/// 小走势线（业财差额），t = 画出来的进度。
+class _SparkPainter extends CustomPainter {
+  _SparkPainter({required this.values, required this.color, required this.t});
+
+  final List<double> values;
+  final Color color;
+  final double t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    final lo = values.reduce(math.min);
+    final hi = values.reduce(math.max);
+    final span = (hi - lo).abs() < 1e-6 ? 1.0 : hi - lo;
+    final pts = [
+      for (var i = 0; i < values.length; i++)
+        Offset(size.width * i / (values.length - 1), 3 + (size.height - 6) * (1 - (values[i] - lo) / span)),
+    ];
+    final line = Path()..moveTo(pts.first.dx, pts.first.dy);
+    for (var i = 1; i < pts.length; i++) {
+      final a = pts[i - 1];
+      final b = pts[i];
+      final mx = (a.dx + b.dx) / 2;
+      line.cubicTo(mx, a.dy, mx, b.dy, b.dx, b.dy);
+    }
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(0, 0, size.width * t, size.height));
+    final area = Path.from(line)
+      ..lineTo(pts.last.dx, size.height)
+      ..lineTo(pts.first.dx, size.height)
+      ..close();
+    canvas.drawPath(area, Paint()..color = color.withValues(alpha: 0.08));
+    canvas.drawPath(
+      line,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8
+        ..strokeCap = StrokeCap.round
+        ..color = color,
+    );
+    canvas.restore();
+    if (t >= 1) canvas.drawCircle(pts.last, 2.6, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SparkPainter old) => old.t != t || old.values != values || old.color != color;
+}
+
+/// 「要看」角标里的呼吸点（跟秒针同一个控制器，不另起 ticker）。
+class _PulseDot extends StatelessWidget {
+  const _PulseDot({required this.color, required this.controller});
+
+  final Color color;
+  final AnimationController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final p = 0.5 + 0.5 * math.sin(controller.value * math.pi * 2 * 30);
+        return Container(
+          width: 6 + p * 2,
+          height: 6 + p * 2,
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.45 + 0.55 * p), shape: BoxShape.circle),
+        );
+      },
     );
   }
 }
@@ -1353,6 +2115,12 @@ class _BfLinkedState extends State<LighthouseBfLinkedPage> {
   String? _error;
   bool _loading = true;
   String _group = '全部';
+
+  /// 中石油分组下的省份筛选（null = 全部省份）。
+  String? _province;
+
+  /// 供应商展开的主体行。
+  final Set<String> _supOpen = {};
 
   /// 选中的对照排（汇总卡与全部主体卡共用）。默认「业务资产 ⇄ 财务资产」。
   int _pair = 0;
@@ -1463,7 +2231,10 @@ class _BfLinkedState extends State<LighthouseBfLinkedPage> {
   }
 
   List<LhBfRow> _rows(LhBfSummary s) {
-    final list = s.rows.where((r) => _group == '全部' || r.group == _group).toList();
+    final list = s.rows
+        .where((r) => _group == '全部' || r.group == _group)
+        .where((r) => _group != '中石油' || _province == null || r.scopeLabel == _province)
+        .toList();
     list.sort((a, b) {
       if (a.isTail != b.isTail) return a.isTail ? 1 : -1;
       final da = (a.difference['assetPrincipal'] ?? 0).abs();
@@ -1750,13 +2521,102 @@ class _BfLinkedState extends State<LighthouseBfLinkedPage> {
           child: Row(
             children: [
               for (final g in groups) ...[
-                _chip(context, '$g ${count(g)}', g == _group, () => setState(() => _group = g)),
+                _chip(context, '$g ${count(g)}', g == _group, () => setState(() {
+                  _group = g;
+                  _province = null;
+                })),
                 const SizedBox(width: 6),
               ],
             ],
           ),
         ),
+        if (_group == '中石油') ...[
+          const SizedBox(height: 6),
+          _provinceChips(context, s),
+        ],
       ],
+    );
+  }
+
+  /// 中石油下第二级：按省份。数多的在前，同数按名称。
+  Widget _provinceChips(BuildContext context, LhBfSummary s) {
+    final counts = <String, int>{};
+    for (final r in s.rows.where((r) => r.group == '中石油')) {
+      counts[r.scopeLabel] = (counts[r.scopeLabel] ?? 0) + 1;
+    }
+    final names = counts.keys.toList()
+      ..sort((a, b) {
+        final c = counts[b]!.compareTo(counts[a]!);
+        return c != 0 ? c : a.compareTo(b);
+      });
+    Widget small(String text, bool on, VoidCallback onTap) => GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        height: 24,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _bg(context, on ? _kLavender : _kNeutralPanel),
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(
+          text,
+          style: _sans(context, size: 10.5, weight: on ? FontWeight.w700 : FontWeight.w500, color: on ? _kDeep : _kInk2),
+        ),
+      ),
+    );
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Text('省份', style: _sans(context, size: 10, weight: FontWeight.w600, color: _kMute)),
+          ),
+          small('全部省份', _province == null, () => setState(() => _province = null)),
+          for (final n in names) ...[
+            const SizedBox(width: 5),
+            small('$n ${counts[n]}', _province == n, () => setState(() => _province = _province == n ? null : n)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 主体卡身份第二行：供应商。多家时「A 等 n 家」，点开看全部。
+  Widget _supplierLine(BuildContext context, LhBfRow r, String key) {
+    final list = r.suppliers;
+    if (list.isEmpty) return const SizedBox.shrink();
+    final open = _supOpen.contains(key);
+    final many = list.length > 1;
+    final text = !many || open ? list.join('、') : '${list.first} 等 ${list.length} 家';
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: many
+          ? () => setState(() {
+              if (!_supOpen.remove(key)) _supOpen.add(key);
+            })
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 5),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('供应商 ', style: _sans(context, size: 9.5, weight: FontWeight.w600, color: _kInk2, height: 1.35)),
+            Expanded(
+              child: Text(
+                text,
+                maxLines: open ? 4 : 1,
+                overflow: TextOverflow.ellipsis,
+                style: _sans(context, size: 9.5, color: _kInk, height: 1.35),
+              ),
+            ),
+            if (many)
+              Icon(open ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 13, color: _fg(context, _kMute)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1789,6 +2649,10 @@ class _BfLinkedState extends State<LighthouseBfLinkedPage> {
             ),
             const SizedBox(width: 6),
             _tag(context, r.group, Colors.white, _groupColor(r.group), solid: true),
+            if (r.isSpecial ? (r.subjectKey != 'UNASSIGNED' && r.subjectKey != 'OTHER') : r.title != r.scopeLabel) ...[
+              const SizedBox(width: 4),
+              _tag(context, r.scopeLabel, _kInk2, _kGreySoft),
+            ],
             const Spacer(),
             Text(
               _overlapText(r.business['assetPrincipal'], r.finance['assetPrincipal']),
@@ -1801,8 +2665,9 @@ class _BfLinkedState extends State<LighthouseBfLinkedPage> {
             ),
           ],
         ),
+        _supplierLine(context, r, key),
         if (sub.isNotEmpty) ...[
-          const SizedBox(height: 5),
+          const SizedBox(height: 4),
           Text(
             sub,
             maxLines: 2,

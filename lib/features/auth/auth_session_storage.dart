@@ -142,8 +142,14 @@ class AuthSessionStorage {
     }
     final tmp = File('${file.path}.tmp');
     await tmp.writeAsString(raw, flush: true);
-    if (await file.exists()) await file.delete();
-    await tmp.rename(file.path);
+    // 安卓/iOS 上 rename 会原子替换旧文件。先删再改名会留下两份都不在的窗口，
+    // 进程恰好在这时被杀，下次启动就读不到登录记录。
+    try {
+      await tmp.rename(file.path);
+    } on FileSystemException {
+      if (await file.exists()) await file.delete();
+      await tmp.rename(file.path);
+    }
   }
 
   Future<void> _deleteMirror(Directory? dir) async {

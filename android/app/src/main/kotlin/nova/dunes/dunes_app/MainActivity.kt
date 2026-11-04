@@ -6,11 +6,14 @@ import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.util.Log
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.EventChannel
@@ -19,6 +22,8 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
+
+private const val RECORDER_TAG = "DunesRecorder"
 
 class MainActivity : FlutterActivity() {
     private val voiceChannel = "dunes/audio_recorder"
@@ -356,6 +361,7 @@ class MainActivity : FlutterActivity() {
     private fun startRecord(call: MethodCall, result: MethodChannel.Result) {
         try {
             stopInternal(deleteFile = true)
+            pruneOldVoiceRecordings()
             sessionTitle = call.argument<String>("title")?.trim().orEmpty()
             sessionTracking = call.argument<Boolean>("persistSession") == true
             MeetingRecordingService.start(this)
@@ -708,8 +714,15 @@ class MainActivity : FlutterActivity() {
             try {
                 val duration = stopInternal(deleteFile)
                 val path = outputPath
+                // 文件已交给 Flutter：清掉引用，避免下次 start/cancel 走 stopInternal(deleteFile = true)
+                // 时把这场会议的录音当成「当前录音」删掉。
+                outputPath = null
+                val usable = !path.isNullOrBlank() && File(path).let { it.exists() && it.length() > 0 }
+                if (!deleteFile && !path.isNullOrBlank() && !usable) {
+                    Log.w(RECORDER_TAG, "stop returned missing file path=$path")
+                }
                 mainHandler.post {
-                    if (deleteFile || path.isNullOrBlank()) {
+                    if (deleteFile || !usable) {
                         result.success(null)
                     } else {
                         result.success(
@@ -721,15 +734,141 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             } catch (e: Exception) {
-                try {
-                    stopInternal(deleteFile = true)
+                Log.e(RECORDER_TAG, "stop failed deleteFile=$deleteFile", e)
+                if (deleteFile) {
+                    try {
+                        stopInternal(deleteFile = true)
+                    } catch (_: Exception) {
+                    }
+                    mainHandler.post {
+                        result.error("AUDIO_STOP_FAILED", e.message, null)
+                    }
+                    return@Thread
+                }
+                // 结束保存出错时绝不删录音：先救回能用的文件交给 Flutter。
+                val salvaged = try {
+                    salvageAfterStopFailure()
                 } catch (_: Exception) {
+                    null
                 }
                 mainHandler.post {
-                    result.error("AUDIO_STOP_FAILED", e.message, null)
+                    if (salvaged != null) {
+                        result.success(
+                            mapOf(
+                                "path" to salvaged.first,
+                                "durationMs" to salvaged.second
+                            )
+                        )
+                    } else {
+                        result.error("AUDIO_STOP_FAILED", e.message, null)
+                    }
                 }
             }
         }, "dunes-audio-stop").start()
+    }
+
+    /** 结束后的录音不再由下一次 start 顺手删除，这里统一清掉 7 天前的旧文件。 */
+    private fun pruneOldVoiceRecordings() {
+        val cutoff = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+        val live = livePcmFile().absolutePath
+        try {
+            voiceRecordingDir().listFiles()?.forEach { f ->
+                if (f.isFile && f.absolutePath != live && f.name.startsWith("voice") &&
+                    f.lastModified() < cutoff
+                ) {
+                    deleteQuietly(f)
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    /** stop 中途异常时，从兜底 PCM 或已收尾的分段里挑一个能用的文件。 */
+    private fun salvageAfterStopFailure(): Pair<String, Long>? {
+        isRecording = false
+        isPaused = false
+        try {
+            stopAudioRecordCapture()
+        } catch (_: Exception) {
+        }
+        try {
+            releaseAudioRecordQuietly()
+        } catch (_: Exception) {
+        }
+        try {
+            releaseWakeLock()
+        } catch (_: Exception) {
+        }
+        try {
+            MeetingRecordingService.stop(this)
+        } catch (_: Exception) {
+        }
+        try {
+            crashWav?.close()
+        } catch (_: Exception) {
+        }
+        crashWav = null
+        val candidates = (segmentPaths.toList() + listOfNotNull(outputPath)).distinct()
+        segmentPaths.clear()
+        outputPath = null
+        val pcm = livePcmFile()
+        if (pcm.exists() && pcm.length() > 44 + 1024) {
+            CrashSafeWavWriter.repairHeader(pcm.absolutePath)
+            val durationMs = CrashSafeWavWriter.durationMs(pcm.absolutePath).toLong()
+            val path = detachLivePcm(pcm)
+            for (item in candidates) {
+                if (item != path) deleteQuietly(File(item))
+            }
+            clearLiveSessionFile()
+            sessionTracking = false
+            sessionTitle = ""
+            return Pair(path, durationMs)
+        }
+        val playable = candidates.filter { isPlayableAudio(it) }
+        val best = M4aSegmentMerger.largestExistingPath(playable) ?: return null
+        clearLiveSessionFile()
+        sessionTracking = false
+        sessionTitle = ""
+        return Pair(best, accumulatedDurationMs)
+    }
+
+    /**
+     * 把兜底 PCM 改名成独立文件再交出去。否则 live_pcm.wav 会被下一场录音覆盖，
+     * 下次启动还会被误判成「未完成的会议录音」。
+     */
+    private fun detachLivePcm(pcm: File): String {
+        val dest = File(voiceRecordingDir(), "voice-pcm-${System.currentTimeMillis()}.wav")
+        return try {
+            if (pcm.renameTo(dest)) dest.absolutePath else pcm.absolutePath
+        } catch (_: Exception) {
+            pcm.absolutePath
+        }
+    }
+
+    /** 只看大小不够：编码器收尾失败的 m4a 有内容但没有索引，放不出来。 */
+    private fun isPlayableAudio(path: String): Boolean {
+        val file = File(path)
+        if (!file.exists() || file.length() <= 1024) return false
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(path)
+            var ok = false
+            for (i in 0 until extractor.trackCount) {
+                val mime = extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME).orEmpty()
+                if (mime.startsWith("audio/")) {
+                    ok = true
+                    break
+                }
+            }
+            ok
+        } catch (_: Exception) {
+            false
+        } finally {
+            try {
+                extractor.release()
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun currentSegmentDurationMs(): Long {
@@ -799,35 +938,51 @@ class MainActivity : FlutterActivity() {
         segmentPaths.clear()
         val pcm = livePcmFile()
         val pcmOk = pcm.exists() && pcm.length() > 44
-        if (paths.isEmpty()) {
+        Log.i(RECORDER_TAG, "stop segments=${paths.size} pcmBytes=${if (pcm.exists()) pcm.length() else -1}")
+
+        // 兜底：交出 PCM（改名成独立文件），分段一律保留到确认 PCM 可用之后再删。
+        fun usePcmOr(fallback: String?): Long {
             if (pcmOk) {
-                outputPath = pcm.absolutePath
-                return CrashSafeWavWriter.durationMs(pcm.absolutePath).toLong()
+                val pcmDuration = CrashSafeWavWriter.durationMs(pcm.absolutePath).toLong()
+                outputPath = detachLivePcm(pcm)
+                for (path in paths) deleteQuietly(File(path))
+                return pcmDuration
             }
-            outputPath = null
+            outputPath = fallback
             return duration
+        }
+
+        if (paths.isEmpty()) {
+            return usePcmOr(null)
         }
 
         if (paths.size == 1) {
-            outputPath = paths[0]
-            if (pcmOk) deleteQuietly(pcm)
-            return duration
+            if (isPlayableAudio(paths[0])) {
+                outputPath = paths[0]
+                if (pcmOk) deleteQuietly(pcm)
+                return duration
+            }
+            Log.w(RECORDER_TAG, "single segment not playable, fallback to pcm=$pcmOk")
+            return usePcmOr(paths[0].takeIf { File(it).exists() })
         }
 
         val merged = newVoiceRecordingPath("voice-merged")
-        if (M4aSegmentMerger.merge(paths, merged)) {
+        if (M4aSegmentMerger.merge(paths, merged) && isPlayableAudio(merged)) {
             outputPath = merged
             for (path in paths) {
                 if (path != merged) deleteQuietly(File(path))
             }
             if (pcmOk) deleteQuietly(pcm)
-        } else {
-            val keep = M4aSegmentMerger.largestExistingPath(paths)
-            outputPath = keep ?: if (pcmOk) pcm.absolutePath else null
-            for (path in paths) {
-                if (path != keep) deleteQuietly(File(path))
-            }
-            if (keep != null && pcmOk) deleteQuietly(pcm)
+            return duration
+        }
+        Log.w(RECORDER_TAG, "merge failed segments=${paths.size}, fallback to pcm=$pcmOk")
+        deleteQuietly(File(merged))
+        if (pcmOk) return usePcmOr(null)
+        val keep = M4aSegmentMerger.largestExistingPath(paths.filter { isPlayableAudio(it) })
+            ?: M4aSegmentMerger.largestExistingPath(paths)
+        outputPath = keep
+        for (path in paths) {
+            if (path != keep) deleteQuietly(File(path))
         }
         return duration
     }

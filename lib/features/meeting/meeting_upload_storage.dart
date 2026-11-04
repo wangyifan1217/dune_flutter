@@ -18,6 +18,7 @@ class MeetingUploadJob {
     this.retryCount = 0,
     this.error,
     this.recordingDurationSeconds = 0,
+    this.sourceFilePath = '',
   });
 
   final int meetingId;
@@ -33,6 +34,9 @@ class MeetingUploadJob {
   final String? error;
   final int recordingDurationSeconds;
 
+  /// 录音结束时原生层交出的原始文件。拷贝丢失时用它兜底，不参与上传。
+  final String sourceFilePath;
+
   bool get isActive =>
       phase == MeetingUploadPhase.pending ||
       phase == MeetingUploadPhase.uploading ||
@@ -40,17 +44,19 @@ class MeetingUploadJob {
 
   MeetingUploadJob copyWith({
     int? meetingId,
+    int? userId,
     MeetingUploadPhase? phase,
     int? uploadProgressPercent,
     int? retryCount,
     String? error,
     String? localFilePath,
     int? recordingDurationSeconds,
+    String? sourceFilePath,
     bool clearError = false,
   }) {
     return MeetingUploadJob(
       meetingId: meetingId ?? this.meetingId,
-      userId: userId,
+      userId: userId ?? this.userId,
       localFilePath: localFilePath ?? this.localFilePath,
       title: title,
       meetingDate: meetingDate,
@@ -64,6 +70,7 @@ class MeetingUploadJob {
       error: clearError ? null : (error ?? this.error),
       recordingDurationSeconds:
           recordingDurationSeconds ?? this.recordingDurationSeconds,
+      sourceFilePath: sourceFilePath ?? this.sourceFilePath,
     );
   }
 
@@ -79,6 +86,7 @@ class MeetingUploadJob {
     'uploadProgressPercent': uploadProgressPercent,
     'retryCount': retryCount,
     'recordingDurationSeconds': recordingDurationSeconds,
+    if (sourceFilePath.isNotEmpty) 'sourceFilePath': sourceFilePath,
     if (error != null && error!.isNotEmpty) 'error': error,
   };
 
@@ -104,6 +112,7 @@ class MeetingUploadJob {
       retryCount: (json['retryCount'] as num?)?.toInt() ?? 0,
       recordingDurationSeconds:
           (json['recordingDurationSeconds'] as num?)?.toInt() ?? 0,
+      sourceFilePath: (json['sourceFilePath'] ?? '').toString(),
       error: (json['error'] ?? '').toString().trim().isEmpty
           ? null
           : (json['error'] ?? '').toString(),

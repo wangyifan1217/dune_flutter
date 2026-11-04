@@ -30,13 +30,19 @@ Future<http.Response> _dunesRequestWithRetry(
 }) async {
   final active = AuthSessionCoordinator.instance.resolve(session);
   var resp = await send(active);
-  if (!retried && AuthSessionCoordinator.isRecoverable401(resp)) {
+  var sentToken = active.token;
+  if (!retried &&
+      AuthSessionCoordinator.isRecoverable401(resp) &&
+      AuthSessionCoordinator.instance.tokenIsCurrent(sentToken)) {
     final refreshed = await AuthSessionCoordinator.instance.refreshToken();
-    if (refreshed != null) {
+    AuthSessionGuard.instance.consumeRefreshLogout();
+    if (refreshed != null &&
+        AuthSessionCoordinator.instance.tokenIsCurrent(refreshed.token)) {
       resp = await send(refreshed);
+      sentToken = refreshed.token;
     }
   }
-  AuthSessionGuard.instance.inspectResponse(resp);
+  AuthSessionGuard.instance.inspectResponse(resp, requestToken: sentToken);
   return resp;
 }
 

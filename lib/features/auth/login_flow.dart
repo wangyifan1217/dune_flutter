@@ -59,6 +59,7 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
   Timer? _updateCheckTimer;
   bool _showPostLoginSplash = false;
   String _appVersion = '';
+  int _signInEpoch = 0;
 
   @override
   void initState() {
@@ -128,6 +129,12 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
   }
 
   void _onSignedIn(AuthSession session) {
+    unawaited(_enterSignedIn(session));
+  }
+
+  /// 先把令牌写入本地，再进入首页。进程若在写入完成前被系统回收，冷启动仍能读到。
+  Future<void> _enterSignedIn(AuthSession session) async {
+    final epoch = ++_signInEpoch;
     session = session.withLocalDevGrants();
     if (session.userId <= 0) {
       session =
@@ -146,6 +153,10 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
               )
               .withLocalDevGrants();
     }
+    try {
+      await _persistSession(session);
+    } catch (_) {}
+    if (!mounted || epoch != _signInEpoch) return;
     AuthSessionCoordinator.instance.bind(
       session,
       onUpdated: _onSessionRefreshed,
@@ -155,7 +166,6 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
       // 已屏蔽登录后启屏，登录成功后直接进 IM。
       _showPostLoginSplash = false;
     });
-    _persistSession(session);
     if (isDesktopCommOnly) {
       unawaited(DesktopImagePreviewPref.ensureLoaded());
       unawaited(warmDesktopChatImagePreviewWindow());
@@ -229,11 +239,23 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
                 headers: {'Authorization': 'Bearer ${session.token}'},
               )
               .timeout(const Duration(seconds: 5));
-          if (AuthSessionCoordinator.isRecoverable401(resp)) {
+          if (AuthSessionCoordinator.isRecoverable401(resp) &&
+              AuthSessionCoordinator.instance.tokenIsCurrent(session.token)) {
             final refreshed = await AuthSessionCoordinator.instance
                 .refreshToken()
                 .timeout(const Duration(seconds: 5));
-            if (refreshed != null) {
+            final refreshLogout =
+                AuthSessionCoordinator.instance.takeRefreshLogoutMessage();
+            if (refreshLogout != null) {
+              await _clearSession(userId: session.userId);
+              AuthSessionCoordinator.instance.clear();
+              if (mounted) setState(() => _hydrating = false);
+              return;
+            }
+            if (refreshed != null &&
+                AuthSessionCoordinator.instance.tokenIsCurrent(
+                  refreshed.token,
+                )) {
               session = refreshed;
               resp = await http
                   .get(
@@ -243,7 +265,9 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
                   .timeout(const Duration(seconds: 5));
             }
           }
-          if (resp.statusCode == 401) {
+          // 冷启动只在当前令牌被明确踢下线时清本地。超时、500、其它 401 都保留。
+          if (AuthSessionCoordinator.shouldForceLogout(resp) &&
+              AuthSessionCoordinator.instance.tokenIsCurrent(session.token)) {
             await _clearSession(userId: session.userId);
             AuthSessionCoordinator.instance.clear();
             if (mounted) setState(() => _hydrating = false);

@@ -13,7 +13,7 @@ import 'auth_session_coordinator.dart';
 /// 只在这些时机请求：
 /// - 登录后进入主壳（首帧一次）
 /// - 从后台回到前台
-/// - 定时 45 秒（防踢下线；任意业务接口 401 也会经 [inspectResponse] 踢出）
+/// - 定时 45 秒（防踢下线；当前令牌收到「其他设备登录 / 账号已停用」时经 [inspectResponse] 踢出）
 ///
 /// 上一次还没返回时不再发下一次，避免网关 ESTAB 堆积。
 class AuthSessionGuard {
@@ -53,14 +53,37 @@ class AuthSessionGuard {
     // 无 response 体时不直接踢下线，交给带 retry 的 HTTP 层处理。
   }
 
-  void inspectResponse(http.Response response) {
+  void inspectResponse(http.Response response, {String? requestToken}) {
     if (response.statusCode != 401 && response.statusCode != 403) return;
-    if (_shouldRevokeForUnauthorized(response)) {
-      final message = AuthSessionCoordinator.readApiMessage(response.body);
-      unawaited(revoke(
-        message: message.contains('账号已停用') ? '账号已停用，请联系管理员' : null,
-      ));
-    }
+    if (!_shouldRevokeForUnauthorized(response)) return;
+    final sent = (requestToken ?? _bearerFrom(response) ?? '').trim();
+    // 旧请求带的是已经换掉的令牌时，忽略这次 401，避免清掉刚登录写入的新令牌。
+    if (!AuthSessionCoordinator.instance.tokenIsCurrent(sent)) return;
+    final message = AuthSessionCoordinator.readApiMessage(response.body);
+    unawaited(revoke(
+      message: message.contains('账号已停用') ? '账号已停用，请联系管理员' : null,
+    ));
+  }
+
+  /// 刷新接口对当前令牌回了下线文案时，走和业务 401 相同的清登录。
+  void consumeRefreshLogout() {
+    final message = AuthSessionCoordinator.instance.takeRefreshLogoutMessage();
+    if (message == null) return;
+    unawaited(revoke(
+      message: message.contains('账号已停用') ? '账号已停用，请联系管理员' : null,
+    ));
+  }
+
+  static String? _bearerFrom(http.Response response) {
+    final headers = response.request?.headers;
+    if (headers == null) return null;
+    final raw = headers['authorization'] ?? headers['Authorization'];
+    if (raw == null) return null;
+    final trimmed = raw.trim();
+    final lower = trimmed.toLowerCase();
+    if (!lower.startsWith('bearer ')) return null;
+    final token = trimmed.substring(7).trim();
+    return token.isEmpty ? null : token;
   }
 
   bool _shouldRevokeForUnauthorized(http.Response response) {
@@ -81,25 +104,30 @@ class AuthSessionGuard {
             },
           )
           .timeout(_requestTimeout);
-      if (AuthSessionCoordinator.isRecoverable401(resp)) {
+      var sentToken = session.token;
+      if (AuthSessionCoordinator.isRecoverable401(resp) &&
+          AuthSessionCoordinator.instance.tokenIsCurrent(sentToken)) {
         final refreshed = await AuthSessionCoordinator.instance.refreshToken();
-        if (refreshed != null) {
+        consumeRefreshLogout();
+        if (refreshed != null &&
+            AuthSessionCoordinator.instance.tokenIsCurrent(refreshed.token)) {
           session = refreshed;
           _session = refreshed;
+          sentToken = refreshed.token;
           resp = await http
               .get(
                 Uri.parse('${session.apiBase}/users/me'),
                 headers: <String, String>{
-                  'Authorization': 'Bearer ${session.token}',
+                  'Authorization': 'Bearer $sentToken',
                   'Accept': 'application/json',
                 },
               )
               .timeout(_requestTimeout);
         }
       }
-      inspectResponse(resp);
+      inspectResponse(resp, requestToken: sentToken);
     } catch (_) {
-      // 超时/网络异常不强制退出，等下一轮 45 秒或任意接口 401。
+      // 超时、断网不强制退出。下一轮只认当前令牌的「其他设备登录 / 账号已停用」。
     } finally {
       _checking = false;
     }

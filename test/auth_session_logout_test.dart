@@ -4,6 +4,7 @@ import 'package:dunes_app/features/auth/auth_session.dart';
 import 'package:dunes_app/features/auth/auth_session_coordinator.dart';
 import 'package:dunes_app/features/auth/auth_session_guard.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 
 void main() {
@@ -39,15 +40,15 @@ void main() {
     );
     expect(
       AuthSessionCoordinator.shouldForceLogout(response(401, '账号已停用')),
-      isTrue,
+      isFalse,
     );
     expect(
       AuthSessionCoordinator.shouldForceLogout(response(403, '账号已停用')),
-      isTrue,
+      isFalse,
     );
     expect(
       AuthSessionCoordinator.shouldForceLogout(response(401, '账号不存在')),
-      isTrue,
+      isFalse,
     );
     expect(
       AuthSessionCoordinator.shouldForceLogout(response(401, 'invalid token')),
@@ -134,5 +135,25 @@ void main() {
 
     expect(revoked, 0);
     expect(coordinator.session?.token, 'current-token');
+  });
+
+  testWidgets('guard scope preserves the session persistence callback', (
+    tester,
+  ) async {
+    final coordinator = AuthSessionCoordinator.instance;
+    final initial = sessionWith('initial-token');
+    AuthSession? persisted;
+    coordinator.bind(initial, onUpdated: (session) => persisted = session);
+
+    await tester.pumpWidget(
+      AuthSessionGuardScope(
+        session: initial,
+        onSessionRevoked: () {},
+        child: const SizedBox(),
+      ),
+    );
+    coordinator.updateSession(sessionWith('refreshed-token'));
+    expect(persisted?.token, 'refreshed-token');
+    await tester.pumpWidget(const SizedBox());
   });
 }

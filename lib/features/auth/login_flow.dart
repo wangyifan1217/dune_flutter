@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/analytics/usage_analytics.dart';
 import '../../core/config/dunes_defaults.dart';
@@ -20,6 +19,7 @@ import '../nova/nova_web_storage.dart';
 import '../conversation/conversation_realtime_hub.dart';
 import '../push/push_service.dart';
 import '../shell/dunes_shell.dart';
+import '../shell/dunes_toast.dart';
 import '../shell/splash_screen.dart';
 import '../update/app_update_dialog.dart';
 import '../update/app_update_notifier.dart';
@@ -29,6 +29,7 @@ import 'auth_service.dart';
 import 'auth_profile.dart';
 import 'auth_session.dart';
 import 'auth_session_coordinator.dart';
+import 'auth_session_storage.dart';
 import 'desktop_login_page.dart';
 
 const _authBlue = authBlue;
@@ -45,12 +46,13 @@ class LoginFlow extends StatefulWidget {
 }
 
 class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
-  static const _sessionStorageKey = 'dunes_auth_session_v1';
+  final _sessionStorage = AuthSessionStorage.instance;
   static const _updateCheckInterval = Duration(minutes: 15);
   static const _updateRetryInterval = Duration(minutes: 10);
   final _auth = AuthService();
   AuthSession? _session;
   bool _hydrating = true;
+  bool _restoreFailed = false;
   bool _notifiedHydrated = false;
   bool _updateChecked = false;
   bool _updateCheckInFlight = false;
@@ -81,8 +83,7 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
         AuthSessionCoordinator.instance.clear();
         if (mounted) setState(() => _session = null);
         try {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.remove(_sessionStorageKey);
+          await _sessionStorage.clear();
         } catch (_) {}
         unawaited(ConversationRealtimeHub.instance.dispose());
         unawaited(unbindPushSession());
@@ -90,9 +91,6 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
         if (uid > 0) unawaited(NovaWebStorage.clear(uid));
       });
     }
-    Future<void>.delayed(const Duration(seconds: 8), () {
-      if (mounted && _hydrating) setState(() => _hydrating = false);
-    });
   }
 
   @override
@@ -154,8 +152,13 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
               .withLocalDevGrants();
     }
     try {
-      await _persistSession(session);
-    } catch (_) {}
+      await _persistSession(session, epoch: epoch);
+    } catch (_) {
+      if (mounted && epoch == _signInEpoch) {
+        showDunesToast(context, '保存登录状态失败，请重试', kind: DunesToastKind.error);
+      }
+      return;
+    }
     if (!mounted || epoch != _signInEpoch) return;
     AuthSessionCoordinator.instance.bind(
       session,
@@ -180,29 +183,35 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
       return;
     }
     setState(() => _session = session);
-    unawaited(_persistSession(session));
+    // 按入队顺序写入，后续退出操作会在该写入之后删除同一张令牌。
+    unawaited(_sessionStorage.write(session).catchError((Object _) {}));
   }
 
   void _onSignedOut() {
+    _signInEpoch++;
     final uid = _session?.userId ?? 0;
+    final token = _session?.token ?? '';
     unawaited(UsageAnalytics.instance.unbind());
     AuthSessionCoordinator.instance.clear();
     setState(() => _session = null);
-    _clearSession(userId: uid);
+    unawaited(_clearSession(userId: uid, token: token));
   }
 
   Future<void> _restoreSession() async {
+    final epoch = _signInEpoch;
+    bool isCurrent() => mounted && epoch == _signInEpoch;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_sessionStorageKey);
+      final raw = await _sessionStorage.read().timeout(
+        const Duration(seconds: 8),
+      );
+      if (!isCurrent()) return;
       if (raw == null || raw.isEmpty) {
         if (mounted) setState(() => _hydrating = false);
         return;
       }
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) {
-        if (mounted) setState(() => _hydrating = false);
-        return;
+        throw const FormatException('invalid stored session');
       }
       var session = AuthSession.fromJson(decoded).withLocalDevGrants();
       if (session.userId <= 0 && session.token.isNotEmpty) {
@@ -226,12 +235,19 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
       if (normalized.apiBase != session.apiBase) {
         session = normalized;
         await _persistSession(session);
+        if (!isCurrent()) return;
       }
       if (session.token.isNotEmpty) {
         AuthSessionCoordinator.instance.bind(
           session,
           onUpdated: _onSessionRefreshed,
         );
+        // 先展示已保存的会话，网络慢时不要先显示登录页。
+        if (!isCurrent()) return;
+        setState(() {
+          _session = session;
+          _hydrating = false;
+        });
         try {
           var resp = await http
               .get(
@@ -239,17 +255,33 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
                 headers: {'Authorization': 'Bearer ${session.token}'},
               )
               .timeout(const Duration(seconds: 5));
+          if (!isCurrent()) return;
           if (AuthSessionCoordinator.isRecoverable401(resp) &&
               AuthSessionCoordinator.instance.tokenIsCurrent(session.token)) {
             final refreshed = await AuthSessionCoordinator.instance
                 .refreshToken()
                 .timeout(const Duration(seconds: 5));
-            final refreshLogout =
-                AuthSessionCoordinator.instance.takeRefreshLogoutMessage();
+            if (!isCurrent()) return;
+            final refreshLogout = AuthSessionCoordinator.instance
+                .takeRefreshLogoutMessage();
             if (refreshLogout != null) {
-              await _clearSession(userId: session.userId);
+              if (!AuthSessionCoordinator.instance.tokenIsCurrent(
+                session.token,
+              )) {
+                return;
+              }
+              await _clearSession(userId: session.userId, token: session.token);
+              if (!isCurrent() ||
+                  !AuthSessionCoordinator.instance.tokenIsCurrent(
+                    session.token,
+                  )) {
+                return;
+              }
               AuthSessionCoordinator.instance.clear();
-              if (mounted) setState(() => _hydrating = false);
+              setState(() {
+                _session = null;
+                _hydrating = false;
+              });
               return;
             }
             if (refreshed != null &&
@@ -263,17 +295,27 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
                     headers: {'Authorization': 'Bearer ${session.token}'},
                   )
                   .timeout(const Duration(seconds: 5));
+              if (!isCurrent()) return;
             }
           }
           // 冷启动只在当前令牌被明确踢下线时清本地。超时、500、其它 401 都保留。
           if (AuthSessionCoordinator.shouldForceLogout(resp) &&
               AuthSessionCoordinator.instance.tokenIsCurrent(session.token)) {
-            await _clearSession(userId: session.userId);
+            await _clearSession(userId: session.userId, token: session.token);
+            if (!isCurrent() ||
+                !AuthSessionCoordinator.instance.tokenIsCurrent(session.token)) {
+              return;
+            }
             AuthSessionCoordinator.instance.clear();
-            if (mounted) setState(() => _hydrating = false);
+            setState(() {
+              _session = null;
+              _hydrating = false;
+            });
             return;
           }
-          if (resp.statusCode >= 200 && resp.statusCode < 300) {
+          if (resp.statusCode >= 200 &&
+              resp.statusCode < 300 &&
+              AuthSessionCoordinator.instance.tokenIsCurrent(session.token)) {
             final body = jsonDecode(resp.body);
             final data = body is Map<String, dynamic>
                 ? (body['data'] is Map<String, dynamic>
@@ -285,12 +327,11 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
               data,
             ).withLocalDevGrants();
             AuthSessionCoordinator.instance.updateSession(session);
-            await _persistSession(session);
           }
         } catch (_) {}
-        if (mounted) {
+        if (isCurrent()) {
           setState(() {
-            _session = session;
+            _session = AuthSessionCoordinator.instance.resolve(session);
             _hydrating = false;
           });
         }
@@ -300,8 +341,39 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
         }
         return;
       }
+      throw const FormatException('missing stored token');
+    } on TimeoutException {
+      if (isCurrent()) {
+        setState(() {
+          _restoreFailed = true;
+          _hydrating = false;
+        });
+      }
+    } on FormatException {
+      await _dropUnreadableSession(isCurrent);
+    } on TypeError {
+      await _dropUnreadableSession(isCurrent);
+    } catch (_) {
+      if (isCurrent()) {
+        setState(() {
+          _restoreFailed = true;
+          _hydrating = false;
+        });
+      }
+    }
+  }
+
+  /// 本地记录已损坏时清掉，回到登录页。继续重试同一份记录没有意义。
+  Future<void> _dropUnreadableSession(bool Function() isCurrent) async {
+    try {
+      await _sessionStorage.clear();
     } catch (_) {}
-    if (mounted) setState(() => _hydrating = false);
+    if (!isCurrent()) return;
+    setState(() {
+      _session = null;
+      _restoreFailed = false;
+      _hydrating = false;
+    });
   }
 
   AuthSession _normalizeApiHost(AuthSession session) {
@@ -316,17 +388,23 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
     return next.withLocalDevGrants();
   }
 
-  Future<void> _persistSession(AuthSession session) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_sessionStorageKey, jsonEncode(session.toJson()));
+  Future<void> _persistSession(AuthSession session, {int? epoch}) {
+    final expectedEpoch = epoch ?? _signInEpoch;
+    return _sessionStorage.write(
+      session,
+      stillCurrent: () => mounted && expectedEpoch == _signInEpoch,
+    );
   }
 
-  Future<void> _clearSession({int userId = 0}) async {
+  Future<void> _clearSession({int userId = 0, required String token}) async {
+    final epoch = _signInEpoch;
+    await _sessionStorage.removeIfToken(token);
+    if (epoch != _signInEpoch) return;
     await ConversationRealtimeHub.instance.dispose();
+    if (epoch != _signInEpoch) return;
     await unbindPushSession();
+    if (epoch != _signInEpoch) return;
     syncPushBadgeCount(0);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_sessionStorageKey);
     if (userId > 0) {
       await NovaWebStorage.clear(userId);
     }
@@ -394,6 +472,28 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
         ),
         body: const Center(
           child: CircularProgressIndicator(strokeWidth: 2, color: _authBlue),
+        ),
+      );
+    }
+    if (_restoreFailed) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('暂时无法读取本地登录状态，请重试'),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _restoreFailed = false;
+                    _hydrating = true;
+                  });
+                  unawaited(_restoreSession());
+                },
+                child: const Text('重试'),
+              ),
+            ],
+          ),
         ),
       );
     }

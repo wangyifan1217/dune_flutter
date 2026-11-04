@@ -110,8 +110,9 @@ class AuthSessionCoordinator extends ChangeNotifier {
       if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
 
       final decoded = jsonDecode(resp.body);
-      final body =
-          decoded is Map<String, dynamic> ? decoded : const <String, dynamic>{};
+      final body = decoded is Map<String, dynamic>
+          ? decoded
+          : const <String, dynamic>{};
       final data = body['data'];
       final token = data is Map<String, dynamic>
           ? (data['token'] as String?)
@@ -138,20 +139,12 @@ class AuthSessionCoordinator extends ChangeNotifier {
     return body;
   }
 
-  /// 当前令牌被明确踢下线或账号已不可用时才清登录。
+  /// 只有当前令牌被明确踢下线时才清登录。
   /// 网络失败、超时、500、饕开通失败，以及 invalid token，都不在这里。
   static bool shouldForceLogout(http.Response response) {
     final message = readApiMessage(response.body);
-    // 停用账号：flow/im 中间件返回 401，登录接口返回 403，统一强制登出。
-    if (response.statusCode == 403) {
-      return message.contains('账号已停用');
-    }
     if (response.statusCode != 401) return false;
-    if (message.contains('其他设备登录')) return true;
-    if (message.contains('账号已停用') || message.contains('账号不存在')) {
-      return true;
-    }
-    return false;
+    return message.contains('账号已在其他设备登录');
   }
 
   static bool isRecoverable401(http.Response response) {

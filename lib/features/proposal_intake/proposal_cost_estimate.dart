@@ -404,18 +404,25 @@ ProposalSettleLineView proposalSettleLineView(
   if (terms.settleByTier) {
     final promotion =
         promotionMain != null && proposalSettleTierUsesSettlement(terms);
-    final volume = promotion
+    final proposalScale = form == null ? 0.0 : proposalTierScale(form);
+    final lookup = promotion
         ? proposalRoundWan(scale * promotionMain.share)
-        : scale;
+        : (proposalScale > 0 ? proposalScale : scale);
+    final charge = !promotion && (lookup - scale).abs() > 0.001
+        ? scale
+        : null;
     final plans = proposalSettleTierPlans(terms);
-    final results = [for (final plan in plans) plan.evaluate(volume)];
+    final results = [
+      for (final plan in plans) plan.evaluate(lookup, chargeScale: charge),
+    ];
     final amount = proposalRoundWan(
       results.fold<double>(0, (sum, item) => sum + item.amount),
     );
+    final shareBasis = promotion ? scale : (scale > 0 ? scale : lookup);
     return _withExpectedRedemption(
       terms,
       ProposalSettleLineView(
-        share: scale > 0 ? amount / scale : 0,
+        share: shareBasis > 0 ? amount / shareBasis : 0,
         amount: amount,
         substitution: [
           if (promotion)
@@ -678,11 +685,13 @@ ProposalProductScaleRollup? proposalProductScaleRollup(
   final scale = proposalFinanceAmount(hydrated, kProposalSalesScaleKey);
   if (scale <= 0) return null;
   var ownedRevenue = 0.0;
+  var tierRevenue = 0.0;
   var anyOwned = false;
   var anyUnowned = false;
   var anyShare = false;
   final shares = <double>[];
   for (final sku in proposalIntakeSkuDetails(hydrated)) {
+    tierRevenue += proposalSkuTierIncomeAmount(sku, hydrated);
     final share = proposalSkuIncomeShare(sku);
     if (share <= 0) continue;
     anyShare = true;
@@ -717,7 +726,7 @@ ProposalProductScaleRollup? proposalProductScaleRollup(
   }
   return ProposalProductScaleRollup(
     salesScale: proposalRoundWan(scale),
-    revenue: proposalRoundWan(anyShare ? revenue : 0),
+    revenue: proposalRoundWan((anyShare ? revenue : 0) + tierRevenue),
   );
 }
 
@@ -736,6 +745,43 @@ double proposalEffectiveSalesScale(Map<String, dynamic> form) {
   final stored = proposalFinanceAmount(hydrated, kProposalSalesScaleKey);
   if (stored > 0) return stored;
   return proposalProductScaleRollup(hydrated)?.salesScale ?? 0;
+}
+
+/// 阶梯折扣套档用的规模：整张提案的总规模。
+/// 分产品测算会把「规模（万元）」改成单个产品的一份，这里仍用记下的总规模。
+/// 没填总规模时，退回各产品结算规模之和，和原来的年化规模一致。
+double proposalTierScale(Map<String, dynamic> form) {
+  final stamped = proposalFinanceAmount(form, '_proposalScale');
+  if (stamped > 0) return stamped;
+  return proposalEffectiveSalesScale(form);
+}
+
+double proposalSkuTierIncomeAmount(
+  ProposalSkuDetailRow sku,
+  Map<String, dynamic> form,
+) {
+  final lookup = proposalTierScale(form);
+  final local = proposalIntakeSkuScaleTotal(sku);
+  final charge = local > 0
+      ? local
+      : (proposalIntakeFormHasText(form, kProposalSalesScaleKey)
+            ? proposalSkuFaceShareScale(sku, form: form)
+            : 0.0);
+  if (charge <= 0) return 0;
+  final volume = lookup > 0 ? lookup : charge;
+  final split = (volume - charge).abs() > 0.001;
+  var sum = 0.0;
+  for (final settle in proposalIntakeSkuSettlements(sku)) {
+    if (settle.isCost || !settle.terms.settleByTier) continue;
+    if (proposalIsPromotion(settle.terms)) continue;
+    sum += proposalSettleTierPlans(settle.terms).fold<double>(
+      0,
+      (total, plan) =>
+          total +
+          plan.evaluate(volume, chargeScale: split ? charge : null).amount,
+    );
+  }
+  return sum;
 }
 
 bool proposalRevenueIsManual(Map<String, dynamic> form) =>
@@ -1325,6 +1371,19 @@ double? proposalSpreadIncomeAmount(Map<String, dynamic> form) {
       if (settle.isCost) continue;
       if (proposalSettleBillTypeL3(settle.terms) != '利差') continue;
       found = true;
+      if (settle.terms.settleByTier) {
+        final lookup = proposalTierScale(form);
+        final volume = lookup > 0 ? lookup : scale;
+        final charge = lookup > 0 && (lookup - scale).abs() > 0.001
+            ? scale
+            : null;
+        sum += proposalSettleTierPlans(settle.terms).fold<double>(
+          0,
+          (total, plan) =>
+              total + plan.evaluate(volume, chargeScale: charge).amount,
+        );
+        continue;
+      }
       final share = proposalIntakeSettleShare(settle.terms, face: face);
       sum += scale * share;
     }
@@ -1529,12 +1588,21 @@ double proposalPayableCostLineAmount(
   List<String> skuIds,
 ) {
   if (terms.settleByTier) {
-    final scale = proposalSettleTierUsesSettlement(terms)
-        ? proposalPromotionVolume(form, skuIds).volume
-        : proposalAssociatedSalesScale(form, skuIds);
-    return proposalSettleTierPlans(
-      terms,
-    ).fold<double>(0, (sum, plan) => sum + plan.evaluate(scale).amount);
+    if (proposalSettleTierUsesSettlement(terms)) {
+      final scale = proposalPromotionVolume(form, skuIds).volume;
+      return proposalSettleTierPlans(
+        terms,
+      ).fold<double>(0, (sum, plan) => sum + plan.evaluate(scale).amount);
+    }
+    final lookup = proposalTierScale(form);
+    final charge = proposalAssociatedSalesScale(form, skuIds);
+    final volume = lookup > 0 ? lookup : charge;
+    final split = lookup > 0 && (lookup - charge).abs() > 0.001;
+    return proposalSettleTierPlans(terms).fold<double>(
+      0,
+      (sum, plan) =>
+          sum + plan.evaluate(volume, chargeScale: split ? charge : null).amount,
+    );
   }
   if (proposalPromotionByRatio(terms)) {
     final rate = proposalParseSettleRatio(terms.displayRatio.trim());

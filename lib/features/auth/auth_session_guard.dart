@@ -13,7 +13,7 @@ import 'auth_session_coordinator.dart';
 /// 只在这些时机请求：
 /// - 登录后进入主壳（首帧一次）
 /// - 从后台回到前台
-/// - 定时 45 秒（防踢下线；当前令牌收到「其他设备登录 / 账号已停用」时经 [inspectResponse] 踢出）
+/// - 定时 45 秒（当前令牌收到其他设备登录提示时经 [inspectResponse] 踢出）
 ///
 /// 上一次还没返回时不再发下一次，避免网关 ESTAB 堆积。
 class AuthSessionGuard {
@@ -28,10 +28,7 @@ class AuthSessionGuard {
 
   static const _requestTimeout = Duration(seconds: 15);
 
-  void bind({
-    required AuthSession session,
-    required VoidCallback onRevoked,
-  }) {
+  void bind({required AuthSession session, required VoidCallback onRevoked}) {
     _session = session;
     _onRevoked = onRevoked;
     _revoking = false;
@@ -60,18 +57,18 @@ class AuthSessionGuard {
     // 旧请求带的是已经换掉的令牌时，忽略这次 401，避免清掉刚登录写入的新令牌。
     if (!AuthSessionCoordinator.instance.tokenIsCurrent(sent)) return;
     final message = AuthSessionCoordinator.readApiMessage(response.body);
-    unawaited(revoke(
-      message: message.contains('账号已停用') ? '账号已停用，请联系管理员' : null,
-    ));
+    unawaited(
+      revoke(message: message.contains('账号已停用') ? '账号已停用，请联系管理员' : null),
+    );
   }
 
   /// 刷新接口对当前令牌回了下线文案时，走和业务 401 相同的清登录。
   void consumeRefreshLogout() {
     final message = AuthSessionCoordinator.instance.takeRefreshLogoutMessage();
     if (message == null) return;
-    unawaited(revoke(
-      message: message.contains('账号已停用') ? '账号已停用，请联系管理员' : null,
-    ));
+    unawaited(
+      revoke(message: message.contains('账号已停用') ? '账号已停用，请联系管理员' : null),
+    );
   }
 
   static String? _bearerFrom(http.Response response) {
@@ -127,7 +124,7 @@ class AuthSessionGuard {
       }
       inspectResponse(resp, requestToken: sentToken);
     } catch (_) {
-      // 超时、断网不强制退出。下一轮只认当前令牌的「其他设备登录 / 账号已停用」。
+      // 超时、断网不强制退出。下一轮只认当前令牌的「其他设备登录」。
     } finally {
       _checking = false;
     }
@@ -149,8 +146,8 @@ class AuthSessionGuard {
     final callback = _onRevoked;
     unbind();
     AuthSessionCoordinator.instance.clear();
-    await ConversationRealtimeHub.instance.dispose();
     callback?.call();
+    await ConversationRealtimeHub.instance.dispose();
   }
 }
 
@@ -203,16 +200,7 @@ class _AuthSessionGuardScopeState extends State<AuthSessionGuardScope>
   }
 
   void _bindGuard() {
-    AuthSessionCoordinator.instance.bind(
-      widget.session,
-      onUpdated: (_) {
-        if (!mounted) return;
-        AuthSessionGuard.instance.bind(
-          session: AuthSessionCoordinator.instance.session ?? widget.session,
-          onRevoked: _handleRevoked,
-        );
-      },
-    );
+    // LoginFlow 管理协调器及持久化；旧组件帧不能覆盖刚刷新的令牌。
     AuthSessionGuard.instance.bind(
       session: widget.session,
       onRevoked: _handleRevoked,
@@ -222,7 +210,8 @@ class _AuthSessionGuardScopeState extends State<AuthSessionGuardScope>
   void _handleRevoked() {
     if (_revoked || !mounted) return;
     _revoked = true;
-    final message = AuthSessionGuard.instance.consumePendingRevokeMessage() ??
+    final message =
+        AuthSessionGuard.instance.consumePendingRevokeMessage() ??
         widget.revokedMessage;
     showDunesToast(
       context,

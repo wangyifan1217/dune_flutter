@@ -852,21 +852,33 @@ class ProposalPromotionSegment {
   }
 
   /// 一个月的推广费（万元）和代入过程。档位按月规模比较。
-  ({double fee, String detail}) monthlyFee(double monthlyScale) =>
-      scaledFee(monthlyScale, volumeName: '月规模');
+  ({double fee, String detail}) monthlyFee(
+    double monthlyScale, {
+    double? chargeScale,
+  }) => scaledFee(
+    monthlyScale,
+    volumeName: '月规模',
+    chargeScale: chargeScale,
+  );
 
   /// 按 [volume]（万元）套档位。[volumeName] 写进代入过程，月阶梯用「月规模」，年阶梯用「年化规模」。
+  /// [chargeScale] 有值时，档位仍看 [volume]，金额改乘这一档比例对应的产品规模。
   ({double fee, String detail}) scaledFee(
     double volume, {
     required String volumeName,
+    double? chargeScale,
   }) {
     final volumeText = _wan(volume);
+    final charge = chargeScale ?? volume;
+    final chargeText = _wan(charge);
+    final split = chargeScale != null && (charge - volume).abs() > 0.001;
     if (!tiered) {
-      final fee = volume * rate;
+      final fee = charge * rate;
+      final basisText = split ? chargeText : volumeText;
       return (
         fee: fee,
         detail:
-            '固定比例：$volumeText × ${proposalFormatPromotionRate(rate)} = ${_wan(fee)} 万',
+            '固定比例：$basisText × ${proposalFormatPromotionRate(rate)} = ${_wan(fee)} 万',
       );
     }
     final list = sorted;
@@ -892,18 +904,31 @@ class ProposalPromotionSegment {
           '${_wan(part)} × ${proposalFormatPromotionRate(list[i].rate)}',
         );
       }
+      if (!split) {
+        return (
+          fee: fee,
+          detail:
+              '$volumeName $volumeText 万，超额累进：${parts.join(' + ')} = ${_wan(fee)} 万',
+        );
+      }
+      final blended = volume > 0 ? fee / volume : 0.0;
+      final charged = charge * blended;
+      final blendedLabel = proposalFormatPromotionRate(blended);
       return (
-        fee: fee,
+        fee: charged,
         detail:
-            '$volumeName $volumeText 万，超额累进：${parts.join(' + ')} = ${_wan(fee)} 万',
+            '$volumeName $volumeText 万，超额累进折合 $blendedLabel，按产品规模 $chargeText × $blendedLabel = ${_wan(charged)} 万',
       );
     }
     final rateLabel = proposalFormatPromotionRate(list[hit].rate);
-    final fee = volume * list[hit].rate;
+    final basis = split ? charge : volume;
+    final basisText = split ? chargeText : volumeText;
+    final fee = basis * list[hit].rate;
     return (
       fee: fee,
-      detail:
-          '$volumeName $volumeText 万，落在第 ${hit + 1} 档（≥ ${_wan(list[hit].from)} 万，$rateLabel），全额累进：$volumeText × $rateLabel = ${_wan(fee)} 万',
+      detail: split
+          ? '提案规模 $volumeText 万，落在第 ${hit + 1} 档（≥ ${_wan(list[hit].from)} 万，$rateLabel），按产品规模全额累进：$basisText × $rateLabel = ${_wan(fee)} 万'
+          : '$volumeName $volumeText 万，落在第 ${hit + 1} 档（≥ ${_wan(list[hit].from)} 万，$rateLabel），全额累进：$basisText × $rateLabel = ${_wan(fee)} 万',
     );
   }
 }
@@ -1044,28 +1069,41 @@ class ProposalPromotionTierPlan {
     segments: segments ?? this.segments,
   );
 
-  /// 年化推广费（万元）和代入过程。
-  ({double amount, String substitution}) evaluate(double annualScale) {
+  /// 年化金额（万元）和代入过程。
+  /// [chargeScale] 有值时，用 [annualScale] 看落在哪一档，金额按 [chargeScale] 乘这一档的比例。
+  ({double amount, String substitution}) evaluate(
+    double annualScale, {
+    double? chargeScale,
+  }) {
+    final split =
+        chargeScale != null && (chargeScale - annualScale).abs() > 0.001;
+    final basis = chargeScale ?? annualScale;
     if (fixed) {
       final rate = fixedRate;
-      final amount = annualScale * rate;
+      final amount = basis * rate;
       return (
         amount: proposalRoundWan(amount),
-        substitution:
-            '按固定比例：年化规模 ${_wan(annualScale)} 万 × ${proposalFormatPromotionRate(rate)} = ${_wan(amount)} 万元',
+        substitution: split
+            ? '按固定比例：提案规模 ${_wan(annualScale)} 万对应该比例，产品规模 ${_wan(basis)} 万 × ${proposalFormatPromotionRate(rate)} = ${_wan(amount)} 万元'
+            : '按固定比例：年化规模 ${_wan(annualScale)} 万 × ${proposalFormatPromotionRate(rate)} = ${_wan(amount)} 万元',
       );
     }
     if (annual) {
       final segment = segments.isEmpty
           ? const ProposalPromotionSegment()
           : segments.first;
-      final result = segment.scaledFee(annualScale, volumeName: '年化规模');
+      final result = segment.scaledFee(
+        annualScale,
+        volumeName: '年化规模',
+        chargeScale: split ? basis : null,
+      );
       return (
         amount: proposalRoundWan(result.fee),
         substitution: '年阶梯：${result.detail}',
       );
     }
     final monthly = annualScale / 12;
+    final monthlyCharge = split ? basis / 12 : null;
     final counts = List<int>.filled(segments.length, 0);
     final uncovered = <int>[];
     for (var month = 1; month <= kProposalPromotionMonths; month++) {
@@ -1080,7 +1118,7 @@ class ProposalPromotionTierPlan {
     final parts = <String>[];
     for (var i = 0; i < segments.length; i++) {
       if (counts[i] == 0) continue;
-      final month = segments[i].monthlyFee(monthly);
+      final month = segments[i].monthlyFee(monthly, chargeScale: monthlyCharge);
       final subtotal = month.fee * counts[i];
       total += subtotal;
       parts.add(
@@ -1952,6 +1990,10 @@ Map<String, dynamic> proposalFinanceSkuScope(
     }
   }
   next.remove(kProposalPromotionTiersKey);
+  final proposalScale = proposalTierScale(scope);
+  if (proposalScale > 0) {
+    next['_proposalScale'] = proposalScale;
+  }
   if (scale > 0) {
     next[kProposalSalesScaleKey] = scale;
   } else {
@@ -2532,7 +2574,8 @@ ProposalFinanceLine _evaluateProjectLine(
     costNames: costNames,
   ).where((hit) => hit.costName == name && hit.terms.settleByTier).toList();
   if (tierHits.isNotEmpty) {
-    final scale = proposalEffectiveSalesScale(form);
+    final lookup = proposalTierScale(form);
+    final productScale = proposalFinanceAmount(form, kProposalSalesScaleKey);
     final volumes = [
       for (final hit in tierHits)
         proposalSettleTierUsesSettlement(hit.terms)
@@ -2542,7 +2585,16 @@ ProposalFinanceLine _evaluateProjectLine(
     final results = [
       for (var i = 0; i < tierHits.length; i++)
         for (final plan in proposalSettleTierPlans(tierHits[i].terms))
-          plan.evaluate(volumes[i]?.volume ?? scale),
+          plan.evaluate(
+            volumes[i]?.volume ?? (lookup > 0 ? lookup : productScale),
+            chargeScale:
+                volumes[i] == null &&
+                    lookup > 0 &&
+                    productScale > 0 &&
+                    (lookup - productScale).abs() > 0.001
+                ? productScale
+                : null,
+          ),
     ];
     final volumeNotes = [
       for (final v in volumes)

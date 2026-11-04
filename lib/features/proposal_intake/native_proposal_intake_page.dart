@@ -22130,14 +22130,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (remoteLine == null) {
       estimate = _remoteFinance.loading ? '正在测算…' : '测算暂不可用，请重试。';
     } else if (way == _settleWayTier) {
-      // 后端按这个产品的年化规模套档算出了金额就直接显示（利差、电子券采购款按阶梯都靠这一行看数）。
+      // 后端按提案总规模套档算出了金额就直接显示（利差、电子券采购款按阶梯都靠这一行看数）。
       final amount = (remoteLine['amount'] as num?)?.toDouble() ?? 0;
       if (amount > 0) {
         estimateReady = true;
         estimate = '测算：${remoteLine['substitution']}';
       } else {
         estimate = scale <= 0
-            ? '按阶梯分档算；产品年化规模填好后自动算出金额。'
+            ? (isPromotion
+                  ? '按阶梯分档算；产品年化规模填好后自动算出金额。'
+                  : '按阶梯分档算；提案规模（万元）填好后自动算出金额。')
             : '按阶梯分档算，档位填好后自动算出金额。';
       }
     } else if (way == _settleWayUnit &&

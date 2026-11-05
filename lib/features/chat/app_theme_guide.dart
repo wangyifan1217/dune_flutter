@@ -64,17 +64,14 @@ Future<void> showAppThemeGuide(
                       AppEggThemeController.instance.manualOverride,
                   builder: (context, selected, _) {
                     final settings = ImEggSettings.instance;
-                    final canOverride = settings.manualThemeOverrideEnabled;
                     final options = [
                       (
                         'auto',
                         settings.automaticThemeLabel,
                         Icons.auto_mode_rounded,
                       ),
-                      if (canOverride) ...[
-                        ('day', '日间', Icons.light_mode_outlined),
-                        ('night', '夜间', Icons.dark_mode_outlined),
-                      ],
+                      ('day', '日间', Icons.light_mode_outlined),
+                      ('night', '夜间', Icons.dark_mode_outlined),
                     ];
                     return Wrap(
                       spacing: 8,
@@ -84,8 +81,7 @@ Future<void> showAppThemeGuide(
                           ChoiceChip(
                             avatar: Icon(option.$3, size: 18),
                             label: Text(option.$2),
-                            selected:
-                                option.$1 == (canOverride ? selected : 'auto'),
+                            selected: option.$1 == selected,
                             onSelected: (_) => unawaited(
                               AppEggThemeController.instance.setOverride(
                                 option.$1,

@@ -912,6 +912,17 @@ extension XflowApprovalStepExt on XflowApprovalStep {
 
   String get decidedAtRaw =>
       (raw['decidedAt'] ?? raw['updatedAt'] ?? '').toString();
+
+  /// 或签：任一人通过即可。n 人通过（requiredApprovals > 1）不是或签。
+  bool get isOrSign {
+    final mode = (raw['parallelMode'] ?? '').toString().toUpperCase();
+    if (mode != 'PARALLEL_N_OF_M' && mode != 'PARALLEL_ANY') return false;
+    final required = raw['requiredApprovals'];
+    final n = required is num
+        ? required.toInt()
+        : int.tryParse('${required ?? ''}') ?? 0;
+    return n <= 1;
+  }
 }
 
 Map<String, dynamic> parseLayout(dynamic rawLayout) {

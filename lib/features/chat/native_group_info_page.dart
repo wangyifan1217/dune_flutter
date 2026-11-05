@@ -444,8 +444,22 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       ),
     );
     if (picked == null || picked.isEmpty) return;
+    if (!mounted) return;
+    final historyMode = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('新成员可查看的聊天记录'),
+        children: [
+          SimpleDialogOption(onPressed: () => Navigator.pop(context, 'all'), child: const Text('全部聊天记录（默认）')),
+          SimpleDialogOption(onPressed: () => Navigator.pop(context, 'recent'), child: const Text('最近 30 条聊天记录')),
+          SimpleDialogOption(onPressed: () => Navigator.pop(context, 'none'), child: const Text('不附带聊天记录')),
+          SimpleDialogOption(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        ],
+      ),
+    );
+    if (historyMode == null) return;
     try {
-      final added = await _service.addGroupMembers(info.id, picked);
+      final added = await _service.addGroupMembers(info.id, picked, historyMode: historyMode);
       if (!mounted) return;
       _toast(context, '已添加 $added 人');
       await _load();
@@ -1190,7 +1204,7 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
                         ),
                       ),
                       child: Text(
-                        _selected.isEmpty ? '确定' : '确定（）',
+                        _selected.isEmpty ? '确定' : '确定（${_selected.length}）',
                         style: DunesTypography.sans(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,

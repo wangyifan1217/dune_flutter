@@ -216,9 +216,6 @@ class ImEggSettings {
       enabled &&
       _map(_map(_config['scenes'])['taskCompletion'])['enabled'] == true;
   bool get seasonalMascotEnabled => _map(_config['mascot'])['enabled'] != false;
-  bool get manualThemeOverrideEnabled =>
-      _map(_config['theme'])['enabled'] != false &&
-      _map(_config['theme'])['manualOverride'] != false;
   String get automaticThemeLabel =>
       _map(_config['theme'])['followSystem'] == true ? '自动（跟随系统）' : '自动（按时段切换）';
   String get seasonalDecoration {
@@ -235,13 +232,13 @@ class ImEggSettings {
   }
 
   bool get isNightTheme {
-    final theme = _map(_config['theme']);
-    if (theme['enabled'] == false) return false;
-    final prefsOverride = manualThemeOverrideEnabled
-        ? AppEggThemeController.instance.manualOverride.value
-        : 'auto';
+    // A device-local explicit choice takes precedence over remote automatic
+    // theme settings, including settings refreshed after login or resume.
+    final prefsOverride = AppEggThemeController.instance.manualOverride.value;
     if (prefsOverride == 'day') return false;
     if (prefsOverride == 'night') return true;
+    final theme = _map(_config['theme']);
+    if (theme['enabled'] == false) return false;
     if (theme['followSystem'] == true) {
       return WidgetsBinding.instance.platformDispatcher.platformBrightness ==
           Brightness.dark;
@@ -454,19 +451,17 @@ class ImEggSettings {
 
   String get themeGuide {
     final theme = _map(_config['theme']);
-    if (theme['enabled'] == false) {
-      return '当前管理员已关闭日夜主题，APP 保持日间显示。开启后，可在「我的 → 设置 → 日夜主题」选择自动、日间或夜间。';
-    }
     final day = (theme['dayStart'] ?? '07:00').toString();
     final night = (theme['nightStart'] ?? '19:00').toString();
     final timeZone = theme['timezone'] == 'Asia/Shanghai' ? '北京时间' : '手机本地时间';
-    final schedule = theme['followSystem'] == true
+    final schedule = theme['enabled'] == false
+        ? '自动模式当前保持日间显示。'
+        : theme['followSystem'] == true
         ? '自动模式跟随手机系统的深色 / 浅色外观。'
         : '自动模式按$timeZone切换：$day 进入日间，$night 进入夜间。';
     return '进入「我的 → 设置 → 日夜主题」，选择自动、日间或夜间。\n\n'
         '$schedule\n\n'
-        '选择日间或夜间后会一直保持该模式；想恢复自动切换，再选择「自动」。'
-        '${manualThemeOverrideEnabled ? '' : '\n\n当前管理员已关闭手动切换，可使用自动模式。'}';
+        '选择日间或夜间后会保存到本机，重启 APP 后仍保持，不随时段或系统外观改变；想恢复自动切换，再选择「自动」。';
   }
 
   Future<void> maybeShowDailyWelcome(BuildContext context, int userId) async {
@@ -839,34 +834,65 @@ class AppEggThemeController with WidgetsBindingObserver {
     Timer.periodic(const Duration(minutes: 1), (_) => refresh());
   }
 
+  @visibleForTesting
+  AppEggThemeController.forTesting();
+
   static final AppEggThemeController instance = AppEggThemeController._();
   static const _overrideKey = 'dunes_app_easter_egg_theme_override_v1';
   final ValueNotifier<String> manualOverride = ValueNotifier<String>('auto');
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
   bool? _lastNightTheme;
   bool _loaded = false;
+  Future<void>? _loadFuture;
+  Future<void>? _saveFuture;
+  int _selectionVersion = 0;
 
   bool get isNight => ImEggSettings.instance.isNightTheme;
 
-  Future<void> load() async {
-    if (_loaded) return;
-    _loaded = true;
+  Future<void> load() {
+    if (_loaded) return Future<void>.value();
+    return _loadFuture ??= _loadStoredOverride().whenComplete(() {
+      _loadFuture = null;
+    });
+  }
+
+  Future<void> _loadStoredOverride() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      manualOverride.value = prefs.getString(_overrideKey) ?? 'auto';
+      final saved = prefs.get(_overrideKey);
+      // Never overwrite a choice made while preferences were loading.
+      if (_selectionVersion == 0) {
+        manualOverride.value = const {'day', 'night', 'auto'}.contains(saved)
+            ? saved as String
+            : 'auto';
+      }
+      _loaded = true;
     } catch (_) {}
     refresh();
   }
 
-  Future<void> setOverride(String value) async {
+  Future<void> setOverride(String value) {
     final normalized = const {'auto', 'day', 'night'}.contains(value)
         ? value
         : 'auto';
+    _selectionVersion++;
     manualOverride.value = normalized;
     refresh();
+    // Serialize writes so rapid taps persist the last selected mode.
+    final pending = _saveFuture;
+    final saving = pending == null
+        ? _persistOverride(normalized)
+        : pending.then((_) => _persistOverride(normalized));
+    _saveFuture = saving;
+    return saving.whenComplete(() {
+      if (identical(_saveFuture, saving)) _saveFuture = null;
+    });
+  }
+
+  Future<void> _persistOverride(String value) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_overrideKey, normalized);
+      await prefs.setString(_overrideKey, value);
     } catch (_) {}
     refresh();
   }

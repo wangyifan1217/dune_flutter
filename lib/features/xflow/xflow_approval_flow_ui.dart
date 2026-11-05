@@ -192,6 +192,20 @@ class XflowApprovalFlowTrackSection extends StatelessWidget {
   }
 }
 
+class XflowApprovalFlowTrackPeer {
+  const XflowApprovalFlowTrackPeer({
+    required this.title,
+    required this.comment,
+    required this.state,
+    this.time,
+  });
+
+  final String title;
+  final String comment;
+  final String? time;
+  final XflowApprovalFlowStepState state;
+}
+
 class XflowApprovalFlowTrackRowData {
   const XflowApprovalFlowTrackRowData({
     required this.title,
@@ -200,6 +214,7 @@ class XflowApprovalFlowTrackRowData {
     required this.state,
     this.role,
     this.subComment,
+    this.peers,
   });
 
   final String title;
@@ -208,6 +223,9 @@ class XflowApprovalFlowTrackRowData {
   final String? role;
   final String? subComment;
   final XflowApprovalFlowStepState state;
+
+  /// 或签：同一节点的几个人并排，不再上下各占一步。
+  final List<XflowApprovalFlowTrackPeer>? peers;
 }
 
 class XflowApprovalFlowBadge extends StatelessWidget {
@@ -461,30 +479,32 @@ class _FlowTrackRow extends StatelessWidget {
   Widget build(BuildContext context) {
     const dotSize = 14.0;
     final commentStyle = _commentStyle(data.state);
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: dotSize + 2,
-            child: Column(
-              children: [
-                _FlowDot(state: data.state),
-                if (!isLast)
-                  Expanded(
-                    child: Container(
-                      width: 0.5,
-                      color: DunesColors.resolve(
-                        context,
-                        XfProposalUi.lineSoft,
-                        role: DunesColorRole.surface,
-                      ),
-                      margin: const EdgeInsets.symmetric(vertical: 2),
-                    ),
-                  ),
-              ],
+    return Stack(
+      children: [
+        if (!isLast)
+          Positioned(
+            left: (dotSize + 2 - 0.5) / 2,
+            top: dotSize,
+            bottom: 0,
+            child: Container(
+              width: 0.5,
+              color: DunesColors.resolve(
+                context,
+                XfProposalUi.lineSoft,
+                role: DunesColorRole.surface,
+              ),
             ),
           ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: dotSize + 2,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: _FlowDot(state: data.state),
+              ),
+            ),
           const SizedBox(width: 10),
           Expanded(
             child: Padding(
@@ -562,21 +582,26 @@ class _FlowTrackRow extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        data.time,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: DunesColors.resolve(
-                            context,
-                            XfProposalUi.mute2,
+                      if (data.time.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          data.time,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: DunesColors.resolve(
+                              context,
+                              XfProposalUi.mute2,
+                            ),
+                            letterSpacing: 0.2,
                           ),
-                          letterSpacing: 0.2,
                         ),
-                      ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 5),
+                  if (data.peers != null && data.peers!.length >= 2)
+                    _OrSignPeers(peers: data.peers!)
+                  else
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
@@ -637,6 +662,104 @@ class _FlowTrackRow extends StatelessWidget {
               ),
             ),
           ),
+        ],
+        ),
+      ],
+    );
+  }
+}
+
+class _OrSignPeers extends StatelessWidget {
+  const _OrSignPeers({required this.peers});
+
+  final List<XflowApprovalFlowTrackPeer> peers;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = peers.length <= 1
+            ? 1
+            : (constraints.maxWidth >= 520 && peers.length >= 3 ? 3 : 2);
+        const gap = 8.0;
+        final width =
+            (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final peer in peers)
+              SizedBox(width: width, child: _OrSignPeerCard(peer: peer)),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _OrSignPeerCard extends StatelessWidget {
+  const _OrSignPeerCard({required this.peer});
+
+  final XflowApprovalFlowTrackPeer peer;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = _commentStyle(peer.state);
+    final time = (peer.time ?? '').trim();
+    final showTime = time.isNotEmpty && time != '待处理' && time != '当前处理';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          style.bg,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(7),
+        border: Border(
+          left: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              style.border,
+              role: DunesColorRole.border,
+            ),
+            width: 2,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            peer.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.resolveNullable(context, style.fg),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            formatDetailPlainText(peer.comment),
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.5,
+              color: DunesColors.resolveNullable(context, style.fg),
+            ),
+          ),
+          if (showTime) ...[
+            const SizedBox(height: 2),
+            Text(
+              time,
+              style: TextStyle(
+                fontSize: 10,
+                color: DunesColors.resolve(context, XfProposalUi.mute2),
+              ),
+            ),
+          ],
         ],
       ),
     );

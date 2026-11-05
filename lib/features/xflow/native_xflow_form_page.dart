@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
@@ -73,13 +77,23 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   bool _loading = true;
   bool _ccLoading = true;
   String? _error;
+  String? _loadFailureDetails;
+  String? _draftRecoveryWarning;
   String? _ccError;
   bool _submitting = false;
   bool _checkingPolicy = false;
+
+  String? get _entryCategory =>
+      _launchEntry(_values['entryCategory']) ??
+      _launchEntry(widget.entryCategory);
+
   /// 模板要求关联提案，或者是从提案内发起（带着当前提案）时，都展示关联提案卡片。
   bool get _proposalLinkRequired =>
       _template?.raw['proposalLinkRequired'] == true ||
-      (widget.initialLinkedProposal != null && !_isEditing);
+      (widget.initialLinkedProposal != null &&
+          !_isEditing &&
+          (_template?.fields.any((field) => field.key == 'linkedProposal') ??
+              false));
   bool _submitSucceeded = false;
   int? _draftProposalId;
 
@@ -229,10 +243,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _service = widget.service ?? XflowService(
-      session: widget.session,
-      templateKey: widget.templateKey,
-    );
+    _service =
+        widget.service ??
+        XflowService(session: widget.session, templateKey: widget.templateKey);
     _load();
   }
 
@@ -426,20 +439,28 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     setState(() {
       _loading = true;
       _error = null;
+      _loadFailureDetails = null;
+      _draftRecoveryWarning = null;
       _ccLoading = true;
       _ccError = null;
     });
-    final ccFuture = _service.fetchCcRulesList(templateKey: widget.templateKey);
+    // Attach error handling immediately; a fast CC failure must not escape
+    // while the main template/draft requests are still running.
+    unawaited(_loadCcRules());
+    var loadStage = 'template';
     try {
       var entry = _launchEntry(widget.entryCategory);
       XflowSubmissionDetail? editingSubmission;
       if (_isDynamicSubmission) {
+        loadStage = 'submission';
         editingSubmission = await _service.fetchSubmissionDetail(
           businessType: widget.editBusinessType,
           businessId: widget.editProposalId!,
         );
-        entry = _launchEntry(editingSubmission.formData['entryCategory']) ?? entry;
+        entry =
+            _launchEntry(editingSubmission.formData['entryCategory']) ?? entry;
       }
+      loadStage = 'template';
       var template = applyElectronicReimbursementTemplate(
         await _service.fetchTemplateDetail(
           templateKey: widget.templateKey,
@@ -448,12 +469,23 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       );
       // 先挂上模板，便于 _localDraftBusinessType 取到真实业务类型。
       _template = template;
-      final local = widget.initialLinkedProposal != null && !_isEditing
-          ? <String, dynamic>{}
-          : await _service.loadLocalDraft(
-              businessType: _localDraftBusinessType,
-              businessId: widget.editProposalId,
-            );
+      var local = <String, dynamic>{};
+      if (widget.initialLinkedProposal == null || _isEditing) {
+        try {
+          local = await _service.loadLocalDraft(
+            businessType: _localDraftBusinessType,
+            businessId: widget.editProposalId,
+          );
+        } catch (error, stackTrace) {
+          _draftRecoveryWarning = '本机草稿暂时无法恢复，可继续填写；已有草稿未删除。';
+          developer.log(
+            'Local draft recovery failed',
+            name: 'dunes.xflow',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
+      }
       _values
         ..clear()
         ..addAll(local);
@@ -473,6 +505,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         }
         _draftBusinessType = widget.editBusinessType;
       } else if (_isEditing) {
+        loadStage = 'submission';
         detail = await _service.fetchProposalDetail(widget.editProposalId!);
         _mergeProposalToForm(detail);
         _draftProposalId = widget.editProposalId;
@@ -485,6 +518,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         );
       } catch (_) {}
       // 初次渲染前先重算计算字段（如印花税），避免编辑/草稿预填时显示为空。
+      loadStage = 'defaults';
       template = await _applySubmitterDefaults(template);
       if (_isEditing) {
         stripCopiedApprovalTitle(_values, [
@@ -494,8 +528,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         ]);
       }
       if (!mounted) return;
-      if (!_isEditing && template.raw['proposalLinkRequired'] == true &&
+      if (!_isEditing &&
+          _proposalLinkRequired &&
           parseLinkedProposalId(_values['linkedProposal']) <= 0) {
+        loadStage = 'proposal-picker';
         final selected = await showCompletedProposalPicker(context, _service);
         if (!mounted) return;
         if (selected == null) {
@@ -515,15 +551,39 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       });
       // 条件阶段 / 人名补齐走预览接口，不本地拼审批链。
       unawaited(_refreshApprovalPreview());
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (!mounted) return;
+      developer.log(
+        'Approval form load failed: ${widget.templateKey} / $loadStage',
+        name: 'dunes.xflow',
+        error: e,
+        stackTrace: stackTrace,
+      );
       setState(() {
-        _error = friendlyErrorText(e);
+        _error = friendlyErrorText(e, fallback: '审批表单加载失败，请重试或联系管理员');
+        _loadFailureDetails = [
+          '审批表单加载失败',
+          'time=${DateTime.now().toUtc().toIso8601String()}',
+          'platform=${kIsWeb ? 'web' : defaultTargetPlatform.name}',
+          'template=${widget.templateKey}',
+          'stage=$loadStage',
+          'errorType=${e.runtimeType}',
+          'stack=${stackTrace.toString().split('\n').take(8).join('\n')}',
+          if (e is XflowRequestException) ...[
+            'httpStatus=${e.statusCode}',
+            'path=${e.path}',
+          ],
+        ].join('\n');
         _loading = false;
       });
     }
+  }
+
+  Future<void> _loadCcRules() async {
     try {
-      final rules = await ccFuture;
+      final rules = await _service.fetchCcRulesList(
+        templateKey: widget.templateKey,
+      );
       if (!mounted) return;
       setState(() {
         _ccRules = rules;
@@ -561,10 +621,14 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         actorName == '朱虹旭') {
       try {
         final matches = await _service.searchOrgUsers('郑咏熹');
-        final target = matches.where((row) {
-          final name = (row['displayName'] ?? row['name'] ?? '').toString().trim();
-          return name == '郑咏熹';
-        }).toList(growable: false);
+        final target = matches
+            .where((row) {
+              final name = (row['displayName'] ?? row['name'] ?? '')
+                  .toString()
+                  .trim();
+              return name == '郑咏熹';
+            })
+            .toList(growable: false);
         if (target.length == 1) {
           final delegatedId = _int(
             target.single['userId'] ?? target.single['id'],
@@ -625,9 +689,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       values: _values,
       userId: submitterId,
       displayName: submitterName,
-      profile: submitterId == actorId
-          ? _submitterProfile(profile)
-          : profile,
+      profile: submitterId == actorId ? _submitterProfile(profile) : profile,
     );
     XflowLinkage.recompute(fields, template.layout, _values);
     return XflowTemplateDetail(
@@ -690,11 +752,20 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   }
 
   Future<void> _submit() async {
-    if (_submitting || _checkingPolicy) return;
+    if (_loading ||
+        _error != null ||
+        _template == null ||
+        _submitting ||
+        _checkingPolicy) {
+      return;
+    }
     setState(() => _checkingPolicy = true);
     try {
       final fresh = applyElectronicReimbursementTemplate(
-        await _service.fetchTemplateDetail(templateKey: widget.templateKey),
+        await _service.fetchTemplateDetail(
+          templateKey: widget.templateKey,
+          entryCategory: _entryCategory,
+        ),
       );
       if (!mounted) return;
       // Refresh rules without reloading or clearing user-entered form values.
@@ -1162,6 +1233,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                             10 + MediaQuery.viewInsetsOf(context).bottom,
                           ),
                           children: [
+                            if (_draftRecoveryWarning != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Text(_draftRecoveryWarning!),
+                              ),
                             Container(
                               margin: const EdgeInsets.only(bottom: 12),
                               padding: const EdgeInsets.fromLTRB(
@@ -1355,7 +1431,14 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
             XflowXfActionBar(
               label: _submitLabel,
               loading: _submitting || _checkingPolicy,
-              onPressed: _submitting || _checkingPolicy ? null : _submit,
+              onPressed:
+                  _loading ||
+                      _error != null ||
+                      _template == null ||
+                      _submitting ||
+                      _checkingPolicy
+                  ? null
+                  : _submit,
               secondaryLabel: _canDeleteDraft ? '删除草稿' : null,
               secondaryDanger: true,
               onSecondaryPressed: _canDeleteDraft && !_submitting
@@ -1378,10 +1461,29 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 10),
             OutlinedButton(onPressed: _load, child: const Text('重试')),
+            if (_loadFailureDetails != null)
+              TextButton(
+                onPressed: _copyLoadFailureDetails,
+                child: const Text('复制故障信息'),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _copyLoadFailureDetails() async {
+    final details = _loadFailureDetails;
+    if (details == null) return;
+    var version = 'unknown';
+    try {
+      final info = await PackageInfo.fromPlatform();
+      version = '${info.version}+${info.buildNumber}';
+    } catch (_) {}
+    await Clipboard.setData(
+      ClipboardData(text: '$details\nappVersion=$version'),
+    );
+    if (mounted) showDunesToast(context, '故障信息已复制，可发给管理员排查');
   }
 
   int _int(dynamic value) {

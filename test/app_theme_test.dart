@@ -6,7 +6,6 @@ import 'package:dunes_app/features/chat/im_celebration.dart';
 import 'package:dunes_app/features/conversation/inbox_widgets.dart';
 import 'package:dunes_app/features/tasks/task_widgets.dart';
 import 'package:dunes_app/main.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -66,10 +65,8 @@ void main() {
     await AppEggThemeController.instance.load();
   });
   setUp(() async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     await AppEggThemeController.instance.setOverride('day');
   });
-  tearDown(() => debugDefaultTargetPlatformOverride = null);
 
   testWidgets('root theme updates cached page, actual inbox header and surfaces', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -98,7 +95,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(Theme.of(context).brightness, Brightness.light);
     expect(tester.widget<Text>(find.text('消息')).style!.color, dayInk);
-  });
+  }, variant: TargetPlatformVariant({TargetPlatform.android, TargetPlatform.iOS}));
 
   testWidgets('task date picker and menus inherit night brightness', (tester) async {
     late ThemeData taskTheme;

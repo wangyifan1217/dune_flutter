@@ -1020,17 +1020,14 @@ class _NativeMyWorkProfileCenterPageState
 
   void _openEggThemePicker() {
     final controller = AppEggThemeController.instance;
-    final canOverride = ImEggSettings.instance.manualThemeOverrideEnabled;
     final options = <(String, String, IconData)>[
       (
         'auto',
         ImEggSettings.instance.automaticThemeLabel,
         Icons.auto_mode_rounded,
       ),
-      if (canOverride) ...[
-        ('day', '日间模式', Icons.light_mode_rounded),
-        ('night', '夜间模式', Icons.dark_mode_rounded),
-      ],
+      ('day', '日间模式', Icons.light_mode_rounded),
+      ('night', '夜间模式', Icons.dark_mode_rounded),
     ];
     showModalBottomSheet<void>(
       context: context,
@@ -1053,9 +1050,7 @@ class _NativeMyWorkProfileCenterPageState
               ),
               const SizedBox(height: 8),
               Text(
-                canOverride
-                    ? '自动模式可按时段切换或跟随系统；日间、夜间模式会保持你的选择。'
-                    : '仅影响 iOS / Android APP；手动切换由管理员关闭。',
+                '日间、夜间模式会保存并保持你的选择，重启 APP 后仍生效；选择自动才按时段切换或跟随系统。',
                 style: DunesTypography.sans(
                   fontSize: 12,
                   color: DunesColors.resolve(context, DunesColors.text3),

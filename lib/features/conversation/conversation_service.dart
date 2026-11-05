@@ -2531,11 +2531,11 @@ class ConversationService {
     }
   }
 
-  Future<int> addGroupMembers(int conversationId, List<int> userIds) async {
+  Future<int> addGroupMembers(int conversationId, List<int> userIds, {String historyMode = 'all'}) async {
     final resp = await _client.post(
       _uri('/conversations/$conversationId/members'),
       headers: _headers,
-      body: jsonEncode(<String, dynamic>{'userIds': userIds}),
+      body: jsonEncode(<String, dynamic>{'userIds': userIds, 'historyMode': historyMode}),
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('添加成员失败: HTTP ${resp.statusCode}');

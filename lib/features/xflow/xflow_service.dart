@@ -11,6 +11,21 @@ import 'xflow_approval_catalog.dart';
 import 'xflow_models.dart';
 import 'xflow_template_runtime.dart';
 
+class XflowRequestException implements Exception {
+  const XflowRequestException({
+    required this.path,
+    required this.statusCode,
+    required this.message,
+  });
+
+  final String path;
+  final int statusCode;
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class XflowService {
   XflowService({
     required this.session,
@@ -1855,7 +1870,10 @@ class XflowService {
     String objectKey = '',
     String templateKey = '',
   }) async {
-    final req = http.MultipartRequest('POST', _uri('/xflow/invoices/recognize'));
+    final req = http.MultipartRequest(
+      'POST',
+      _uri('/xflow/invoices/recognize'),
+    );
     req.headers['Authorization'] = 'Bearer ${session.token}';
     if (objectKey.isNotEmpty) req.fields['objectKey'] = objectKey;
     if (templateKey.isNotEmpty) req.fields['templateKey'] = templateKey;
@@ -1903,20 +1921,24 @@ class XflowService {
       businessType: businessType,
       businessId: businessId,
     );
-    var text = prefs.getString(key);
-    // 新建才回退旧 key，避免编辑单串草稿。
-    if ((text == null || text.isEmpty) &&
-        (businessId == null || businessId <= 0)) {
-      text =
-          prefs.getString(_legacyDraftStorageKey) ??
-          prefs.getString(_legacyPcDraftStorageKey);
+    // Old clients may have stored another preference type or malformed JSON.
+    // Skip that entry without deleting it; editing never falls back to a new draft.
+    final keys = [
+      key,
+      if (businessId == null || businessId <= 0) ...[
+        _legacyDraftStorageKey,
+        _legacyPcDraftStorageKey,
+      ],
+    ];
+    for (final candidate in keys) {
+      final text = prefs.get(candidate);
+      if (text is! String || text.trim().isEmpty) continue;
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
     }
-    if (text == null || text.isEmpty) return const {};
-    try {
-      final decoded = jsonDecode(text);
-      if (decoded is Map<String, dynamic>) return decoded;
-      if (decoded is Map) return Map<String, dynamic>.from(decoded);
-    } catch (_) {}
     return const {};
   }
 
@@ -1975,13 +1997,7 @@ class XflowService {
 
   Future<List<dynamic>> _requestList(String path) async {
     final resp = await _client.get(_uri(path), headers: _headers);
-    final map = _decode(resp.body);
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception(_apiMessage(map, '[$path] HTTP ${resp.statusCode}'));
-    }
-    if (map['success'] == false) {
-      throw Exception(_apiMessage(map, '$path 请求失败'));
-    }
+    final map = _checkedEnvelope(path, resp);
     final data = map['data'];
     if (data is List<dynamic>) return data;
     if (data is Map<String, dynamic>) {
@@ -1992,17 +2008,51 @@ class XflowService {
   }
 
   Map<String, dynamic> _unwrap(String path, http.Response resp) {
-    final map = _decode(resp.body);
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception(_apiMessage(map, '[$path] HTTP ${resp.statusCode}'));
-    }
-    if (map['success'] == false) {
-      throw Exception(_apiMessage(map, '$path 请求失败'));
-    }
+    final map = _checkedEnvelope(path, resp);
     final data = map['data'];
     if (data is Map<String, dynamic>) return data;
     if (data is Map) return Map<String, dynamic>.from(data);
     if (data is List<dynamic>) return <String, dynamic>{'list': data};
+    return map;
+  }
+
+  Map<String, dynamic> _checkedEnvelope(String path, http.Response resp) {
+    final failed = resp.statusCode < 200 || resp.statusCode >= 300;
+    Map<String, dynamic> map;
+    try {
+      map = _decode(resp.body);
+    } on FormatException {
+      // Proxies often return HTML/plain text for 401/502/503.
+      if (!failed) rethrow;
+      map = const {};
+    }
+    if (failed || map['success'] == false) {
+      var fallback = '审批请求失败，请稍后重试';
+      if (resp.statusCode == 401) {
+        fallback = '登录已失效，请重新登录后再试';
+      } else if (resp.statusCode == 403) {
+        fallback = '当前账号没有访问权限，请联系管理员';
+      } else if (resp.statusCode == 404) {
+        fallback = path.startsWith('/xflow/templates/')
+            ? '该审批模板不存在或已停用，请返回后重新进入'
+            : '未找到该审批数据，请返回刷新后重试';
+      } else if (resp.statusCode >= 500) {
+        fallback = '审批服务暂时不可用，请稍后重试';
+      }
+      final message = _apiMessage(map, fallback);
+      throw XflowRequestException(
+        path: path.split('?').first,
+        statusCode: resp.statusCode,
+        message:
+            (resp.statusCode == 401 ||
+                    resp.statusCode == 403 ||
+                    resp.statusCode == 404 ||
+                    resp.statusCode >= 500) &&
+                !RegExp(r'[\u4e00-\u9fa5]').hasMatch(message)
+            ? fallback
+            : message,
+      );
+    }
     return map;
   }
 
@@ -2014,8 +2064,10 @@ class XflowService {
   }
 
   String _apiMessage(Map<String, dynamic> map, String fallback) {
-    final msg = (map['message'] ?? (map['error'] as Map?)?['message'] ?? '')
-        .toString();
+    final error = map['error'];
+    final msg =
+        (map['message'] ?? (error is Map ? error['message'] : error) ?? '')
+            .toString();
     if (msg.trim().isNotEmpty) return msg;
     return fallback;
   }
@@ -2148,7 +2200,6 @@ class XflowService {
     }
     return out;
   }
-
 
   XflowProposalItem _mapProposalItem(Map<String, dynamic> json) {
     final idText = _businessIdText(json['id'] ?? json['businessId']);

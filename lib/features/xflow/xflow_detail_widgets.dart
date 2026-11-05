@@ -2390,39 +2390,97 @@ class XfDetTrackTimeline extends StatelessWidget {
       ),
     ];
 
-    for (final step in steps) {
+    ({
+      XflowApprovalFlowStepState state,
+      String comment,
+      String time,
+    }) paintStep(XflowApprovalStep step) {
+      final decision = step.decision.toUpperCase();
+      if (decision == 'APPROVED') {
+        return (
+          state: XflowApprovalFlowStepState.done,
+          comment: step.comment.isEmpty ? '已通过' : step.comment,
+          time: fmtDetailTime(step.decidedAtRaw),
+        );
+      }
+      if (decision == 'REJECTED') {
+        return (
+          state: XflowApprovalFlowStepState.rejected,
+          comment: step.comment.isEmpty ? '已驳回' : step.comment,
+          time: fmtDetailTime(step.decidedAtRaw),
+        );
+      }
+      if (st == 'pending' && isCurrentTrackStep(step)) {
+        return (
+          state: XflowApprovalFlowStepState.current,
+          comment: '审批进行中',
+          time: '当前处理',
+        );
+      }
+      return (
+        state: XflowApprovalFlowStepState.pending,
+        comment: '待处理',
+        time: '待处理',
+      );
+    }
+
+    XflowApprovalFlowTrackRowData singleRow(XflowApprovalStep step) {
       final label = trailStepRole(step, bundle.stages);
       final who = assigneeName(step);
-      final decision = step.decision.toUpperCase();
-      late XflowApprovalFlowStepState state;
-      late String cmt;
-      late String tm;
-      if (decision == 'APPROVED') {
-        state = XflowApprovalFlowStepState.done;
-        cmt = step.comment.isEmpty ? '已通过' : step.comment;
-        tm = fmtDetailTime(step.decidedAtRaw);
-      } else if (decision == 'REJECTED') {
-        state = XflowApprovalFlowStepState.rejected;
-        cmt = step.comment.isEmpty ? '已驳回' : step.comment;
-        tm = fmtDetailTime(step.decidedAtRaw);
-      } else if (st == 'pending' && isCurrentTrackStep(step)) {
-        state = XflowApprovalFlowStepState.current;
-        cmt = '审批进行中';
-        tm = '当前处理';
-      } else {
-        state = XflowApprovalFlowStepState.pending;
-        cmt = '待处理';
-        tm = '待处理';
-      }
-      rows.add(
-        XflowApprovalFlowTrackRowData(
-          title: who.isNotEmpty ? who : label,
-          role: who.isNotEmpty ? label : null,
-          time: tm,
-          comment: cmt,
-          state: state,
-        ),
+      final painted = paintStep(step);
+      return XflowApprovalFlowTrackRowData(
+        title: who.isNotEmpty ? who : label,
+        role: who.isNotEmpty ? label : null,
+        time: painted.time,
+        comment: painted.comment,
+        state: painted.state,
       );
+    }
+
+    var index = 0;
+    while (index < steps.length) {
+      final step = steps[index];
+      if (step.isOrSign) {
+        final group = <XflowApprovalStep>[step];
+        var next = index + 1;
+        while (next < steps.length &&
+            steps[next].isOrSign &&
+            steps[next].stepNo == step.stepNo) {
+          group.add(steps[next]);
+          next++;
+        }
+        if (group.length >= 2) {
+          final peers = <XflowApprovalFlowTrackPeer>[];
+          for (final member in group) {
+            final painted = paintStep(member);
+            final who = assigneeName(member);
+            peers.add(
+              XflowApprovalFlowTrackPeer(
+                title: who.isNotEmpty
+                    ? who
+                    : trailStepRole(member, bundle.stages),
+                comment: painted.comment,
+                time: painted.time,
+                state: painted.state,
+              ),
+            );
+          }
+          rows.add(
+            XflowApprovalFlowTrackRowData(
+              title: trailStepRole(step, bundle.stages),
+              role: '或签',
+              time: '',
+              comment: '',
+              state: _orSignGroupState(peers.map((peer) => peer.state)),
+              peers: peers,
+            ),
+          );
+          index = next;
+          continue;
+        }
+      }
+      rows.add(singleRow(step));
+      index++;
     }
 
     if (st == 'approved') {
@@ -2438,6 +2496,21 @@ class XfDetTrackTimeline extends StatelessWidget {
 
     return XflowApprovalFlowTrackSection(rows: rows, embedded: true);
   }
+}
+
+XflowApprovalFlowStepState _orSignGroupState(
+  Iterable<XflowApprovalFlowStepState> states,
+) {
+  final list = states.toList(growable: false);
+  final passed = list.contains(XflowApprovalFlowStepState.done);
+  if (list.contains(XflowApprovalFlowStepState.rejected) && !passed) {
+    return XflowApprovalFlowStepState.rejected;
+  }
+  if (passed) return XflowApprovalFlowStepState.done;
+  if (list.contains(XflowApprovalFlowStepState.current)) {
+    return XflowApprovalFlowStepState.current;
+  }
+  return XflowApprovalFlowStepState.pending;
 }
 
 class XfDetCcCard extends StatelessWidget {

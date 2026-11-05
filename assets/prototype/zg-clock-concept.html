@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>资管时钟 · 视觉原型</title>
+<style>
+  :root { --ink:#302649; --muted:#8f899e; --purple:#9d86df; --purple-deep:#7057b5; --blue:#72a6d4; --orange:#e2a45e; --coral:#e8968c; --paper:#fbfafd; --edge:#e9e4f2; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; background:radial-gradient(circle at 20% 15%,#f8f4ff,#f1eef6 54%,#eae6f1); font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; color:var(--ink); }
+  .stage { width:min(100%,570px); padding:24px; }
+  .card { position:relative; overflow:hidden; padding:24px 24px 22px; border:1px solid #fff; border-radius:28px; background:linear-gradient(145deg,rgba(255,255,255,.95),rgba(250,248,253,.94)); box-shadow:0 18px 48px #46357c14,0 1px 4px #46357c0a; }
+  .card:before { content:""; position:absolute; width:270px; height:270px; right:-95px; top:-130px; border-radius:50%; background:radial-gradient(circle,#e7ddff80,transparent 70%); pointer-events:none; }
+  .head { position:relative; display:flex; align-items:center; gap:10px; }
+  .badge { width:34px; height:34px; display:grid; place-items:center; border-radius:12px; background:#f1ebff; color:var(--purple-deep); }
+  .titles { flex:1; }
+  h1 { font-size:16px; line-height:1.2; margin:0 0 4px; letter-spacing:.02em; }
+  .subtitle { font-size:11px; color:var(--muted); }
+  .live { display:flex; align-items:center; gap:6px; color:#75638f; font-size:10px; padding:6px 9px; border-radius:99px; background:#f4effa; }
+  .live i { width:6px; height:6px; background:#9d86df; border-radius:50%; box-shadow:0 0 0 3px #9d86df25; }
+  .layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; align-items:start; margin-top:22px; }
+  .dial-col { min-width:0; text-align:center; }
+  .dial-wrap { width:100%; aspect-ratio:1; max-width:220px; margin:auto; }
+  svg { width:100%; height:100%; overflow:visible; }
+  .eyebrow { font-size:10px; letter-spacing:.12em; color:#9d96ad; margin:8px 0 4px; }
+  .time { font-variant-numeric:tabular-nums; font-size:24px; font-weight:750; letter-spacing:.045em; line-height:1; }
+  .time small { font-size:11px; color:#aaa2b7; vertical-align:baseline; margin-left:2px; }
+  .caption { font-size:11px; color:#827a91; margin-top:7px; }
+  .key { display:flex; justify-content:center; gap:15px; margin-top:17px; font-size:10px; color:#877f94; }
+  .key span { display:flex; align-items:center; gap:5px; }
+  .key b { width:13px; height:4px; border-radius:3px; }
+  .metrics { display:grid; grid-template-columns:1fr 1fr; margin-top:18px; border:1px solid var(--edge); border-radius:14px; background:#ffffff99; overflow:hidden; }
+  .metric { position:relative; padding:8px 12px; min-width:0; background:linear-gradient(130deg,color-mix(in srgb,var(--tone) 8%,white),#fff 75%); }
+  .metric:nth-child(odd) { border-right:1px solid var(--edge); }
+  .metric:nth-child(-n+2) { border-bottom:1px solid var(--edge); }
+  .metric:nth-child(5) { border-top:1px solid var(--edge); }
+  .metric-label { display:flex; align-items:center; justify-content:flex-start; gap:5px; color:#817a8f; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .metric-label span { flex:none; margin-left:auto; padding:2px 5px; border:1px solid #d7c9f5; border-radius:99px; color:#7057b5; font-size:9px; }
+  .metric-label b { display:inline-grid; place-items:center; width:17px; height:17px; margin-right:4px; border-radius:50%; background:color-mix(in srgb,var(--tone) 18%,white); color:var(--tone); font-size:11px; }
+  .metric:after { content:""; position:absolute; right:12px; top:43px; width:18px; height:18px; border-radius:50%; background:conic-gradient(var(--tone) var(--pct),#ebe6f2 0); mask:radial-gradient(transparent 50%,#000 54%); }
+  .metric-value { margin-top:3px; color:var(--ink); font-size:15px; line-height:1.2; font-weight:750; }
+  .metric-sub { margin-top:2px; color:#a29bac; font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .note { margin:14px auto 0; width:max-content; max-width:100%; text-align:center; font-size:11px; line-height:1.5; color:#827a91; background:#f4f0f9; border:1px solid #ede7f5; padding:8px 13px; border-radius:10px; }
+  @media(max-width:420px) { .stage{padding:12px}.card{padding:18px 15px}.layout{gap:5px}.time{font-size:21px}.key{gap:9px;font-size:9px} }
+</style>
+</head>
+<body>
+<div class="stage"><div class="card">
+  <div class="head"><div class="badge">◷</div><div class="titles"><h1>资管时钟</h1><div class="subtitle">本月进度与此刻时间</div></div><div class="live"><i></i> 实时</div></div>
+  <div class="layout">
+    <div class="dial-col"><div class="dial-wrap"><svg id="month" viewBox="0 0 220 220" aria-label="本月进度表盘"></svg></div><div class="eyebrow" id="monthLabel"></div><div class="time" id="dateText"></div><div class="caption" id="dayText"></div></div>
+    <div class="dial-col"><div class="dial-wrap"><svg id="day" viewBox="0 0 220 220" aria-label="当前时间表盘"></svg></div><div class="eyebrow">此刻 · 24H 进度</div><div class="time" id="timeText"></div><div class="caption">短时针 · 长分针 · 外圈为今日进度</div></div>
+  </div>
+  <div class="metrics">
+    <div class="metric" style="--tone:#9d86df;--pct:78%"><div class="metric-label"><b>◫</b>业财对照 <span>👥 10</span></div><div class="metric-value">78%</div><div class="metric-sub">资产重合 · 差 +2,660.45 万</div></div>
+    <div class="metric" style="--tone:#e2a45e;--pct:42%"><div class="metric-label"><b>⇄</b>未结往来 <span>👥 14</span></div><div class="metric-value">42%</div><div class="metric-sub">渠道应收逾期 · 4,574.88 万</div></div>
+    <div class="metric" style="--tone:#72a6d4;--pct:100%"><div class="metric-label"><b>▤</b>资金计划 <span>👥 11</span></div><div class="metric-value">455%</div><div class="metric-sub">回款进度 · 快于时间 17%</div></div>
+    <div class="metric" style="--tone:#e8968c;--pct:91%"><div class="metric-label"><b>≋</b>资金流水 <span>👥 11</span></div><div class="metric-value">91%</div><div class="metric-sub">流入覆盖流出 · 净 −193.16 万</div></div>
+    <div class="metric" style="grid-column:span 2;border-right:0;--tone:#8a78cb;--pct:16%"><div class="metric-label"><b>↗</b>资金调动 <span>👥</span></div><div class="metric-value">2,571.17 万</div><div class="metric-sub">跨板块发生额 · 16%</div></div>
+  </div>
+  <div class="key"><span><b style="background:#9d86df"></b>本月</span><span><b style="background:#72a6d4"></b>回款</span><span><b style="background:#e2a45e"></b>付款</span></div>
+  <div class="note">表针读取本机时间；外圈从 0 点起顺时针走完一天。</div>
+</div></div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+const el=(tag,attrs={},parent)=>{let n=document.createElementNS(NS,tag);for(let [k,v] of Object.entries(attrs))n.setAttribute(k,v);parent.appendChild(n);return n};
+const polar=(r,f)=>[110+r*Math.sin(f*2*Math.PI),110-r*Math.cos(f*2*Math.PI)];
+const line=(p,x1,y1,x2,y2,color,width,cap='round')=>el('line',{x1,y1,x2,y2,stroke:color,'stroke-width':width,'stroke-linecap':cap},p);
+const circle=(p,r,fill,stroke='none',sw=0)=>el('circle',{cx:110,cy:110,r,fill,stroke,'stroke-width':sw},p);
+const ring=(p,r,color,track,width,f)=>{circle(p,r,'none',track,width);if(f>0){let circumference=2*Math.PI*r;el('circle',{cx:110,cy:110,r,fill:'none',stroke:color,'stroke-width':width,'stroke-linecap':'round','stroke-dasharray':`${circumference*Math.min(f,.99999)} ${circumference}`,'transform':'rotate(-90 110 110)'},p)}};
+const hand=(p,r,f,color,w)=>{let [x,y]=polar(r,f);line(p,110,110,x,y,color,w)};
+function draw(){
+ const n=new Date(), d=new Date(n.getFullYear(),n.getMonth()+1,0).getDate(), day=n.getDate();
+ const month=document.getElementById('month'), clock=document.getElementById('day');month.replaceChildren();clock.replaceChildren();
+ const defs=el('defs',{},clock);let g=el('radialGradient',{id:'face',cx:'48%',cy:'42%',r:'68%'},defs);el('stop',{offset:'0%', 'stop-color':'#ffffff'},g);el('stop',{offset:'75%', 'stop-color':'#fcfbff'},g);el('stop',{offset:'100%', 'stop-color':'#f0ecf8'},g);
+ // 月钟保留原卡片的淡紫、蓝、橙、珊瑚色系。
+ circle(month,97,'#fbfafd','#eeeaf5',1);
+ for(let i=0;i<d;i++){let f=i/d,[x1,y1]=polar(i%5===0?91:94,f),[x2,y2]=polar(98,f);line(month,x1,y1,x2,y2,i<day?'#b1a7c6':'#d8d2e2',i%5===0?1.5:.8)}
+ ring(month,88,'#9d86df','#eae5f4',5,(day-1+(n.getHours()+n.getMinutes()/60)/24)/d);
+ ring(month,70,'#e2a45e','#f4e8d9',4,.42);ring(month,60,'#72a6d4','#e3edf6',4,.56);ring(month,50,'#e8968c','#f7e9e7',4,.74);
+ circle(month,37,'#fff');hand(month,83,(day-.5)/d,'#302649',2.4);circle(month,4,'#302649');
+ // 真实时间：外圈 24 小时进度，内圈为传统 12 小时表盘。
+ circle(clock,94,'url(#face)','#ebe6f3',1);
+ let dayFraction=(n.getHours()*3600+n.getMinutes()*60+n.getSeconds())/86400;
+ ring(clock,88,'#8f78cf','#e8e2f1',5,dayFraction);
+ for(let i=0;i<60;i++){let f=i/60,major=i%5===0,[x1,y1]=polar(major?79:83,f),[x2,y2]=polar(major?88:87,f);line(clock,x1,y1,x2,y2,major?'#9d92b3':'#d0c9dc',major?1.8:.8)}
+ for(let h=1;h<=12;h++){let [x,y]=polar(69,h/12);let t=el('text',{x,y:y+3,'text-anchor':'middle',fill:h%3===0?'#5b4b78':'#a5a0ae','font-size':h%3===0?10:8,'font-family':'-apple-system,Arial,sans-serif','font-weight':h%3===0?700:500},clock);t.textContent=h}
+ ring(clock,57,'#72a6d4','#e5eef7',3,.56);ring(clock,50,'#e2a45e','#f5eadc',3,.42);
+ let hour=((n.getHours()%12)+n.getMinutes()/60+n.getSeconds()/3600)/12,minute=(n.getMinutes()+n.getSeconds()/60)/60,second=n.getSeconds()/60;
+ hand(clock,42,hour,'#33294b',4.6);hand(clock,70,minute,'#675493',2.7);hand(clock,74,second,'#e8968c',1);
+ circle(clock,5.6,'#fff','#675493',2);circle(clock,2.1,'#e8968c');
+ let pad=v=>String(v).padStart(2,'0');document.getElementById('timeText').innerHTML=`${pad(n.getHours())}:${pad(n.getMinutes())}<small>:${pad(n.getSeconds())}</small>`;
+ document.getElementById('dateText').textContent=`${pad(n.getMonth()+1)}.${pad(day)}`;document.getElementById('monthLabel').textContent=`本月 · ${new Intl.DateTimeFormat('en',{month:'short'}).format(n).toUpperCase()}`;document.getElementById('dayText').textContent=`第 ${day} 天 / 共 ${d} 天`;
+}
+draw();setInterval(draw,1000);
+</script>
+</body></html>

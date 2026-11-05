@@ -7,9 +7,14 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import 'lighthouse_business_finance.dart';
+import 'lighthouse_card_share.dart';
+import 'lighthouse_shared_card_data.dart';
+import 'lighthouse_zg_share.dart';
+import 'lighthouse_product_l3.dart' show LhProductL3BranchMark;
 import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
 import 'lighthouse_visibility_sheet.dart';
+import 'lighthouse_zg_period.dart';
 
 part 'lighthouse_fund_flow.dart';
 part 'lighthouse_fund_plan.dart';
@@ -30,12 +35,6 @@ part 'lighthouse_fund_plan.dart';
 //   页面用语保持正式：应收 / 应付 / 预收、多收 / 多付，不用口语化描述。
 // ════════════════════════════════════════════════════════════════════════
 
-
-/// 资管页宽于这个就左右排（左时钟、右板块），窄于它照旧上下排。
-const double _kZgWideBreakpoint = 900;
-
-/// 超宽屏才封顶居中；常见 PC 宽度（1280–1680）都是铺满的。
-const double _kZgMaxContentWidth = 1680;
 
 const _kInk = Color(0xFF1F2421);
 const _kInk2 = Color(0xFF5A5C56);
@@ -100,6 +99,20 @@ String _signedWan(double? yuan) {
   if (yuan.abs() < 0.5) return '0.00';
   return '${yuan > 0 ? '+' : '−'}${lhBfWan(yuan.abs())}';
 }
+
+/// 资管卡片的转发按钮：同灯塔一条通路（选会话 → 发结构化卡片），预览 / 接收端是 [LhZgSharedCardView]。
+Widget lhZgShareButton(BuildContext context, {required AuthSession session, required LighthouseSharedCardData Function() data}) =>
+    LighthouseShareableCard(
+      session: session,
+      title: '资管',
+      rangeLabel: '',
+      compact: true,
+      dialogTitle: '转发资管卡片',
+      confirmText: '发送这张卡片的快照：金额和日期固定为现在看到的口径，接收人不会因此获得资管数据的查看权限。请确认数据适合所选会话。',
+      data: data,
+      previewBuilder: (d) => LhZgSharedCardView(data: d),
+      builder: (icon) => icon,
+    );
 
 BoxDecoration _cardDeco(BuildContext context, {double radius = 14}) => BoxDecoration(
   color: _bg(context, Colors.white),
@@ -973,7 +986,6 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
   LhBfSummary? _bf;
   String? _bfError;
   bool _bfLoading = true;
-  List<LhBfPoint> _bfSeries = const [];
   LhLedger? _bills;
   String? _billError;
   bool _billLoading = true;
@@ -984,11 +996,17 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
   String? _flowError;
   bool _flowLoading = true;
   LhTransfer? _transfer;
+  String? _transferError;
+  bool _transferLoading = true;
+
+  /// 今日资金计划（planDate = 今天）：24 小时钟的两环。
+  LhFundPlan? _todayPlan;
+  bool _todayLoading = true;
 
   /// 入场：圆环画出来、指针转到今天、卡片依次浮现。
-  late final AnimationController _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800));
+  late final AnimationController _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
 
-  /// 秒针：一分钟一圈，表示数据是活的。
+  /// 驱动表盘重绘；指针位置始终取设备当前时间。
   late final AnimationController _sweep = AnimationController(vsync: this, duration: const Duration(seconds: 60));
 
   @override
@@ -997,15 +1015,17 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
     unawaited(_fetchBf());
     unawaited(_fetchBills());
     unawaited(_fetchPlan());
+    unawaited(_fetchTodayPlan());
     unawaited(_fetchFlow());
+    unawaited(_fetchTransfer());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
         _intro.value = 1;
       } else {
         unawaited(_intro.forward());
-        unawaited(_sweep.repeat());
       }
+      unawaited(_sweep.repeat());
     });
   }
 
@@ -1045,19 +1065,6 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
       });
       return;
     }
-    try {
-      final data = await widget.service.fetchBusinessFinanceSeries(days: 14);
-      final raw = data['points'];
-      final pts = <LhBfPoint>[
-        if (raw is List)
-          for (final p in raw)
-            if (p is Map) LhBfPoint.from(p),
-      ];
-      if (!mounted) return;
-      setState(() => _bfSeries = pts);
-    } catch (_) {
-      // 走势只是装饰，拿不到就不画。
-    }
   }
 
   Future<void> _fetchBills() async {
@@ -1096,16 +1103,47 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
     }
   }
 
-  Future<void> _fetchFlow() async {
+  Future<void> _fetchTodayPlan() async {
+    final n = DateTime.now();
+    final date = '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
     try {
-      final results = await Future.wait([
-        widget.service.fetchFlowCategory(period: _monthParam),
-        widget.service.fetchFundTransfer(yearMonth: _monthParam).catchError((Object _) => <String, dynamic>{}),
-      ]);
+      final data = await widget.service.fetchFundPlan(planDate: date);
       if (!mounted) return;
       setState(() {
-        _flow = LhFlowCategory.fromJson(results[0]);
-        _transfer = results[1].isEmpty ? null : LhTransfer.fromJson(results[1]);
+        _todayPlan = LhFundPlan.fromJson(data);
+        _todayLoading = false;
+      });
+    } catch (_) {
+      // 拿不到今日计划，24 小时钟只走时间，两环留空。
+      if (!mounted) return;
+      setState(() => _todayLoading = false);
+    }
+  }
+
+  Future<void> _fetchTransfer() async {
+    try {
+      final data = await widget.service.fetchFundTransfer(yearMonth: _monthParam);
+      if (!mounted) return;
+      setState(() {
+        _transfer = LhTransfer.fromJson(data);
+        _transferError = null;
+        _transferLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _transferError = '$e'.replaceFirst('Exception: ', '');
+        _transferLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchFlow() async {
+    try {
+      final data = await widget.service.fetchFlowCategory(period: _monthParam);
+      if (!mounted) return;
+      setState(() {
+        _flow = LhFlowCategory.fromJson(data);
         _flowError = null;
         _flowLoading = false;
       });
@@ -1119,7 +1157,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
   }
 
   Future<void> _refresh() async {
-    await Future.wait([_fetchBf(), _fetchBills(), _fetchPlan(), _fetchFlow()]);
+    await Future.wait([_fetchBf(), _fetchBills(), _fetchPlan(), _fetchTodayPlan(), _fetchFlow(), _fetchTransfer()]);
   }
 
   void _push(String name, Widget page) {
@@ -1133,7 +1171,11 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
       _push('lighthouse/zg/fund-plan', LighthouseFundPlanPage(service: widget.service, session: widget.session, initial: _plan));
   void _openFlow() => _push(
     'lighthouse/zg/fund-flow',
-    LighthouseFundFlowPage(service: widget.service, session: widget.session, initialMonth: _flow, initialTransfer: _transfer),
+    LighthouseFundFlowPage(service: widget.service, session: widget.session, initialMonth: _flow),
+  );
+  void _openTransfer() => _push(
+    'lighthouse/zg/fund-transfer',
+    LighthouseFundTransferPage(service: widget.service, session: widget.session, initial: _transfer),
   );
 
   void _visibility(String module, String title) {
@@ -1145,6 +1187,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
   bool get _billForbidden => _forbidden(_bills == null ? _billError : null, _bills?.restricted ?? false);
   bool get _planForbidden => _forbidden(_plan == null ? _planError : null, _plan?.restricted ?? false);
   bool get _flowForbidden => _forbidden(_flow == null ? _flowError : null, _flow?.restricted ?? false);
+  bool get _transferForbidden => _forbidden(_transfer == null ? _transferError : null, _transfer?.restricted ?? false);
 
   // ── 指标（时钟四环 + 板块卡共用）────────────────────────────────────────
 
@@ -1171,16 +1214,6 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
   /// 计划已建、但回款和付款一笔都没填（资管返回的合计是 0 或空）。
   bool _planEmpty(LhFundPlan p) => (p.inPlan ?? 0).abs() < 0.5 && (p.outPlan ?? 0).abs() < 0.5;
 
-  /// 接口错误转成人话：503 = 资管那边没取到，不是这边坏了。
-  String _errText(String? e, String fallback) {
-    final t = (e ?? '').trim();
-    if (t.isEmpty) return fallback;
-    if (t.contains('HTTP 503')) return '资管接口暂时没取到，下拉刷新重试';
-    if (t.contains('HTTP 404')) return '后端还没有这个接口，需要重建灯塔服务';
-    if (t.contains('超时')) return '资管接口响应超时，下拉刷新重试';
-    return t;
-  }
-
   double? get _planInProgress {
     final p = _plan;
     if (p == null || !p.exists || p.inKindPlan <= 0) return null;
@@ -1200,139 +1233,36 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
 
   // ── 布局 ───────────────────────────────────────────────────────────────
 
-  List<Widget> _boardTiles(BuildContext context, {required bool fill}) => [
-    if (!_bfForbidden) _bfTile(context, fill: fill),
-    if (!_billForbidden) _billTile(context, fill: fill),
-    if (!_planForbidden) _planTile(context, fill: fill),
-    if (!_flowForbidden) _flowTile(context, fill: fill),
-  ];
-
-  List<Widget> _tileRows(List<Widget> tiles, {required bool stretch}) {
-    final rows = <Widget>[];
-    for (var i = 0; i < tiles.length; i += 2) {
-      if (i > 0) rows.add(SizedBox(height: stretch ? 12 : 10));
-      final row = Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(child: _fadeIn(0.25 + i * 0.05, tiles[i])),
-          SizedBox(width: stretch ? 12 : 10),
-          Expanded(child: i + 1 < tiles.length ? _fadeIn(0.3 + i * 0.05, tiles[i + 1]) : const SizedBox.shrink()),
-        ],
-      );
-      rows.add(
-        stretch
-            ? Expanded(child: row)
-            : IntrinsicHeight(child: row),
-      );
-    }
-    return rows;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final allForbidden = _bfForbidden && _billForbidden && _planForbidden && _flowForbidden;
+    final allForbidden = _bfForbidden && _billForbidden && _planForbidden && _flowForbidden && _transferForbidden;
     return Scaffold(
       backgroundColor: _bg(context, const Color(0xFFF6F4F9)),
       body: Stack(
         children: [
           ..._glows(context),
           SafeArea(
-            child: LayoutBuilder(
-              builder: (context, box) {
-                // 窄屏上下排，跟着内容滚。宽屏左右排，并且撑满当前窗口高度：
-                // 时钟放大，右边 2×2 跟时钟一样高，不再在屏幕下半截留一块空白。
-                final wide = box.maxWidth.isFinite && box.maxWidth >= _kZgWideBreakpoint && box.maxHeight.isFinite;
-                final bottom = dunesAppBottomNavContentPadding(context, fallback: 24);
-                final padH = wide ? 28.0 : 14.0;
-                final inner = math.min(box.maxWidth, _kZgMaxContentWidth) - padH * 2;
-                final boardHeader = Padding(
-                  padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
-                  child: Row(
-                    children: [
-                      Text('板块', style: _sans(context, size: 13, weight: FontWeight.w700)),
-                      const Spacer(),
-                      Text('余额截至当日 · 单位：万元', style: _sans(context, size: 10, color: _kMute)),
-                    ],
-                  ),
-                );
-                final Widget board;
-                if (allForbidden) {
-                  board = _statusBox(context, '暂无资管板块权限');
-                } else if (!wide) {
-                  board = Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _clockCard(context),
-                      const SizedBox(height: 14),
-                      boardHeader,
-                      ..._tileRows(_boardTiles(context, fill: false), stretch: false),
-                    ],
-                  );
-                } else {
-                  final clockW = (inner * 0.40).clamp(400.0, 560.0);
-                  board = Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SizedBox(width: clockW, child: _clockCard(context, expand: true)),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            boardHeader,
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: _tileRows(_boardTiles(context, fill: true), stretch: true),
-                              ),
-                            ),
-                          ],
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(0, 0, 0, dunesAppBottomNavContentPadding(context, fallback: 32)),
+                children: [
+                  if (widget.embedded) const SizedBox(height: 8) else _switchHeader(context),
+                  LayoutBuilder(
+                    builder: (context, box) {
+                      return Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 640),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: allForbidden ? _statusBox(context, '暂无资管板块权限') : _clockCard(context),
+                          ),
                         ),
-                      ),
-                    ],
-                  );
-                }
-                final framed = Center(
-                  child: SizedBox(
-                    width: inner + padH * 2,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: padH),
-                      child: board,
-                    ),
+                      );
+                    },
                   ),
-                );
-                final header = widget.embedded ? null : _switchHeader(context);
-                final Widget page;
-                if (wide) {
-                  final minH = math.max(640.0, box.maxHeight - bottom);
-                  page = SizedBox(
-                    height: minH,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (header != null) header else const SizedBox(height: 12),
-                        Expanded(child: framed),
-                      ],
-                    ),
-                  );
-                } else {
-                  page = Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (header != null) header else const SizedBox(height: 8),
-                      framed,
-                    ],
-                  );
-                }
-                return RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: EdgeInsets.only(bottom: bottom),
-                    child: page,
-                  ),
-                );
-              },
+                ],
+              ),
             ),
           ),
         ],
@@ -1387,7 +1317,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
 
   // ── 资管时钟 ───────────────────────────────────────────────────────────
 
-  Widget _clockCard(BuildContext context, {bool expand = false}) {
+  Widget _clockCard(BuildContext context) {
     final now = DateTime.now();
     final days = DateTime(now.year, now.month + 1, 0).day;
     final alerts = _alerts;
@@ -1396,49 +1326,72 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
       _ClockRing(_overlap, const Color(0xFFA48DEB)),
       _ClockRing(_overdueShare('CHANNEL'), const Color(0xFFE2A45E)),
       _ClockRing(_planInProgress, const Color(0xFF72A6D4)),
-      _ClockRing(_flowCoverage == null ? null : math.min(_flowCoverage!, 1), const Color(0xFFE8968C)),
+      _ClockRing(_flowCoverage, const Color(0xFFE8968C)),
     ];
     String pct(double? v) => v == null ? '—' : '${(v * 100).round()}%';
     final legend = <Widget>[
-      _legendCell(
+      if (!_bfForbidden) _legendCell(
         context,
-        const Color(0xFFA48DEB),
-        '业财 · 资产重合',
+        '业财对照',
         pct(_overlap),
-        _assetDiff == null ? (_bfLoading ? '加载中' : '—') : '差 ${_swu(_assetDiff)}',
+        _assetDiff == null ? (_bfLoading ? '加载中' : '资产重合') : '资产重合 · 差 ${_swu(_assetDiff)}',
+        module: 'business_finance',
+        tone: const Color(0xFFA48DEB),
+        icon: Icons.view_column_outlined,
+        progress: _overlap,
         alert: alerts.contains('bf'),
-        onTap: _bfForbidden ? null : _openBf,
+        onTap: _openBf,
       ),
-      _legendCell(
+      if (!_billForbidden) _legendCell(
         context,
-        const Color(0xFFE2A45E),
-        '未结 · 渠道应收逾期',
+        '未结往来',
         pct(_overdueShare('CHANNEL')),
-        _bills?.dim('CHANNEL') == null ? (_billLoading ? '加载中' : (_billError != null ? '没取到' : '—')) : '${lhBfWan(_bills!.dim('CHANNEL')!.overdueAmount)} 万',
+        _bills?.dim('CHANNEL') == null ? (_billLoading ? '加载中' : (_billError != null ? '没取到' : '渠道应收逾期')) : '渠道应收逾期 · ${lhBfWan(_bills!.dim('CHANNEL')!.overdueAmount)} 万',
+        module: 'bills',
+        tone: const Color(0xFFE2A45E),
+        icon: Icons.swap_horiz_rounded,
+        progress: _overdueShare('CHANNEL'),
         alert: alerts.contains('bills'),
-        onTap: _billForbidden ? null : _openBills,
+        onTap: _openBills,
       ),
-      _legendCell(
+      if (!_planForbidden) _legendCell(
         context,
-        const Color(0xFF72A6D4),
-        '计划 · 回款进度',
+        '资金计划',
         pct(_planInProgress),
         _planInProgress == null
             ? (_planLoading
                   ? '加载中'
                   : (_plan?.exists == false ? '本月未建计划' : (_plan != null && _planEmpty(_plan!) ? '计划金额未填' : '—')))
-            : '${_planInProgress! >= _timeProgress ? '快于' : '慢于'}时间 ${(_timeProgress * 100).round()}%',
+            : '回款进度 · ${_planInProgress! >= _timeProgress ? '快于' : '慢于'}时间 ${(_timeProgress * 100).round()}%',
+        module: 'fund_plan',
+        tone: const Color(0xFF72A6D4),
+        icon: Icons.event_note_outlined,
+        progress: _planInProgress,
         alert: alerts.contains('plan'),
-        onTap: _planForbidden ? null : _openPlan,
+        onTap: _openPlan,
       ),
-      _legendCell(
+      if (!_flowForbidden) _legendCell(
         context,
-        const Color(0xFFE8968C),
-        '流水 · 流入覆盖流出',
+        '资金流水',
         pct(_flowCoverage),
-        _flow == null ? (_flowLoading ? '加载中' : '—') : (_flow!.generated ? '净 ${_swu(_flow!.net)}' : '本月未生成快照'),
+        _flow == null ? (_flowLoading ? '加载中' : '流入覆盖流出') : (_flow!.generated ? '流入覆盖流出 · 净 ${_swu(_flow!.net)}' : '本月未生成快照'),
+        module: 'fund_flow',
+        tone: const Color(0xFFE8968C),
+        icon: Icons.waves_rounded,
+        progress: _flowCoverage,
         alert: alerts.contains('flow'),
-        onTap: _flowForbidden ? null : _openFlow,
+        onTap: _openFlow,
+      ),
+      if (!_transferForbidden) _legendCell(
+        context,
+        '资金调动',
+        _transfer == null ? (_transferLoading ? '…' : '—') : _wu(_transfer!.crossVolume),
+        _transfer == null ? (_transferLoading ? '加载中' : '跨板块发生额') : '跨板块发生额 · ${pct(_transfer!.crossShare)}',
+        module: 'fund_transfer',
+        tone: const Color(0xFF8A78CB),
+        icon: Icons.swap_calls_rounded,
+        progress: _transfer?.crossShare,
+        onTap: _openTransfer,
       ),
     ];
     return _fadeIn(
@@ -1486,20 +1439,40 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
                   ),
               ],
             ),
-            SizedBox(height: expand ? 12 : 8),
-            _clockDial(context, rings: rings, days: days, today: now.day, expand: expand),
-            SizedBox(height: expand ? 12 : 8),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [Expanded(child: legend[0]), const SizedBox(width: 6), Expanded(child: legend[1])],
-              ),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, box) {
+                final d = math.min((box.maxWidth - 16) / 2, 190.0);
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _monthDial(context, d, rings, days, now)),
+                    const SizedBox(width: 16),
+                    Expanded(child: _dayDial(context, d)),
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 6),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [Expanded(child: legend[2]), const SizedBox(width: 6), Expanded(child: legend[3])],
+            const SizedBox(height: 14),
+            Container(
+              decoration: BoxDecoration(
+                color: _bg(context, Colors.white).withValues(alpha: 0.46),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _ln(context, _kLine), width: 0.8),
+              ),
+              child: Column(
+                children: [
+                  for (var i = 0; i < legend.length; i += 2) ...[
+                    if (i > 0) Divider(height: 1, thickness: 0.8, color: _ln(context, _kLine)),
+                    Row(children: [
+                      Expanded(child: legend[i]),
+                      if (i + 1 < legend.length) ...[
+                        Container(width: 1, height: 58, color: _ln(context, _kLine)),
+                        Expanded(child: legend[i + 1]),
+                      ],
+                    ]),
+                  ],
+                ],
               ),
             ),
           ],
@@ -1508,17 +1481,27 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
     );
   }
 
-  Widget _clockDial(
-    BuildContext context, {
-    required List<_ClockRing> rings,
-    required int days,
-    required int today,
-    required bool expand,
-  }) {
-    Widget paint(double size) {
-      final roomy = size >= 300;
-      return Center(
-        child: SizedBox(
+  // ── 两只表：月份钟（本月第几天 + 四环）、24 小时钟（真实时间 + 今日回款 / 付款两环）──
+
+  static const _kMonAbbr = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+  Widget _dialCaption(BuildContext context, String kicker, Widget big, String sub, {Color subColor = _kInk2}) => Padding(
+    padding: const EdgeInsets.only(top: 10),
+    child: Column(
+      children: [
+        Text(kicker, style: _sans(context, size: 10, color: _kInk2, height: 1.2).copyWith(letterSpacing: 1.2)),
+        const SizedBox(height: 3),
+        big,
+        const SizedBox(height: 3),
+        Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: _sans(context, size: 10.5, color: subColor)),
+      ],
+    ),
+  );
+
+  Widget _monthDial(BuildContext context, double size, List<_ClockRing> rings, int days, DateTime now) {
+    return Column(
+      children: [
+        SizedBox(
           width: size,
           height: size,
           child: AnimatedBuilder(
@@ -1527,42 +1510,111 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
               painter: _ClockPainter(
                 rings: rings,
                 days: days,
-                today: today,
+                today: now.day,
                 intro: Curves.easeOutCubic.transform(_intro.value),
                 sweep: _sweep.value,
                 ink: _fg(context, const Color(0xFF2B2147)),
                 faint: _fg(context, const Color(0xFFC9C4D6)),
                 accent: _fg(context, LhColors.neg),
                 face: _bg(context, Colors.white),
-                tickLabel: _mono(context, size: roomy ? 11 : 8.5, weight: FontWeight.w600, color: _kMute),
-                dateLabel: _mono(context, size: roomy ? 22 : 15, weight: FontWeight.w700, color: const Color(0xFF2B2147)),
-                subLabel: _sans(context, size: roomy ? 12 : 9.5, color: _kInk2),
-                date: _fpMd(DateTime.now()),
-                sub: '第 $today 天 / $days',
+                tickLabel: _mono(context, size: 8, weight: FontWeight.w600, color: _kMute),
+                dateLabel: _mono(context, size: 15, weight: FontWeight.w700, color: const Color(0xFF2B2147)),
+                subLabel: _sans(context, size: 9.5, color: _kInk2),
+                date: '',
+                sub: '',
               ),
             ),
           ),
         ),
-      );
-    }
+        _dialCaption(
+          context,
+          '本月 · ${_kMonAbbr[now.month - 1]}',
+          Text(_fpMd(now), style: _mono(context, size: 22, weight: FontWeight.w700, color: const Color(0xFF2B2147))),
+          '第 ${now.day} 天 / 共 $days 天',
+        ),
+      ],
+    );
+  }
 
-    if (!expand) return paint(236);
-    return Expanded(
-      child: LayoutBuilder(
-        builder: (context, c) {
-          final room = math.max(0.0, math.min(c.maxWidth - 8, c.maxHeight - 4));
-          return paint(room.clamp(0.0, 440.0));
-        },
+  Widget _dayDial(BuildContext context, double size) {
+    final t = _todayPlan;
+    final has = t != null && t.exists && !t.restricted && !t.unavailable;
+    double? inR;
+    double? outR;
+    if (t != null && has) {
+      if (t.inKindPlan > 0) inR = t.inKindActual / t.inKindPlan;
+      if (t.outKindPlan > 0) outR = t.outKindActual / t.outKindPlan;
+    }
+    String pct(double? r) => r == null ? '—' : '${(r * 100).round()}%';
+    final sub = !has
+        ? (_todayLoading ? '今日计划加载中' : '今日没有资金计划')
+        : (inR == null && outR == null ? '今日计划没有收付' : '回款 ${pct(inR)} · 付款 ${pct(outR)}');
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _planForbidden ? null : _openPlan,
+      child: Column(
+        children: [
+          SizedBox(
+            width: size,
+            height: size,
+            child: AnimatedBuilder(
+              animation: Listenable.merge([_intro, _sweep]),
+              builder: (context, _) => CustomPaint(
+                painter: _DayClockPainter(
+                  now: DateTime.now(),
+                  inRatio: inR,
+                  outRatio: outR,
+                  intro: Curves.easeOutCubic.transform(_intro.value),
+                  sweep: _sweep.value,
+                  ink: _fg(context, const Color(0xFF2B2147)),
+                  faint: _fg(context, const Color(0xFFC9C4D6)),
+                  night: _fg(context, const Color(0xFFB9C3E0)),
+                  accent: _fg(context, LhColors.neg),
+                  inColor: _fg(context, const Color(0xFF72A6D4)),
+                  outColor: _fg(context, const Color(0xFFE2A45E)),
+                  face: _bg(context, Colors.white),
+                  tickLabel: _mono(context, size: 8, weight: FontWeight.w600, color: _kMute),
+                ),
+              ),
+            ),
+          ),
+          AnimatedBuilder(
+            animation: _sweep,
+            builder: (context, _) {
+              final n = DateTime.now();
+              final hm = '${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')}';
+              return _dialCaption(
+                context,
+                '今日 · 24H',
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: hm, style: _mono(context, size: 22, weight: FontWeight.w700, color: const Color(0xFF2B2147))),
+                      TextSpan(
+                        text: ':${n.second.toString().padLeft(2, '0')}',
+                        style: _mono(context, size: 11, weight: FontWeight.w600, color: _kMute),
+                      ),
+                    ],
+                  ),
+                ),
+                sub,
+              );
+            },
+          ),
+        ],
       ),
     );
   }
 
   Widget _legendCell(
     BuildContext context,
-    Color c,
     String title,
     String value,
     String sub, {
+    required String module,
+    required Color tone,
+    required IconData icon,
+    double? progress,
     bool alert = false,
     VoidCallback? onTap,
   }) {
@@ -1570,27 +1622,38 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+        padding: const EdgeInsets.fromLTRB(10, 7, 6, 7),
         decoration: BoxDecoration(
-          color: _bg(context, Colors.white).withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: alert ? _fg(context, LhColors.neg).withValues(alpha: 0.35) : _ln(context, _kLine), width: 0.8),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [_fg(context, tone).withValues(alpha: 0.07), _bg(context, Colors.white).withValues(alpha: 0.02)],
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Container(width: 12, height: 4, decoration: BoxDecoration(color: _fg(context, c), borderRadius: BorderRadius.circular(2))),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10, color: _kInk2)),
+                Container(
+                  width: 17,
+                  height: 17,
+                  decoration: BoxDecoration(color: _fg(context, tone).withValues(alpha: 0.16), shape: BoxShape.circle),
+                  child: Icon(icon, size: 10, color: _fg(context, tone)),
                 ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10, color: _kInk2)),
+                ),
+                _visButton(context, widget.service, module, () => _visibility(module, '资管 · $title')),
               ],
             ),
-            const SizedBox(height: 4),
-            Text(value, style: _mono(context, size: 15, weight: FontWeight.w700, color: const Color(0xFF2B2147))),
             const SizedBox(height: 2),
+            Row(children: [
+              Expanded(child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: _mono(context, size: 14, weight: FontWeight.w700, color: const Color(0xFF2B2147)))),
+              SizedBox(width: 21, height: 21, child: CustomPaint(painter: _CompactRingPainter(value: progress, color: _fg(context, tone)))),
+            ]),
+            const SizedBox(height: 1),
             Text(
               sub,
               maxLines: 1,
@@ -1603,316 +1666,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
     );
   }
 
-  // ── 板块卡（两列）──────────────────────────────────────────────────────
 
-  Widget _tile(
-    BuildContext context, {
-    required IconData icon,
-    required Color tint,
-    required String title,
-    String? module,
-    String? moduleTitle,
-    String? badge,
-    required String label,
-    required Widget value,
-    Widget? visual,
-    String? foot,
-    VoidCallback? onTap,
-    bool muted = false,
-    bool fill = false,
-  }) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        constraints: const BoxConstraints(minHeight: 150),
-        decoration: _glass(context, dashed: muted),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(color: _fg(context, tint).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-                  child: Icon(icon, size: 14, color: _fg(context, tint)),
-                ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 13, weight: FontWeight.w700)),
-                ),
-                if (badge != null) _tag(context, badge, tint, _kLavender),
-                if (module != null)
-                  _visButton(context, widget.service, module, () => _visibility(module, moduleTitle ?? title)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10.5, color: _kInk2)),
-            const SizedBox(height: 4),
-            if (visual != null) ...[
-              value,
-              const SizedBox(height: 8),
-              if (fill) Expanded(child: visual) else visual,
-            ] else if (fill)
-              Expanded(
-                child: Align(alignment: Alignment.centerLeft, child: value),
-              )
-            else
-              value,
-            if (foot != null && foot.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(foot, maxLines: 2, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10, color: _kMute, height: 1.4)),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _big(BuildContext context, String text, {Color color = const Color(0xFF2B2147)}) => _amount(context, text, color: color, size: 20);
-
-  Widget _hintText(BuildContext context, String text) =>
-      Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: _sans(context, size: 11, color: _kInk2));
-
-  Widget _bfTile(BuildContext context, {bool fill = false}) {
-    final diff = _assetDiff;
-    final pts = _bfSeries.where((p) => p.hasData && p.values['assetDiff'] != null).toList();
-    Widget value;
-    if (_bfLoading && _bf == null) {
-      value = _hintText(context, '加载中…');
-    } else if (_bf == null || _bf!.total == null) {
-      value = _hintText(context, _bf == null ? _errText(_bfError, '暂无数据') : '当日暂无快照');
-    } else {
-      value = _big(context, _signedWan(diff), color: (diff ?? 0) > 0 ? LhColors.neg : const Color(0xFF2B2147));
-    }
-    return _tile(
-      context,
-      icon: Icons.view_column_outlined,
-      tint: _kPurple,
-      title: '业财对照',
-      module: 'business_finance',
-      moduleTitle: '资管 · 业财对照',
-      label: pts.length >= 2 ? '业务减财务 · 近 ${pts.length} 天' : '业务资产减财务资产',
-      value: value,
-      visual: pts.length >= 2
-          ? LayoutBuilder(
-              builder: (context, c) {
-                final h = c.maxHeight.isFinite && c.maxHeight > 0 ? c.maxHeight : 36.0;
-                return SizedBox(
-                  height: math.max(h, 36),
-                  width: double.infinity,
-                  child: AnimatedBuilder(
-                    animation: _intro,
-                    builder: (context, _) => CustomPaint(
-                      painter: _SparkPainter(
-                        values: [for (final p in pts) p.values['assetDiff']!],
-                        color: _fg(context, LhColors.neg),
-                        t: Curves.easeOut.transform(((_intro.value - 0.3) / 0.7).clamp(0.0, 1.0)),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            )
-          : null,
-      foot: _overlap == null ? null : '重合 ${(_overlap! * 100).round()}% · ${_bf?.rows.length ?? 0} 个主体',
-      onTap: _openBf,
-      fill: fill,
-    );
-  }
-
-  Widget _shareBar(BuildContext context, String label, double? share, Color c) {
-    return Row(
-      children: [
-        SizedBox(width: 26, child: Text(label, style: _sans(context, size: 10, color: _kInk2))),
-        Expanded(
-          child: AnimatedBuilder(
-            animation: _intro,
-            builder: (context, _) {
-              final t = Curves.easeOutCubic.transform(((_intro.value - 0.35) / 0.65).clamp(0.0, 1.0));
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: LinearProgressIndicator(
-                  value: (share ?? 0) * t,
-                  minHeight: 5,
-                  backgroundColor: _fg(context, c).withValues(alpha: 0.16),
-                  valueColor: AlwaysStoppedAnimation(_fg(context, c)),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: 6),
-        SizedBox(
-          width: 34,
-          child: Text(
-            share == null ? '—' : '${(share * 100).round()}%',
-            textAlign: TextAlign.right,
-            style: _mono(context, size: 10, weight: FontWeight.w700, color: c),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _billTile(BuildContext context, {bool fill = false}) {
-    final b = _bills;
-    final ch = b?.dim('CHANNEL');
-    Widget value;
-    if (_billLoading && b == null) {
-      value = _hintText(context, '加载中…');
-    } else if (b == null) {
-      value = _hintText(context, _errText(_billError, '暂无数据'));
-    } else if (b.unavailable) {
-      value = _hintText(context, '资管接口未配置');
-    } else {
-      value = _big(context, ch == null ? '—' : lhBfWan(ch.diffAmount));
-    }
-    final asOf = DateTime.tryParse(b?.asOf ?? '');
-    return _tile(
-      context,
-      icon: Icons.swap_horiz_rounded,
-      tint: _kCopper,
-      title: '未结往来',
-      module: 'bills',
-      moduleTitle: '资管 · 未结往来',
-      label: '渠道应收',
-      value: value,
-      visual: b == null || b.unavailable
-          ? null
-          : Column(
-              children: [
-                _shareBar(context, '应收', _overdueShare('CHANNEL'), const Color(0xFFE2A45E)),
-                const SizedBox(height: 5),
-                _shareBar(context, '应付', _overdueShare('PAYABLE'), const Color(0xFF72A6D4)),
-              ],
-            ),
-      foot: asOf == null ? '条 = 逾期占比' : '条 = 逾期占比 · 账期 ≤ ${_mdDate(_overdueCutoff(asOf, b!.graceDays), asOf)}',
-      onTap: _openBills,
-      fill: fill,
-    );
-  }
-
-  Widget _planTile(BuildContext context, {bool fill = false}) {
-    final p = _plan;
-    Widget value;
-    Widget? visual;
-    if (_planLoading && p == null) {
-      value = _hintText(context, '加载中…');
-    } else if (p == null) {
-      value = _hintText(context, _errText(_planError, '暂无数据'));
-    } else if (p.unavailable) {
-      value = _hintText(context, '资管接口未配置');
-    } else if (!p.exists) {
-      value = _hintText(context, '本月还没有建资金计划');
-    } else if (_planEmpty(p)) {
-      value = _hintText(context, '计划已建，回款 / 付款金额还没填');
-    } else {
-      value = _big(context, _signedWan(p.net), color: (p.net ?? 0) < 0 ? _kFpOut : const Color(0xFF2B2147));
-      final inR = p.inKindPlan > 0 ? p.inKindActual / p.inKindPlan : null;
-      final outR = p.outKindPlan > 0 ? p.outKindActual / p.outKindPlan : null;
-      visual = Column(
-        children: [
-          _shareBar(context, '回款', inR == null ? null : math.min(inR, 1), const Color(0xFF72A6D4)),
-          const SizedBox(height: 5),
-          _shareBar(context, '付款', outR == null ? null : math.min(outR, 1), _kFpOut),
-        ],
-      );
-    }
-    return _tile(
-      context,
-      icon: Icons.event_note_outlined,
-      tint: const Color(0xFF3B6E96),
-      title: '资金计划',
-      module: 'fund_plan',
-      moduleTitle: '资管 · 资金计划',
-      badge: p?.exists == true && p!.statusLabel.isNotEmpty ? p.statusLabel : null,
-      label: '计划净流入',
-      value: value,
-      visual: visual,
-      foot: p?.exists == true ? '时间进度 ${(_timeProgress * 100).round()}%${p!.fixture ? ' · 样例数据' : ''}' : null,
-      onTap: _openPlan,
-      fill: fill,
-    );
-  }
-
-  Widget _flowTile(BuildContext context, {bool fill = false}) {
-    final f = _flow;
-    Widget value;
-    Widget? visual;
-    if (_flowLoading && f == null) {
-      value = _hintText(context, '加载中…');
-    } else if (f == null) {
-      value = _hintText(context, _errText(_flowError, '暂无数据'));
-    } else if (f.unavailable) {
-      value = _hintText(context, '资管接口未配置');
-    } else if (!f.generated) {
-      value = _hintText(context, '本月还没有生成快照');
-    } else {
-      value = _big(context, _signedWan(f.net), color: f.net < 0 ? _kFpOut : const Color(0xFF2B2147));
-      final total = f.inflow + f.outflow;
-      visual = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AnimatedBuilder(
-            animation: _intro,
-            builder: (context, _) {
-              final t = Curves.easeOutCubic.transform(((_intro.value - 0.4) / 0.6).clamp(0.0, 1.0));
-              final inFlex = total <= 0 ? 1 : math.max(1, (f.inflow / total * 1000).round());
-              final outFlex = total <= 0 ? 1 : math.max(1, (f.outflow / total * 1000).round());
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: FractionallySizedBox(
-                  widthFactor: math.max(t, 0.001),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: SizedBox(
-                      height: 8,
-                      child: Row(
-                        children: [
-                          Expanded(flex: inFlex, child: Container(color: _fg(context, _kFlIn))),
-                          const SizedBox(width: 2),
-                          Expanded(flex: outFlex, child: Container(color: _fg(context, _kFlOut))),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 5),
-          Row(
-            children: [
-              Text('流入 ${_wu(f.inflow)}', style: _mono(context, size: 9.5, color: _kInk2)),
-              const Spacer(),
-              Text('流出 ${_wu(f.outflow)}', style: _mono(context, size: 9.5, color: _kInk2)),
-            ],
-          ),
-        ],
-      );
-    }
-    final share = _transfer?.crossShare;
-    return _tile(
-      context,
-      icon: Icons.waves_rounded,
-      tint: const Color(0xFF9C82E6),
-      title: '资金流水',
-      module: 'fund_flow',
-      moduleTitle: '资管 · 资金流水',
-      label: '本月净流入',
-      value: value,
-      visual: visual,
-      foot: [
-        if (share != null) '跨板块调动 ${(share * 100).toStringAsFixed(1)}%',
-        if (f?.fixture == true) '样例数据',
-      ].join(' · '),
-      onTap: _openFlow,
-      fill: fill,
-    );
-  }
 }
 
 // ═════════════════════════════ 资管时钟 · 画法 ═════════════════════════════
@@ -1988,35 +1742,19 @@ class _ClockPainter extends CustomPainter {
       tp.paint(canvas, p - Offset(tp.width / 2, tp.height / 2));
     }
 
-    // 四个环
+    // 四个环（统一规则见 _paintRing）
     final stroke = r * 0.05;
     for (var i = 0; i < rings.length; i++) {
       final ring = rings[i];
-      final rr = r * (0.76 - i * 0.1);
-      final rect = Rect.fromCircle(center: c, radius: rr);
-      canvas.drawCircle(
+      _paintRing(
+        canvas,
         c,
-        rr,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..color = ring.color.withValues(alpha: 0.16),
-      );
-      final v = ring.value;
-      if (v == null) continue;
-      final t = ((intro - i * 0.08) / 0.75).clamp(0.0, 1.0);
-      final sweepAngle = 2 * math.pi * v.clamp(0.0, 1.0) * t;
-      if (sweepAngle <= 0) continue;
-      canvas.drawArc(
-        rect,
-        -math.pi / 2,
-        sweepAngle,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = ring.color,
+        r * (0.76 - i * 0.1),
+        stroke,
+        ring.value,
+        ring.color,
+        t: ((intro - i * 0.08) / 0.75).clamp(0.0, 1.0),
+        warn: const Color(0xFFD9933F),
       );
     }
 
@@ -2030,8 +1768,8 @@ class _ClockPainter extends CustomPainter {
     );
 
     // 指针：今天在本月的位置
-    final handFrac = ((today - 0.5) / days) * intro;
-    final tip = at(r * 0.82, handFrac);
+    final handFrac = (today - 0.5) / days;
+    final tip = at(r * 0.82 * intro, handFrac);
     canvas.drawLine(
       c,
       tip,
@@ -2057,55 +1795,230 @@ class _ClockPainter extends CustomPainter {
       old.intro != intro || old.sweep != sweep || old.today != today || old.rings != rings || old.ink != ink;
 }
 
-/// 小走势线（业财差额），t = 画出来的进度。
-class _SparkPainter extends CustomPainter {
-  _SparkPainter({required this.values, required this.color, required this.t});
-
-  final List<double> values;
-  final Color color;
-  final double t;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (values.length < 2) return;
-    final lo = values.reduce(math.min);
-    final hi = values.reduce(math.max);
-    final span = (hi - lo).abs() < 1e-6 ? 1.0 : hi - lo;
-    final pts = [
-      for (var i = 0; i < values.length; i++)
-        Offset(size.width * i / (values.length - 1), 3 + (size.height - 6) * (1 - (values[i] - lo) / span)),
-    ];
-    final line = Path()..moveTo(pts.first.dx, pts.first.dy);
-    for (var i = 1; i < pts.length; i++) {
-      final a = pts[i - 1];
-      final b = pts[i];
-      final mx = (a.dx + b.dx) / 2;
-      line.cubicTo(mx, a.dy, mx, b.dy, b.dx, b.dy);
+/// 环的统一画法：0–100% 正常走；超过 100% 画满一圈，再用细线叠出多出的那段；
+/// 负数不走，轨道改成虚线（[warn] 色）；null 只画底环。
+void _paintRing(
+  Canvas canvas,
+  Offset c,
+  double radius,
+  double stroke,
+  double? v,
+  Color color, {
+  required double t,
+  required Color warn,
+}) {
+  final rect = Rect.fromCircle(center: c, radius: radius);
+  if (v != null && v < 0) {
+    const n = 40;
+    final seg = 2 * math.pi / n;
+    final p = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke * 0.7
+      ..strokeCap = StrokeCap.round
+      ..color = warn.withValues(alpha: 0.75);
+    for (var i = 0; i < n; i++) {
+      canvas.drawArc(rect, -math.pi / 2 + i * seg, seg * 0.45, false, p);
     }
-    canvas.save();
-    canvas.clipRect(Rect.fromLTWH(0, 0, size.width * t, size.height));
-    final area = Path.from(line)
-      ..lineTo(pts.last.dx, size.height)
-      ..lineTo(pts.first.dx, size.height)
-      ..close();
-    canvas.drawPath(area, Paint()..color = color.withValues(alpha: 0.08));
-    canvas.drawPath(
-      line,
+    return;
+  }
+  canvas.drawCircle(
+    c,
+    radius,
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..color = color.withValues(alpha: 0.16),
+  );
+  if (v == null || t <= 0) return;
+  final main = 2 * math.pi * v.clamp(0.0, 1.0) * t;
+  if (main > 0) {
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      main,
+      false,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.8
+        ..strokeWidth = stroke
         ..strokeCap = StrokeCap.round
         ..color = color,
     );
-    canvas.restore();
-    if (t >= 1) canvas.drawCircle(pts.last, 2.6, Paint()..color = color);
+  }
+  if (v > 1) {
+    final extra = v - v.floorToDouble();
+    final lt = ((t - 0.6) / 0.4).clamp(0.0, 1.0);
+    final lap = 2 * math.pi * (extra < 0.005 ? 1 : extra) * lt;
+    if (lap > 0) {
+      canvas.drawArc(
+        rect,
+        -math.pi / 2,
+        lap,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(1.2, stroke * 0.36)
+          ..strokeCap = StrokeCap.round
+          ..color = Color.lerp(color, const Color(0xFF1F1A33), 0.5)!,
+      );
+    }
+  }
+}
+
+/// 板块入口用同一套圆环语法，尺寸压到 21px，不增加入口高度。
+class _CompactRingPainter extends CustomPainter {
+  const _CompactRingPainter({required this.value, required this.color});
+
+  final double? value;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    _paintRing(canvas, size.center(Offset.zero), size.shortestSide / 2 - 2, 2.8, value, color, t: 1, warn: color);
   }
 
   @override
-  bool shouldRepaint(covariant _SparkPainter old) => old.t != t || old.values != values || old.color != color;
+  bool shouldRepaint(covariant _CompactRingPainter old) => old.value != value || old.color != color;
 }
 
-/// 「要看」角标里的呼吸点（跟秒针同一个控制器，不另起 ticker）。
+/// 24 小时钟：跟月份钟同一套比例（刻度 0.86–0.93、标签 0.985、环 0.76 / 0.66、表心 0.27）。
+/// 0 点在正上方顺时针；走过的半小时刻度加深；18–6 点在刻度外沿一条细夜色。
+/// 外环 = 今日回款完成度，内环 = 今日付款完成度（今日资金计划）。时针一天一圈、针尖呼吸；分针是一根淡紫细线。
+class _DayClockPainter extends CustomPainter {
+  _DayClockPainter({
+    required this.now,
+    required this.inRatio,
+    required this.outRatio,
+    required this.intro,
+    required this.sweep,
+    required this.ink,
+    required this.faint,
+    required this.night,
+    required this.accent,
+    required this.inColor,
+    required this.outColor,
+    required this.face,
+    required this.tickLabel,
+  });
+
+  final DateTime now;
+  final double? inRatio;
+  final double? outRatio;
+  final double intro;
+  final double sweep;
+  final Color ink;
+  final Color faint;
+  final Color night;
+  final Color accent;
+  final Color inColor;
+  final Color outColor;
+  final Color face;
+  final TextStyle tickLabel;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.shortestSide / 2;
+    Offset at(double radius, double frac) {
+      final a = -math.pi / 2 + 2 * math.pi * frac;
+      return c + Offset(math.cos(a), math.sin(a)) * radius;
+    }
+
+    final dayFrac = (now.hour * 60 + now.minute + now.second / 60) / 1440;
+
+    // 柔和的表面与昼夜分区。右半是白天，左半是夜晚。
+    canvas.drawCircle(
+      c,
+      r * 0.83,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [face, night.withValues(alpha: 0.09), face],
+          stops: const [0.38, 0.76, 1],
+        ).createShader(Rect.fromCircle(center: c, radius: r * 0.83)),
+    );
+    // 有色圆环与左侧月钟最外圈同为 0.76r，视觉尺寸保持一致。
+    final progressRect = Rect.fromCircle(center: c, radius: r * 0.76);
+    canvas.drawArc(
+      progressRect,
+      -math.pi / 2,
+      math.pi * 2,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * 0.035
+        ..color = faint.withValues(alpha: 0.45),
+    );
+    canvas.drawArc(
+      progressRect,
+      -math.pi / 2,
+      math.pi * 2 * dayFrac * intro,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * 0.04
+        ..strokeCap = StrokeCap.round
+        ..color = ink.withValues(alpha: 0.82),
+    );
+
+    // 内侧为传统 12 小时刻度，每五分钟一格。
+    for (var i = 0; i < 60; i++) {
+      final f = i / 60;
+      final major = i % 15 == 0;
+      final hour = i % 5 == 0;
+      canvas.drawLine(
+        at(r * 0.86, f),
+        at(major ? r * 0.93 : (hour ? r * 0.9 : r * 0.88), f),
+        Paint()
+          ..color = hour ? ink.withValues(alpha: 0.55) : faint.withValues(alpha: 0.7)
+          ..strokeWidth = major ? 1.8 : (hour ? 1.15 : 0.8)
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+    for (final h in const [12, 3, 6, 9]) {
+      final tp = TextPainter(text: TextSpan(text: '$h', style: tickLabel), textDirection: TextDirection.ltr)..layout();
+      final p = at(r * 0.985, (h % 12) / 12);
+      tp.paint(canvas, p - Offset(tp.width / 2, tp.height / 2));
+    }
+
+    // 资金进度环收在时间环内，不再把右侧表盘撑得更大。
+    final stroke = r * 0.05;
+    _paintRing(canvas, c, r * 0.64, stroke * 0.75, inRatio, inColor, t: (intro / 0.75).clamp(0.0, 1.0), warn: outColor);
+    _paintRing(canvas, c, r * 0.55, stroke * 0.75, outRatio, outColor, t: ((intro - 0.08) / 0.75).clamp(0.0, 1.0), warn: outColor);
+
+    // 普通 12 小时钟：时针短而粗，分针长而细；外环仍按 24 小时计。
+    final hourFrac = ((now.hour % 12) + now.minute / 60 + now.second / 3600) / 12;
+    canvas.drawLine(
+      c,
+      at(r * 0.40 * intro, hourFrac),
+      Paint()
+        ..color = ink
+        ..strokeWidth = 3.5
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawLine(
+      c,
+      at(r * 0.72 * ((intro - 0.12) / 0.88).clamp(0.0, 1.0), (now.minute * 60 + now.second) / 3600),
+      Paint()
+        ..color = const Color(0xFF7057B5)
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round,
+    );
+
+    final tip = at(r * 0.76, dayFrac);
+    final pulse = 0.5 + 0.5 * math.sin(sweep * math.pi * 2 * 20);
+    canvas.drawCircle(tip, 3.6 + pulse * 0.4, Paint()..color = face);
+    canvas.drawCircle(tip, 2.1 + pulse * 0.3, Paint()..color = accent.withValues(alpha: 0.85 + 0.15 * pulse));
+
+    // 表心
+    canvas.drawCircle(c, r * 0.18, Paint()..color = face.withValues(alpha: 0.92));
+    canvas.drawCircle(c, 4.2, Paint()..color = ink);
+    canvas.drawCircle(c, 1.8, Paint()..color = face);
+  }
+
+  @override
+  bool shouldRepaint(covariant _DayClockPainter old) =>
+      old.now != now || old.intro != intro || old.sweep != sweep || old.inRatio != inRatio || old.outRatio != outRatio || old.ink != ink;
+}
+
 class _PulseDot extends StatelessWidget {
   const _PulseDot({required this.color, required this.controller});
 

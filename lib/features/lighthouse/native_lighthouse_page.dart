@@ -14991,6 +14991,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   static const String _kPrefsMetricSupply = 'lighthouse.metrics.supply';
   static const String _kPrefsMetricChannel = 'lighthouse.metrics.channel';
   static const String _kPrefsUiZoom = 'lighthouse.uiZoom';
+  static double? _cachedUiZoom;
+  static Future<void> _uiZoomWrite = Future<void>.value();
 
   /// 用户自定义列序 —— 每个 tab 各存一份（渠道看成本、产品看利润，诉求不同）。
   static const String _kPrefsColOrderProduct = 'lighthouse.colorder.product';
@@ -15299,7 +15301,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   _LhAnchor _anchor = _LhAnchor.verified;
 
   /// 界面整体缩放（浏览器式），默认 100%。
-  double _uiZoom = 1.0;
+  double _uiZoom = _cachedUiZoom ?? 1.0;
 
   // ── 内嵌折线图: 记住当前展开的指标 key (null = 未展开) ─────────
   // v7: 会议原话"点那个数字就能看到日的" —— 从弹 sheet 改成 hero 下方直接展开
@@ -15906,16 +15908,23 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           _syncMetricsFromUI();
         }
       }
-      if (savedZoom != null &&
+      if (_cachedUiZoom == null && savedZoom != null &&
           _kUiZoomOptions.any((z) => (z - savedZoom).abs() < 0.001)) {
-        _uiZoom = savedZoom;
+        _uiZoom = _cachedUiZoom = savedZoom;
+      } else if (_cachedUiZoom != null) {
+        _uiZoom = _cachedUiZoom!;
       }
     });
   }
 
-  Future<void> _persistUiZoom() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_kPrefsUiZoom, _uiZoom);
+  Future<void> _persistUiZoom() {
+    final zoom = _uiZoom;
+    _cachedUiZoom = zoom;
+    _uiZoomWrite = _uiZoomWrite.catchError((Object _) {}).then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_kPrefsUiZoom, zoom);
+    });
+    return _uiZoomWrite;
   }
 
   Future<void> _persistMetricPrefs() async {

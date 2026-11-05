@@ -17,7 +17,6 @@ part of 'lighthouse_zg.dart';
 // ════════════════════════════════════════════════════════════════════════
 
 const _kFpIn = Color(0xFF6A4FC9);
-const _kFpInSoft = Color(0xFFE4DCF4);
 const _kFpOut = Color(0xFFC9762B);
 const _kFpOutSoft = Color(0xFFF6E4D2);
 const _kFpWarn = Color(0xFFA85A1E);
@@ -352,6 +351,19 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
   DateTime? _selected;
   final Set<String> _openAccounts = {};
 
+  /// 今日计划（planDate = 今天），只在看当月时拉。
+  LhFundPlan? _today;
+  bool _todayLoading = false;
+
+  /// 计划流向里点中的节点。
+  String? _flowSel;
+
+  /// 周期浮岛：月 / 日。日粒度单独拉当天计划。
+  LhZgPeriod _period = const LhZgPeriod.month();
+  LhFundPlan? _dayPlan;
+  String? _dayError;
+  bool _dayLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -367,7 +379,34 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
   }
 
   Future<void> _reload() async {
-    await Future.wait([_fetchPlan(), _fetchDays()]);
+    await Future.wait([_fetchPlan(), _fetchDays(), _fetchToday()]);
+  }
+
+  Future<void> _fetchToday() async {
+    // 可能在 initState 里同步跑到这里，只改字段不 setState；拿到结果后再统一刷新。
+    if (!_isCurrentMonth) {
+      _today = null;
+      return;
+    }
+    final m = _month;
+    final now = DateTime.now();
+    final date = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    _todayLoading = true;
+    try {
+      final data = await widget.service.fetchFundPlan(planDate: date);
+      if (!mounted || m != _month) return;
+      setState(() {
+        _today = LhFundPlan.fromJson(data);
+        _todayLoading = false;
+      });
+    } catch (_) {
+      // 今日面板拿不到就退回「余额」面板，不报错。
+      if (!mounted || m != _month) return;
+      setState(() {
+        _today = null;
+        _todayLoading = false;
+      });
+    }
   }
 
   Future<void> _fetchPlan() async {
@@ -408,56 +447,130 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
     }
   }
 
-  Future<void> _pickMonth() async {
+  /// 周期浮岛切换：月 = 原来的整月页面；日 = 当天计划（planDate）。
+  void _setPeriod(LhZgPeriod p) {
+    if (p == _period) return;
     final now = DateTime.now();
-    final months = [for (var i = 1; i >= -11; i--) DateTime(now.year, now.month + i)];
-    final picked = await showModalBottomSheet<DateTime>(
-      context: context,
-      backgroundColor: _bg(context, Colors.white),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.symmetric(vertical: 10),
+    final m = p.month;
+    final monthChanged = m != _month;
+    setState(() {
+      _period = p;
+      _flowSel = null;
+      if (monthChanged) {
+        _month = m;
+        _plan = null;
+        _days = null;
+        _planError = null;
+        _daysError = null;
+        _planLoading = true;
+        _daysLoading = true;
+        _today = null;
+        _selected = m.year == now.year && m.month == now.month ? DateTime(now.year, now.month, now.day) : m;
+      }
+      if (p.isDay) {
+        _dayPlan = null;
+        _dayError = null;
+        _dayLoading = true;
+        _selected = p.day;
+      }
+    });
+    if (monthChanged) unawaited(_reload());
+    if (p.isDay) unawaited(_fetchDay());
+  }
+
+  Future<void> _fetchDay() async {
+    final p = _period;
+    if (!p.isDay) return;
+    try {
+      final data = await widget.service.fetchFundPlan(planDate: p.param);
+      if (!mounted || p != _period) return;
+      setState(() {
+        _dayPlan = LhFundPlan.fromJson(data);
+        _dayError = null;
+        _dayLoading = false;
+      });
+    } catch (e) {
+      if (!mounted || p != _period) return;
+      setState(() {
+        _dayError = '$e'.replaceFirst('Exception: ', '');
+        _dayLoading = false;
+      });
+    }
+  }
+
+  /// 能转发的那份计划：当前粒度下已加载、有权限、建过计划。
+  LhFundPlan? get _shareable {
+    final p = _period.isDay ? _dayPlan : _plan;
+    if (p == null || p.restricted || p.unavailable || !p.exists) return null;
+    return p;
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait([_reload(), if (_period.isDay) _fetchDay()]);
+  }
+
+  /// 日粒度页面：当日执行 → 当日计划流向 → 各板块当日。
+  List<Widget> _dayView(BuildContext context) {
+    final p = _dayPlan;
+    final d = _period.day;
+    final label = '${_fpMd(d)} 周${_kFpWeek[d.weekday - 1]}';
+    if (_dayLoading && p == null) return [_loadingBox(context)];
+    if (p == null) return [_statusBox(context, _dayError ?? '暂无数据', onRetry: _fetchDay)];
+    if (p.restricted) return [_statusBox(context, '资金计划是全公司数据，当前账号暂无权限查看')];
+    if (p.unavailable) return [_statusBox(context, '资管资金计划接口未配置')];
+    if (!p.exists) return [_statusBox(context, '$label 没有资金计划')];
+    if ((p.inPlan ?? 0).abs() < 0.5 && (p.outPlan ?? 0).abs() < 0.5 && p.inKindActual.abs() < 0.5 && p.outKindActual.abs() < 0.5) {
+      return [_statusBox(context, '$label 计划里没有收付')];
+    }
+    return [
+      Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        decoration: _cardDeco(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
-              child: Text('选择月份', style: _sans(ctx, size: 13, weight: FontWeight.w700)),
+            _sectionHead(
+              context,
+              icon: Icons.today_outlined,
+              title: '当日执行',
+              chip: label,
+              trailing: p.fixture ? _tag(context, '样例数据', _kFpWarn, _kFpWarnSoft) : null,
             ),
-            for (final m in months)
-              ListTile(
-                dense: true,
-                title: Text(
-                  '${m.year} 年 ${m.month} 月',
-                  style: _sans(
-                    ctx,
-                    size: 12.5,
-                    weight: m == _month ? FontWeight.w700 : FontWeight.w400,
-                    color: m == _month ? _kDeep : _kInk,
+            const SizedBox(height: 10),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _execPanel(
+                      context,
+                      title: '当日 · 计划',
+                      titleColor: _kFin,
+                      tint: _kFin,
+                      inActual: p.inKindActual,
+                      inPlan: p.inKindPlan,
+                      outActual: p.outKindActual,
+                      outPlan: p.outKindPlan,
+                    ),
                   ),
-                ),
-                trailing: m == _month ? Icon(Icons.check_rounded, size: 18, color: _fg(ctx, _kPurple)) : null,
-                onTap: () => Navigator.of(ctx).pop(m),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _panel(context, [
+                      _cell(context, label: '当日计划净流入', value: _signedWan(p.net), color: (p.net ?? 0) < 0 ? _kFpOut : _kFpIn),
+                      _cell(context, label: '期初余额', value: lhBfWan(p.opening), color: _kFin),
+                    ], title: '余额', titleColor: _kFin),
+                  ),
+                ],
               ),
+            ),
           ],
         ),
       ),
-    );
-    if (picked == null || picked == _month || !mounted) return;
-    final today = DateTime.now();
-    setState(() {
-      _month = picked;
-      _plan = null;
-      _days = null;
-      _planError = null;
-      _daysError = null;
-      _planLoading = true;
-      _daysLoading = true;
-      _selected = picked.year == today.year && picked.month == today.month
-          ? DateTime(today.year, today.month, today.day)
-          : picked;
-    });
-    unawaited(_reload());
+      const SizedBox(height: 10),
+      _flowCard(context, p),
+      const SizedBox(height: 10),
+      _sectorCard(context, p),
+    ];
   }
 
   /// 月度时间进度（0–1）：当月按今天，过去的月 = 1，未来的月 = 0。
@@ -475,7 +588,9 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
   Widget build(BuildContext context) {
     final plan = _plan;
     final children = <Widget>[];
-    if (_planLoading && plan == null) {
+    if (_period.isDay) {
+      children.addAll(_dayView(context));
+    } else if (_planLoading && plan == null) {
       children.add(_loadingBox(context));
     } else if (plan == null) {
       children.add(_statusBox(context, _planError ?? '暂无数据', onRetry: _reload));
@@ -498,13 +613,11 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
         ..add(const SizedBox(height: 10))
         ..add(_calendarCard(context, plan))
         ..add(const SizedBox(height: 10))
-        ..add(_sectorCard(context, plan))
-        ..add(const SizedBox(height: 10))
-        ..add(_linesCard(context, plan));
+        ..add(_sectorCard(context, plan));
     }
     return _scaffold(
       context,
-      onRefresh: _reload,
+      onRefresh: _refreshAll,
       header: _pageHeader(
         context,
         '资金计划',
@@ -526,7 +639,15 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
               ),
             ),
             const SizedBox(width: 8),
-            _dateIsland(context, '月份', _fpMonthParam(_month), _pickMonth),
+            if (_shareable != null) ...[
+              lhZgShareButton(
+                context,
+                session: widget.session,
+                data: () => lhZgPlanShare(_shareable!, _period, timeProgress: _period.isDay ? null : _timeProgress),
+              ),
+              const SizedBox(width: 6),
+            ],
+            LhZgPeriodIsland(value: _period, grains: const ['day', 'month'], monthForward: 1, onChanged: _setPeriod),
           ],
         ),
       ),
@@ -542,6 +663,8 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
     final low = _lowest(p);
     final end = _monthEnd(p);
     final lowDate = low?.day.date;
+    final today = _today;
+    final showToday = _isCurrentMonth && today != null && today.exists && !today.restricted && !today.unavailable;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
       decoration: _cardDeco(context),
@@ -562,48 +685,87 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _progress(context, '回款', p.inKindActual, p.inKindPlan, _kFpIn, _kFpInSoft, tp)),
-              const SizedBox(width: 14),
-              Expanded(child: _progress(context, '付款', p.outKindActual, p.outKindPlan, _kFpOut, _kFpOutSoft, tp)),
-            ],
-          ),
+          _verdict(context, p, tp),
           const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _panel(context, [
-                  _cell(context, label: '期初余额', value: lhBfWan(p.opening), color: _kFin),
-                  _cell(
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _execPanel(
                     context,
-                    label: '计划净流入',
-                    value: _signedWan(p.net),
-                    color: (p.net ?? 0) < 0 ? _kFpOut : _kFpIn,
+                    title: '本月 · 整月计划',
+                    titleColor: _kDeep,
+                    inActual: p.inKindActual,
+                    inPlan: p.inKindPlan,
+                    outActual: p.outKindActual,
+                    outPlan: p.outKindPlan,
                   ),
-                ], tint: _kFin, title: '余额', titleColor: _kFin),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _panel(context, [
-                  _cell(
-                    context,
-                    label: '预计最低余额',
-                    value: low == null ? '—' : lhBfWan(low.balance),
-                    color: low != null && low.balance < 0 ? _kFpWarn : _kInk,
-                    badge: lowDate == null ? null : '${_fpMd(lowDate)} 周${_kFpWeek[lowDate.weekday - 1]}',
-                    badgeColor: _kFpWarn,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: showToday
+                      ? _execPanel(
+                          context,
+                          title: '今日 · ${_fpMd(DateTime.now())}',
+                          titleColor: _kFin,
+                          tint: _kFin,
+                          inActual: today!.inKindActual,
+                          inPlan: today.inKindPlan,
+                          outActual: today.outKindActual,
+                          outPlan: today.outKindPlan,
+                        )
+                      : _panel(context, [
+                          _cell(context, label: '期初余额', value: lhBfWan(p.opening), color: _kFin),
+                          _cell(
+                            context,
+                            label: '计划净流入',
+                            value: _signedWan(p.net),
+                            color: (p.net ?? 0) < 0 ? _kFpOut : _kFpIn,
+                          ),
+                        ], tint: _kFin, title: _isCurrentMonth && _todayLoading ? '今日 · 加载中' : '余额', titleColor: _kFin),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (showToday) ...[
+                  Expanded(
+                    child: _panel(context, [
+                      _cell(context, label: '期初余额', value: lhBfWan(p.opening), color: _kFin),
+                      _cell(
+                        context,
+                        label: '计划净流入',
+                        value: _signedWan(p.net),
+                        color: (p.net ?? 0) < 0 ? _kFpOut : _kFpIn,
+                      ),
+                    ], title: '余额', titleColor: _kFin),
                   ),
-                  _cell(context, label: '月末预计', value: end == null ? '—' : lhBfWan(end)),
-                ], title: '日历推算', titleColor: _kFpWarn),
-              ),
-            ],
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: _panel(context, [
+                    _cell(
+                      context,
+                      label: '预计最低余额',
+                      value: low == null ? '—' : lhBfWan(low.balance),
+                      color: low != null && low.balance < 0 ? _kFpWarn : _kInk,
+                      badge: lowDate == null ? null : '${_fpMd(lowDate)} 周${_kFpWeek[lowDate.weekday - 1]}',
+                      badgeColor: _kFpWarn,
+                    ),
+                    _cell(context, label: '月末预计', value: end == null ? '—' : lhBfWan(end)),
+                  ], title: '日历推算', titleColor: _kFpWarn),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           Text(
-            '进度只算收、付两类分类行（本月利润等净额行不计）· 黑线 = 时间进度 ${(tp * 100).round()}%'
+            '进度只算收、付两类分类行（本月利润等净额行不计）· 时间进度 ${(tp * 100).round()}%'
             '${fetched == null ? '' : ' · 实际数实时计算 ${fetched.hour.toString().padLeft(2, '0')}:${fetched.minute.toString().padLeft(2, '0')}'}',
             style: _sans(context, size: 10, color: _kMute, height: 1.4),
           ),
@@ -612,69 +774,108 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
     );
   }
 
-  Widget _progress(BuildContext context, String label, double actual, double plan, Color c, Color soft, double tp) {
-    final has = plan > 0;
-    final ratio = has ? actual / plan : 0.0;
-    final r = ratio.clamp(0.0, 1.0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Text(label, style: _sans(context, size: 11.5, weight: FontWeight.w700)),
-            const Spacer(),
-            Text(
-              has ? '${(ratio * 100).toStringAsFixed(0)}%' : '无计划',
-              style: _mono(context, size: 13, weight: FontWeight.w700, color: has ? c : _kMute),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        LayoutBuilder(
-          builder: (context, cons) {
-            final w = cons.maxWidth;
-            return SizedBox(
-              height: 14,
-              child: Stack(
-                clipBehavior: Clip.none,
+  bool get _isCurrentMonth {
+    final now = DateTime.now();
+    return _month.year == now.year && _month.month == now.month;
+  }
+
+  /// 一句话结论：走到第几、回款和付款各自是什么状态。只用接口给的数推，不加判断。
+  Widget _verdict(BuildContext context, LhFundPlan p, double tp) {
+    String state(double actual, double plan) {
+      if (plan <= 0) return '没有计划';
+      final r = actual / plan;
+      if (r < 0) return '实际为负';
+      if (r >= 1) return '已超过整月计划';
+      final gap = ((r - tp) * 100).round();
+      return gap >= 0 ? '快于时间 $gap 个点' : '慢于时间 ${-gap} 个点';
+    }
+
+    String pct(double actual, double plan) => plan > 0 ? '${(actual / plan * 100).toStringAsFixed(0)}%' : '—';
+    Widget line(Color dot, String name, String value, Color vc, String tail) => Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Container(width: 7, height: 7, decoration: BoxDecoration(color: _fg(context, dot), shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                style: _sans(context, size: 12.5, color: _kInk),
                 children: [
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 3,
-                    child: Container(
-                      height: 8,
-                      decoration: BoxDecoration(color: _bg(context, soft), borderRadius: BorderRadius.circular(4)),
-                    ),
-                  ),
-                  Positioned(
-                    left: 0,
-                    top: 3,
-                    child: Container(
-                      width: w * r,
-                      height: 8,
-                      decoration: BoxDecoration(color: _fg(context, c), borderRadius: BorderRadius.circular(4)),
-                    ),
-                  ),
-                  Positioned(
-                    left: (w * tp - 1).clamp(0.0, w > 2 ? w - 2 : 0.0),
-                    top: 0,
-                    child: Container(width: 2, height: 14, color: _fg(context, _kInk)),
-                  ),
+                  TextSpan(text: '$name '),
+                  TextSpan(text: value, style: _mono(context, size: 12.5, weight: FontWeight.w700, color: vc)),
+                  TextSpan(text: ' · $tail', style: _sans(context, size: 12, color: _kInk2)),
                 ],
               ),
-            );
-          },
-        ),
-        const SizedBox(height: 5),
-        Text(
-          '${lhBfWan(actual)} / ${lhBfWan(plan)} 万${has ? (ratio >= tp ? ' · 快于时间' : ' · 慢于时间') : ''}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+    final outNeg = p.outKindPlan > 0 && p.outKindActual < 0;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+      decoration: BoxDecoration(
+        color: _bg(context, const Color(0xFFFBFAFD)),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _ln(context, _kLine), width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text.rich(
+            TextSpan(
+              style: _sans(context, size: 15.5, weight: FontWeight.w700, color: _kInk),
+              children: [
+                TextSpan(text: '${_month.month} 月计划走到 '),
+                TextSpan(
+                  text: '${(tp * 100).round()}%',
+                  style: _mono(context, size: 16, weight: FontWeight.w700, color: _kPurple),
+                ),
+              ],
+            ),
+          ),
+          line(_kFpIn, '回款', pct(p.inKindActual, p.inKindPlan), _kFpIn, state(p.inKindActual, p.inKindPlan)),
+          line(_kFpOut, '付款', pct(p.outKindActual, p.outKindPlan), outNeg ? _kFpWarn : _kFpOut, state(p.outKindActual, p.outKindPlan)),
+        ],
+      ),
+    );
+  }
+
+  /// 执行面板：已收 / 已付（角标 = 完成比例），最后一行写计划数。
+  Widget _execPanel(
+    BuildContext context, {
+    required String title,
+    required Color titleColor,
+    Color? tint,
+    required double inActual,
+    required double inPlan,
+    required double outActual,
+    required double outPlan,
+  }) {
+    String? pct(double a, double plan) => plan > 0 ? '${(a / plan * 100).toStringAsFixed(0)}%' : null;
+    return _panel(context, [
+      _cell(context, label: '已收', value: lhBfWan(inActual), color: _kFpIn, badge: pct(inActual, inPlan) ?? '无计划', badgeColor: _kFpIn),
+      _cell(
+        context,
+        label: '已付',
+        value: lhBfWan(outActual),
+        color: outActual < 0 ? _kFpWarn : _kFpOut,
+        badge: pct(outActual, outPlan) ?? '无计划',
+        badgeColor: outActual < 0 ? _kFpWarn : _kFpOut,
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(9, 5, 8, 6),
+        child: Text(
+          '计划 收 ${lhBfWan(inPlan)} · 付 ${lhBfWan(outPlan)}',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: _mono(context, size: 9.5, color: _kInk2),
+          style: _mono(context, size: 9, color: _kInk2),
         ),
-      ],
-    );
+      ),
+    ], tint: tint, title: title, titleColor: titleColor);
   }
 
   List<_FpBalance>? _balances(LhFundPlan p) {
@@ -707,10 +908,13 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
     final pout = _fpSum(secs.map((s) => s.outPlan));
     final gapTotal = gaps.fold<double>(0, (a, b) => a + b);
     final endTotal = _fpSum(secs.map((s) => s.projectedEnd > 0 ? s.projectedEnd : 0.0));
+    final srcTotal = open + pin + gapTotal;
+    final dstTotal = pout + endTotal;
     final left = <_SkNode>[
-      if (open > 0) _SkNode('open', '期初余额', _wu(open), open, _kFin),
-      if (pin > 0) _SkNode('pin', '回款计划', _wu(pin), pin, _kFpIn),
-      if (gapTotal > 0) _SkNode('gap', '资金缺口', _wu(gapTotal), gapTotal, _kFpWarn, dashed: true),
+      if (open > 0) _SkNode('open', '期初余额', _wu(open), open, _kFin, share: _skShare('资金来源', open, srcTotal)),
+      if (pin > 0) _SkNode('pin', '回款计划', _wu(pin), pin, _kFpIn, share: _skShare('资金来源', pin, srcTotal)),
+      if (gapTotal > 0)
+        _SkNode('gap', '资金缺口', _wu(gapTotal), gapTotal, _kFpWarn, dashed: true, share: _skShare('资金来源', gapTotal, srcTotal)),
     ];
     final mid = <_SkNode>[
       for (var i = 0; i < secs.length; i++)
@@ -720,11 +924,12 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
           _wu((secs[i].opening ?? 0) + (secs[i].inPlan ?? 0) + gaps[i]),
           (secs[i].opening ?? 0) + (secs[i].inPlan ?? 0) + gaps[i],
           _kDeep,
+          share: _skShare('全部板块', (secs[i].opening ?? 0) + (secs[i].inPlan ?? 0) + gaps[i], srcTotal),
         ),
     ];
     final right = <_SkNode>[
-      if (pout > 0) _SkNode('pout', '付款计划', _wu(pout), pout, _kFpOut),
-      if (endTotal > 0) _SkNode('end', '预计期末', _wu(endTotal), endTotal, _kFin),
+      if (pout > 0) _SkNode('pout', '付款计划', _wu(pout), pout, _kFpOut, share: _skShare('资金去向', pout, dstTotal)),
+      if (endTotal > 0) _SkNode('end', '预计期末', _wu(endTotal), endTotal, _kFin, share: _skShare('资金去向', endTotal, dstTotal)),
     ];
     final links = <_SkLink>[];
     for (var i = 0; i < secs.length; i++) {
@@ -769,20 +974,31 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
           const SizedBox(height: 8),
           if (!ok)
             _hintLine(context, '计划里还没有金额')
-          else
+          else ...[
             _SkChart(
               height: 64.0 + 46.0 * mid.length,
               dataKey: Object.hashAll([for (final l in links) l.v]),
+              selected: _flowSel,
+              onSelect: (id) => setState(() => _flowSel = id),
               builder: (t) => _SkPainter(
                 t: t,
                 cols: [left, mid, right],
                 links: links,
+                selected: _flowSel,
                 label: _sans(context, size: 11, weight: FontWeight.w600),
                 sub: _mono(context, size: 9.5, color: _kMute),
                 halo: _bg(context, Colors.white),
                 resolve: (c) => _fg(context, c),
               ),
             ),
+            _skFocus(
+              context,
+              cols: [left, mid, right],
+              links: links,
+              selected: _flowSel,
+              onClear: () => setState(() => _flowSel = null),
+            ),
+          ],
           if (gapNames.isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
@@ -1076,65 +1292,72 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
   // ── 各板块执行 ─────────────────────────────────────────────────────────
 
   Widget _sectorCard(BuildContext context, LhFundPlan p) {
-    final tp = _timeProgress;
+    final inTotal = p.inKindPlan;
+    final outTotal = p.outKindPlan;
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: _cardDeco(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _sectionHead(context, icon: Icons.stacked_bar_chart_rounded, title: '各板块执行', chip: '${p.sectors.length} 个板块'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 30),
+            child: Text('收 = 回款，付 = 付款，净 = 收入 − 支出 · 展开看分类和账户', style: _sans(context, size: 10.5, color: _kInk2)),
+          ),
+          const SizedBox(height: 10),
           for (var i = 0; i < p.sectors.length; i++) ...[
-            if (i > 0)
-              Container(
-                height: 0.6,
-                color: _ln(context, _kLine),
-                margin: const EdgeInsets.symmetric(vertical: 8),
-              ),
-            _sectorRow(context, p.sectors[i], tp),
+            if (i > 0) const SizedBox(height: 8),
+            _sectorItem(context, i, p.sectors[i], inTotal, outTotal),
           ],
         ],
       ),
     );
   }
 
-  Widget _sectorRow(BuildContext context, LhFpSector s, double tp) {
+  Widget _sectorItem(BuildContext context, int i, LhFpSector s, double inTotal, double outTotal) {
     final end = s.projectedEnd;
     final empty = s.opening == null && s.inPlan == null && s.outPlan == null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 12, weight: FontWeight.w700)),
-            ),
-            Text('期初 ', style: _sans(context, size: 10, color: _kInk2)),
-            Text(_wu(s.opening), style: _mono(context, size: 10.5, weight: FontWeight.w600, color: _kFin)),
-            const SizedBox(width: 10),
-            Text('预计期末 ', style: _sans(context, size: 10, color: _kInk2)),
-            Text(
-              empty ? '—' : _nwu(end),
-              style: _mono(context, size: 10.5, weight: FontWeight.w700, color: end < 0 ? _kFpWarn : _kInk),
-            ),
-          ],
-        ),
-        if (end < 0)
-          Padding(
-            padding: const EdgeInsets.only(top: 3),
-            child: Text('计划付款超过期初 + 回款，缺口 ${lhBfWan(-end)} 万', style: _sans(context, size: 10, color: _kFpWarn)),
+    String? pct(double a, double plan) => plan > 0 ? '${(a / plan * 100).toStringAsFixed(0)}%' : null;
+    String? share(double v, double total) => total > 0 && v > 0 ? '占${(v / total * 100).toStringAsFixed(0)}%' : null;
+    final outNeg = s.outKindActual < 0;
+    final names = [for (final l in s.lines) l.name.isEmpty ? '未命名分类' : l.name];
+    return _LhRowCard(
+      key: ValueKey('fp-sector-${_fpMonthParam(_month)}-${s.name}'),
+      index: i + 1,
+      title: s.name,
+      titleTag: !empty && end < 0 ? _tag(context, '缺口 ${lhBfWan(-end)}万', _kFpWarn, _kFpWarnSoft) : null,
+      mainLabel: '计划净流入',
+      mainHint: '期初 ${_wu(s.opening)}',
+      mainValue: _signedWan(s.net),
+      mainColor: (s.net ?? 0) < 0 ? _kFpOut : _kInk,
+      mainBadge: empty ? null : '预计期末 ${_nwu(end)}',
+      mainBadgeColor: end < 0 ? _kFpWarn : _kInk2,
+      accent: _kPurple,
+      panels: [
+        _panel(context, [
+          _cell(context, label: '已收', value: lhBfWan(s.inKindActual), color: _kFpIn, badge: pct(s.inKindActual, s.inKindPlan), badgeColor: _kFpIn),
+          _cell(context, label: '回款计划', value: lhBfWan(s.inKindPlan), badge: share(s.inKindPlan, inTotal), badgeColor: _kInk2),
+        ], tint: _kFpIn, title: '回款', titleColor: _kFpIn),
+        _panel(context, [
+          _cell(
+            context,
+            label: '已付',
+            value: lhBfWan(s.outKindActual),
+            color: outNeg ? _kFpWarn : _kFpOut,
+            badge: pct(s.outKindActual, s.outKindPlan),
+            badgeColor: outNeg ? _kFpWarn : _kFpOut,
           ),
-        const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _progress(context, '回款', s.inKindActual, s.inKindPlan, _kFpIn, _kFpInSoft, tp)),
-            const SizedBox(width: 14),
-            Expanded(child: _progress(context, '付款', s.outKindActual, s.outKindPlan, _kFpOut, _kFpOutSoft, tp)),
-          ],
-        ),
+          _cell(context, label: '付款计划', value: lhBfWan(s.outKindPlan), badge: share(s.outKindPlan, outTotal), badgeColor: _kInk2),
+        ], tint: _kFpOut, title: '付款', titleColor: _kFpOut),
       ],
+      expandKicker: '分类 ${s.lines.length}',
+      expandPreview: [
+        if (names.isNotEmpty) names.take(4).join('、'),
+        if (s.accounts.isNotEmpty) '${s.accounts.length} 个账号',
+      ].join(' · '),
+      expandBuilder: (context) => _sectorLines(context, s, inCard: true),
     );
   }
 
@@ -1159,7 +1382,7 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
     );
   }
 
-  Widget _sectorLines(BuildContext context, LhFpSector s) {
+  Widget _sectorLines(BuildContext context, LhFpSector s, {bool inCard = false}) {
     final open = _openAccounts.contains(s.name);
     final meta = [
       '期初 ${_wu(s.opening)}',
@@ -1168,8 +1391,8 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
       if (s.missingBalances > 0) '${s.missingBalances} 个无余额',
     ].join(' · ');
     return Container(
-      decoration: BoxDecoration(color: _bg(context, _kNeutralPanel), borderRadius: BorderRadius.circular(12)),
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+      decoration: inCard ? null : BoxDecoration(color: _bg(context, _kNeutralPanel), borderRadius: BorderRadius.circular(12)),
+      padding: inCard ? const EdgeInsets.only(top: 6) : const EdgeInsets.fromLTRB(10, 8, 10, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1182,15 +1405,20 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
                   }),
             child: Row(
               children: [
-                Text(s.name, style: _sans(context, size: 12, weight: FontWeight.w700)),
-                const SizedBox(width: 8),
+                if (!inCard) ...[
+                  Text(s.name, style: _sans(context, size: 12, weight: FontWeight.w700)),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10, color: _kInk2)),
                 ),
-                Text(
-                  _swu(s.net),
-                  style: _mono(context, size: 10.5, weight: FontWeight.w700, color: (s.net ?? 0) < 0 ? _kFpOut : _kFpIn),
-                ),
+                if (!inCard)
+                  Text(
+                    _swu(s.net),
+                    style: _mono(context, size: 10.5, weight: FontWeight.w700, color: (s.net ?? 0) < 0 ? _kFpOut : _kFpIn),
+                  ),
+                if (inCard && s.accounts.isNotEmpty)
+                  Text(open ? '收起账户' : '看账户', style: _sans(context, size: 10, weight: FontWeight.w600, color: _kPurple)),
                 if (s.accounts.isNotEmpty)
                   Icon(open ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 16, color: _fg(context, _kInk2)),
               ],
@@ -1312,16 +1540,286 @@ class _FundPlanPageState extends State<LighthouseFundPlanPage> {
   );
 }
 
+// ═════════════════════════════ 灯塔行卡 ═════════════════════════════
+//
+//   资金计划「各板块执行」、资金流水「分类明细」「账号属性 × 资金属性」共用，
+//   版式照灯塔产品卡：左栏 = 序号 + 标题 + 主数，右栏 = 两块指标面板，底部可选「展开」条。
+//   交互：按下轻微下沉、桌面悬停描边、展开条带旋转箭头和高度动画；有 [onOpen] 时左下角给一个进入按钮。
+
+class _LhRowCard extends StatefulWidget {
+  const _LhRowCard({
+    super.key,
+    required this.index,
+    required this.title,
+    required this.panels,
+    this.titleTag,
+    this.mainLabel,
+    this.mainHint,
+    this.mainValue,
+    this.mainColor = _kInk,
+    this.mainUnit = '万',
+    this.mainBadge,
+    this.mainBadgeColor = _kDeep,
+    this.expandKicker,
+    this.expandPreview,
+    this.expandBuilder,
+    this.onOpen,
+    this.accent = _kPurple,
+    this.initiallyOpen = false,
+  });
+
+  final int index;
+  final String title;
+  final Widget? titleTag;
+  final List<Widget> panels;
+  final String? mainLabel;
+  final String? mainHint;
+  final String? mainValue;
+  final Color mainColor;
+  final String mainUnit;
+
+  /// 主数下面的一行（占比只写在这里）。
+  final String? mainBadge;
+  final Color mainBadgeColor;
+  final String? expandKicker;
+  final String? expandPreview;
+  final WidgetBuilder? expandBuilder;
+  final VoidCallback? onOpen;
+  final Color accent;
+  final bool initiallyOpen;
+
+  @override
+  State<_LhRowCard> createState() => _LhRowCardState();
+}
+
+class _LhRowCardState extends State<_LhRowCard> {
+  late bool _open = widget.initiallyOpen;
+  bool _hover = false;
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final w = widget;
+    final accent = _fg(context, w.accent);
+    final canExpand = w.expandBuilder != null;
+    final left = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(padding: const EdgeInsets.only(top: 1.5), child: _indexBadge(context, w.index)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                w.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: _sans(context, size: 13, weight: FontWeight.w700, height: 1.3),
+              ),
+            ),
+          ],
+        ),
+        if (w.titleTag != null) ...[const SizedBox(height: 5), w.titleTag!],
+        const Spacer(),
+        if (w.mainLabel != null)
+          Text(w.mainLabel!, maxLines: 1, style: _sans(context, size: 10, weight: FontWeight.w700, color: _kInk2, height: 1.2)),
+        if (w.mainHint != null)
+          Text(w.mainHint!, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 9, color: _kMute, height: 1.3)),
+        const SizedBox(height: 5),
+        Row(
+          children: [
+            Expanded(child: _amount(context, w.mainValue ?? '—', unit: w.mainUnit, color: w.mainColor, size: 15)),
+            if (w.onOpen != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: _bg(context, _kLavender),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: accent.withValues(alpha: 0.18), width: 0.8),
+                ),
+                child: Icon(Icons.chevron_right_rounded, size: 17, color: accent),
+              ),
+            ],
+          ],
+        ),
+        if (w.mainBadge != null) ...[
+          const SizedBox(height: 3),
+          Text(
+            w.mainBadge!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _mono(context, size: 9.5, weight: FontWeight.w600, color: w.mainBadgeColor),
+          ),
+        ],
+      ],
+    );
+    final body = Padding(
+      padding: const EdgeInsets.fromLTRB(11, 11, 10, 10),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final leftW = (box.maxWidth * 0.34).clamp(108.0, 220.0);
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(width: leftW, child: left),
+                const SizedBox(width: 9),
+                for (var i = 0; i < w.panels.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 6),
+                  Expanded(child: w.panels[i]),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    final card = AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        color: _bg(context, Colors.white),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _hover || _open ? accent.withValues(alpha: 0.38) : _ln(context, _kEdge),
+          width: _hover || _open ? 1 : 0.8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF3C2878).withValues(alpha: _hover ? 0.09 : 0.04),
+            blurRadius: _hover ? 16 : 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: w.onOpen == null ? null : (_) => setState(() => _down = true),
+            onTapCancel: w.onOpen == null ? null : () => setState(() => _down = false),
+            onTapUp: w.onOpen == null ? null : (_) => setState(() => _down = false),
+            onTap: w.onOpen,
+            child: body,
+          ),
+          if (canExpand) _expandBar(context, accent),
+          if (canExpand)
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: _open
+                  ? Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(12, 2, 12, 10),
+                      color: _bg(context, const Color(0xFFFAF9FD)),
+                      child: w.expandBuilder!(context),
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
+        ],
+      ),
+    );
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      cursor: w.onOpen != null ? SystemMouseCursors.click : MouseCursor.defer,
+      child: AnimatedScale(
+        scale: _down ? 0.985 : 1,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: card,
+      ),
+    );
+  }
+
+  Widget _expandBar(BuildContext context, Color accent) {
+    final w = widget;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _open = !_open),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+        decoration: BoxDecoration(
+          color: Color.alphaBlend(accent.withAlpha(_open ? 18 : 0), _bg(context, const Color(0xFFFAF9FD))),
+          border: Border(top: BorderSide(color: _ln(context, _kLine), width: 0.7)),
+        ),
+        child: Row(
+          children: [
+            LhProductL3BranchMark(color: accent, size: 16),
+            const SizedBox(width: 6),
+            if (w.expandKicker != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(color: accent.withAlpha(26), borderRadius: BorderRadius.circular(4)),
+                child: Text(w.expandKicker!, style: _sans(context, size: 10, weight: FontWeight.w700, color: _kDeep, height: 1.2)),
+              ),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                w.expandPreview ?? '',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _sans(context, size: 11, weight: FontWeight.w500, color: _kInk2, height: 1.2),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(_open ? '收起' : '展开', style: _sans(context, size: 10.5, weight: FontWeight.w600, color: w.accent, height: 1.2)),
+            AnimatedRotation(
+              turns: _open ? 0.5 : 0,
+              duration: const Duration(milliseconds: 180),
+              child: Icon(Icons.keyboard_arrow_down_rounded, size: 17, color: accent),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 展开区里的一行：名字（可带角标）+ 右侧金额。
+Widget _lhSubRow(BuildContext context, String name, String value, {Color color = _kInk, Widget? tag, bool muted = false, int depth = 0}) {
+  return Container(
+    padding: EdgeInsets.fromLTRB(depth * 12.0, 7, 0, 7),
+    decoration: BoxDecoration(border: Border(top: BorderSide(color: _ln(context, _kLine), width: 0.6))),
+    child: Row(
+      children: [
+        Flexible(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _sans(context, size: muted ? 10.5 : 11.5, weight: muted ? FontWeight.w500 : FontWeight.w600, color: muted ? _kInk2 : _kInk),
+          ),
+        ),
+        if (tag != null) ...[const SizedBox(width: 5), tag],
+        const Spacer(),
+        const SizedBox(width: 8),
+        Text(value, style: _mono(context, size: 11, weight: FontWeight.w600, color: muted ? _kMute : color)),
+      ],
+    ),
+  );
+}
+
 // ═════════════════════════════ 桑基图 ═════════════════════════════
 
 class _SkNode {
-  _SkNode(this.id, this.label, this.sub, this.value, this.color, {this.dashed = false});
+  _SkNode(this.id, this.label, this.sub, this.value, this.color, {this.dashed = false, this.share});
   final String id;
   final String label;
   final String sub;
   final double value;
   final Color color;
   final bool dashed;
+
+  /// 点中这块时，大数旁边的占比说明（如「占本月流出 23.4%」）；为空就不写。
+  final String? share;
 }
 
 class _SkLink {
@@ -1334,12 +1832,15 @@ class _SkLink {
 }
 
 /// 桑基图外壳：进页面或数据变了，色带从左往右长出来（1.1 秒）；系统关了动效就直接画完。
+/// 给了 [onSelect] 就能点：点一块只亮它的来路和去向，再点一次或点空白处恢复。
 class _SkChart extends StatefulWidget {
-  const _SkChart({required this.height, required this.builder, required this.dataKey});
+  const _SkChart({required this.height, required this.builder, required this.dataKey, this.selected, this.onSelect});
 
   final double height;
   final _SkPainter Function(double t) builder;
   final Object dataKey;
+  final String? selected;
+  final ValueChanged<String?>? onSelect;
 
   @override
   State<_SkChart> createState() => _SkChartState();
@@ -1377,14 +1878,39 @@ class _SkChartState extends State<_SkChart> with SingleTickerProviderStateMixin 
 
   @override
   Widget build(BuildContext context) {
+    final onSelect = widget.onSelect;
     return SizedBox(
       height: widget.height,
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (context, _) => CustomPaint(painter: widget.builder(Curves.easeOutCubic.transform(_c.value))),
+      child: LayoutBuilder(
+        builder: (context, box) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: onSelect == null
+              ? null
+              : (d) {
+                  final id = widget.builder(1).nodeAt(Size(box.maxWidth, widget.height), d.localPosition);
+                  onSelect(id == null || id == widget.selected ? null : id);
+                },
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (context, _) => CustomPaint(
+              size: Size(box.maxWidth, widget.height),
+              painter: widget.builder(Curves.easeOutCubic.transform(_c.value)),
+            ),
+          ),
+        ),
       ),
     );
   }
+}
+
+/// 布局结果：节点矩形、列内序号、比例尺、标签宽、标签中心（左右两列避让过）。
+class _SkGeo {
+  _SkGeo(this.rect, this.order, this.scale, this.labelW, this.cy);
+  final Map<String, Rect> rect;
+  final Map<String, int> order;
+  final double scale;
+  final double labelW;
+  final Map<String, double> cy;
 }
 
 /// 三列桑基：左列标签靠右、右列标签靠左、中列标签压在色带上（白边）。
@@ -1397,6 +1923,7 @@ class _SkPainter extends CustomPainter {
     required this.halo,
     required this.resolve,
     this.midLabelTop = false,
+    this.selected,
     this.t = 1,
   });
 
@@ -1405,6 +1932,9 @@ class _SkPainter extends CustomPainter {
 
   /// 中列只有一个节点（资金池）时，标签放在节点上方。
   final bool midLabelTop;
+
+  /// 点中的节点：只亮跟它相连的色带和节点，其他压淡。
+  final String? selected;
   final List<List<_SkNode>> cols;
   final List<_SkLink> links;
   final TextStyle label;
@@ -1417,8 +1947,7 @@ class _SkPainter extends CustomPainter {
   static const double _pad = 8;
   static const double _labelGap = 32;
 
-  @override
-  void paint(Canvas canvas, Size size) {
+  _SkGeo? _geo(Size size) {
     final w = size.width;
     final h = size.height;
     final labelW = (w * 0.27).clamp(72.0, 140.0);
@@ -1432,7 +1961,7 @@ class _SkPainter extends CustomPainter {
       if (total <= 0) continue;
       scale = math.min(scale, (h - topPad - 2 * _pad - _gap * (c.length - 1)) / total);
     }
-    if (!scale.isFinite || scale <= 0) return;
+    if (!scale.isFinite || scale <= 0) return null;
 
     final rect = <String, Rect>{};
     final order = <String, int>{};
@@ -1447,6 +1976,79 @@ class _SkPainter extends CustomPainter {
         y += hs[i] + _gap;
       }
     }
+
+    final cy = <String, double>{};
+    final last = cols.length - 1;
+    for (var ci = 0; ci < cols.length; ci++) {
+      final nodes = cols[ci].where((n) => rect.containsKey(n.id)).toList();
+      final centers = <double>[for (final n in nodes) rect[n.id]!.center.dy];
+      if (ci == 0 || ci == last) {
+        for (var i = 1; i < centers.length; i++) {
+          centers[i] = math.max(centers[i], centers[i - 1] + _labelGap);
+        }
+        if (centers.isNotEmpty) {
+          final over = centers.last - (h - 12);
+          if (over > 0) {
+            centers[centers.length - 1] -= over;
+            for (var i = centers.length - 2; i >= 0; i--) {
+              centers[i] = math.min(centers[i], centers[i + 1] - _labelGap);
+            }
+          }
+        }
+      }
+      for (var i = 0; i < nodes.length; i++) {
+        cy[nodes[i].id] = centers[i];
+      }
+    }
+    return _SkGeo(rect, order, scale, labelW, cy);
+  }
+
+  /// 点在哪一块上（节点本身 + 它的标签区）。先看左右两列，再看中列，免得中列标签区盖住右列。
+  String? nodeAt(Size size, Offset p) {
+    final g = _geo(size);
+    if (g == null) return null;
+    final last = cols.length - 1;
+    final seq = <int>[0, if (last > 0) last, for (var i = 1; i < last; i++) i];
+    for (final ci in seq) {
+      for (final n in cols[ci]) {
+        final r = g.rect[n.id];
+        if (r == null) continue;
+        final c = g.cy[n.id] ?? r.center.dy;
+        final Rect hit;
+        if (ci == 0) {
+          hit = Rect.fromLTRB(r.left - g.labelW, math.min(r.top, c - 16), r.right + 6, math.max(r.bottom, c + 16));
+        } else if (ci == last) {
+          hit = Rect.fromLTRB(r.left - 6, math.min(r.top, c - 16), r.right + g.labelW, math.max(r.bottom, c + 16));
+        } else if (midLabelTop) {
+          hit = Rect.fromLTRB(r.left - size.width * 0.15, r.top - 32, r.right + size.width * 0.15, r.bottom);
+        } else {
+          hit = Rect.fromLTRB(r.left - 6, math.min(r.top, c - 14), r.right + size.width * 0.3, math.max(r.bottom, c + 14));
+        }
+        if (hit.contains(p)) return n.id;
+      }
+    }
+    return null;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final g = _geo(size);
+    if (g == null) return;
+    final rect = g.rect;
+    final order = g.order;
+    final scale = g.scale;
+    final labelW = g.labelW;
+
+    final sel = selected != null && rect.containsKey(selected) ? selected : null;
+    bool linkOn(_SkLink l) => sel == null || l.s == sel || l.t == sel;
+    final related = <String>{
+      if (sel != null) sel,
+      for (final l in links)
+        if (sel != null && (l.s == sel || l.t == sel)) ...[l.s, l.t],
+    };
+    bool nodeOn(String id) => sel == null || related.contains(id);
 
     final outY = <String, double>{for (final e in rect.entries) e.key: e.value.top};
     final inY = Map<String, double>.of(outY);
@@ -1480,7 +2082,8 @@ class _SkPainter extends CustomPainter {
         ..lineTo(xb, y1 + hh)
         ..cubicTo(xm, y1 + hh, xm, y0 + hh, xa, y0 + hh)
         ..close();
-      canvas.drawPath(path, Paint()..color = resolve(l.color).withValues(alpha: l.opacity));
+      final op = linkOn(l) ? (sel == null ? l.opacity : math.min(1.0, l.opacity + 0.15)) : l.opacity * 0.16;
+      canvas.drawPath(path, Paint()..color = resolve(l.color).withValues(alpha: op));
     }
     canvas.restore();
 
@@ -1495,11 +2098,12 @@ class _SkPainter extends CustomPainter {
     }
 
     for (var ci = 0; ci < cols.length; ci++) {
-      final na = colAlpha(ci);
-      if (na <= 0) continue;
+      final ca = colAlpha(ci);
+      if (ca <= 0) continue;
       for (final n in cols[ci]) {
         final r = rect[n.id];
         if (r == null) continue;
+        final na = ca * (nodeOn(n.id) ? 1 : 0.3);
         final rr = RRect.fromRectAndRadius(r, const Radius.circular(2));
         final nc = resolve(n.color);
         if (n.dashed) {
@@ -1514,35 +2118,30 @@ class _SkPainter extends CustomPainter {
         } else {
           canvas.drawRRect(rr, Paint()..color = nc.withValues(alpha: nc.a * na));
         }
+        if (n.id == sel) {
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(r.inflate(2.5), const Radius.circular(3)),
+            Paint()
+              ..color = nc.withValues(alpha: ca)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.6,
+          );
+        }
       }
     }
 
     final last = cols.length - 1;
     for (var ci = 0; ci < cols.length; ci++) {
-      final nodes = cols[ci].where((n) => rect.containsKey(n.id)).toList();
-      final centers = <double>[for (final n in nodes) rect[n.id]!.center.dy];
-      if (ci == 0 || ci == last) {
-        for (var i = 1; i < centers.length; i++) {
-          centers[i] = math.max(centers[i], centers[i - 1] + _labelGap);
-        }
-        if (centers.isNotEmpty) {
-          final over = centers.last - (h - 12);
-          if (over > 0) {
-            centers[centers.length - 1] -= over;
-            for (var i = centers.length - 2; i >= 0; i--) {
-              centers[i] = math.min(centers[i], centers[i + 1] - _labelGap);
-            }
-          }
-        }
-      }
-      final la = colAlpha(ci);
-      if (la <= 0) continue;
-      final subS = fade(sub, la);
-      for (var i = 0; i < nodes.length; i++) {
-        final n = nodes[i];
-        final r = rect[n.id]!;
-        final cy = centers[i];
-        final ls = fade(n.dashed ? label.copyWith(color: resolve(n.color)) : label, la);
+      final ca = colAlpha(ci);
+      if (ca <= 0) continue;
+      for (final n in cols[ci]) {
+        final r = rect[n.id];
+        if (r == null) continue;
+        final la = ca * (nodeOn(n.id) ? 1 : 0.35);
+        final cy = g.cy[n.id] ?? r.center.dy;
+        final base = n.dashed ? label.copyWith(color: resolve(n.color)) : label;
+        final ls = fade(n.id == sel ? base.copyWith(fontWeight: FontWeight.w800) : base, la);
+        final subS = fade(sub, la);
         if (ci == 0) {
           _text(canvas, n.label, ls, r.left - 6, cy - 13, alignRight: true, maxW: labelW - 8);
           _text(canvas, n.sub, subS, r.left - 6, cy + 2, alignRight: true, maxW: labelW - 8);
@@ -1615,5 +2214,152 @@ class _SkPainter extends CustomPainter {
       old.links != links ||
       old.label != label ||
       old.halo != halo ||
+      old.selected != selected ||
       old.midLabelTop != midLabelTop;
+}
+
+/// 点中一块后，桑基图下面的说明：名字、大数、占比（只写在大数上），再列它连着的几条（只写金额）。
+Widget _skFocus(
+  BuildContext context, {
+  required List<List<_SkNode>> cols,
+  required List<_SkLink> links,
+  required String? selected,
+  required VoidCallback onClear,
+}) {
+  _SkNode? find(String id) {
+    for (final c in cols) {
+      for (final n in c) {
+        if (n.id == id) return n;
+      }
+    }
+    return null;
+  }
+
+  final n = selected == null ? null : find(selected);
+  if (n == null) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text('点图上任意一块，只看它的来路和去向', textAlign: TextAlign.center, style: _sans(context, size: 10.5, color: _kMute)),
+    );
+  }
+  final ins = [
+    for (final l in links)
+      if (l.t == n.id) (find(l.s), l),
+  ];
+  final outs = [
+    for (final l in links)
+      if (l.s == n.id) (find(l.t), l),
+  ];
+  Widget side(String title, List<(_SkNode?, _SkLink)> xs) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(title, style: _sans(context, size: 10, color: _kMute)),
+      const SizedBox(height: 4),
+      for (final (m, l) in xs)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: _fg(context, l.color), borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(m?.label ?? '—', maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 11)),
+              ),
+              Text(_wu(l.v), style: _mono(context, size: 10.5, weight: FontWeight.w600)),
+            ],
+          ),
+        ),
+    ],
+  );
+  return Container(
+    margin: const EdgeInsets.only(top: 8),
+    padding: const EdgeInsets.fromLTRB(11, 10, 11, 10),
+    decoration: BoxDecoration(
+      color: _bg(context, _kMist),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: _ln(context, _kLine), width: 0.8),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(n.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 12.5, weight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(_wu(n.value), style: _mono(context, size: 18, weight: FontWeight.w700, color: const Color(0xFF2B2147))),
+                  if (n.share != null) ...[
+                    const SizedBox(height: 2),
+                    Text(n.share!, style: _sans(context, size: 11, weight: FontWeight.w600, color: _kDeep)),
+                  ],
+                ],
+              ),
+            ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onClear,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Text('看全部', style: _sans(context, size: 11, weight: FontWeight.w600, color: _kPurple)),
+              ),
+            ),
+          ],
+        ),
+        if (ins.isNotEmpty || outs.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: ins.isEmpty ? const SizedBox.shrink() : side('来自', ins)),
+              if (ins.isNotEmpty && outs.isNotEmpty) const SizedBox(width: 14),
+              Expanded(child: outs.isEmpty ? const SizedBox.shrink() : side('去向', outs)),
+            ],
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+/// 占比文案：「占本月流出 23.4%」。分母为 0 就不写。
+String? _skShare(String what, double v, double total) =>
+    total > 0 ? '占$what ${(v / total * 100).toStringAsFixed(1)}%' : null;
+
+// ═════════════════════════════ 转发到 IM ═════════════════════════════
+
+/// 资金计划卡片：计划净流入 + 回款 / 付款完成 + 余额 + 各板块净流入。
+LighthouseSharedCardData lhZgPlanShare(LhFundPlan p, LhZgPeriod period, {double? timeProgress}) {
+  String? pct(double a, double plan) => plan > 0 ? '${(a / plan * 100).toStringAsFixed(0)}%' : null;
+  final secs = [...p.sectors]..sort((a, b) => (b.net ?? 0).abs().compareTo((a.net ?? 0).abs()));
+  return lhZgShareData(
+    module: 'fund_plan',
+    title: '资金计划',
+    range: '${lhZgPeriodName(period)} ${lhZgPeriodRange(period)}',
+    head: {
+      ...lhZgCell(period.isDay ? '当日计划净流入' : '计划净流入', _signedWan(p.net), tone: (p.net ?? 0) < 0 ? 'out' : 'in'),
+      if (p.statusLabel.isNotEmpty) 'b': p.statusLabel,
+    },
+    cells: [
+      lhZgCell('已收', lhBfWan(p.inKindActual), tone: 'in', badge: pct(p.inKindActual, p.inKindPlan)),
+      lhZgCell('已付', lhBfWan(p.outKindActual), tone: p.outKindActual < 0 ? 'warn' : 'out', badge: pct(p.outKindActual, p.outKindPlan)),
+      lhZgCell('回款计划', lhBfWan(p.inKindPlan)),
+      lhZgCell('付款计划', lhBfWan(p.outKindPlan)),
+      lhZgCell('期初余额', lhBfWan(p.opening), tone: 'fin'),
+      if (timeProgress != null) lhZgCell('时间进度', '${(timeProgress * 100).round()}%', unit: ''),
+    ],
+    linesTitle: '各板块计划净流入',
+    lines: [
+      for (final s in secs.take(6))
+        if (s.net != null) lhZgCell(s.name, _signedWan(s.net), tone: (s.net ?? 0) < 0 ? 'out' : 'in'),
+    ],
+    note: '进度只算收、付两类分类行（本月利润等净额行不计）',
+  );
 }

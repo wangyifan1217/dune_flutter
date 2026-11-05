@@ -22,6 +22,8 @@ class LighthouseShareableCard extends StatefulWidget {
     this.previewBuilder,
     this.compact = false,
     this.serviceFactory,
+    this.dialogTitle = '转发灯塔卡片',
+    this.confirmText,
   }) : assert(child != null || builder != null);
   final AuthSession session;
   final String title;
@@ -31,6 +33,10 @@ class LighthouseShareableCard extends StatefulWidget {
   final LighthouseSharedCardData Function()? data;
   final Widget Function(LighthouseSharedCardData data)? previewBuilder;
   final bool compact;
+
+  /// 确认框标题 / 说明。资管卡片是静态快照，说明要跟灯塔的「可交互卡片」区分开。
+  final String dialogTitle;
+  final String? confirmText;
   @visibleForTesting
   final ConversationService Function()? serviceFactory;
   @override
@@ -51,7 +57,7 @@ class _LighthouseShareableCardState extends State<LighthouseShareableCard> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('转发灯塔卡片'),
+          title: Text(widget.dialogTitle),
           contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
           content: SizedBox(
             width: (MediaQuery.sizeOf(context).width - 48)
@@ -70,11 +76,12 @@ class _LighthouseShareableCardState extends State<LighthouseShareableCard> {
                           Text(data.fallbackText),
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: Text(
-                      '发送可交互卡片，接收人可展开指标、趋势和细分。日期和金额保持本次分享口径，请确认数据适合所选会话。',
-                      style: TextStyle(fontSize: 12),
+                      widget.confirmText ??
+                          '发送可交互卡片，接收人可展开指标、趋势和细分。日期和金额保持本次分享口径，请确认数据适合所选会话。',
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ),
                 ],

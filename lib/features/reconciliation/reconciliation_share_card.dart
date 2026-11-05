@@ -235,7 +235,7 @@ Future<void> sendReconciliationCard(
       maxCount: 10,
     );
     if (ids == null || ids.isEmpty || !context.mounted) return;
-    for (final id in ids) {
+        for (final id in ids) {
       await service.sendText(id, summary, payload: payload);
     }
     if (context.mounted) {

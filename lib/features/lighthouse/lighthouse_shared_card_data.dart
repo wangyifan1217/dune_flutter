@@ -41,6 +41,7 @@ class LighthouseSharedCardData {
 
   static bool _valid(Map<String, dynamic> json) =>
       (json['version'] == 2 && json['kind'] == 'pk' && _validPk(json)) ||
+      (json['version'] == 2 && json['kind'] == 'zg' && _validZg(json)) ||
       json['version'] == 2 &&
       _kinds.contains(json['kind']) &&
       _periods.contains(json['period']) &&
@@ -170,6 +171,23 @@ class LighthouseSharedCardData {
     return true;
   }
 
+  /// 资管卡片：主数 / 指标格 / 明细行全是字符串（转发时已格式化），不带原始金额。
+  static bool _validZg(Map<String, dynamic> j) {
+    bool strMap(dynamic m) =>
+        m is Map && m.values.every((v) => v == null || v is String) && m['l'] is String && (m['v'] == null || m['v'] is String);
+    if (j['title'] is! String || j['range'] is! String || j['module'] is! String) return false;
+    if (!strMap(j['head'])) return false;
+    for (final key in const ['cells', 'lines']) {
+      final xs = j[key];
+      if (xs == null) continue;
+      if (xs is! List || xs.length > 12 || !xs.every(strMap)) return false;
+    }
+    for (final key in const ['note', 'linesTitle']) {
+      if (j[key] != null && j[key] is! String) return false;
+    }
+    return true;
+  }
+
   Map<String, dynamic> toJson() =>
       Map<String, dynamic>.from(jsonDecode(jsonEncode(_json)) as Map);
   String get kind => _json['kind'] as String;
@@ -205,6 +223,19 @@ class LighthouseSharedCardData {
         entry.key as String: (entry.value as num).toDouble(),
   };
   bool get isPk => kind == 'pk';
+  bool get isZg => kind == 'zg';
+  String get zgModule => _json['module']?.toString() ?? '';
+  Map<String, String> get zgHead => _strMap(_json['head']);
+  List<Map<String, String>> get zgCells => [for (final e in (_json['cells'] as List? ?? const [])) _strMap(e)];
+  List<Map<String, String>> get zgLines => [for (final e in (_json['lines'] as List? ?? const [])) _strMap(e)];
+  String? get zgLinesTitle => _json['linesTitle']?.toString();
+  String? get zgNote => _json['note']?.toString();
+  static Map<String, String> _strMap(dynamic m) => m is Map
+      ? {
+          for (final e in m.entries)
+            if (e.key is String && e.value is String) e.key as String: e.value as String,
+        }
+      : const {};
   List<String> get pkNames => [
     for (final e in (_json['names'] as List? ?? const [])) e.toString(),
   ];
@@ -222,6 +253,8 @@ class LighthouseSharedCardData {
 
   String get fallbackText => isPk
       ? '灯塔 · $title · $range\n${pkNames.join(' vs ')}'
+      : isZg
+      ? '资管 · $title · $range\n${zgHead['l'] ?? ''} ${zgHead['v'] ?? ''}${zgHead['u'] ?? ''}'
       : '灯塔 · $title · $range\n可展开指标、查看趋势与细分';
 }
 

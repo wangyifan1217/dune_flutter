@@ -43,6 +43,7 @@ String _moduleLabel(String key) => switch (key) {
   'bills' => '资管未结往来',
   'fund_plan' => '资管资金计划',
   'fund_flow' => '资管资金流水',
+  'fund_transfer' => '资管资金调动',
   'discount' => '折扣返点',
   _ => key,
 };
@@ -644,6 +645,7 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
       'bills' => '开关即时生效。未结往来是全公司数据，只能看部分省份的账号即使打开也看不到。',
       'fund_plan' => '开关即时生效。资金计划是全公司数据，只能看部分省份的账号即使打开也看不到。',
       'fund_flow' => '开关即时生效。资金流水是全公司数据，只能看部分省份的账号即使打开也看不到。',
+      'fund_transfer' => '开关即时生效。资金调动是全公司数据，跟资金流水分开授权；只能看部分省份的账号即使打开也看不到。',
       'business_finance' => '开关即时生效。单个主体去主体卡上的「👥」里调整。',
       _ => '开关即时生效。能看哪些行由管理后台的数据规则决定；单独某一行去那一行的「👥」里调整。',
     };

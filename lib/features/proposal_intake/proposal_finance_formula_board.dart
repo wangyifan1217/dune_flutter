@@ -1120,8 +1120,8 @@ class _ProposalBusinessFormulas extends StatelessWidget {
                       color: _c(context, _K.grey),
                     ),
                   ),
-              ],
-            ),
+                    ],
+                  ),
           ),
         if (lines.isNotEmpty)
           Padding(

@@ -1250,15 +1250,19 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
                   if (widget.embedded) const SizedBox(height: 8) else _switchHeader(context),
                   LayoutBuilder(
                     builder: (context, box) {
-                      return Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 640),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            child: allForbidden ? _statusBox(context, '暂无资管板块权限') : _clockCard(context),
-                          ),
-                        ),
+                      // 窄屏维持原来的 640 卡片。PC 内容区铺满可用宽度，不再居中收成一条。
+                      final width = box.maxWidth.isFinite ? box.maxWidth : MediaQuery.sizeOf(context).width;
+                      final wide = width >= 800;
+                      final child = Padding(
+                        padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 14),
+                        child: allForbidden ? _statusBox(context, '暂无资管板块权限') : _clockCard(context),
                       );
+                      if (!wide) {
+                        return Center(
+                          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 640), child: child),
+                        );
+                      }
+                      return child;
                     },
                   ),
                 ],
@@ -1329,7 +1333,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
       _ClockRing(_flowCoverage, const Color(0xFFE8968C)),
     ];
     String pct(double? v) => v == null ? '—' : '${(v * 100).round()}%';
-    final legend = <Widget>[
+    List<Widget> legendOf({required bool horizontal}) => <Widget>[
       if (!_bfForbidden) _legendCell(
         context,
         '业财对照',
@@ -1341,6 +1345,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         progress: _overlap,
         alert: alerts.contains('bf'),
         onTap: _openBf,
+        horizontal: horizontal,
       ),
       if (!_billForbidden) _legendCell(
         context,
@@ -1353,6 +1358,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         progress: _overdueShare('CHANNEL'),
         alert: alerts.contains('bills'),
         onTap: _openBills,
+        horizontal: horizontal,
       ),
       if (!_planForbidden) _legendCell(
         context,
@@ -1369,6 +1375,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         progress: _planInProgress,
         alert: alerts.contains('plan'),
         onTap: _openPlan,
+        horizontal: horizontal,
       ),
       if (!_flowForbidden) _legendCell(
         context,
@@ -1381,6 +1388,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         progress: _flowCoverage,
         alert: alerts.contains('flow'),
         onTap: _openFlow,
+        horizontal: horizontal,
       ),
       if (!_transferForbidden) _legendCell(
         context,
@@ -1392,6 +1400,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         icon: Icons.swap_calls_rounded,
         progress: _transfer?.crossShare,
         onTap: _openTransfer,
+        horizontal: horizontal,
       ),
     ];
     return _fadeIn(
@@ -1442,38 +1451,54 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
             const SizedBox(height: 12),
             LayoutBuilder(
               builder: (context, box) {
-                final d = math.min((box.maxWidth - 16) / 2, 190.0);
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                final w = box.maxWidth;
+                // 内容区够宽时：两只表留在左侧，指标横排占满右侧，避免表盘被拉到两端。
+                if (w >= 900) {
+                  final legend = legendOf(horizontal: true);
+                  final d = math.min(228.0, math.max(188.0, (w * 0.34 - 16) / 2));
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: d * 2 + 16,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: _monthDial(context, d, rings, days, now)),
+                            const SizedBox(width: 16),
+                            Expanded(child: _dayDial(context, d)),
+                          ],
+                        ),
+                      ),
+                      if (legend.isNotEmpty) ...[
+                        const SizedBox(width: 18),
+                        Expanded(child: _legendBoard(context, legend, columns: 1)),
+                      ],
+                    ],
+                  );
+                }
+                final legend = legendOf(horizontal: false);
+                final d = math.min((w - 16) / 2, w >= 720 ? 240.0 : 190.0);
+                final columns = legend.length <= 1
+                    ? 1
+                    : (w >= 720 && w >= legend.length * 210 ? legend.length : 2);
+                return Column(
                   children: [
-                    Expanded(child: _monthDial(context, d, rings, days, now)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _dayDial(context, d)),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _monthDial(context, d, rings, days, now)),
+                        const SizedBox(width: 16),
+                        Expanded(child: _dayDial(context, d)),
+                      ],
+                    ),
+                    if (legend.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _legendBoard(context, legend, columns: columns),
+                    ],
                   ],
                 );
               },
-            ),
-            const SizedBox(height: 14),
-            Container(
-              decoration: BoxDecoration(
-                color: _bg(context, Colors.white).withValues(alpha: 0.46),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _ln(context, _kLine), width: 0.8),
-              ),
-              child: Column(
-                children: [
-                  for (var i = 0; i < legend.length; i += 2) ...[
-                    if (i > 0) Divider(height: 1, thickness: 0.8, color: _ln(context, _kLine)),
-                    Row(children: [
-                      Expanded(child: legend[i]),
-                      if (i + 1 < legend.length) ...[
-                        Container(width: 1, height: 58, color: _ln(context, _kLine)),
-                        Expanded(child: legend[i + 1]),
-                      ],
-                    ]),
-                  ],
-                ],
-              ),
             ),
           ],
         ),
@@ -1606,6 +1631,32 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
     );
   }
 
+  Widget _legendBoard(BuildContext context, List<Widget> legend, {required int columns}) {
+    final cols = math.max(1, math.min(columns, legend.length));
+    return Container(
+      decoration: BoxDecoration(
+        color: _bg(context, Colors.white).withValues(alpha: 0.46),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _ln(context, _kLine), width: 0.8),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < legend.length; i += cols) ...[
+            if (i > 0) Divider(height: 1, thickness: 0.8, color: _ln(context, _kLine)),
+            Row(
+              children: [
+                for (var j = 0; j < cols && i + j < legend.length; j++) ...[
+                  if (j > 0) Container(width: 1, height: 58, color: _ln(context, _kLine)),
+                  Expanded(child: legend[i + j]),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _legendCell(
     BuildContext context,
     String title,
@@ -1617,7 +1668,61 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
     double? progress,
     bool alert = false,
     VoidCallback? onTap,
+    bool horizontal = false,
   }) {
+    if (horizontal) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [_fg(context, tone).withValues(alpha: 0.07), _bg(context, Colors.white).withValues(alpha: 0.02)],
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(color: _fg(context, tone).withValues(alpha: 0.16), shape: BoxShape.circle),
+                child: Icon(icon, size: 12, color: _fg(context, tone)),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 64,
+                child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 12, color: _kInk2)),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 108,
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _mono(context, size: 15, weight: FontWeight.w700, color: const Color(0xFF2B2147)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  sub,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _mono(context, size: 11, color: alert ? LhColors.neg : _kInk2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(width: 22, height: 22, child: CustomPaint(painter: _CompactRingPainter(value: progress, color: _fg(context, tone)))),
+              _visButton(context, widget.service, module, () => _visibility(module, '资管 · $title')),
+            ],
+          ),
+        ),
+      );
+    }
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,

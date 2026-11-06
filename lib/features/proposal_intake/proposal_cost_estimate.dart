@@ -92,7 +92,9 @@ class ProposalVatEstimate {
   final double inputRate;
   final double projectRate;
 
-  double get payable => (outputTax - inputTax) * kProposalVatSurcharge;
+  double get payable => proposalRoundWan(
+    math.max(0, outputTax - inputTax) * kProposalVatSurcharge,
+  );
 }
 
 enum ProposalBusinessCostFormula { bn, u }
@@ -404,16 +406,20 @@ ProposalSettleLineView proposalSettleLineView(
   if (terms.settleByTier) {
     final promotion =
         promotionMain != null && proposalSettleTierUsesSettlement(terms);
-    final proposalScale = form == null ? 0.0 : proposalTierScale(form);
+    final proposalScale = form == null
+        ? 0.0
+        : proposalTierScale(form, skuIds: skuIds);
     final lookup = promotion
         ? proposalRoundWan(scale * promotionMain.share)
         : (proposalScale > 0 ? proposalScale : scale);
+    final lookupLabel = form == null ? '提案规模' : proposalTierLookupLabel(form);
     final charge = !promotion && (lookup - scale).abs() > 0.001
         ? scale
         : null;
     final plans = proposalSettleTierPlans(terms);
     final results = [
-      for (final plan in plans) plan.evaluate(lookup, chargeScale: charge),
+      for (final plan in plans)
+        plan.evaluate(lookup, chargeScale: charge, lookupLabel: lookupLabel),
     ];
     final amount = proposalRoundWan(
       results.fold<double>(0, (sum, item) => sum + item.amount),
@@ -747,10 +753,119 @@ double proposalEffectiveSalesScale(Map<String, dynamic> form) {
   return proposalProductScaleRollup(hydrated)?.salesScale ?? 0;
 }
 
-/// 阶梯折扣套档用的规模：整张提案的总规模。
-/// 分产品测算会把「规模（万元）」改成单个产品的一份，这里仍用记下的总规模。
-/// 没填总规模时，退回各产品结算规模之和，和原来的年化规模一致。
-double proposalTierScale(Map<String, dynamic> form) {
+/// 阶梯套档说明里用的规模名称。分产品范围里如果已经记下省份合计，沿用那一份。
+String proposalTierLookupLabel(Map<String, dynamic> form) {
+  final stamped = '${form['_proposalScaleLabel'] ?? ''}'.trim();
+  if (stamped.isNotEmpty) return stamped;
+  if (proposalProductsSpanProvinces(form)) return '省份合计规模';
+  return '提案规模';
+}
+
+/// 产品自己填了省份就用自己的；关联产品没填时跟所属业务产品。
+String proposalSkuResolvedProvince(
+  Map<String, dynamic> form,
+  ProposalSkuDetailRow sku,
+) {
+  final own = sku.province.trim();
+  if (own.isNotEmpty) return own;
+  final parentId = sku.parentSkuId.trim();
+  if (parentId.isEmpty) return '';
+  for (final parent in proposalIntakeSkuDetails(form)) {
+    if (parent.id == parentId && parent.province.trim().isNotEmpty) {
+      return parent.province.trim();
+    }
+  }
+  final mains = form['_mainSkus'];
+  if (mains is! List) return '';
+  for (final raw in mains) {
+    if (raw is! Map) continue;
+    if ('${raw['id'] ?? ''}'.trim() != parentId) continue;
+    return '${raw['province'] ?? ''}'.trim();
+  }
+  return '';
+}
+
+/// 当前这组产品是否分属两个及以上省份。只有一个省、或都没填省份时，阶梯仍按整张提案。
+bool proposalProductsSpanProvinces(Map<String, dynamic> form) {
+  final provinces = <String>{};
+  for (final sku in proposalIntakeSkuDetails(form)) {
+    final province = proposalSkuResolvedProvince(form, sku);
+    if (province.isNotEmpty) provinces.add(province);
+  }
+  return provinces.length > 1;
+}
+
+/// 同一省份产品的合计规模。产品自己有结算规模用自己的，没有的再平分剩余总规模。
+double proposalProvinceProductScale(
+  Map<String, dynamic> form,
+  String province,
+) {
+  final target = province.trim();
+  if (target.isEmpty) return 0;
+  final skus = proposalIntakeSkuDetails(form);
+  if (skus.isEmpty) return 0;
+  final own = [for (final sku in skus) proposalIntakeSkuScaleTotal(sku)];
+  var owned = 0.0;
+  var missing = 0;
+  for (final value in own) {
+    if (value > 0) {
+      owned += value;
+    } else {
+      missing++;
+    }
+  }
+  final share = missing > 0
+      ? math.max(0.0, proposalEffectiveSalesScale(form) - owned) / missing
+      : 0.0;
+  var sum = 0.0;
+  for (var i = 0; i < skus.length; i++) {
+    if (proposalSkuResolvedProvince(form, skus[i]) != target) continue;
+    sum += own[i] > 0 ? own[i] : share;
+  }
+  return proposalRoundWan(sum);
+}
+
+String _proposalProvinceOfSkuIds(
+  Map<String, dynamic> form,
+  Iterable<String> skuIds,
+) {
+  final want = skuIds.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet();
+  if (want.isEmpty) return '';
+  final provinces = <String>{};
+  for (final sku in proposalIntakeAllSellableSkus(form)) {
+    if (!want.contains(sku.id)) continue;
+    final province = proposalSkuResolvedProvince(form, sku);
+    if (province.isEmpty) continue;
+    provinces.add(province);
+  }
+  if (provinces.length != 1) return '';
+  return provinces.single;
+}
+
+/// 阶梯折扣套档用的规模。
+/// 产品都在同一省，或还没填省份时，用整张提案的总规模。
+/// 产品分属多个省时，用对应省份产品的合计规模套档，不再用整张提案。
+/// 分产品测算会把「规模（万元）」改成单个产品的一份，这里仍用记下的套档规模。
+double proposalTierScale(
+  Map<String, dynamic> form, {
+  String province = '',
+  Iterable<String> skuIds = const [],
+}) {
+  final details = proposalIntakeSkuDetails(form);
+  if (details.length <= 1) {
+    final stamped = proposalFinanceAmount(form, '_proposalScale');
+    if (stamped > 0) return stamped;
+    return proposalEffectiveSalesScale(form);
+  }
+  if (proposalProductsSpanProvinces(form)) {
+    final target = province.trim().isNotEmpty
+        ? province.trim()
+        : _proposalProvinceOfSkuIds(form, skuIds);
+    if (target.isNotEmpty) {
+      final sum = proposalProvinceProductScale(form, target);
+      if (sum > 0) return sum;
+    }
+  }
   final stamped = proposalFinanceAmount(form, '_proposalScale');
   if (stamped > 0) return stamped;
   return proposalEffectiveSalesScale(form);
@@ -760,7 +875,10 @@ double proposalSkuTierIncomeAmount(
   ProposalSkuDetailRow sku,
   Map<String, dynamic> form,
 ) {
-  final lookup = proposalTierScale(form);
+  final lookup = proposalTierScale(
+    form,
+    province: proposalSkuResolvedProvince(form, sku),
+  );
   final local = proposalIntakeSkuScaleTotal(sku);
   final charge = local > 0
       ? local
@@ -962,51 +1080,110 @@ double proposalPurchaseInputTaxRate(Map<String, dynamic> form) =>
 double proposalProjectCostTaxRate(Map<String, dynamic> form) =>
     _firstDeductibleTaxRate(_projectCostSettleTerms(form));
 
-/// 销项按各销售结算「规模 × 比例 × 该行税率」加总；无规模时用收入 × 销项税率。
-/// 销项不看票种——开普票一样要交。
-///
-/// 进项 = 项目成本 × 项目成本税率（电子券采购成本已取消）。
-/// 进项税率只取专用发票那一行；票种已填但全是普票时进项按 0 算，
-/// 票种一行都没填时才拿销项税率兜底。
+/// 销项税 = Σ 收入结算金额 × 该行税率。进项税 = Σ 成本结算金额 × 该行税率。
+/// 税费 = (销项税 − 进项税) × 1.12，差额小于 0 时按 0。空税率按 0，不借用其他行。
 ProposalVatEstimate proposalVatEstimate(Map<String, dynamic> form) {
-  final outputRate = proposalSalesOutputTaxRate(form);
-  var inputRate = proposalPurchaseInputTaxRate(form);
-  final purchaseDeclared = _anyInvoiceTypeDeclared(_purchaseSettleTerms(form));
-  if (inputRate <= 0 && !purchaseDeclared) {
-    inputRate = outputRate;
-  }
-  var projectRate = proposalProjectCostTaxRate(form);
-  final projectDeclared = _anyInvoiceTypeDeclared(
-    _projectCostSettleTerms(form),
-  );
-  if (projectRate <= 0 && !projectDeclared) {
-    projectRate = inputRate;
-  }
-
   var outputTax = 0.0;
-  var anyScale = false;
-  for (final terms in proposalIntakeProductSalesSettleTerms(form)) {
-    if (terms.scale.trim().isEmpty) continue;
-    anyScale = true;
-    final amount =
-        proposalAnnualizedScale(terms) *
-        proposalParseSettleRatio(terms.displayRatio);
-    var rate = proposalParseTaxRate(terms.taxRate);
-    if (rate <= 0) rate = outputRate;
-    outputTax += amount * rate;
+  var inputTax = 0.0;
+  var anyRate = false;
+  for (final sku in proposalIntakeSkuDetails(form)) {
+    for (final row in proposalIntakeSkuSettlements(sku)) {
+      final rate = proposalParseTaxRate(row.terms.taxRate);
+      if (rate <= 0) continue;
+      anyRate = true;
+      final tax = _proposalVatTaxBase(form, sku, row) * rate;
+      if (_proposalVatIsInput(row)) {
+        inputTax += tax;
+      } else {
+        outputTax += tax;
+      }
+    }
   }
-  if (!anyScale) {
-    outputTax = proposalEffectiveRevenue(form) * outputRate;
-  }
-
-  // 电子券采购成本已取消，进项只算项目成本。
-  final inputTax = proposalFinanceAmount(form, 'projectCost') * projectRate;
   return ProposalVatEstimate(
     outputTax: outputTax,
     inputTax: inputTax,
-    outputRate: outputRate,
-    inputRate: inputRate,
-    projectRate: projectRate,
+    outputRate: anyRate ? 1 : 0,
+    inputRate: 0,
+    projectRate: 0,
+  );
+}
+
+bool _proposalVatIsInput(ProposalSkuSettleRow row) {
+  final kind = row.kind.trim();
+  if (row.isCost || kind == 'couponCost' || kind.contains('成本')) return true;
+  final bill = '${row.terms.billType}${row.terms.billTypeRef?.name ?? ''}';
+  return bill.contains('应付') || bill.contains('券使用成本') || bill.contains('采购');
+}
+
+bool _proposalVatIsCouponCost(ProposalSkuSettleRow row) {
+  final bill = '${row.terms.billType}${row.terms.billTypeRef?.name ?? ''}';
+  return row.kind.trim() == 'couponCost' || bill.contains('券使用成本');
+}
+
+/// 填了发生额用这一行；否则产品上已有结算规模就用产品规模，再否则把提案规模均摊给没填规模的产品。
+double _proposalVatScale(
+  Map<String, dynamic> form,
+  ProposalSkuDetailRow sku,
+  ProposalFinanceSettleTerms terms,
+) {
+  if (terms.scale.trim().isNotEmpty) return proposalAnnualizedScale(terms);
+  final local = proposalIntakeSkuScaleTotal(sku);
+  if (local > 0) return local;
+  final skus = proposalIntakeSkuDetails(form);
+  var missing = 0;
+  var owned = 0.0;
+  for (final item in skus) {
+    final scale = proposalIntakeSkuScaleTotal(item);
+    if (scale <= 0) {
+      missing++;
+    } else {
+      owned += scale;
+    }
+  }
+  if (missing == 0) return 0;
+  final pool = math.max(0.0, proposalEffectiveSalesScale(form) - owned);
+  return pool / missing;
+}
+
+double _proposalVatTaxBase(
+  Map<String, dynamic> form,
+  ProposalSkuDetailRow sku,
+  ProposalSkuSettleRow row,
+) {
+  final terms = row.terms;
+  final scale = _proposalVatScale(form, sku, terms);
+  if (terms.settleByTier && !proposalIsPromotion(terms)) {
+    final lookup = proposalTierScale(
+      form,
+      province: proposalSkuResolvedProvince(form, sku),
+    );
+    if (lookup <= 0) return _proposalVatTierAmount(terms, scale);
+    final tier = _proposalVatTierAmount(terms, lookup);
+    return proposalRoundWan(scale * (tier / lookup));
+  }
+  if (terms.settleByTier) {
+    return _proposalVatTierAmount(terms, scale);
+  }
+  final share = proposalIntakeSettleShare(
+    terms,
+    face: proposalIntakeSkuSettleFace(sku),
+  );
+  var amount = proposalRoundWan(scale * share);
+  if (_proposalVatIsInput(row) && _proposalVatIsCouponCost(row)) {
+    final redemption = terms.expectedRedemptionRate.trim();
+    if (redemption.isNotEmpty) {
+      amount = proposalRoundWan(amount * proposalParseSettleRatio(redemption));
+    }
+  }
+  return amount;
+}
+
+double _proposalVatTierAmount(ProposalFinanceSettleTerms terms, double scale) {
+  return proposalRoundWan(
+    proposalSettleTierPlans(terms).fold<double>(
+      0,
+      (sum, plan) => sum + plan.evaluate(scale).amount,
+    ),
   );
 }
 
@@ -1372,7 +1549,10 @@ double? proposalSpreadIncomeAmount(Map<String, dynamic> form) {
       if (proposalSettleBillTypeL3(settle.terms) != '利差') continue;
       found = true;
       if (settle.terms.settleByTier) {
-        final lookup = proposalTierScale(form);
+        final lookup = proposalTierScale(
+          form,
+          province: proposalSkuResolvedProvince(form, sku),
+        );
         final volume = lookup > 0 ? lookup : scale;
         final charge = lookup > 0 && (lookup - scale).abs() > 0.001
             ? scale
@@ -1582,6 +1762,55 @@ List<({double scale, double face, double share, String price})> _promotionParts(
   ];
 }
 
+/// 一条结算关联的产品按省份分组。没分到两个省时返回空，调用方继续按整张提案套档。
+Map<String, List<String>> _proposalTierProvinceGroups(
+  Map<String, dynamic> form,
+  List<String> skuIds,
+) {
+  if (!proposalProductsSpanProvinces(form) || skuIds.isEmpty) return const {};
+  final skus = {
+    for (final sku in proposalIntakeAllSellableSkus(form)) sku.id: sku,
+  };
+  final groups = <String, List<String>>{};
+  for (final id in skuIds) {
+    final sku = skus[id];
+    if (sku == null) continue;
+    final province = proposalSkuResolvedProvince(form, sku);
+    if (province.isEmpty) continue;
+    (groups[province] ??= []).add(id);
+  }
+  return groups;
+}
+
+/// 一组产品分到的规模：自己有结算规模用自己的，没有的平分剩余总规模。
+double _proposalAllocatedScale(
+  Map<String, dynamic> form,
+  List<String> skuIds,
+) {
+  if (skuIds.isEmpty) return 0;
+  final want = skuIds.toSet();
+  final skus = proposalIntakeSkuDetails(form);
+  final own = [for (final sku in skus) proposalIntakeSkuScaleTotal(sku)];
+  var owned = 0.0;
+  var missing = 0;
+  for (final value in own) {
+    if (value > 0) {
+      owned += value;
+    } else {
+      missing++;
+    }
+  }
+  final share = missing > 0
+      ? math.max(0.0, proposalEffectiveSalesScale(form) - owned) / missing
+      : 0.0;
+  var sum = 0.0;
+  for (var i = 0; i < skus.length; i++) {
+    if (!want.contains(skus[i].id)) continue;
+    sum += own[i] > 0 ? own[i] : share;
+  }
+  return proposalRoundWan(sum);
+}
+
 double proposalPayableCostLineAmount(
   Map<String, dynamic> form,
   ProposalFinanceSettleTerms terms,
@@ -1594,14 +1823,50 @@ double proposalPayableCostLineAmount(
         terms,
       ).fold<double>(0, (sum, plan) => sum + plan.evaluate(scale).amount);
     }
-    final lookup = proposalTierScale(form);
+    final groups = _proposalTierProvinceGroups(form, skuIds);
+    if (groups.length > 1) {
+      final label = proposalTierLookupLabel(form);
+      var sum = 0.0;
+      for (final entry in groups.entries) {
+        final lookup = proposalTierScale(form, province: entry.key);
+        final charge = _proposalAllocatedScale(form, entry.value);
+        final volume = lookup > 0 ? lookup : charge;
+        final split = lookup > 0 && (lookup - charge).abs() > 0.001;
+        sum += proposalSettleTierPlans(terms).fold<double>(
+          0,
+          (total, plan) =>
+              total +
+              plan
+                  .evaluate(
+                    volume,
+                    chargeScale: split ? charge : null,
+                    lookupLabel: label,
+                  )
+                  .amount,
+        );
+      }
+      return sum;
+    }
+    final lookup = proposalTierScale(
+      form,
+      province: groups.length == 1 ? groups.keys.first : '',
+      skuIds: skuIds,
+    );
     final charge = proposalAssociatedSalesScale(form, skuIds);
     final volume = lookup > 0 ? lookup : charge;
     final split = lookup > 0 && (lookup - charge).abs() > 0.001;
+    final label = proposalTierLookupLabel(form);
     return proposalSettleTierPlans(terms).fold<double>(
       0,
       (sum, plan) =>
-          sum + plan.evaluate(volume, chargeScale: split ? charge : null).amount,
+          sum +
+          plan
+              .evaluate(
+                volume,
+                chargeScale: split ? charge : null,
+                lookupLabel: label,
+              )
+              .amount,
     );
   }
   if (proposalPromotionByRatio(terms)) {
@@ -1973,10 +2238,11 @@ Map<String, dynamic> proposalApplyEstimatedProjectCosts(
 List<String> proposalEnsureAutoTaxItemNames(Map<String, dynamic> form) {
   final names = [...proposalCostSelectedNames(form, 'taxCostItems')];
   final hasStampBase = proposalEffectiveSalesScale(form) > 0;
-  final hasVatBase =
-      proposalSalesOutputTaxRate(form) > 0 &&
-      (proposalEffectiveRevenue(form) != 0 ||
-          proposalEffectiveSalesScale(form) > 0);
+  final hasVatBase = proposalIntakeSkuDetails(form).any(
+    (sku) => proposalIntakeSkuSettlements(
+      sku,
+    ).any((row) => proposalParseTaxRate(row.terms.taxRate) > 0),
+  );
   if (hasStampBase && !names.contains(kProposalStampTaxName)) {
     names.add(kProposalStampTaxName);
   }

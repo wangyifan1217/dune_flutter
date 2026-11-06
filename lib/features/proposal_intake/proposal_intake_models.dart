@@ -2617,6 +2617,86 @@ List<String> proposalIntakeActiveReviewActions(ProposalIntakeRow row) {
   return actions;
 }
 
+/// 财务这条待办对应的复核已经完成。采购提案财务板块本身不复核，合同勾上即算完成。
+bool proposalIntakeFinanceActionClosed(ProposalIntakeRow row, String action) {
+  switch (action) {
+    case 'review_contract':
+    case 'change_review_contract':
+      return proposalIntakeContractsReviewed(row);
+    case 'review_finance':
+    case 'change_review_finance':
+      return proposalIntakeFinance2ReviewDone(row);
+    case 'review_finance_module':
+    case 'change_review_finance_module':
+      if (proposalIntakeIsPurchase(row.kind)) return true;
+      return row.review['financeCompleted'] == true;
+    default:
+      return false;
+  }
+}
+
+bool _proposalOwnerIs(ProposalIntakeRow row, int userId, String prefix) {
+  final id = proposalIntakeOwnerUserId(row.form, prefix);
+  return id > 0 && id == userId;
+}
+
+/// 当前用户在这张提案上还没做完的动作。财务复核完成后不再算他的待办。
+List<String> proposalIntakeOwedActions(ProposalIntakeRow row, int userId) {
+  if (userId <= 0) return const [];
+  final stage = row.resolvedStage;
+  if (stage != 'reviewing' && stage != 'tech_reviewing') {
+    final action = row.myAction.trim();
+    if (action.isEmpty || proposalIntakeFinanceActionClosed(row, action)) {
+      return const [];
+    }
+    return [action];
+  }
+  bool done(String key) => row.review[key] == true;
+  final purchase = proposalIntakeIsPurchase(row.kind);
+  final techOwner = proposalIntakeOwnerUserId(row.form, 'technologyOwner');
+  final out = <String>[];
+  if (!done('marketCompleted') && _proposalOwnerIs(row, userId, 'marketOwner1')) {
+    out.add('review_market');
+  }
+  if (!done('technologyCompleted') &&
+      ((techOwner > 0 && techOwner == userId) ||
+          (techOwner <= 0 && row.createdBy == userId))) {
+    out.add('review_tech');
+  }
+  if (stage == 'tech_reviewing') return out;
+  if (purchase) {
+    if (!proposalIntakeFinance2ReviewDone(row) &&
+        _proposalOwnerIs(row, userId, 'financeOwner2')) {
+      out.add('review_contract');
+    }
+    return out;
+  }
+  if (!proposalIntakeFinance2ReviewDone(row) &&
+      _proposalOwnerIs(row, userId, 'financeOwner2')) {
+    out.add('review_finance');
+  } else if (!done('financeCompleted') &&
+      proposalIntakeFinance2ReviewDone(row) &&
+      _proposalOwnerIs(row, userId, 'financeOwner1')) {
+    out.add('review_finance_module');
+  }
+  return out;
+}
+
+/// 待我处理：财务复核已经完成的人不再看到这张单；市场、科技还没过的人继续看到。
+bool proposalIntakeStillActionableFor(ProposalIntakeRow row, int userId) {
+  if (userId <= 0) return true;
+  if (proposalIntakeOwedActions(row, userId).isNotEmpty) return true;
+  final change = row.change?.myAction.trim() ?? '';
+  if (change.isNotEmpty && !proposalIntakeFinanceActionClosed(row, change)) {
+    return true;
+  }
+  final action = row.myAction.trim();
+  if (action.isEmpty || proposalIntakeFinanceActionClosed(row, action)) {
+    return false;
+  }
+  return true;
+}
+
 /// 列表上给所有人看的待复核对象：有姓名则「待某某复核」，否则保留短状态。
 List<String> proposalIntakePendingReviewLabels(
   ProposalIntakeRow row, {
@@ -2755,10 +2835,11 @@ bool proposalIntakeTechnologyItemReviewed(
 List<String> proposalIntakeTechnologyReviewGaps(
   Map<String, dynamic> review, {
   Map<String, dynamic>? form,
+  bool purchase = false,
 }) {
   final keys = form == null
-      ? kProposalTechnologyReviewFields
-      : proposalIntakeTechnologyReviewItemKeys(form);
+      ? proposalIntakeTechnologyReviewFields(purchase: purchase)
+      : proposalIntakeTechnologyReviewItemKeys(form, purchase: purchase);
   String labelOf(String key) {
     if (key.startsWith(kProposalChildTechReviewPrefix)) {
       final field = key.substring(kProposalChildTechReviewPrefix.length);
@@ -2835,10 +2916,15 @@ bool proposalIntakeAwaitingModuleConfirm(
   String action,
   Map<String, dynamic> review, {
   Map<String, dynamic>? form,
+  bool purchase = false,
 }) {
   return action == 'review_tech' &&
       review['technologyCompleted'] != true &&
-      proposalIntakeTechnologyReviewGaps(review, form: form).isEmpty;
+      proposalIntakeTechnologyReviewGaps(
+        review,
+        form: form,
+        purchase: purchase,
+      ).isEmpty;
 }
 
 bool proposalIntakeActionIsWrite(String action) {
@@ -2878,9 +2964,14 @@ int proposalIntakeTaskRemainingCount(
   String action,
   Map<String, dynamic> review, {
   Map<String, dynamic>? form,
+  bool purchase = false,
 }) {
   if (action == 'review_tech') {
-    return proposalIntakeTechnologyReviewGaps(review, form: form).length;
+    return proposalIntakeTechnologyReviewGaps(
+      review,
+      form: form,
+      purchase: purchase,
+    ).length;
   }
   if (action == 'review_finance' && form != null) {
     final raw = review['financeItems'];
@@ -5857,6 +5948,10 @@ Map<String, dynamic> proposalIntakeProductFinanceScope(
       if (!_kProductFinanceScopeDerivedKeys.contains(entry.key))
         entry.key: entry.value,
     'skuDetails': [for (final sku in skus) sku.toJson()],
+    if (resolvedOwner == kProposalProductFinanceChildren)
+      '_mainSkus': [
+        for (final sku in proposalIntakeSkuDetails(form)) sku.toJson(),
+      ],
     'childProducts': const <Map<String, dynamic>>[],
     'channelSkus': const <Map<String, dynamic>>[],
     'products': const <Map<String, dynamic>>[],
@@ -6859,6 +6954,7 @@ class ProposalSkuDetailRow {
     this.partnerProductCode = '',
     this.platformMessage = '',
     this.remark = '',
+    this.province = '',
     this.settlements = const [],
   });
 
@@ -6900,6 +6996,9 @@ class ProposalSkuDetailRow {
 
   /// 业务产品说明，选填。
   final String remark;
+
+  /// 这个产品归属的省份，取市场部标签二里已选的一项。
+  final String province;
   final List<ProposalSkuSettleRow> settlements;
 
   String get syncSourceCode => (syncSourceRef?.code ?? '').trim();
@@ -6924,10 +7023,11 @@ class ProposalSkuDetailRow {
   );
 
   String get displayName {
-    final fromHit = (assetProduct?.label ?? '').trim();
-    if (fromHit.isNotEmpty) return fromHit;
+    // 手填名称优先。复制后改名时，已建产品上还留着旧名，不能再拿它覆盖。
     final name = productName.trim();
     if (name.isNotEmpty) return name;
+    final fromHit = (assetProduct?.label ?? '').trim();
+    if (fromHit.isNotEmpty) return fromHit;
     return resolvedCouponKind;
   }
 
@@ -6952,7 +7052,8 @@ class ProposalSkuDetailRow {
       existingBuilt.isEmpty &&
       (assetProduct == null || assetProduct!.isEmpty) &&
       parentSkuId.isEmpty &&
-      remark.isEmpty;
+      remark.isEmpty &&
+      province.isEmpty;
 
   ProposalSkuDetailRow copyWith({
     String? id,
@@ -6981,6 +7082,7 @@ class ProposalSkuDetailRow {
     String? partnerProductCode,
     String? platformMessage,
     String? remark,
+    String? province,
     List<ProposalSkuSettleRow>? settlements,
   }) => ProposalSkuDetailRow(
     id: id ?? this.id,
@@ -7021,6 +7123,7 @@ class ProposalSkuDetailRow {
     partnerProductCode: partnerProductCode ?? this.partnerProductCode,
     platformMessage: platformMessage ?? this.platformMessage,
     remark: remark ?? this.remark,
+    province: province ?? this.province,
     settlements: settlements ?? this.settlements,
   );
 
@@ -7102,6 +7205,7 @@ class ProposalSkuDetailRow {
     'partnerProductCode': partnerProductCode.trim(),
     'platformMessage': platformMessage.trim(),
     'remark': remark.trim(),
+    'province': province.trim(),
     'settlements': [
       for (final item in settlements)
         item
@@ -7181,6 +7285,7 @@ class ProposalSkuDetailRow {
       platformMessage: '${raw['platformMessage'] ?? raw['message'] ?? ''}'
           .trim(),
       remark: '${raw['remark'] ?? ''}'.trim(),
+      province: '${raw['province'] ?? ''}'.trim(),
       settlements: [
         for (final item
             in raw['settlements'] is List
@@ -7279,15 +7384,40 @@ Map<String, dynamic> _proposalIntakeClearPlatformFields(
   return row;
 }
 
+/// 改名后同步已建产品上的名称，避免卡片标题继续显示复制来的旧名。
+ChannelProductHit? proposalIntakeAssetProductNamed(
+  ChannelProductHit? hit,
+  String name,
+) {
+  if (hit == null || hit.isEmpty) return hit;
+  final next = name.trim();
+  if (next.isEmpty || hit.productName.trim() == next) return hit;
+  return ChannelProductHit(
+    id: hit.id,
+    idText: hit.idText,
+    productCode: hit.productCode,
+    productName: next,
+    channelId: hit.channelId,
+    channelName: hit.channelName,
+    supplierId: hit.supplierId,
+    supplierCode: hit.supplierCode,
+    supplierName: hit.supplierName,
+    syncSource: hit.syncSource,
+    submitStatus: hit.submitStatus,
+  );
+}
+
 ProposalSkuDetailRow proposalIntakeCloneSkuProduct(
   ProposalSkuDetailRow source, {
   required String id,
   String? productName,
   String? parentSkuId,
 }) {
+  final name = productName ?? source.productName;
   return source.copyWith(
     id: id,
-    productName: productName ?? source.productName,
+    productName: name,
+    assetProduct: proposalIntakeAssetProductNamed(source.assetProduct, name),
     parentSkuId: parentSkuId ?? source.parentSkuId,
     platformStatus: '',
     partnerProductCode: '',
@@ -7644,8 +7774,21 @@ Map<String, dynamic> proposalIntakeChildTechnology(Map<String, dynamic> form) {
 
 const kProposalChildTechReviewPrefix = 'children:';
 
-List<String> proposalIntakeTechnologyReviewItemKeys(Map<String, dynamic> form) {
-  final keys = [...kProposalTechnologyReviewFields];
+/// 采购提案科技部没有渠道字段，也不再复核渠道。
+List<String> proposalIntakeTechnologyReviewFields({bool purchase = false}) {
+  if (!purchase) return kProposalTechnologyReviewFields;
+  return [
+    for (final key in kProposalTechnologyReviewFields)
+      if (key != 'channelRef') key,
+  ];
+}
+
+List<String> proposalIntakeTechnologyReviewItemKeys(
+  Map<String, dynamic> form, {
+  bool purchase = false,
+}) {
+  final fields = proposalIntakeTechnologyReviewFields(purchase: purchase);
+  final keys = [...fields];
   if (proposalIntakeSkuDetails(form).isNotEmpty ||
       proposalIntakeHasChildProducts(form)) {
     keys.add(kProposalSkuProductsReviewKey);
@@ -7655,8 +7798,7 @@ List<String> proposalIntakeTechnologyReviewItemKeys(Map<String, dynamic> form) {
   }
   return [
     ...keys,
-    for (final key in kProposalTechnologyReviewFields)
-      '$kProposalChildTechReviewPrefix$key',
+    for (final key in fields) '$kProposalChildTechReviewPrefix$key',
   ];
 }
 

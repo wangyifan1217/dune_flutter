@@ -162,6 +162,11 @@ class AuthSession {
 
   bool get isExternalUser => userType.toUpperCase() == 'EXTERNAL';
 
+  /// Attendance is temporarily enabled only for the two pilot accounts.
+  bool get canUseAttendance =>
+      !isExternalUser &&
+      const {'王奕凡', '朱子姝'}.contains((displayName ?? '').trim());
+
   /// 本地联调网关时自动视为已开通灯塔（见 [DunesDefaults.localLighthouseAccessBypass]）。
   bool get effectiveLighthouseAccess =>
       lighthouseAccess || DunesDefaults.localLighthouseAccessBypass;

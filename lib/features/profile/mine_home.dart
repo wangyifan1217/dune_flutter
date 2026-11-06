@@ -1267,7 +1267,14 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                       proposalIntakeHasMeaningfulContent(row)),
             )
             .toList(growable: false);
-        _actionable = results[2].items;
+        _actionable = results[2].items
+            .where(
+              (row) => proposalIntakeStillActionableFor(
+                row,
+                widget.session.userId,
+              ),
+            )
+            .toList(growable: false);
         _loading = false;
         _error = null;
       });

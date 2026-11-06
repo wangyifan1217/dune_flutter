@@ -1,6 +1,7 @@
 package nova.dunes.dunes_app
 
 import android.content.Intent
+import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioFormat
@@ -14,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import android.net.wifi.WifiManager
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.EventChannel
@@ -68,6 +70,25 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dunes/attendance_wifi")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "currentNetwork") {
+                    result.notImplemented()
+                } else {
+                    try {
+                        @Suppress("DEPRECATION")
+                        val info = (applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).connectionInfo
+                        @Suppress("DEPRECATION")
+                        val ssid = info?.ssid?.takeUnless { it == WifiManager.UNKNOWN_SSID || it == "<unknown ssid>" }
+                        val bssid = info?.bssid?.takeUnless { it == "02:00:00:00:00:00" }
+                        result.success(mapOf("ssid" to ssid, "bssid" to bssid))
+                    } catch (_: SecurityException) {
+                        result.success(emptyMap<String, String>())
+                    } catch (_: Exception) {
+                        result.success(emptyMap<String, String>())
+                    }
+                }
+            }
         MeetingRecordingService.taskRemovedListener = {
             flushLiveSessionForDeath()
         }

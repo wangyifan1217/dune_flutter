@@ -67,6 +67,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.text('发起汇总审批'), findsNothing);
     await tester.tap(find.text('明细'));
     await tester.pumpAndSettle();
     expect(find.byType(DataTable), findsOneWidget);
@@ -81,7 +82,7 @@ void main() {
     client.close();
   });
 
-  testWidgets('汇总审批提交当前筛选条件', (tester) async {
+  testWidgets('汇总审批提交当前筛选条件', skip: true, (tester) async {
     tester.view.physicalSize = const Size(2200, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);

@@ -481,7 +481,8 @@ const _kVatFormulas = <ProposalFinanceFormula>[
   ProposalFinanceFormula(
     code: 'TAX_VAT',
     name: '（销项税 − 进项税）× 1.12',
-    expression: '(销项税 − 进项税) × 1.12；销项按各销售结算规模 × 比例 × 税率，进项按项目成本 × 可抵扣税率',
+    expression:
+        '(销项税 − 进项税) × 1.12；每一行结算金额 × 该行税率，空税率按 0，差额小于 0 时为 0',
     kind: ProposalFinanceFormulaKind.vat,
   ),
 ];
@@ -855,10 +856,12 @@ class ProposalPromotionSegment {
   ({double fee, String detail}) monthlyFee(
     double monthlyScale, {
     double? chargeScale,
+    String lookupLabel = '提案规模',
   }) => scaledFee(
     monthlyScale,
     volumeName: '月规模',
     chargeScale: chargeScale,
+    lookupLabel: lookupLabel,
   );
 
   /// 按 [volume]（万元）套档位。[volumeName] 写进代入过程，月阶梯用「月规模」，年阶梯用「年化规模」。
@@ -867,6 +870,7 @@ class ProposalPromotionSegment {
     double volume, {
     required String volumeName,
     double? chargeScale,
+    String lookupLabel = '提案规模',
   }) {
     final volumeText = _wan(volume);
     final charge = chargeScale ?? volume;
@@ -927,7 +931,7 @@ class ProposalPromotionSegment {
     return (
       fee: fee,
       detail: split
-          ? '提案规模 $volumeText 万，落在第 ${hit + 1} 档（≥ ${_wan(list[hit].from)} 万，$rateLabel），按产品规模全额累进：$basisText × $rateLabel = ${_wan(fee)} 万'
+          ? '$lookupLabel $volumeText 万，落在第 ${hit + 1} 档（≥ ${_wan(list[hit].from)} 万，$rateLabel），按产品规模全额累进：$basisText × $rateLabel = ${_wan(fee)} 万'
           : '$volumeName $volumeText 万，落在第 ${hit + 1} 档（≥ ${_wan(list[hit].from)} 万，$rateLabel），全额累进：$basisText × $rateLabel = ${_wan(fee)} 万',
     );
   }
@@ -1074,6 +1078,7 @@ class ProposalPromotionTierPlan {
   ({double amount, String substitution}) evaluate(
     double annualScale, {
     double? chargeScale,
+    String lookupLabel = '提案规模',
   }) {
     final split =
         chargeScale != null && (chargeScale - annualScale).abs() > 0.001;
@@ -1084,7 +1089,7 @@ class ProposalPromotionTierPlan {
       return (
         amount: proposalRoundWan(amount),
         substitution: split
-            ? '按固定比例：提案规模 ${_wan(annualScale)} 万对应该比例，产品规模 ${_wan(basis)} 万 × ${proposalFormatPromotionRate(rate)} = ${_wan(amount)} 万元'
+            ? '按固定比例：$lookupLabel ${_wan(annualScale)} 万对应该比例，产品规模 ${_wan(basis)} 万 × ${proposalFormatPromotionRate(rate)} = ${_wan(amount)} 万元'
             : '按固定比例：年化规模 ${_wan(annualScale)} 万 × ${proposalFormatPromotionRate(rate)} = ${_wan(amount)} 万元',
       );
     }
@@ -1096,6 +1101,7 @@ class ProposalPromotionTierPlan {
         annualScale,
         volumeName: '年化规模',
         chargeScale: split ? basis : null,
+        lookupLabel: lookupLabel,
       );
       return (
         amount: proposalRoundWan(result.fee),
@@ -1118,7 +1124,11 @@ class ProposalPromotionTierPlan {
     final parts = <String>[];
     for (var i = 0; i < segments.length; i++) {
       if (counts[i] == 0) continue;
-      final month = segments[i].monthlyFee(monthly, chargeScale: monthlyCharge);
+      final month = segments[i].monthlyFee(
+        monthly,
+        chargeScale: monthlyCharge,
+        lookupLabel: lookupLabel,
+      );
       final subtotal = month.fee * counts[i];
       total += subtotal;
       parts.add(
@@ -1990,9 +2000,13 @@ Map<String, dynamic> proposalFinanceSkuScope(
     }
   }
   next.remove(kProposalPromotionTiersKey);
-  final proposalScale = proposalTierScale(scope);
+  final proposalProvince = proposalSkuResolvedProvince(scope, sku);
+  final proposalScale = proposalTierScale(scope, province: proposalProvince);
   if (proposalScale > 0) {
     next['_proposalScale'] = proposalScale;
+    if (proposalProductsSpanProvinces(scope) && proposalProvince.isNotEmpty) {
+      next['_proposalScaleLabel'] = '省份合计规模';
+    }
   }
   if (scale > 0) {
     next[kProposalSalesScaleKey] = scale;
@@ -2594,6 +2608,7 @@ ProposalFinanceLine _evaluateProjectLine(
                     (lookup - productScale).abs() > 0.001
                 ? productScale
                 : null,
+            lookupLabel: proposalTierLookupLabel(form),
           ),
     ];
     final volumeNotes = [

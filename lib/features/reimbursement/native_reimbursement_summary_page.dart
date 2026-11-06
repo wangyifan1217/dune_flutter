@@ -55,6 +55,9 @@ class _NativeReimbursementSummaryPageState
   bool _busy = false;
   bool _exporting = false;
   bool _submitting = false;
+
+  /// 汇总审批的发起入口先不放出。
+  bool get _showSubmitApprovalEntry => false;
   int _loadGeneration = 0;
   String _loadedFilter = '';
   String _error = '';
@@ -386,24 +389,27 @@ class _NativeReimbursementSummaryPageState
                             ? null
                             : () => unawaited(_export()),
                       ),
-                      const SizedBox(width: 8),
-                      _ToolbarChip(
-                        key: const Key('reimbursement-submit-approval'),
-                        icon: Icons.send_outlined,
-                        label: _submitting ? '发起中' : '发起汇总审批',
-                        busy: _submitting,
-                        onPressed:
-                            _busy ||
-                                _submitting ||
-                                _loadedFilter != _filterKey ||
-                                (_debounce?.isActive ?? false) ||
-                                !(data?.details.any(
-                                      (d) => !d.alreadySubmitted,
-                                    ) ??
-                                    false)
-                            ? null
-                            : () => unawaited(_submitApproval()),
-                      ),
+                      // 发起入口先隐藏，提交逻辑保留，打开时把这里改回 true。
+                      if (_showSubmitApprovalEntry) ...[
+                        const SizedBox(width: 8),
+                        _ToolbarChip(
+                          key: const Key('reimbursement-submit-approval'),
+                          icon: Icons.send_outlined,
+                          label: _submitting ? '发起中' : '发起汇总审批',
+                          busy: _submitting,
+                          onPressed:
+                              _busy ||
+                                  _submitting ||
+                                  _loadedFilter != _filterKey ||
+                                  (_debounce?.isActive ?? false) ||
+                                  !(data?.details.any(
+                                        (d) => !d.alreadySubmitted,
+                                      ) ??
+                                      false)
+                              ? null
+                              : () => unawaited(_submitApproval()),
+                        ),
+                      ],
                       const SizedBox(width: 16),
                       _ToolbarChip(
                         label: '报销人 × 主体',

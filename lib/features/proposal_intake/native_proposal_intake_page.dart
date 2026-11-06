@@ -385,6 +385,10 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           .toList(growable: false);
     }
     if (widget.assistantMode) {
+      final me = widget.session.userId;
+      items = items
+          .where((row) => proposalIntakeStillActionableFor(row, me))
+          .toList(growable: false);
       final q = _search.text.trim().toLowerCase();
       if (q.isNotEmpty) {
         items = items
@@ -821,6 +825,14 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     return proposalIntakeRowsOfKind(rows, widget.kind);
   }
 
+  /// 待办队列去掉财务已经复核完的单。市场、科技还没过的仍留在队列里。
+  List<ProposalIntakeRow> _openActionQueue(List<ProposalIntakeRow> rows) {
+    final me = widget.session.userId;
+    return _scopedKindRows(rows)
+        .where((row) => proposalIntakeStillActionableFor(row, me))
+        .toList(growable: false);
+  }
+
   ProposalIntakeRow _withScopedKind(
     ProposalIntakeRow row, {
     String fallback = '',
@@ -871,7 +883,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         pageSize: 100,
       );
       if (!mounted) return;
-      setState(() => _actionQueue = _scopedKindRows(result.items));
+      setState(() => _actionQueue = _openActionQueue(result.items));
     } catch (_) {}
   }
 
@@ -888,7 +900,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         pageSize: 100,
       );
       if (!mounted) return;
-      final items = _scopedKindRows(result.items);
+      final items = _openActionQueue(result.items);
       setState(() => _actionQueue = items);
       final next = ProposalSkipTail.pick(
         items: items,
@@ -3653,9 +3665,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     ('financeRemark', '备注'),
   ];
 
-  /// 与后端 proposalTechnologyReviewFields 保持一致。
+  /// 与后端 proposalTechnologyReviewFields 保持一致。采购提案不含渠道。
   List<String> get _technologyReviewFields =>
-      proposalIntakeTechnologyReviewItemKeys(_form);
+      proposalIntakeTechnologyReviewItemKeys(_form, purchase: _isPurchase);
 
   /// 与后端 proposalContractReviewFields 保持一致（复核键为 prefix.字段）。
   static const _contractReviewFields = <String>[
@@ -4813,7 +4825,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       return;
     }
     if (key == 'technologyCompleted') {
-      final gaps = proposalIntakeTechnologyReviewGaps(_review, form: _form);
+      final gaps = proposalIntakeTechnologyReviewGaps(
+        _review,
+        form: _form,
+        purchase: _isPurchase,
+      );
       if (gaps.isNotEmpty) {
         await _showTechnologyOmissions(gaps);
         return;
@@ -4950,12 +4966,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       final beforeGaps = proposalIntakeTechnologyReviewGaps(
         _review,
         form: _form,
+        purchase: _isPurchase,
       );
       setState(() => _row = saved.row);
       _emitChanged(saved.row);
       final afterGaps = proposalIntakeTechnologyReviewGaps(
         _review,
         form: _form,
+        purchase: _isPurchase,
       );
       final techReady =
           beforeGaps.isNotEmpty &&
@@ -5204,6 +5222,27 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   Set<String> _setOf(String key) {
     final value = _form[key];
     return value is List ? value.map((item) => '$item').toSet() : <String>{};
+  }
+
+  /// 标签二已选省份。顺序跟省份格子一致，下拉默认第一项。
+  List<String> _selectedSupplyProvinces() {
+    final raw = _form['supplies'];
+    if (raw is! List) return const [];
+    final selected = <String>[];
+    for (final item in raw) {
+      final text = '$item'.trim();
+      if (text.isEmpty || selected.contains(text)) continue;
+      selected.add(text);
+    }
+    if (selected.isEmpty) return const [];
+    final ordered = <String>[
+      for (final name in widget.options.supplies)
+        if (selected.contains(name)) name,
+    ];
+    for (final name in selected) {
+      if (!ordered.contains(name)) ordered.add(name);
+    }
+    return ordered;
   }
 
   void _toggleList(
@@ -9175,11 +9214,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   String get _taskAction {
     final fromRow = _row.myAction.trim();
-    if (fromRow.isNotEmpty) return fromRow;
+    // 服务端可能还留着已完成的财务待办，详情里不再当成当前要办的事。
+    if (fromRow.isNotEmpty &&
+        !proposalIntakeFinanceActionClosed(_row, fromRow)) {
+      return fromRow;
+    }
     final changeAction = widget.changeEdit == null
         ? (_row.change?.myAction ?? '').trim()
         : '';
-    if (changeAction.isNotEmpty) return changeAction;
+    if (changeAction.isNotEmpty &&
+        !proposalIntakeFinanceActionClosed(_row, changeAction)) {
+      return changeAction;
+    }
     if (!_isReviewing) return '';
     if (_moduleReviewEnabled('marketCompleted') &&
         !_moduleReviewed('marketCompleted')) {
@@ -9210,7 +9256,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         !_moduleReviewEnabled('technologyCompleted')) {
       return false;
     }
-    return proposalIntakeTechnologyReviewGaps(_review, form: _form).isEmpty;
+    return proposalIntakeTechnologyReviewGaps(
+      _review,
+      form: _form,
+      purchase: _isPurchase,
+    ).isEmpty;
   }
 
   ProposalIntakeNavSection? get _taskSection {
@@ -10800,7 +10850,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
     final remaining = awaitingModule
         ? 0
-        : proposalIntakeTaskRemainingCount(action, _review, form: _form);
+        : proposalIntakeTaskRemainingCount(
+            action,
+            _review,
+            form: _form,
+            purchase: _isPurchase,
+          );
     final bodyWithLeft = remaining > 0 ? '还剩 $remaining 条未复核。$body' : body;
     final jump = proposalIntakeNavJumpLabel(
       action,
@@ -11068,6 +11123,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         _taskAction,
         _review,
         form: _form,
+        purchase: _isPurchase,
       );
       hint = left > 0 ? '还剩 $left 条没复核 · 有问题可直接驳回本板块' : '逐条已完成，到本板块底部确认通过';
       hintColor = left > 0 ? 0xFF6B4FD8 : 0xFF5B556A;
@@ -11302,6 +11358,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _taskAction,
       _review,
       form: _form,
+      purchase: _isPurchase,
     );
     final write = proposalIntakeActionIsWrite(_taskAction);
     return Padding(
@@ -13930,13 +13987,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               '填写人填写，科技部负责人复核科技字段（含财务技术接口）并对业务平台产品整板块复核后统一确认。确认前会检查遗漏。发现问题可直接整板块驳回。',
           keyName: 'technologyCompleted',
           buttonLabel:
-              proposalIntakeTechnologyReviewGaps(_review, form: _form).isEmpty
+              proposalIntakeTechnologyReviewGaps(
+                _review,
+                form: _form,
+                purchase: _isPurchase,
+              ).isEmpty
               ? '确认本板块通过'
               : '科技部字段全部复核',
           locked: false,
           progress:
               '逐条复核 ${_technologyReviewedCount()}/${_technologyReviewFields.length}',
-          omissions: proposalIntakeTechnologyReviewGaps(_review, form: _form),
+          omissions: proposalIntakeTechnologyReviewGaps(
+            _review,
+            form: _form,
+            purchase: _isPurchase,
+          ),
           onCheckOmissions: _showTechnologyOmissions,
         ),
       ],
@@ -14123,13 +14188,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               '填写人填写，科技部负责人复核科技字段（含财务技术接口）并对业务平台产品整板块复核后统一确认。确认前会检查遗漏。发现问题可直接整板块驳回。',
           keyName: 'technologyCompleted',
           buttonLabel:
-              proposalIntakeTechnologyReviewGaps(_review, form: _form).isEmpty
+              proposalIntakeTechnologyReviewGaps(
+                _review,
+                form: _form,
+                purchase: _isPurchase,
+              ).isEmpty
               ? '确认本板块通过'
               : '科技部字段全部复核',
           locked: false,
           progress:
               '逐条复核 ${_technologyReviewedCount()}/${_technologyReviewFields.length}',
-          omissions: proposalIntakeTechnologyReviewGaps(_review, form: _form),
+          omissions: proposalIntakeTechnologyReviewGaps(
+            _review,
+            form: _form,
+            purchase: _isPurchase,
+          ),
           onCheckOmissions: _showTechnologyOmissions,
           plain: true,
         ),
@@ -17753,6 +17826,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           proposalIntakeFormSyncSourceRef(_form),
         ),
         channel: proposalIntakeFormChannelRef(_form),
+        provinceOptions: _selectedSupplyProvinces(),
         initialLinked: child
             ? const []
             : [
@@ -18902,11 +18976,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final scale = ownScale > 0
         ? ownScale
         : proposalSkuFaceShareScale(sku, form: _form);
+    final province = proposalSkuResolvedProvince(_form, sku);
     return [
-      if (sku.productName.trim().isNotEmpty &&
-          sku.productName.trim() != sku.displayName.trim())
-        ('产品名称', sku.productName.trim()),
       ('券种', sku.resolvedCouponKind.isEmpty ? '未填' : sku.resolvedCouponKind),
+      if (province.isNotEmpty) ('省份', province),
       ('面值', value('face')),
       ('业务平台', value('platform')),
       ('年化规模', scale > 0 ? '${proposalFormatWan(scale)} 万' : ''),
@@ -19865,8 +19938,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ).showSnackBar(const SnackBar(content: Text('产品名称不能与提案内其他产品重复')));
       return;
     }
-    final update = (ProposalSkuDetailRow current) =>
-        current.copyWith(productName: name);
+    final update = (ProposalSkuDetailRow current) => current.copyWith(
+      productName: name,
+      assetProduct: proposalIntakeAssetProductNamed(current.assetProduct, name),
+    );
     if (child) {
       _patchChildProduct(id, update, rebuild: false);
     } else {
@@ -22126,7 +22201,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (remoteLine == null) {
       estimate = _remoteFinance.loading ? '正在测算…' : '测算暂不可用，请重试。';
     } else if (way == _settleWayTier) {
-      // 后端按提案总规模套档算出了金额就直接显示（利差、电子券采购款按阶梯都靠这一行看数）。
+      // 后端按套档规模算出了金额就直接显示（利差、电子券采购款按阶梯都靠这一行看数）。
+      // 多个省时套档规模是该省产品合计，否则仍是整张提案规模。
       final amount = (remoteLine['amount'] as num?)?.toDouble() ?? 0;
       if (amount > 0) {
         estimateReady = true;
@@ -22135,6 +22211,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         estimate = scale <= 0
             ? (isPromotion
                   ? '按阶梯分档算；产品年化规模填好后自动算出金额。'
+                  : proposalProductsSpanProvinces(_form)
+                  ? '按阶梯分档算；同一省份产品的合计规模填好后自动算出金额。'
                   : '按阶梯分档算；提案规模（万元）填好后自动算出金额。')
             : '按阶梯分档算，档位填好后自动算出金额。';
       }
@@ -27878,6 +27956,7 @@ class _SkuProductEditorDialog extends StatefulWidget {
     this.initialLinked = const [],
     this.syncSource,
     this.channel,
+    this.provinceOptions = const [],
   });
 
   final bool childProduct;
@@ -27892,6 +27971,9 @@ class _SkuProductEditorDialog extends StatefulWidget {
   final List<_SkuProductDraft> initialLinked;
   final CatalogRef? syncSource;
   final CatalogRef? channel;
+
+  /// 市场部标签二已选的省份。下拉只出现这些，默认第一项。
+  final List<String> provinceOptions;
 
   @override
   State<_SkuProductEditorDialog> createState() =>
@@ -27911,6 +27993,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
   late String _parentSkuId;
   late String _rollback;
   late String _couponKind;
+  late String _province;
   CatalogRef? _syncSource;
   final List<_SkuProductDraft> _linked = [];
   _SkuProductDraft? _linkedClipboard;
@@ -27944,6 +28027,11 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
       widget.productTypes,
     );
     _syncSource = widget.syncSource;
+    final storedProvince = widget.initial.province.trim();
+    final options = widget.provinceOptions;
+    _province = options.contains(storedProvince)
+        ? storedProvince
+        : (options.isNotEmpty ? options.first : storedProvince);
   }
 
   @override
@@ -27972,6 +28060,12 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     if (widget.childProduct && _parentSkuId.trim().isEmpty) return;
     if (_suppliers.text.trim().isEmpty) {
       showProposalCenterToast(context, '请填写供应商编码', error: true);
+      return;
+    }
+    if (!widget.childProduct &&
+        widget.provinceOptions.isNotEmpty &&
+        _province.trim().isEmpty) {
+      showProposalCenterToast(context, '请选择省份', error: true);
       return;
     }
     for (final item in _linked) {
@@ -28010,6 +28104,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
           parentSkuId: widget.childProduct ? _parentSkuId : '',
           rollback: _rollback,
           remark: _remark.text.trim(),
+          province: widget.childProduct ? widget.initial.province : _province.trim(),
         ),
         quantity: quantity < 1 ? 1 : quantity,
         linked: proposalIntakeProductTypeIsBenefit(couponKind, _productTypes)
@@ -28249,6 +28344,40 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     );
   }
 
+  Widget _provinceField() {
+    final options = widget.provinceOptions;
+    final current = options.contains(_province) ? _province : null;
+    return ProposalField(
+      label: '省份',
+      required: options.isNotEmpty,
+      child: widget.readOnly
+          ? Text(
+              _province.trim().isEmpty ? '未填写' : _province.trim(),
+              style: TextStyle(
+                fontSize: 13,
+                color: _province.trim().isEmpty
+                    ? DunesColors.resolve(context, ProposalPalette.text3)
+                    : DunesColors.resolve(context, ProposalPalette.text),
+                fontWeight: FontWeight.w600,
+              ),
+            )
+          : ProposalSelectField<String>(
+              value: current,
+              title: '省份',
+              hint: options.isEmpty ? '请先选择标签二' : '请选择省份',
+              allowClear: false,
+              emptyText: options.isEmpty ? '请先在市场部选择标签二' : null,
+              options: [
+                for (final name in options)
+                  ProposalSelectOption(value: name, label: name),
+              ],
+              onSelected: options.isEmpty
+                  ? null
+                  : (value) => setState(() => _province = (value ?? '').trim()),
+            ),
+    );
+  }
+
   Widget _textField({
     required String label,
     required TextEditingController controller,
@@ -28326,6 +28455,8 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                   ),
                   _textField(label: '业务产品说明', controller: _remark, hint: '选填'),
                 ),
+                const SizedBox(height: 10),
+                _pair(_provinceField(), const SizedBox.shrink()),
                 const SizedBox(height: 10),
               ],
               _pair(

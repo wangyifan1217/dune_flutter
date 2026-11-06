@@ -671,4 +671,88 @@ void main() {
     expect(fullLine.amount, closeTo(3.49, 0.01));
     expect(fullLine.substitution, contains('139.53 × 0.025 − 139.53 × (1 − 1)'));
   });
+
+  test('tier discount uses province scale when products span provinces', () {
+    Map<String, dynamic> tier(String id, String scale) => {
+      'id': id,
+      'kind': 'income',
+      'billType': '利差',
+      'priceMode': 'tier',
+      'scale': scale,
+      'scalePeriod': '年',
+      'tierPlans': [
+        {
+          'id': 'p1',
+          'strategy': 'annual',
+          'segments': [
+            {
+              'type': 'tier',
+              'mode': 'whole',
+              'tiers': [
+                {'from': 0, 'rate': 0.9},
+                {'from': 4000, 'rate': 0.85},
+                {'from': 8000, 'rate': 0.8},
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    final form = <String, dynamic>{
+      'salesScale': '10000',
+      'skuDetails': [
+        {
+          'id': 'bj-a',
+          'province': '北京',
+          'faceValue': '100',
+          'settlements': [tier('st-a', '2000')],
+        },
+        {
+          'id': 'bj-b',
+          'province': '北京',
+          'faceValue': '100',
+          'settlements': [tier('st-b', '2500')],
+        },
+        {
+          'id': 'sh-c',
+          'province': '上海',
+          'faceValue': '100',
+          'settlements': [tier('st-c', '1000')],
+        },
+      ],
+    };
+    final rows = proposalIntakeSkuDetails(form);
+    // 北京合计 4500 落到 0.85，产品 2000 的收入是 1700。整张提案 10000 会落到 0.8。
+    expect(proposalSkuTierIncomeAmount(rows[0], form), closeTo(1700, 0.01));
+    expect(proposalSkuTierIncomeAmount(rows[2], form), closeTo(900, 0.01));
+    final line = proposalSettleLineView(
+      rows[0].settlements.single.terms,
+      scale: 2000,
+      face: 100,
+      form: form,
+      skuIds: const ['bj-a'],
+    );
+    expect(line.amount, closeTo(1700, 0.01));
+    expect(line.substitution, contains('省份合计规模'));
+
+    final sameProvince = <String, dynamic>{
+      'salesScale': '10000',
+      'skuDetails': [
+        {
+          'id': 'bj-a',
+          'province': '北京',
+          'faceValue': '100',
+          'settlements': [tier('st-a', '2000')],
+        },
+        {
+          'id': 'bj-b',
+          'province': '北京',
+          'faceValue': '100',
+          'settlements': [tier('st-b', '2500')],
+        },
+      ],
+    };
+    final kept = proposalIntakeSkuDetails(sameProvince).first;
+    expect(proposalSkuTierIncomeAmount(kept, sameProvince), closeTo(1600, 0.01));
+  });
 }

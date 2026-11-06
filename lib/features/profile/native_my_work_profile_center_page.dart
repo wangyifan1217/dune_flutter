@@ -12,6 +12,7 @@ import '../../core/widgets/dunes_month_picker.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../auth/auth_session.dart';
 import '../auth/qr_login_scan_page.dart';
+import '../attendance/native_attendance_page.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_picker_sheet.dart';
@@ -299,6 +300,7 @@ class _NativeMyWorkProfileCenterPageState
   ProposalIntakeRow? _desktopProposal;
   bool _qrScannerOpening = false;
   int _avatarRefreshVersion = 0;
+  int _attendanceRefreshToken = 0;
   final MeetingLiveController _live = MeetingLiveController.instance;
 
   DateTime get _currentMonth {
@@ -1232,6 +1234,15 @@ class _NativeMyWorkProfileCenterPageState
     });
   }
 
+  Future<void> _openAttendance() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => NativeAttendancePage(session: widget.session),
+      ),
+    );
+    if (mounted) setState(() => _attendanceRefreshToken++);
+  }
+
   String _formatLiveElapsed(Duration duration) {
     final total = duration.inSeconds.clamp(0, 24 * 60 * 60);
     final h = (total ~/ 3600).toString().padLeft(2, '0');
@@ -1402,6 +1413,18 @@ class _NativeMyWorkProfileCenterPageState
                             name: name,
                             subtitle: identityLine,
                           ),
+                          if (widget.session.canUseAttendance)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: kMinePageGutter,
+                              ),
+                              child: AttendanceSummaryCard(
+                                key: ValueKey<int>(_attendanceRefreshToken),
+                                session: widget.session,
+                                refreshToken: _attendanceRefreshToken,
+                                onTap: _openAttendance,
+                              ),
+                            ),
                           Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: kMinePageGutter,

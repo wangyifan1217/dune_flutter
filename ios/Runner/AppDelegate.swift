@@ -4,6 +4,7 @@ import AVFoundation
 import CallKit
 import UniformTypeIdentifiers
 import UserNotifications
+import NetworkExtension
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, XGPushDelegate,
@@ -69,6 +70,18 @@ import UserNotifications
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
+    let attendanceWifiChannel = FlutterMethodChannel(
+      name: "dunes/attendance_wifi",
+      binaryMessenger: messenger
+    )
+    attendanceWifiChannel.setMethodCallHandler { call, result in
+      guard call.method == "currentNetwork" else { return result(FlutterMethodNotImplemented) }
+      guard #available(iOS 14.0, *) else { return result([String: Any]()) }
+      NEHotspotNetwork.fetchCurrent { network in
+        guard let network else { return result([String: Any]()) }
+        result(["ssid": network.ssid, "bssid": network.bssid])
+      }
+    }
     tpnsBridge = TpnsPushBridge(
       application: UIApplication.shared,
       messenger: messenger,

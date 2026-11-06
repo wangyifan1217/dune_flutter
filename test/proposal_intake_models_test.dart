@@ -827,6 +827,16 @@ void main() {
         );
     expect(applied.productName, 'SKU-10001');
     expect(applied.displayName, 'SKU-10001');
+    final renamed = applied.copyWith(
+      productName: '山东中石油300元电子券',
+      assetProduct: proposalIntakeAssetProductNamed(
+        applied.assetProduct,
+        '山东中石油300元电子券',
+      ),
+    );
+    expect(renamed.displayName, '山东中石油300元电子券');
+    expect(renamed.assetProduct?.label, '山东中石油300元电子券');
+    expect(renamed.assetProduct?.productCode, 'SKU-10001');
     expect(applied.syncSourceCode, 'POINTS');
     expect(applied.channelName, '江苏中石油');
     expect(applied.assetProduct?.productCode, 'SKU-10001');
@@ -1274,7 +1284,7 @@ void main() {
       expect(form['revenue'], 100);
       expect(form['profit'], 15);
       expect(form['margin'], 7.5);
-      expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 1.01);
+      expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 6.72);
       expect(form['taxCostItemAmounts']['印花税'], 0.12);
       expect(form['taxCostItemAmounts']['所得税'], 1.62);
 
@@ -1397,7 +1407,7 @@ void main() {
       expect(manualRevenue['margin'], -25);
       expect(form['margin'], 62.53);
       expect(form['taxCostItemAmounts']['印花税'], 0.18);
-      expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 12.61);
+      expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 6.22);
 
       form = proposalApplyEstimatedFinanceCosts({
         'isCouponPack': true,
@@ -1480,7 +1490,7 @@ void main() {
     },
   );
 
-  test('vat uses sales output rate and purchase input rate per settlement', () {
+  test('vat uses each settlement rate and does not borrow an empty rate', () {
     expect(
       proposalCostFormulaText(ProposalCostEstimateKind.vat),
       contains('销项'),
@@ -1522,8 +1532,8 @@ void main() {
       },
       'taxCostItems': ['增值税及附加（能源）'],
     });
-    // 销项 100×13% + 100×6% = 19；进项 80×9% + 10×6% = 7.8；(19−7.8)×1.12 = 12.544
-    expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 12.54);
+    // 只按结算行：销项 100×13% + 100×6% = 19，供给和项目成本税率不进项；(19)×1.12 = 21.28
+    expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 21.28);
 
     form = proposalApplyEstimatedFinanceCosts({
       'revenue': 100,
@@ -1539,8 +1549,8 @@ void main() {
       ],
       'taxCostItems': ['增值税及附加（能源）'],
     });
-    // 无供给税率时进销一致： (100−80−5)×13%×1.12 = 2.184
-    expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 2.18);
+    // 这一行没填规模，提案也没有规模，税额按 0，不再用收入 × 税率兜底。
+    expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 0);
 
     form = proposalApplyEstimatedFinanceCosts({
       'revenue': 100,
@@ -1564,8 +1574,77 @@ void main() {
       ],
       'taxCostItems': ['增值税及附加（能源）'],
     });
-    // 无规模：销项 100×13%，进项 80×9%；(13−7.2)×1.12 = 6.496
-    expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 6.5);
+    // 没填规模时供给税率不算进项。
+    expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 0);
+    final eachRate = proposalVatEstimate({
+      'salesScale': 600,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'faceValue': '50',
+          'settlements': [
+            {
+              'id': 'in-1',
+              'kind': 'income',
+              'billType': '电子券销售款',
+              'scale': '600',
+              'settleRatio': '0.926',
+              'taxRate': '6%',
+            },
+            {
+              'id': 'cost-1',
+              'kind': 'cost',
+              'billType': '机构返佣',
+              'settleRatio': '0.019',
+              'taxRate': '6%',
+            },
+          ],
+        },
+      ],
+    });
+    // 600×0.926×6% − 600×0.019×6%，再 ×1.12
+    expect(eachRate.payable, closeTo(36.57, 0.011));
+
+    Map<String, dynamic> faceSku(String face, String couponRate) => {
+      'id': 'sku-$face',
+      'faceValue': face,
+      'settlements': [
+        {
+          'id': 'in-$face',
+          'kind': 'income',
+          'billType': '电子券销售款',
+          'settleRatio': '0.975',
+          'taxRate': '0%',
+        },
+        {
+          'id': 'coupon-$face',
+          'kind': 'cost',
+          'billType': '券使用成本',
+          'priceMode': 'direct',
+          'settleRatio': '0.97',
+          'taxRate': couponRate,
+          'expectedRedemptionRate': '1',
+        },
+        {
+          'id': 'saas-$face',
+          'kind': 'income',
+          'billType': '能源saas',
+          'settleRatio': '0.005',
+          'taxRate': '6%',
+        },
+      ],
+    };
+    final manman = proposalVatEstimate({
+      'salesScale': '8000',
+      'skuDetails': [faceSku('200', '0%'), faceSku('300', '0%'), faceSku('400', '0%')],
+    });
+    // 8000 均摊到 3 个产品，只对 SaaS 6% 计销项
+    expect(manman.payable, closeTo(2.69, 0.011));
+    final beijing = proposalVatEstimate({
+      'salesScale': '8000',
+      'skuDetails': [faceSku('200', '0%'), faceSku('300', '6%'), faceSku('400', '6%')],
+    });
+    expect(beijing.payable, closeTo(0, 0.011));
 
     final help = proposalCostFormulaHelpOf(
       name: '增值税及附加（能源）',
@@ -1834,7 +1913,7 @@ void main() {
     });
     expect(form['taxCostItems'], contains('增值税及附加（运营商+公共出行）'));
     expect(form['taxCostItems'], isNot(contains('增值税及附加（能源）')));
-    expect(form['taxCostItemAmounts']['增值税及附加（运营商+公共出行）'], 1.01);
+    expect(form['taxCostItemAmounts']['增值税及附加（运营商+公共出行）'], 0);
 
     form = proposalApplyEstimatedFinanceCosts(
       proposalMarkCostAmountManual(
@@ -2113,6 +2192,72 @@ void main() {
       isFalse,
     );
     expect(reviewing.copyWith(status: 'done').canDeleteBy(11), isFalse);
+  });
+
+  test('finance review done drops the finance owner from my todos', () {
+    ProposalIntakeRow purchase({
+      required int userId,
+      required String ownerKey,
+      required Map<String, dynamic> review,
+      String myAction = 'review_contract',
+    }) {
+      return ProposalIntakeRow.fromJson({
+        'id': 1,
+        'title': '中石油供给-福建',
+        'kind': 'purchase',
+        'status': 'reviewing',
+        'stage': 'reviewing',
+        'myAction': myAction,
+        'createdBy': 9,
+        'form': {'${ownerKey}UserId': userId},
+        'review': {
+          'stage': 'reviewing',
+          'financeCompleted': true,
+          'salesContractCompleted': true,
+          'marketCompleted': false,
+          'technologyCompleted': false,
+          ...review,
+        },
+      });
+    }
+
+    final financeDone = purchase(
+      userId: 11,
+      ownerKey: 'financeOwner2',
+      review: {'purchaseContractCompleted': true},
+    );
+    expect(proposalIntakeStillActionableFor(financeDone, 11), isFalse);
+
+    final financeOpen = purchase(
+      userId: 11,
+      ownerKey: 'financeOwner2',
+      review: {'purchaseContractCompleted': false},
+    );
+    expect(proposalIntakeStillActionableFor(financeOpen, 11), isTrue);
+
+    final marketStillOpen = purchase(
+      userId: 4,
+      ownerKey: 'marketOwner1',
+      review: {'purchaseContractCompleted': true},
+      myAction: 'review_market',
+    );
+    expect(proposalIntakeStillActionableFor(marketStillOpen, 4), isTrue);
+
+    final alsoTech = ProposalIntakeRow.fromJson({
+      'id': 2,
+      'kind': 'purchase',
+      'status': 'reviewing',
+      'stage': 'reviewing',
+      'myAction': 'review_contract',
+      'form': {'financeOwner2UserId': 11, 'technologyOwnerUserId': 11},
+      'review': {
+        'financeCompleted': true,
+        'purchaseContractCompleted': true,
+        'technologyCompleted': false,
+        'marketCompleted': true,
+      },
+    });
+    expect(proposalIntakeStillActionableFor(alsoTech, 11), isTrue);
   });
 
   test('proposal row reads stage and myAction', () {
@@ -5593,6 +5738,27 @@ void main() {
       '去底部确认',
     );
     expect(proposalIntakeTechnologyReviewGaps(const {}), contains('财务技术接口'));
+    final purchaseReviewed = {
+      'technologyItems': {
+        for (final key in kProposalTechnologyReviewFields)
+          if (key != 'channelRef') key: true,
+      },
+    };
+    expect(
+      proposalIntakeTechnologyReviewGaps(
+        purchaseReviewed,
+        form: const {'technologyPlatform': '能源'},
+        purchase: true,
+      ),
+      isEmpty,
+    );
+    expect(
+      proposalIntakeTechnologyReviewItemKeys(
+        const {'technologyPlatform': '能源'},
+        purchase: true,
+      ),
+      isNot(contains('channelRef')),
+    );
     expect(
       proposalIntakeTechnologyReviewGaps({
         'technologyItems': {

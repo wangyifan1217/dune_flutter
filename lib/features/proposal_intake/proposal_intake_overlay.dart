@@ -191,7 +191,14 @@ class _ProposalIntakeOverlayHostState
         _row = result[0] as ProposalIntakeRow;
         _options = result[1] as ProposalIntakeOptions;
         _people = result[2] as List<ProposalPerson>;
-        _actionQueue = (result[3] as ProposalIntakeListResult).items;
+        _actionQueue = (result[3] as ProposalIntakeListResult).items
+            .where(
+              (row) => proposalIntakeStillActionableFor(
+                row,
+                widget.session.userId,
+              ),
+            )
+            .toList(growable: false);
         _formSession++;
         _loading = false;
         _error = null;
@@ -211,9 +218,17 @@ class _ProposalIntakeOverlayHostState
     try {
       final result = await _service.fetchList(actionable: true, pageSize: 100);
       if (!mounted) return;
-      setState(() => _actionQueue = result.items);
+      final queue = result.items
+          .where(
+            (row) => proposalIntakeStillActionableFor(
+              row,
+              widget.session.userId,
+            ),
+          )
+          .toList(growable: false);
+      setState(() => _actionQueue = queue);
       final next = ProposalSkipTail.pick(
-        items: result.items,
+        items: queue,
         currentId: _proposalId,
         afterDecision: afterDecision,
       );

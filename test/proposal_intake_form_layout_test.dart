@@ -2496,6 +2496,7 @@ void main() {
       expect(find.text('业务产品信息填写'), findsOneWidget);
       expect(find.text('业务产品名称'), findsOneWidget);
       expect(find.text('业务产品说明'), findsOneWidget);
+      expect(find.text('省份'), findsOneWidget);
       expect(find.text('类型'), findsOneWidget);
       expect(find.text('产品名称'), findsNothing);
       expect(find.text('面值'), findsOneWidget);
@@ -2531,7 +2532,7 @@ void main() {
       expect(find.text('产品失效日期'), findsNothing);
 
       final dialog = find.byType(AlertDialog);
-      await tester.tap(find.text('请选择现金券、满减券或权益'), warnIfMissed: false);
+      await tester.tap(find.text('请选择现金券、满减券、权益'), warnIfMissed: false);
       await tester.pumpAndSettle();
       await tester.tap(find.text('现金券').last);
       await tester.pumpAndSettle();

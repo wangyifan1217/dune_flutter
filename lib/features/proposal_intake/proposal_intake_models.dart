@@ -2384,6 +2384,12 @@ bool proposalIntakeCanPatchDraft(
   if (row.techRevisionOpen) {
     return isOwner('technologyOwner') || isOwner('financeOwner2');
   }
+  if (proposalIntakeIsPurchase(row.kind) &&
+      isOwner('marketOwner1') &&
+      row.status != 'pending_president' &&
+      row.status != 'done') {
+    return true;
+  }
   if (row.createdBy == userId) return true;
   if (isOwner('technologyOwner') || isOwner('financeOwner2')) return true;
   if (viewAll) return true;
@@ -7402,9 +7408,7 @@ ProposalIntakeProductCopy proposalIntakeCopyBusinessProducts({
           item.terms.skuIds.any(ids.containsKey)
               ? item.copyWith(
                   terms: item.terms.copyWith(
-                    skuIds: [
-                      for (final id in item.terms.skuIds) ids[id] ?? id,
-                    ],
+                    skuIds: [for (final id in item.terms.skuIds) ids[id] ?? id],
                   ),
                 )
               : item,
@@ -7493,8 +7497,7 @@ Map<String, dynamic> proposalIntakeLinkCopiedSupplySkus(
                       terms: item.terms.copyWith(
                         skuIds: {
                           ...item.terms.skuIds,
-                          for (final id in item.terms.skuIds)
-                            ...?copiesOf[id],
+                          for (final id in item.terms.skuIds) ...?copiesOf[id],
                         }.toList(),
                       ),
                     )

@@ -14,11 +14,16 @@ class ProposalIntakeService {
 
   final AuthSession session;
 
-  Future<ProposalRemoteFinanceResult> estimateFinance(Map<String, dynamic> form) async {
-    final response = await http.post(
-      _uri('/proposal-intakes/estimate'), headers: _headers,
-      body: jsonEncode({'form': proposalRemoteFinanceInputs(form)}),
-    ).timeout(const Duration(seconds: 20));
+  Future<ProposalRemoteFinanceResult> estimateFinance(
+    Map<String, dynamic> form,
+  ) async {
+    final response = await http
+        .post(
+          _uri('/proposal-intakes/estimate'),
+          headers: _headers,
+          body: jsonEncode({'form': proposalRemoteFinanceInputs(form)}),
+        )
+        .timeout(const Duration(seconds: 20));
     return ProposalRemoteFinanceResult.fromJson(_asMap(_unwrap(response)));
   }
 
@@ -283,10 +288,7 @@ class ProposalIntakeService {
       await http.patch(
         _uri('/proposal-intakes/$id/meeting-minutes'),
         headers: _headers,
-        body: jsonEncode({
-          'version': version,
-          'meetingMinutes': minutes,
-        }),
+        body: jsonEncode({'version': version, 'meetingMinutes': minutes}),
       ),
     );
     return ProposalIntakeRow.fromJson(_asMap(data));
@@ -328,6 +330,14 @@ class ProposalIntakeService {
           review: latest.review,
         ),
       );
+      if (proposalIntakeIsPurchase(row.kind) &&
+          proposalIntakeOwnerUserId(latest.form, 'marketOwner1') ==
+              session.userId &&
+          latest.status != 'pending_president' &&
+          latest.status != 'done' &&
+          row.form.containsKey('hunId')) {
+        merged['hunId'] = row.form['hunId'];
+      }
       return save(
         latest.copyWith(
           title: row.title,
@@ -454,7 +464,10 @@ class ProposalIntakeService {
 
   Future<ProposalIntakeChange> fetchChange(int changeId) async {
     final data = _unwrap(
-      await http.get(_uri('/proposal-intake-changes/$changeId'), headers: _headers),
+      await http.get(
+        _uri('/proposal-intake-changes/$changeId'),
+        headers: _headers,
+      ),
     );
     return ProposalIntakeChange.fromJson(_asMap(data));
   }
@@ -485,7 +498,7 @@ class ProposalIntakeService {
         headers: _headers,
         body: jsonEncode({
           'version': version,
-          'reason': ? (reason.trim().isEmpty ? null : reason.trim()),
+          'reason': ?(reason.trim().isEmpty ? null : reason.trim()),
           'form': ?form,
         }),
       ),
@@ -573,16 +586,20 @@ class ProposalIntakeService {
 
 /// 从 Content-Disposition 里取文件名：优先 filename*=UTF-8''…（中文名），其次 filename="…"。
 String proposalExportFileName(String header, {String fallback = '提案.xlsx'}) {
-  final star = RegExp(r"filename\*=UTF-8''([^;]+)", caseSensitive: false)
-      .firstMatch(header);
+  final star = RegExp(
+    r"filename\*=UTF-8''([^;]+)",
+    caseSensitive: false,
+  ).firstMatch(header);
   if (star != null) {
     try {
       final name = Uri.decodeComponent(star.group(1)!.trim());
       if (name.isNotEmpty) return name;
     } catch (_) {}
   }
-  final plain = RegExp(r'filename="?([^";]+)"?', caseSensitive: false)
-      .firstMatch(header);
+  final plain = RegExp(
+    r'filename="?([^";]+)"?',
+    caseSensitive: false,
+  ).firstMatch(header);
   final name = plain?.group(1)?.trim() ?? '';
   return name.isEmpty ? fallback : name;
 }

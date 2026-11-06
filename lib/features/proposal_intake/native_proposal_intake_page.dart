@@ -3805,7 +3805,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   /// 复核中还能改内容的人：提交人（未复核的部分）、财务部负责人二（财务未整板块通过前）、
   /// 市场部负责人一（业务成本）。规则和原来完整表单一样，这里只决定给不给「修改内容」入口。
   bool get _canEditDuringReview =>
-      _canEditAsSubmitter || _canEditUnreviewedFinance || _canEditBusinessCost;
+      _canEditAsSubmitter ||
+      _canEditUnreviewedFinance ||
+      _canEditBusinessCost ||
+      _hunEditableBeforeSubmit;
 
   bool _isOwner(String key) => _me > 0 && _ownerId(key) == _me;
 
@@ -3971,12 +3974,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool get _canSeeHun => _isMarketOwner1;
 
-  bool get _canEditHun =>
-      _canSeeHun &&
-      !_isLocked &&
-      !_showSelectedAsText &&
-      !_row.techRevisionOpen &&
-      !_moduleReviewed('marketCompleted');
+  bool get _hunEditableBeforeSubmit =>
+      _isPurchase && _canSeeHun && !_isLocked && !_row.techRevisionOpen;
+
+  bool get _canEditHun => _hunEditableBeforeSubmit && !_showSelectedAsText;
 
   String get _submitterName {
     final named = _personNameById(_row.createdBy);
@@ -4572,11 +4573,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Map<String, dynamic> _keepUnreviewed(Map<String, dynamic> form) {
-    return proposalIntakeKeepUnreviewedForm(
+    final result = proposalIntakeKeepUnreviewedForm(
       baseline: _serverForm,
       current: form,
       review: _review,
     );
+    if (_hunEditableBeforeSubmit && form.containsKey('hunId')) {
+      result['hunId'] = form['hunId'];
+    }
+    return result;
   }
 
   void _setContractMode(String prefix, String? mode) {
@@ -4806,13 +4811,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (_dirty) {
       widget.onError('请先保存最新修改后再复核');
       return;
-    }
-    if (_isPurchase && key == 'marketCompleted') {
-      final hun = proposalIntakePurchaseHunIssue(_form);
-      if (hun != null) {
-        widget.onError(hun);
-        return;
-      }
     }
     if (key == 'technologyCompleted') {
       final gaps = proposalIntakeTechnologyReviewGaps(_review, form: _form);
@@ -20884,10 +20882,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   _removeSkuSettle(channelRows[i].id, settleId),
               onPatch: (settleId, terms) =>
                   _patchSkuSettle(channelRows[i].id, settleId, terms),
-              onReplace: (settlements) => _assignPastedSkuSettlements(
-                channelRows[i].id,
-                settlements,
-              ),
+              onReplace: (settlements) =>
+                  _assignPastedSkuSettlements(channelRows[i].id, settlements),
               onJumpToProduct: () =>
                   _jumpToSkuProduct(channelRows[i], child: false),
               includeScale: false,
@@ -26926,10 +26922,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               'HUN ID',
               'hunId',
               source: '加密处理，仅市场部负责人一填写、可见',
-              hint: '由市场部负责人一在复核时填写',
+              hint: '由市场部负责人一在最终提交前填写',
               required: true,
               writable: _canEditHun,
-              resetReview: 'marketCompleted',
             )
           else
             ProposalField(

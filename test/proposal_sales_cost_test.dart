@@ -372,6 +372,23 @@ void main() {
       expect(proposalIntakeCanPatchDraft(row('purchase'), userId: 7), isFalse);
     },
   );
+  test('purchase market owner one can save before final submission', () {
+    ProposalIntakeRow row(String status) => ProposalIntakeRow.fromJson({
+      'id': 1,
+      'kind': 'purchase',
+      'status': status,
+      'createdBy': 11,
+      'form': {'marketOwner1UserId': 4},
+      'review': {'marketCompleted': true},
+    });
+    for (final status in ['draft', 'filling', 'reviewing']) {
+      expect(proposalIntakeCanPatchDraft(row(status), userId: 4), isTrue);
+      expect(proposalIntakeCanPatchDraft(row(status), userId: 5), isFalse);
+    }
+    for (final status in ['pending_president', 'done']) {
+      expect(proposalIntakeCanPatchDraft(row(status), userId: 4), isFalse);
+    }
+  });
   test('finance approval requires reviewing product project costs', () {
     expect(
       proposalIntakeFinanceReviewKeys(sample()),

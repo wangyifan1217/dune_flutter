@@ -14,6 +14,8 @@ class ReimbursementGroup {
     required this.entity,
     required this.count,
     required this.amount,
+    this.offset,
+    this.payment,
   });
 
   final String applicant;
@@ -21,6 +23,8 @@ class ReimbursementGroup {
   final String entity;
   final int count;
   final double amount;
+  final double? offset;
+  final double? payment;
 
   factory ReimbursementGroup.fromJson(Map<String, dynamic> json) =>
       ReimbursementGroup(
@@ -29,6 +33,8 @@ class ReimbursementGroup {
         entity: '${json['entity'] ?? ''}',
         count: (json['count'] as num?)?.toInt() ?? 0,
         amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        offset: (json['offsetAmount'] as num?)?.toDouble(),
+        payment: (json['paymentAmount'] as num?)?.toDouble(),
       );
 }
 
@@ -39,7 +45,12 @@ class ReimbursementDetail {
     required this.department,
     required this.entity,
     required this.reimbursementType,
+    this.project = '',
+    this.expenses = const [],
     required this.amount,
+    this.offset,
+    this.payment,
+    this.alreadySubmitted = false,
     required this.invoiceCount,
     required this.unrecognized,
     required this.approvedAt,
@@ -50,7 +61,12 @@ class ReimbursementDetail {
   final String department;
   final String entity;
   final String reimbursementType;
+  final String project;
+  final List<ReimbursementExpense> expenses;
   final double amount;
+  final double? offset;
+  final double? payment;
+  final bool alreadySubmitted;
   final int invoiceCount;
   final int unrecognized;
   final String approvedAt;
@@ -62,10 +78,43 @@ class ReimbursementDetail {
         department: '${json['department'] ?? ''}',
         entity: '${json['entity'] ?? ''}',
         reimbursementType: '${json['reimbursementType'] ?? ''}',
+        project: '${json['project'] ?? ''}',
+        expenses: json['expenses'] is List
+            ? (json['expenses'] as List)
+                  .whereType<Map>()
+                  .map(
+                    (item) => ReimbursementExpense.fromJson(
+                      Map<String, dynamic>.from(item),
+                    ),
+                  )
+                  .toList()
+            : const [],
         amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        offset: (json['offsetAmount'] as num?)?.toDouble(),
+        payment: (json['paymentAmount'] as num?)?.toDouble(),
+        alreadySubmitted: json['alreadySubmitted'] == true,
         invoiceCount: (json['invoiceCount'] as num?)?.toInt() ?? 0,
         unrecognized: (json['invoiceUnrecognizedCount'] as num?)?.toInt() ?? 0,
         approvedAt: '${json['approvedAt'] ?? json['submittedAt'] ?? ''}',
+      );
+}
+
+class ReimbursementExpense {
+  const ReimbursementExpense({
+    required this.type,
+    required this.amount,
+    required this.description,
+  });
+
+  final String type;
+  final double amount;
+  final String description;
+
+  factory ReimbursementExpense.fromJson(Map<String, dynamic> json) =>
+      ReimbursementExpense(
+        type: '${json['type'] ?? ''}',
+        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        description: '${json['description'] ?? ''}',
       );
 }
 
@@ -92,7 +141,10 @@ class ReimbursementSummary {
 
   static List<T> _list<T>(Object? raw, T Function(Map<String, dynamic>) f) =>
       raw is List
-      ? raw.whereType<Map>().map((m) => f(Map<String, dynamic>.from(m))).toList()
+      ? raw
+            .whereType<Map>()
+            .map((m) => f(Map<String, dynamic>.from(m)))
+            .toList()
       : <T>[];
 
   factory ReimbursementSummary.fromJson(Map<String, dynamic> json) {
@@ -127,9 +179,7 @@ class ReimbursementSummaryService {
       final message = decoded is Map
           ? decoded['message'] ?? decoded['error']
           : null;
-      throw Exception(
-        '${message ?? '报销汇总请求失败：HTTP ${response.statusCode}'}',
-      );
+      throw Exception('${message ?? '报销汇总请求失败：HTTP ${response.statusCode}'}');
     }
     if (decoded is Map && decoded['success'] == false) {
       throw Exception('${decoded['message'] ?? '报销汇总请求失败'}');
@@ -179,7 +229,24 @@ class ReimbursementSummaryService {
     );
   }
 
-  Future<Uint8List> export({String from = '', String to = '', String q = ''}) async {
+  Future<void> submitApproval({
+    String from = '',
+    String to = '',
+    String q = '',
+  }) async {
+    final response = await dunesHttpPost(
+      session,
+      '/reimbursement-summary/submit?${query(from: from, to: to, q: q)}',
+      client: _client,
+    );
+    _unwrap(response);
+  }
+
+  Future<Uint8List> export({
+    String from = '',
+    String to = '',
+    String q = '',
+  }) async {
     final response = await dunesHttpGet(
       session,
       '/reimbursement-summary/export?${query(from: from, to: to, q: q)}',

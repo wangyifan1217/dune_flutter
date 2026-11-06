@@ -54,6 +54,9 @@ class _NativeReimbursementSummaryPageState
   bool _allTime = false;
   bool _busy = false;
   bool _exporting = false;
+  bool _submitting = false;
+  int _loadGeneration = 0;
+  String _loadedFilter = '';
   String _error = '';
   ReimbursementSummary? _data;
   _SummaryView _view = _SummaryView.combo;
@@ -69,6 +72,8 @@ class _NativeReimbursementSummaryPageState
       _allTime ? '' : _day(DateTime(_month.year, _month.month + 1, 0));
   String get _periodLabel =>
       _allTime ? '全部时间' : '${_month.year}年${_month.month}月';
+  String get _filterKey =>
+      ReimbursementSummaryService.query(from: _from, to: _to, q: _keyword.text);
 
   @override
   void initState() {
@@ -85,26 +90,39 @@ class _NativeReimbursementSummaryPageState
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
+    final from = _from, to = _to, query = _keyword.text, filter = _filterKey;
     setState(() {
       _busy = true;
       _error = '';
     });
     try {
-      final data = await _service.fetch(from: _from, to: _to, q: _keyword.text);
-      if (!mounted) return;
-      setState(() => _data = data);
+      final data = await _service.fetch(from: from, to: to, q: query);
+      if (!mounted || generation != _loadGeneration || filter != _filterKey) {
+        return;
+      }
+      setState(() {
+        _data = data;
+        _loadedFilter = filter;
+      });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() => _error = friendlyErrorText(e, fallback: '报销汇总加载失败'));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _busy = false);
+      }
     }
   }
 
   void _onKeyword(String _) {
+    _loadGeneration++;
     setState(() {});
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 400), () => unawaited(_load()));
+    _debounce = Timer(
+      const Duration(milliseconds: 400),
+      () => unawaited(_load()),
+    );
   }
 
   Future<void> _shiftMonth(int delta) async {
@@ -138,7 +156,11 @@ class _NativeReimbursementSummaryPageState
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
-      final bytes = await _service.export(from: _from, to: _to, q: _keyword.text);
+      final bytes = await _service.export(
+        from: _from,
+        to: _to,
+        q: _keyword.text,
+      );
       final name = _allTime
           ? '报销汇总.xlsx'
           : '报销汇总_${_month.year}-${_month.month.toString().padLeft(2, '0')}.xlsx';
@@ -176,6 +198,49 @@ class _NativeReimbursementSummaryPageState
       }
     } finally {
       if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  Future<void> _submitApproval() async {
+    if (_submitting || _data == null) return;
+    final eligible = _data!.details.where((d) => !d.alreadySubmitted).length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('发起汇总报销审批'),
+        content: Text(
+          '提交当前筛选条件下尚未汇总的 $eligible 张报销单（$_periodLabel）。已进入汇总审批的单据会排除；系统将保存审批快照。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('发起审批'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _submitting = true);
+    try {
+      await _service.submitApproval(from: _from, to: _to, q: _keyword.text);
+      if (mounted) {
+        showDunesToast(context, '汇总报销审批已发起');
+        await _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e, fallback: '发起审批失败'),
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -251,13 +316,19 @@ class _NativeReimbursementSummaryPageState
               children: [
                 WorkProfileMonthBar(
                   label: _periodLabel,
-                  canPrev: !_allTime &&
-                      DateTime(_month.year, _month.month - 1)
-                              .compareTo(_firstMonth) >=
+                  canPrev:
+                      !_allTime &&
+                      DateTime(
+                            _month.year,
+                            _month.month - 1,
+                          ).compareTo(_firstMonth) >=
                           0,
-                  canNext: !_allTime &&
-                      DateTime(_month.year, _month.month + 1)
-                              .compareTo(_lastMonth) <=
+                  canNext:
+                      !_allTime &&
+                      DateTime(
+                            _month.year,
+                            _month.month + 1,
+                          ).compareTo(_lastMonth) <=
                           0,
                   onPrev: () => unawaited(_shiftMonth(-1)),
                   onNext: () => unawaited(_shiftMonth(1)),
@@ -276,7 +347,10 @@ class _NativeReimbursementSummaryPageState
                       FocusManager.instance.primaryFocus?.unfocus(),
                   style: DunesTypography.sans(
                     fontSize: 14,
-                    color: DunesColors.resolve(context, const Color(0xFF312249)),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF312249),
+                    ),
                     context: context,
                   ),
                   decoration: _searchDecoration('搜索报销人、部门或$entityLabel'),
@@ -304,9 +378,31 @@ class _NativeReimbursementSummaryPageState
                         label: _exporting ? '导出中' : '导出',
                         filled: true,
                         busy: _exporting,
-                        onPressed: _busy || _exporting || (data?.count ?? 0) == 0
+                        onPressed:
+                            _busy ||
+                                _exporting ||
+                                _loadedFilter != _filterKey ||
+                                (data?.count ?? 0) == 0
                             ? null
                             : () => unawaited(_export()),
+                      ),
+                      const SizedBox(width: 8),
+                      _ToolbarChip(
+                        key: const Key('reimbursement-submit-approval'),
+                        icon: Icons.send_outlined,
+                        label: _submitting ? '发起中' : '发起汇总审批',
+                        busy: _submitting,
+                        onPressed:
+                            _busy ||
+                                _submitting ||
+                                _loadedFilter != _filterKey ||
+                                (_debounce?.isActive ?? false) ||
+                                !(data?.details.any(
+                                      (d) => !d.alreadySubmitted,
+                                    ) ??
+                                    false)
+                            ? null
+                            : () => unawaited(_submitApproval()),
                       ),
                       const SizedBox(width: 16),
                       _ToolbarChip(
@@ -458,51 +554,75 @@ class _NativeReimbursementSummaryPageState
       );
     }
     final rows = <Widget>[_totals(context, data)];
+    if (_view == _SummaryView.details || _view == _SummaryView.entity) {
+      rows.add(_summaryTable(data));
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: rows,
+        ),
+      );
+    }
     switch (_view) {
       case _SummaryView.combo:
         for (final g in data.groups) {
-          rows.add(_row(
-            context,
-            title: g.applicant,
-            subtitle: [g.entity, if (g.department.isNotEmpty) g.department].join(' · '),
-            trailing: _money(g.amount),
-            meta: '${g.count} 单',
-          ));
+          rows.add(
+            _row(
+              context,
+              title: g.applicant,
+              subtitle: [
+                g.entity,
+                if (g.department.isNotEmpty) g.department,
+              ].join(' · '),
+              trailing: _money(g.amount),
+              meta: '${g.count} 单',
+            ),
+          );
         }
       case _SummaryView.person:
         for (final g in data.byPerson) {
-          rows.add(_row(
-            context,
-            title: g.applicant,
-            subtitle: g.department,
-            trailing: _money(g.amount),
-            meta: '${g.count} 单',
-          ));
+          rows.add(
+            _row(
+              context,
+              title: g.applicant,
+              subtitle: g.department,
+              trailing: _money(g.amount),
+              meta: '${g.count} 单',
+            ),
+          );
         }
       case _SummaryView.entity:
         for (final g in data.byEntity) {
-          rows.add(_row(
-            context,
-            title: g.entity,
-            subtitle: '',
-            trailing: _money(g.amount),
-            meta: '${g.count} 单',
-          ));
+          rows.add(
+            _row(
+              context,
+              title: g.entity,
+              subtitle: '',
+              trailing: _money(g.amount),
+              meta: '${g.count} 单',
+            ),
+          );
         }
       case _SummaryView.details:
         for (final d in data.details) {
-          rows.add(_row(
-            context,
-            title: '${d.applicant} · ${d.entity}',
-            subtitle: [
-              if (d.reimbursementType.isNotEmpty) d.reimbursementType,
-              '发票 ${d.invoiceCount} 张',
-              if (d.unrecognized > 0) '${d.unrecognized} 张未识别',
-              if (d.approvedAt.isNotEmpty) '通过于 ${d.approvedAt}',
-            ].join(' · '),
-            trailing: _money(d.amount),
-            meta: '单据 ${d.businessId}',
-          ));
+          rows.add(
+            _row(
+              context,
+              title: '${d.applicant} · ${d.entity}',
+              subtitle: [
+                if (d.project.isNotEmpty) '提案/项目/任务：${d.project}',
+                for (final expense in d.expenses)
+                  '${expense.type.isEmpty ? '未分类' : expense.type} ${_money(expense.amount)}',
+                if (d.reimbursementType.isNotEmpty) d.reimbursementType,
+                '发票 ${d.invoiceCount} 张',
+                if (d.unrecognized > 0) '${d.unrecognized} 张未识别',
+                if (d.approvedAt.isNotEmpty) '通过于 ${d.approvedAt}',
+              ].join(' · '),
+              trailing: _money(d.amount),
+              meta: '单据 ${d.businessId}',
+            ),
+          );
         }
     }
     return RefreshIndicator(
@@ -510,6 +630,65 @@ class _NativeReimbursementSummaryPageState
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: rows,
+      ),
+    );
+  }
+
+  Widget _summaryTable(ReimbursementSummary data) {
+    final details = _view == _SummaryView.details;
+    final headers = details
+        ? [
+            '单据',
+            '报销人',
+            '部门',
+            data.entityLabel,
+            '提案/项目/任务',
+            '费用类型及明细金额',
+            '报销金额',
+            '待冲借支',
+            '应打款',
+            '汇总审批',
+          ]
+        : [data.entityLabel, '单数', '报销金额', '待冲借支', '应打款'];
+    final tableRows = details
+        ? data.details.map(
+            (d) => [
+              d.businessId,
+              d.applicant,
+              d.department,
+              d.entity,
+              d.project,
+              d.expenses.map((e) => '${e.type} ${_money(e.amount)}').join('；'),
+              _money(d.amount),
+              d.offset == null ? '待核算' : _money(d.offset!),
+              d.payment == null ? '待核算' : _money(d.payment!),
+              d.alreadySubmitted ? '已汇总' : '未汇总',
+            ],
+          )
+        : data.byEntity.map(
+            (g) => [
+              g.entity,
+              '${g.count}',
+              _money(g.amount),
+              g.offset == null ? '待核算' : _money(g.offset!),
+              g.payment == null ? '待核算' : _money(g.payment!),
+            ],
+          );
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columns: [
+          for (final header in headers) DataColumn(label: Text(header)),
+        ],
+        rows: [
+          for (final row in tableRows)
+            DataRow(
+              cells: [
+                for (final value in row)
+                  DataCell(Text(value.isEmpty ? '—' : value)),
+              ],
+            ),
+        ],
       ),
     );
   }
@@ -552,7 +731,10 @@ class _NativeReimbursementSummaryPageState
                   style: DunesTypography.sans(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.resolve(context, const Color(0xFF312249)),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF312249),
+                    ),
                     context: context,
                   ),
                 ),

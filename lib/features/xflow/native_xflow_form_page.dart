@@ -603,6 +603,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     final template = _template;
     if (template == null) return;
     XflowLinkage.recompute(template.fields, template.layout, _values);
+    if (widget.templateKey == kElectronicReimbursementTemplateKey) {
+      applyElectronicReimbursementSettlement(_values);
+    }
   }
 
   Future<XflowTemplateDetail> _applySubmitterDefaults(

@@ -15,7 +15,28 @@ const _overlayKeys = {
   'advanceNo',
   'advanceReason',
   'remainingAdvanceAmount',
+  'offsetAmount',
 };
+
+/// 费用类型下拉，和报销明细汇总表的列一致。
+const kReimbursementExpenseTypes = [
+  '招待费',
+  '差旅住宿',
+  '差旅路费',
+  '市内交通',
+  '差旅打车',
+  '团建',
+  '入职体检',
+  '办公费',
+  '福利',
+  '测试费',
+  '公司车辆',
+];
+
+final _expenseTypeOptions = [
+  for (final name in kReimbursementExpenseTypes)
+    {'label': name, 'value': name},
+];
 
 const _attachmentTemplateMeta = <String, String>{
   'templateUrl':
@@ -59,28 +80,53 @@ const _fieldOverlays = <String, Map<String, dynamic>>{
       'titleContains': '借款',
       'templateKey': 'loan-request,loan-application,advance-request',
       'businessType': 'LOAN_REQUEST,LOAN_APPLICATION,ADVANCE',
+      'entityField': 'applicantEntity',
     },
-    'fill': {
-      'advanceNo': 'advanceNo',
-      'advanceReason': 'advanceReason',
-      'remainingAdvanceAmount': 'remainingAdvanceAmount',
-    },
-    'remoteSearch': {
-      'path': '/xflow/submissions/mine',
-      'labelFields': ['code', 'title'],
-      'valueFields': ['code'],
-      'allowManual': false,
       'fill': {
         'advanceNo': 'advanceNo',
         'advanceReason': 'advanceReason',
         'remainingAdvanceAmount': 'remainingAdvanceAmount',
+        'advanceEntity': 'advanceEntity',
+      },
+      'remoteSearch': {
+        'path': '/xflow/submissions/mine',
+        'labelFields': ['code', 'title'],
+        'valueFields': ['code'],
+        'allowManual': false,
+        'fill': {
+          'advanceNo': 'advanceNo',
+          'advanceReason': 'advanceReason',
+          'remainingAdvanceAmount': 'remainingAdvanceAmount',
+          'advanceEntity': 'advanceEntity',
+        },
       },
     },
-  },
   'advanceNo': {'readonly': true, 'placeholder': '选择借款申请单后自动带出'},
   'advanceReason': {'readonly': true, 'placeholder': '选择借款申请单后自动带出'},
   'remainingAdvanceAmount': {'readonly': true, 'placeholder': '选择借款申请单后自动带出'},
+  'offsetAmount': {
+    'readonly': true,
+    'placeholder': '按同一主体自动冲减，不超过本次报销金额',
+  },
 };
+
+const _settlementFields = <Map<String, dynamic>>[
+  {
+    'key': 'pendingOffsetAmount',
+    'label': '待冲抵借支金额',
+    'type': 'money',
+    'readonly': true,
+    'visibleWhen': 'hasAdvance=是',
+    'placeholder': '同一主体的待冲借支',
+  },
+  {
+    'key': 'paymentAmount',
+    'label': '本次打款金额',
+    'type': 'money',
+    'readonly': true,
+    'placeholder': '报销金额 − 待冲抵借支金额',
+  },
+];
 
 XflowTemplateDetail applyElectronicReimbursementTemplate(
   XflowTemplateDetail template,
@@ -108,7 +154,7 @@ List<XflowField> applyElectronicReimbursementFieldRules(
 ) {
   if (templateKey != kElectronicReimbursementTemplateKey) return fields;
   final hasDepartment = fields.any((field) => field.key == 'applicantDepartment');
-  return [
+  final mapped = [
     for (final field in fields)
       if (field.key == 'applicantRank' && !hasDepartment)
         XflowField.fromJson({
@@ -120,8 +166,61 @@ List<XflowField> applyElectronicReimbursementFieldRules(
       else if (_overlayKeys.contains(field.key))
         XflowField.fromJson({...field.raw, ...?_fieldOverlays[field.key]})
       else
-        _withInvoiceOcrUploads(field),
+        _withExpenseTypeSelect(_withInvoiceOcrUploads(field)),
   ];
+  return _withSettlementFields(mapped);
+}
+
+List<XflowField> _withSettlementFields(List<XflowField> fields) {
+  final keys = {for (final field in fields) field.key};
+  if (!keys.contains('reimbursementAmount')) return fields;
+  if (keys.contains('paymentAmount') && keys.contains('pendingOffsetAmount')) {
+    return fields;
+  }
+  final extra = [
+    for (final raw in _settlementFields)
+      if (!keys.contains(raw['key'])) XflowField.fromJson(raw),
+  ];
+  if (extra.isEmpty) return fields;
+  final out = <XflowField>[];
+  var inserted = false;
+  for (final field in fields) {
+    out.add(field);
+    if (!inserted &&
+        (field.key == 'offsetAmount' || field.key == 'remainingAdvanceAmount')) {
+      out.addAll(extra);
+      inserted = true;
+    }
+  }
+  if (!inserted) out.addAll(extra);
+  return out;
+}
+
+/// 报销项目里的费用类型固定为单选下拉，不改其他列。
+XflowField _withExpenseTypeSelect(XflowField field) {
+  if (field.key != 'expenseItems') return field;
+  final raw = Map<String, dynamic>.from(field.raw);
+  final columns = raw['columns'];
+  if (columns is! List) return field;
+  final next = <dynamic>[];
+  var changed = false;
+  for (final col in columns) {
+    if (col is! Map) {
+      next.add(col);
+      continue;
+    }
+    final map = Map<String, dynamic>.from(col);
+    if ('${map['key'] ?? ''}' == 'expenseType') {
+      map['type'] = 'select';
+      map['options'] = _expenseTypeOptions;
+      map['placeholder'] = '请选择费用类型';
+      changed = true;
+    }
+    next.add(map);
+  }
+  if (!changed) return field;
+  raw['columns'] = next;
+  return XflowField.fromJson(raw);
 }
 
 /// 电子报销「关联发票」固定走识别。模板设计器里的开关写在列的 meta 上，
@@ -249,6 +348,16 @@ const _fillAliases = <String, List<String>>{
     'balance',
     'unpaidAmount',
   ],
+  'advanceEntity': [
+    'advanceEntity',
+    'applicantEntity',
+    'paySubject',
+    'payEntity',
+    'borrowSubject',
+    'companyEntity',
+    'entity',
+    'loanEntity',
+  ],
 };
 
 Map<String, dynamic> flattenApprovedDocSource(
@@ -298,6 +407,75 @@ String orgDepartmentText(Map<String, dynamic>? user) {
   if (user == null) return '';
   return '${user['departmentName'] ?? user['department'] ?? user['deptName'] ?? user['dept'] ?? ''}'
       .trim();
+}
+
+/// 借支单上的打款/借款主体。哪个主体打款，就只冲这个主体的借支。
+String advanceEntityText(Map<String, dynamic> source) {
+  for (final key in _fillAliases['advanceEntity'] ?? const <String>[]) {
+    final value = source[key];
+    if (value == null) continue;
+    final text = value is String ? value.trim() : '$value'.trim();
+    if (text.isEmpty || text == 'null') continue;
+    if (value is Map) {
+      final named = '${value['name'] ?? value['label'] ?? value['title'] ?? ''}'
+          .trim();
+      if (named.isNotEmpty) return named;
+    }
+    return text;
+  }
+  return '';
+}
+
+double _settlementMoney(dynamic value) {
+  if (value is num) return value.toDouble();
+  final text = '$value'.replaceAll(',', '').replaceAll('¥', '').trim();
+  return double.tryParse(text) ?? 0;
+}
+
+String _settlementText(dynamic value) {
+  if (value is Map) {
+    return '${value['name'] ?? value['label'] ?? value['title'] ?? value['value'] ?? ''}'
+        .trim();
+  }
+  return '$value'.trim();
+}
+
+/// 本次打款金额 = 本次报销金额 − 同一主体的待冲抵借支。主体不一致时不冲减。
+void applyElectronicReimbursementSettlement(Map<String, dynamic> values) {
+  final amount = _settlementMoney(values['reimbursementAmount']);
+  final entity = _settlementText(values['applicantEntity']);
+  final advanceEntity = _settlementText(values['advanceEntity']);
+  final hasAdvance = _settlementText(values['hasAdvance']) == '是';
+  final mismatch = hasAdvance &&
+      entity.isNotEmpty &&
+      advanceEntity.isNotEmpty &&
+      entity != advanceEntity;
+  if (mismatch) {
+    values['advanceApplicationNo'] = null;
+    values['advanceNo'] = '';
+    values['advanceReason'] = '';
+    values['remainingAdvanceAmount'] = '';
+    values['advanceEntity'] = '';
+  }
+  final pending = hasAdvance && !mismatch
+      ? _settlementMoney(values['remainingAdvanceAmount'])
+      : 0.0;
+  final offset = pending <= 0
+      ? 0.0
+      : (pending < amount ? pending : amount);
+  if (!hasAdvance || mismatch) {
+    values['pendingOffsetAmount'] = '';
+    values['offsetAmount'] = '';
+  } else {
+    values['pendingOffsetAmount'] = offset.toStringAsFixed(2);
+    values['offsetAmount'] = offset.toStringAsFixed(2);
+  }
+  if ('${values['reimbursementAmount'] ?? ''}'.trim().isEmpty) {
+    values['paymentAmount'] = '';
+    return;
+  }
+  final pay = amount - offset;
+  values['paymentAmount'] = (pay < 0 ? 0 : pay).toStringAsFixed(2);
 }
 
 void applySubmitterDefaults({

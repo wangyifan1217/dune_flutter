@@ -155,10 +155,7 @@ void main() {
       values: values,
       userId: 7,
       displayName: '王奕凡',
-      profile: {
-        'positionName': '后端工程师',
-        'departmentName': '技术中心',
-      },
+      profile: {'positionName': '后端工程师', 'departmentName': '技术中心'},
     );
     expect(values['applicant'], {'userId': 7, 'name': '王奕凡'});
     expect(values['applicantPosition'], '后端工程师');
@@ -179,7 +176,8 @@ void main() {
           'key': 'supportingAttachments',
           'type': 'upload',
           'meta': {
-            'templateUrl': '/api/v1/xflow/templates/electronic-reimbursement/expense-template',
+            'templateUrl':
+                '/api/v1/xflow/templates/electronic-reimbursement/expense-template',
             'templateName': '自定义模板.xlsx',
             'templateLabel': '下载费用模板',
           },
@@ -211,6 +209,47 @@ void main() {
     );
     final column = fields.single.columnsAsFields.single;
     expect(xflowIsInvoiceField(column), isTrue);
+  });
+
+  test('uses the expense category dropdown from the summary template', () {
+    final fields = applyElectronicReimbursementFieldRules(
+      'electronic-reimbursement',
+      [
+        XflowField.fromJson({
+          'key': 'expenseItems',
+          'type': 'dynamicList',
+          'columns': [
+            {'key': 'expenseType', 'label': '费用类型', 'type': 'multiSelect'},
+            {'key': 'invoiceDetail', 'label': '发票明细', 'type': 'text'},
+          ],
+        }),
+      ],
+    );
+    final columns = fields.single.columnsAsFields;
+    expect(columns.first.type, 'select');
+    expect(
+      columns.first.options.map((option) => option.value),
+      containsAll(['招待费', '差旅住宿', '差旅路费', '差旅打车', '公司车辆']),
+    );
+    expect(columns.last.type, 'text');
+  });
+
+  test('settlement preview caps the offset and clears a different payer', () {
+    final values = <String, dynamic>{
+      'hasAdvance': '是',
+      'applicantEntity': '甲公司',
+      'advanceEntity': '甲公司',
+      'remainingAdvanceAmount': '150.00',
+      'reimbursementAmount': '100.00',
+      'advanceApplicationNo': {'businessId': 10},
+    };
+    applyElectronicReimbursementSettlement(values);
+    expect(values['pendingOffsetAmount'], '100.00');
+    expect(values['paymentAmount'], '0.00');
+    values['applicantEntity'] = '乙公司';
+    applyElectronicReimbursementSettlement(values);
+    expect(values['advanceApplicationNo'], isNull);
+    expect(values['paymentAmount'], '100.00');
   });
 
   test('parses content-disposition chinese filename', () {

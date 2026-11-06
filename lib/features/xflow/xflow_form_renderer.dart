@@ -813,6 +813,19 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     };
   }
 
+  String _entityScope(XflowField field) {
+    final meta = field.raw['meta'];
+    if (meta is! Map) return '';
+    final key = '${meta['entityField'] ?? ''}'.trim();
+    if (key.isEmpty) return '';
+    final value = widget.values[key];
+    if (value is Map) {
+      return '${value['name'] ?? value['label'] ?? value['title'] ?? ''}'.trim();
+    }
+    final text = '${value ?? ''}'.trim();
+    return text == 'null' ? '' : text;
+  }
+
   String? _userRoleFilter(XflowField field) {
     final raw = field.raw;
     for (final key in ['roleCode', 'allowedRole', 'userRoleCode']) {
@@ -842,6 +855,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
             field.raw['dataSource']?.toString() == kApprovedMineDataSource,
         meta: meta is Map ? Map<String, dynamic>.from(meta) : null,
         fill: {...?field.remoteSearch?.fill, ..._rawFill(field)},
+        currentEntity: _entityScope(field),
+        currentAmount: '${widget.values['reimbursementAmount'] ?? ''}',
         onChanged: (v) => widget.onChanged(field.key, v),
         onPatch: (patch) => patch.forEach(widget.onChanged),
       ),
@@ -1402,7 +1417,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         col,
         _XflowSelectPicker(
           options: col.options,
-          value: group[col.key]?.toString() ?? '',
+          value: group[col.key] is List
+              ? (group[col.key] as List).join('、')
+              : group[col.key]?.toString() ?? '',
           placeholder: col.placeholder.isEmpty ? '请选择' : col.placeholder,
           readonly: col.readonly,
           onChanged: (v) => patch({col.key: v}),
@@ -2788,6 +2805,8 @@ class _XflowProposalPicker extends StatefulWidget {
     this.mineApproved = false,
     this.meta,
     this.fill = const {},
+    this.currentEntity = '',
+    this.currentAmount = '',
     this.onPatch,
   });
 
@@ -2799,6 +2818,8 @@ class _XflowProposalPicker extends StatefulWidget {
   final bool mineApproved;
   final Map<String, dynamic>? meta;
   final Map<String, String> fill;
+  final String currentEntity;
+  final String currentAmount;
   final void Function(Map<String, dynamic> patch)? onPatch;
 
   @override
@@ -2950,6 +2971,34 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
       }
     }
     final source = flattenApprovedDocSource(row, formData);
+    if (widget.meta?['entityField'] != null) {
+      if (widget.service == null || widget.currentEntity.trim().isEmpty || widget.currentAmount.trim().isEmpty) {
+        if (mounted) showDunesToast(context, '请先填写报销主体和报销金额', kind: DunesToastKind.error);
+        return;
+      }
+      try {
+        source.addAll(await widget.service!.previewReimbursementAdvance(
+          loanId: id, entity: widget.currentEntity.trim(), amount: widget.currentAmount.trim(),
+        ));
+      } catch (error) {
+        if (mounted) showDunesToast(context, '$error', kind: DunesToastKind.error);
+        return;
+      }
+    }
+    final pickedEntity = advanceEntityText(source);
+    final current = widget.currentEntity.trim();
+    if (current.isNotEmpty &&
+        pickedEntity.isNotEmpty &&
+        current != pickedEntity) {
+      if (!mounted) return;
+      showDunesToast(context, '这张借支属于$pickedEntity，只能冲抵$current的报销',
+          kind: DunesToastKind.error);
+      setState(() {
+        _results = const [];
+        _loading = false;
+      });
+      return;
+    }
     final payload = <String, dynamic>{
       'proposalId': id,
       'businessId': id,

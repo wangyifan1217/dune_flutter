@@ -33,6 +33,21 @@ class XflowService {
     this.templateKey = salesTemplateKey,
   }) : _client = client ?? http.Client();
 
+  Future<Map<String, dynamic>> previewReimbursementAdvance({
+    required int loanId,
+    required String entity,
+    required String amount,
+  }) {
+    final query = Uri(
+      queryParameters: {
+        'loanId': '$loanId',
+        'entity': entity,
+        'amount': amount,
+      },
+    ).query;
+    return _request('/reimbursement-advance-preview?$query');
+  }
+
   static const salesTemplateKey = 'sales-proposal';
   static const salesProposalMenuKey = '/business/proposals/new';
   static const pageModeExcelUpload = 'excel-upload';

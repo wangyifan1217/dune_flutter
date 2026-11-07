@@ -126,4 +126,64 @@ void main() {
     expect(merged['gmv'], [0, 10, 20, 30, 40]);
     expect(history.hasMore, isFalse);
   });
+
+  test('周用星期一日期对上 YEARWEEK，标签保持原样', () {
+    expect(lighthouseMysqlYearWeekMode1(DateTime(2024, 11, 4)), 202445);
+    expect(lighthouseMysqlYearWeekMode1(DateTime(2023, 1, 1)), 202300);
+    expect(lighthouseMysqlYearWeekMode1(DateTime(2018, 12, 31)), 201901);
+
+    final match = lighthouseMatchHeroPointTrend(
+      selectedKey: '2024-11-04',
+      selectedLabel: '11.04–11.10',
+      keys: const ['202444', '202445.0'],
+      labels: const ['10.28', '11.04'],
+    );
+    expect(match.indices, [1]);
+    expect(match.previousIndices, isNull);
+  });
+
+  test('季把行趋势里的月份加总，缺月时不编造', () {
+    final match = lighthouseMatchHeroPointTrend(
+      selectedKey: '2026-Q4',
+      selectedLabel: '2026.Q4',
+      keys: const ['2026-07', '2026-08', '2026-09', '2026-10', '2026-11'],
+      labels: const ['2026.07', '2026.08', '2026.09', '2026.10', '2026.11'],
+    );
+    expect(match.indices, [3, 4]);
+    expect(match.previousIndices, [0, 1, 2]);
+
+    final missing = lighthouseMatchHeroPointTrend(
+      selectedKey: '2025-Q1',
+      selectedLabel: '2025.Q1',
+      keys: const ['2026-10', '2026-11'],
+      labels: const ['2026.10', '2026.11'],
+    );
+    expect(missing.isEmpty, isTrue);
+  });
+
+  test('区间按日、周、月三种行趋势键对齐，日键仍精确匹配', () {
+    final day = lighthouseMatchHeroPointTrend(
+      selectedKey: '2026-11-06',
+      selectedLabel: '11.06',
+      keys: const ['2026-11-05', '2026-11-06'],
+      labels: const ['11.05', '11.06'],
+    );
+    expect(day.indices, [1]);
+
+    final week = lighthouseMatchHeroPointTrend(
+      selectedKey: '2024-11-06',
+      selectedLabel: '11.06',
+      keys: const ['202444', '202445'],
+      labels: const ['10.28', '11.04'],
+    );
+    expect(week.indices, [1]);
+
+    final month = lighthouseMatchHeroPointTrend(
+      selectedKey: '2026-11-06',
+      selectedLabel: '11.06',
+      keys: const ['2026-10', '2026-11'],
+      labels: const ['2026.10', '2026.11'],
+    );
+    expect(month.indices, [1]);
+  });
 }

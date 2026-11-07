@@ -18933,8 +18933,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     return List<Map<String, dynamic>>.from(rows);
   }
 
-  /// Hero 选中一个日/月点时，仅给账本显示用的行覆盖对应桶指标。
+  /// Hero 选中一个历史桶时，仅给账本显示用的行覆盖对应桶指标。
   /// 页面其它聚合（资管资产、筛选范围、分享快照等）继续使用整期行数据。
+  /// 图表上的键和标签不改；对不齐的行保留整期数字。
   List<Map<String, dynamic>> _rowsAtSelectedHeroPoint(
     List<Map<String, dynamic>> rows,
   ) {
@@ -18942,7 +18943,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     if (selected == null ||
         _detailKey != null ||
         widget.sharedCard != null ||
-        _isCustomRange ||
         !const {'product', 'supply', 'channel'}.contains(_tab)) {
       return rows;
     }
@@ -18965,28 +18965,24 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         .map((row) {
           final trend = _resolvedRowTrend(row);
           if (trend == null) {
-            return Map<String, dynamic>.from(row)
-              ..['_heroPointMetricAvailability'] = const <String>[];
+            return Map<String, dynamic>.from(row);
           }
           List<String> strings(Object? value) => value is List
               ? value.map((item) => item.toString()).toList(growable: false)
               : const <String>[];
           final keys = strings(trend['keys']);
           final labels = strings(trend['labels'] ?? trend['xLabels']);
-          var index = keys.indexOf(selectedKey);
-          if (index < 0 && selectedLabel.isNotEmpty) {
-            index = labels.indexOf(selectedLabel);
+          final match = lighthouseMatchHeroPointTrend(
+            selectedKey: selectedKey,
+            selectedLabel: selectedLabel,
+            keys: keys,
+            labels: labels,
+          );
+          if (match.isEmpty) {
+            // 周期跨度不同或缺少可比日期时，继续显示现有列表值，避免把整行清空。
+            return Map<String, dynamic>.from(row);
           }
-          if (index < 0 &&
-              (keys.length == heroKeys.length ||
-                  (selectedLabel.isNotEmpty &&
-                      labels.length == heroLabels.length))) {
-            index = selected;
-          }
-          if (index < 0) {
-            return Map<String, dynamic>.from(row)
-              ..['_heroPointMetricAvailability'] = const <String>[];
-          }
+          final index = match.indices.length == 1 ? match.indices.first : -1;
 
           const metricKeys = <String>[
             'sales',
@@ -19009,6 +19005,20 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           }
           next['costTotal'] = null;
           next['cost'] = null;
+          double? valueAt(List<double> series) {
+            if (match.previousIndices == null && index >= 0) {
+              return index < series.length ? series[index] : null;
+            }
+            var seen = false;
+            var total = 0.0;
+            for (final point in match.indices) {
+              if (point < 0 || point >= series.length) continue;
+              seen = true;
+              total += series[point];
+            }
+            return seen ? total : null;
+          }
+
           for (final key in metricKeys) {
             final series = _seriesFromTrendMap(
               trend,
@@ -19016,8 +19026,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               group: row['group']?.toString(),
             );
             seriesByKey[key] = series;
-            if (index < series.length) {
-              final value = series[index];
+            final value = valueAt(series);
+            if (value != null) {
               next[key] = value;
               availableMetrics.add(key);
               if (key == 'businessCost') next['cost'] = value;
@@ -19027,35 +19037,46 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           // ROI 由所选点的利润和成本合计重算，不能沿用整期比例。
           final profitSeries = seriesByKey['profit'] ?? const <double>[];
           final costSeries = seriesByKey['totalCost'] ?? const <double>[];
-          if (index < profitSeries.length && index < costSeries.length) {
-            final cost = costSeries[index];
+          final profit = valueAt(profitSeries);
+          final cost = valueAt(costSeries);
+          if (profit != null && cost != null) {
             next['rate'] = cost.abs() >= _kRoiAnchorMinYuan
-                ? profitSeries[index] / cost * 100
+                ? profit / cost * 100
                 : 0.0;
           }
 
-          // 所选点的环比与主图对齐：日线对上月同日，其它周期对前一桶。
+          // 所选点的环比与主图对齐：日线对上月同日，季 / 年对上一季 / 上一年，其余对前一桶。
           final deltas = <String, dynamic>{};
           for (final entry in seriesByKey.entries) {
             final series = entry.value;
-            if (index >= series.length) continue;
-            final previousIndex =
-                _dayComparesPrevMonth && keys.length == series.length
-                ? lighthouseSameDayPrevMonthIndex(
-                    lighthouseDayAxisDates(keys),
-                    index,
-                  )
-                : (index > 0 ? index - 1 : null);
-            if (previousIndex == null ||
-                previousIndex < 0 ||
-                previousIndex >= series.length ||
-                series[previousIndex].abs() < 1e-9) {
-              continue;
+            final current = valueAt(series);
+            if (current == null) continue;
+            double? previous;
+            if (match.previousIndices != null) {
+              var seen = false;
+              var total = 0.0;
+              for (final point in match.previousIndices!) {
+                if (point < 0 || point >= series.length) continue;
+                seen = true;
+                total += series[point];
+              }
+              previous = seen ? total : null;
+            } else if (index >= 0 && index < series.length) {
+              final previousIndex =
+                  _dayComparesPrevMonth && keys.length == series.length
+                  ? lighthouseSameDayPrevMonthIndex(
+                      lighthouseDayAxisDates(keys),
+                      index,
+                    )
+                  : (index > 0 ? index - 1 : null);
+              if (previousIndex != null &&
+                  previousIndex >= 0 &&
+                  previousIndex < series.length) {
+                previous = series[previousIndex];
+              }
             }
-            deltas[entry.key] =
-                (series[index] - series[previousIndex]) /
-                series[previousIndex].abs() *
-                100;
+            if (previous == null || previous.abs() < 1e-9) continue;
+            deltas[entry.key] = (current - previous) / previous.abs() * 100;
           }
           next['deltas'] = deltas;
           next['deltaPct'] = deltas['profit'];

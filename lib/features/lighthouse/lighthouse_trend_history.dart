@@ -407,3 +407,224 @@ List<double> _doubleList(dynamic raw) {
   if (raw is! List) return const <double>[];
   return [for (final e in raw) e is num ? e.toDouble() : 0.0];
 }
+
+/// Hero 上选中的一格，对应到行趋势里的哪些下标。
+///
+/// 只用于取值，不改图表上的键和标签。日 / 月键相同，直接对上；
+/// 周的主图键是星期一，行趋势是 MySQL `YEARWEEK(..., 1)`；
+/// 季 / 年的主图是一季或一年，行趋势仍是月，把落在里面的月份加总。
+class LighthouseHeroPointMatch {
+  const LighthouseHeroPointMatch({
+    this.indices = const <int>[],
+    this.previousIndices,
+  });
+
+  final List<int> indices;
+
+  /// 季 / 年加总时，环比用上一季或上一年里已经有的月份。
+  /// 为 null 时仍按前一个桶（日线按上月同日）计算。
+  final List<int>? previousIndices;
+
+  bool get isEmpty => indices.isEmpty;
+}
+
+LighthouseHeroPointMatch lighthouseMatchHeroPointTrend({
+  required String selectedKey,
+  required String selectedLabel,
+  required List<String> keys,
+  required List<String> labels,
+}) {
+  final normKeys = [for (final key in keys) _trendBucketKey(key)];
+  final selected = _trendBucketKey(selectedKey);
+  final exact = normKeys.indexOf(selected);
+  if (exact >= 0) {
+    return LighthouseHeroPointMatch(indices: <int>[exact]);
+  }
+  if (selectedLabel.isNotEmpty) {
+    final byLabel = labels.indexOf(selectedLabel);
+    if (byLabel >= 0) {
+      return LighthouseHeroPointMatch(indices: <int>[byLabel]);
+    }
+  }
+
+  final quarter =
+      _parseQuarterKey(selected) ?? _parseQuarterLabel(selectedLabel);
+  if (quarter != null) {
+    final current = _monthIndicesIn(
+      normKeys,
+      labels,
+      year: quarter.year,
+      quarter: quarter.quarter,
+    );
+    if (current.isEmpty) return const LighthouseHeroPointMatch();
+    final previousQuarter = quarter.quarter == 1 ? 4 : quarter.quarter - 1;
+    final previousYear = quarter.quarter == 1 ? quarter.year - 1 : quarter.year;
+    return LighthouseHeroPointMatch(
+      indices: current,
+      previousIndices: _monthIndicesIn(
+        normKeys,
+        labels,
+        year: previousYear,
+        quarter: previousQuarter,
+      ),
+    );
+  }
+
+  final year = _parseYearKey(selected);
+  if (year != null) {
+    final current = _monthIndicesIn(normKeys, labels, year: year);
+    if (current.isNotEmpty) {
+      return LighthouseHeroPointMatch(
+        indices: current,
+        previousIndices: _monthIndicesIn(normKeys, labels, year: year - 1),
+      );
+    }
+  }
+
+  final day = _parseDayKey(selected);
+  if (day != null) {
+    final weekKey = lighthouseMysqlYearWeekMode1(day).toString();
+    final byWeek = normKeys.indexOf(weekKey);
+    if (byWeek >= 0) {
+      return LighthouseHeroPointMatch(indices: <int>[byWeek]);
+    }
+    if (_dateKeysAreWeekStarts(normKeys)) {
+      final monday = _mondayOf(day);
+      final mondayKey = _formatDay(monday);
+      final byMonday = normKeys.indexOf(mondayKey);
+      if (byMonday >= 0) {
+        return LighthouseHeroPointMatch(indices: <int>[byMonday]);
+      }
+    }
+    final monthKey = _formatMonth(day);
+    final byMonth = normKeys.indexOf(monthKey);
+    if (byMonth >= 0) {
+      return LighthouseHeroPointMatch(indices: <int>[byMonth]);
+    }
+  }
+  return const LighthouseHeroPointMatch();
+}
+
+/// MySQL `YEARWEEK(date, 1)`：周一起始，年初不足 4 天的那几天是第 0 周。
+int lighthouseMysqlYearWeekMode1(DateTime date) {
+  final day = DateTime(date.year, date.month, date.day);
+  final iso = _isoWeek(day);
+  if (day.month == DateTime.january && iso.year < day.year) {
+    return day.year * 100;
+  }
+  return iso.year * 100 + iso.week;
+}
+
+String _trendBucketKey(String raw) {
+  final text = raw.trim();
+  final whole = RegExp(r'^(\d+)\.0+$').firstMatch(text);
+  return whole?.group(1) ?? text;
+}
+
+({int year, int week}) _isoWeek(DateTime day) {
+  final thursday = day.add(Duration(days: DateTime.thursday - day.weekday));
+  final isoYear = thursday.year;
+  final jan4 = DateTime(isoYear, 1, 4);
+  final week1Thursday = jan4.add(
+    Duration(days: DateTime.thursday - jan4.weekday),
+  );
+  final week = thursday.difference(week1Thursday).inDays ~/ 7 + 1;
+  return (year: isoYear, week: week);
+}
+
+({int year, int quarter})? _parseQuarterKey(String key) {
+  final match = RegExp(r'^(\d{4})-Q([1-4])$').firstMatch(key);
+  if (match == null) return null;
+  return (
+    year: int.parse(match.group(1)!),
+    quarter: int.parse(match.group(2)!),
+  );
+}
+
+({int year, int quarter})? _parseQuarterLabel(String label) {
+  final match = RegExp(r'^(\d{4})\.Q([1-4])$').firstMatch(label.trim());
+  if (match == null) return null;
+  return (
+    year: int.parse(match.group(1)!),
+    quarter: int.parse(match.group(2)!),
+  );
+}
+
+int? _parseYearKey(String key) {
+  final match = RegExp(r'^(\d{4})$').firstMatch(key);
+  if (match == null) return null;
+  return int.parse(match.group(1)!);
+}
+
+DateTime? _parseDayKey(String key) {
+  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(key);
+  if (match == null) return null;
+  final year = int.parse(match.group(1)!);
+  final month = int.parse(match.group(2)!);
+  final day = int.parse(match.group(3)!);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  final date = DateTime(year, month, day);
+  if (date.year != year || date.month != month || date.day != day) {
+    return null;
+  }
+  return date;
+}
+
+({int year, int month})? _parseMonthKey(String key) {
+  final match = RegExp(r'^(\d{4})-(\d{2})$').firstMatch(key);
+  if (match == null) return null;
+  final month = int.parse(match.group(2)!);
+  if (month < 1 || month > 12) return null;
+  return (year: int.parse(match.group(1)!), month: month);
+}
+
+({int year, int month})? _parseMonthLabel(String label) {
+  final match = RegExp(r'^(\d{4})\.(\d{2})$').firstMatch(label.trim());
+  if (match == null) return null;
+  final month = int.parse(match.group(2)!);
+  if (month < 1 || month > 12) return null;
+  return (year: int.parse(match.group(1)!), month: month);
+}
+
+List<int> _monthIndicesIn(
+  List<String> keys,
+  List<String> labels, {
+  required int year,
+  int? quarter,
+}) {
+  final hits = <int>[];
+  for (var i = 0; i < keys.length; i++) {
+    final month =
+        _parseMonthKey(keys[i]) ??
+        (i < labels.length ? _parseMonthLabel(labels[i]) : null);
+    if (month == null || month.year != year) continue;
+    if (quarter != null && ((month.month - 1) ~/ 3 + 1) != quarter) continue;
+    hits.add(i);
+  }
+  return hits;
+}
+
+bool _dateKeysAreWeekStarts(List<String> keys) {
+  var dates = 0;
+  for (final key in keys) {
+    final day = _parseDayKey(key);
+    if (day == null) continue;
+    dates++;
+    if (day.weekday != DateTime.monday) return false;
+  }
+  return dates > 0;
+}
+
+DateTime _mondayOf(DateTime day) =>
+    DateTime(day.year, day.month, day.day - (day.weekday - DateTime.monday));
+
+String _formatDay(DateTime day) {
+  final month = day.month.toString().padLeft(2, '0');
+  final date = day.day.toString().padLeft(2, '0');
+  return '${day.year}-$month-$date';
+}
+
+String _formatMonth(DateTime day) {
+  final month = day.month.toString().padLeft(2, '0');
+  return '${day.year}-$month';
+}

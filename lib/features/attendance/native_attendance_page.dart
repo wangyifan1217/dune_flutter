@@ -176,24 +176,7 @@ class _AttendanceSummaryCardState extends State<AttendanceSummaryCard> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: .16),
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: .19),
-                          ),
-                        ),
-                        child: Icon(
-                          done
-                              ? Icons.check_rounded
-                              : Icons.arrow_forward_rounded,
-                          color: Colors.white,
-                          size: 23,
-                        ),
-                      ),
+                      _PunchCta(onTap: widget.onTap),
                     ],
                   ),
                 ),
@@ -204,6 +187,76 @@ class _AttendanceSummaryCardState extends State<AttendanceSummaryCard> {
       ),
     );
   }
+}
+
+class _PunchCta extends StatefulWidget {
+  const _PunchCta({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_PunchCta> createState() => _PunchCtaState();
+}
+
+class _PunchCtaState extends State<_PunchCta>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1250),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _controller,
+    builder: (context, child) =>
+        Transform.scale(scale: .97 + _controller.value * .04, child: child),
+    child: Material(
+      color: Colors.white.withValues(alpha: .16),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          widget.onTap();
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: 72,
+          height: 54,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: .24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.white.withValues(alpha: .08),
+                blurRadius: 14,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: const Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.fingerprint_rounded, color: Colors.white, size: 23),
+              SizedBox(height: 1),
+              Text(
+                '去打卡',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class NativeAttendancePage extends StatefulWidget {
@@ -272,7 +325,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
         _today = today;
         _wifiPunchStatus = lastPunch?.wifiStatus;
       });
-      if (locate && today.sites.isNotEmpty && !today.complete && !_locating) {
+      if (locate && today.sites.isNotEmpty && !_locating) {
         await _locate();
       }
     } catch (error) {
@@ -401,12 +454,42 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       return false;
     }
     if (_position!.accuracy <= 0 || _position!.accuracy > 100) return false;
-    return _today?.complete != true;
+    return true;
   }
+
+  String get _punchTypeForNow {
+    final today = _today;
+    if (today?.checkIn == null) return 'check_in';
+    return TimeOfDay.now().hour < 12 ? 'check_in' : 'check_out';
+  }
+
+  String get _punchLabel => _punchTypeForNow == 'check_in' ? '上班打卡' : '下班打卡';
 
   Future<void> _submit() async {
     if (!_canPunch) return;
-    final type = _today?.nextPunchType ?? 'check_in';
+    final type = _punchTypeForNow;
+    if (type == 'check_out' && _today?.checkOut == null) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: const Icon(Icons.wb_sunny_outlined, color: _attendancePurple),
+          title: const Text('已进入下班打卡时段'),
+          content: const Text('现在提交的记录将计为下班卡。确认继续吗？确认后仍可再次打卡。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('再想想'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.fingerprint_rounded),
+              label: const Text('确认打下班卡'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
     setState(() {
       _submitting = true;
       _message = null;
@@ -494,7 +577,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
     final distance = _distanceToNearest(site);
     final allDone = today?.complete == true;
     final noSites = today != null && today.sites.isEmpty;
-    final nextLabel = today?.nextPunchType == 'check_out' ? '下班打卡' : '上班打卡';
+    final nextLabel = _punchLabel;
     final surface = DunesColors.resolve(
       context,
       const Color(0xFFF7F5FA),
@@ -536,10 +619,10 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
                     _AttendanceHero(
                       date: today?.date ?? _dateNow(),
                       title: allDone ? '今日打卡已完成' : '让每一次到场，都有记录',
-                      subtitle: allDone
-                          ? '今天的上下班记录已安全保存'
-                          : noSites
+                      subtitle: noSites
                           ? '暂未配置可用的打卡地点'
+                          : allDone
+                          ? '上下班记录已保存，仍可补充打卡'
                           : '定位确认后即可完成$nextLabel',
                       complete: allDone,
                     ),
@@ -642,19 +725,14 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
                                   color: Colors.white,
                                 ),
                               )
-                            : Icon(
-                                allDone
-                                    ? Icons.check_rounded
-                                    : Icons.fingerprint_rounded,
-                                size: 23,
-                              ),
+                            : Icon(Icons.fingerprint_rounded, size: 23),
                         label: Text(
-                          allDone
-                              ? '今日打卡已完成'
-                              : _submitting
+                          _submitting
                               ? '正在提交打卡'
                               : _locating
                               ? '正在确认位置'
+                              : allDone
+                              ? '再次$nextLabel'
                               : nextLabel,
                           style: const TextStyle(
                             fontSize: 16,
@@ -1055,86 +1133,36 @@ class _LocationPanel extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 10),
-          _AttendanceDiagnosticRow(
-            label: 'GPS（纬度，经度）',
-            value: position == null
-                ? null
-                : '${position!.latitude.toStringAsFixed(6)}, ${position!.longitude.toStringAsFixed(6)}',
-            unavailable: locating ? '正在获取…' : '尚未获取',
-          ),
-          _AttendanceDiagnosticRow(
-            label: 'Wi-Fi 名称（SSID）',
-            value: wifi.ssid,
-            unavailable: locating ? '正在获取…' : '未读取到',
-          ),
-          _AttendanceDiagnosticRow(
-            label: 'Wi-Fi 接入点（BSSID）',
-            value: wifi.bssid,
-            unavailable: locating ? '正在获取…' : '未读取到',
-          ),
-          if (!locating && wifi.bssid == null)
-            Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: Text(
-                '请连接 Wi-Fi 并允许位置权限；部分手机或系统可能不提供 BSSID。',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: DunesColors.resolve(context, const Color(0xFF918C9B)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                inside
+                    ? Icons.location_on_rounded
+                    : Icons.location_searching_rounded,
+                size: 16,
+                color: inside
+                    ? const Color(0xFF21835C)
+                    : const Color(0xFFC67D34),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  locating
+                      ? '正在获取当前位置…'
+                      : selectedSite == null
+                      ? '附近没有可用的打卡地点'
+                      : selectedSite.name,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolve(context, _attendanceInk),
+                  ),
                 ),
               ),
-            ),
-          if (position != null || locating) ...[
-            const SizedBox(height: 14),
-            Container(
-              height: 1,
-              color: DunesColors.resolve(context, const Color(0xFFF0EDF3)),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  inside
-                      ? Icons.location_on_rounded
-                      : Icons.location_searching_rounded,
-                  size: 17,
-                  color: inside
-                      ? const Color(0xFF21835C)
-                      : const Color(0xFFC67D34),
-                ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    locating
-                        ? '正在获取当前位置…'
-                        : selectedSite == null
-                        ? '附近没有可用的打卡地点'
-                        : selectedSite.name,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.resolve(context, _attendanceInk),
-                    ),
-                  ),
-                ),
-                if (distance != null)
-                  Text(
-                    '${distance!.round()} 米',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: DunesColors.resolve(
-                        context,
-                        const Color(0xFF918C9B),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            if (accuracy != null)
-              Padding(
-                padding: const EdgeInsets.only(left: 24, top: 4),
-                child: Text(
-                  '定位精度约 ${accuracy!.round()} 米',
+              if (distance != null)
+                Text(
+                  '${distance!.round()} 米 / ${selectedSite?.radiusMeters.round() ?? 0} 米',
                   style: TextStyle(
                     fontSize: 10,
                     color: DunesColors.resolve(
@@ -1143,48 +1171,95 @@ class _LocationPanel extends StatelessWidget {
                     ),
                   ),
                 ),
-              ),
-          ],
-          const SizedBox(height: 14),
-          Container(
-            height: 1,
-            color: DunesColors.resolve(context, const Color(0xFFF0EDF3)),
+            ],
           ),
-          const SizedBox(height: 11),
-          Row(
-            children: [
-              Icon(
-                Icons.wifi_rounded,
-                size: 17,
-                color: wifi.available
-                    ? const Color(0xFF21835C)
-                    : const Color(0xFF9A95A4),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              initiallyExpanded: false,
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              title: Text(
+                '查看定位与 Wi-Fi 明细',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, const Color(0xFF777283)),
+                ),
               ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  _wifiDescription(wifi, wifiPunchStatus),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFF777283),
+              children: [
+                _AttendanceDiagnosticRow(
+                  label: 'GPS（纬度，经度）',
+                  value: position == null
+                      ? null
+                      : '${position!.latitude.toStringAsFixed(6)}, ${position!.longitude.toStringAsFixed(6)}',
+                  unavailable: locating ? '正在获取…' : '尚未获取',
+                ),
+                _AttendanceDiagnosticRow(
+                  label: '手机定位精度',
+                  value: accuracy == null
+                      ? null
+                      : '约 ${accuracy!.round()} 米（服务端上限 100 米）',
+                  unavailable: locating ? '正在获取…' : '尚未获取',
+                ),
+                _AttendanceDiagnosticRow(
+                  label: 'Wi-Fi 名称（SSID）',
+                  value: wifi.ssid,
+                  unavailable: locating ? '正在获取…' : '未读取到',
+                ),
+                _AttendanceDiagnosticRow(
+                  label: 'Wi-Fi 接入点（BSSID）',
+                  value: wifi.bssid,
+                  unavailable: locating ? '正在获取…' : '未读取到',
+                ),
+                _AttendanceDiagnosticRow(
+                  label: '上次打卡 Wi-Fi',
+                  value: _wifiDescription(wifi, wifiPunchStatus),
+                  unavailable: '暂不可用',
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '围栏半径是地点中心到可打卡边界的距离；当前距离需在半径内。手机定位精度是 GPS 的误差估计，两者含义不同。Wi-Fi 仅作辅助凭据。',
+                    style: TextStyle(
+                      fontSize: 10,
+                      height: 1.45,
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF918C9B),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              Text(
-                '辅助凭据',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: DunesColors.resolve(context, const Color(0xFFAAA5B2)),
+                if (!locating && wifi.bssid == null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Text(
+                      '连接 Wi-Fi 并允许位置权限后，部分设备可提供接入点信息。',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF918C9B),
+                        ),
+                      ),
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: locating ? null : onLocate,
+                    icon: const Icon(Icons.my_location_rounded, size: 16),
+                    label: const Text('刷新定位和 Wi-Fi'),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           if (!inside && position != null && !noSites)
             Padding(
-              padding: const EdgeInsets.only(top: 9),
+              padding: const EdgeInsets.only(top: 3),
               child: Text(
                 '请移动到办公地点围栏内，再重新定位。',
                 style: TextStyle(
@@ -1193,14 +1268,6 @@ class _LocationPanel extends StatelessWidget {
                 ),
               ),
             ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: locating ? null : onLocate,
-              icon: const Icon(Icons.my_location_rounded, size: 16),
-              label: const Text('刷新定位和 Wi-Fi'),
-            ),
-          ),
         ],
       ),
     );

@@ -18933,6 +18933,138 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     return List<Map<String, dynamic>>.from(rows);
   }
 
+  /// Hero 选中一个日/月点时，仅给账本显示用的行覆盖对应桶指标。
+  /// 页面其它聚合（资管资产、筛选范围、分享快照等）继续使用整期行数据。
+  List<Map<String, dynamic>> _rowsAtSelectedHeroPoint(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final selected = _heroPointIndex;
+    if (selected == null ||
+        _detailKey != null ||
+        widget.sharedCard != null ||
+        _isCustomRange ||
+        !const {'product', 'supply', 'channel'}.contains(_tab)) {
+      return rows;
+    }
+    final heroMetrics = _heroSeriesMetrics;
+    final rawHeroKeys = heroMetrics['heroSeriesKeys'];
+    final heroKeys = rawHeroKeys is List
+        ? rawHeroKeys.map((value) => value.toString()).toList(growable: false)
+        : const <String>[];
+    if (selected < 0 || selected >= heroKeys.length) return rows;
+    final selectedKey = heroKeys[selected];
+    final rawHeroLabels = heroMetrics['heroSeriesLabels'];
+    final heroLabels = rawHeroLabels is List
+        ? rawHeroLabels.map((value) => value.toString()).toList(growable: false)
+        : const <String>[];
+    final selectedLabel = selected < heroLabels.length
+        ? heroLabels[selected]
+        : '';
+
+    return rows
+        .map((row) {
+          final trend = _resolvedRowTrend(row);
+          if (trend == null) {
+            return Map<String, dynamic>.from(row)
+              ..['_heroPointMetricAvailability'] = const <String>[];
+          }
+          List<String> strings(Object? value) => value is List
+              ? value.map((item) => item.toString()).toList(growable: false)
+              : const <String>[];
+          final keys = strings(trend['keys']);
+          final labels = strings(trend['labels'] ?? trend['xLabels']);
+          var index = keys.indexOf(selectedKey);
+          if (index < 0 && selectedLabel.isNotEmpty) {
+            index = labels.indexOf(selectedLabel);
+          }
+          if (index < 0 &&
+              (keys.length == heroKeys.length ||
+                  (selectedLabel.isNotEmpty &&
+                      labels.length == heroLabels.length))) {
+            index = selected;
+          }
+          if (index < 0) {
+            return Map<String, dynamic>.from(row)
+              ..['_heroPointMetricAvailability'] = const <String>[];
+          }
+
+          const metricKeys = <String>[
+            'sales',
+            'verifiedSales',
+            'gmv',
+            'prepaid',
+            'profit',
+            'totalCost',
+            'revenue',
+            'businessCost',
+            'netProfit',
+            'spread',
+            'projectCost',
+          ];
+          final next = Map<String, dynamic>.from(row);
+          final seriesByKey = <String, List<double>>{};
+          final availableMetrics = <String>[];
+          for (final key in metricKeys) {
+            next[key] = null;
+          }
+          next['costTotal'] = null;
+          next['cost'] = null;
+          for (final key in metricKeys) {
+            final series = _seriesFromTrendMap(
+              trend,
+              key,
+              group: row['group']?.toString(),
+            );
+            seriesByKey[key] = series;
+            if (index < series.length) {
+              final value = series[index];
+              next[key] = value;
+              availableMetrics.add(key);
+              if (key == 'businessCost') next['cost'] = value;
+            }
+          }
+          next['_heroPointMetricAvailability'] = availableMetrics;
+          // ROI 由所选点的利润和成本合计重算，不能沿用整期比例。
+          final profitSeries = seriesByKey['profit'] ?? const <double>[];
+          final costSeries = seriesByKey['totalCost'] ?? const <double>[];
+          if (index < profitSeries.length && index < costSeries.length) {
+            final cost = costSeries[index];
+            next['rate'] = cost.abs() >= _kRoiAnchorMinYuan
+                ? profitSeries[index] / cost * 100
+                : 0.0;
+          }
+
+          // 所选点的环比与主图对齐：日线对上月同日，其它周期对前一桶。
+          final deltas = <String, dynamic>{};
+          for (final entry in seriesByKey.entries) {
+            final series = entry.value;
+            if (index >= series.length) continue;
+            final previousIndex =
+                _dayComparesPrevMonth && keys.length == series.length
+                ? lighthouseSameDayPrevMonthIndex(
+                    lighthouseDayAxisDates(keys),
+                    index,
+                  )
+                : (index > 0 ? index - 1 : null);
+            if (previousIndex == null ||
+                previousIndex < 0 ||
+                previousIndex >= series.length ||
+                series[previousIndex].abs() < 1e-9) {
+              continue;
+            }
+            deltas[entry.key] =
+                (series[index] - series[previousIndex]) /
+                series[previousIndex].abs() *
+                100;
+          }
+          next['deltas'] = deltas;
+          next['deltaPct'] = deltas['profit'];
+          next['_deltaAvailable'] = deltas.isNotEmpty;
+          return next;
+        })
+        .toList(growable: false);
+  }
+
   /// 标签二根层始终是省级视图；分类只改变省份范围和顶部资产走势。
   bool get _supplyProvinceViewActive =>
       _tab == 'supply' &&
@@ -21065,11 +21197,59 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     );
   }
 
+  bool get _heroPointDrivesPeriodIsland =>
+      _heroPointIndex != null &&
+      _detailKey == null &&
+      widget.sharedCard == null &&
+      !_isCustomRange &&
+      const {'product', 'supply', 'channel'}.contains(_tab);
+
+  String? get _heroPointIslandLabel {
+    if (!_heroPointDrivesPeriodIsland) return null;
+    final index = _heroPointIndex!;
+    final keys = _heroSeriesMetrics['heroSeriesKeys'];
+    final count = keys is List ? keys.length : 0;
+    final labels = _heroTrendLabels(count);
+    return index >= 0 && index < labels.length ? labels[index] : null;
+  }
+
+  String? get _heroPointIslandRange {
+    if (!_heroPointDrivesPeriodIsland) return null;
+    final index = _heroPointIndex!;
+    final keys = _heroSeriesMetrics['heroSeriesKeys'];
+    if (keys is! List || index < 0 || index >= keys.length) return null;
+    final key = keys[index].toString();
+    final dateMatch = RegExp(r'^(\d{4})[-/](\d{1,2})(?:[-/](\d{1,2}))?$')
+        .firstMatch(key);
+    if (dateMatch == null) return _heroPointIslandLabel;
+    final year = int.tryParse(dateMatch.group(1)!);
+    final month = int.tryParse(dateMatch.group(2)!);
+    final day = int.tryParse(dateMatch.group(3) ?? '1');
+    if (year == null || month == null || day == null) {
+      return _heroPointIslandLabel;
+    }
+    final start = DateTime(year, month, day);
+    final endsAtDay = dateMatch.group(3) != null || _period == 'day';
+    if (endsAtDay) {
+      if (index == keys.length - 1 && _periodOffset == 0) {
+        return _selectedRangeLabel;
+      }
+      return '${_two(start.month)}.${_two(start.day)}';
+    }
+    final end = DateTime(year, month + 1, 0);
+    if (index == keys.length - 1 && _periodOffset == 0) {
+      return _selectedRangeLabel;
+    }
+    return '${_two(start.month)}.01–${_two(end.month)}.${_two(end.day)}';
+  }
+
   String get _islandName =>
-      _isCustomRange ? '区间' : _periodPillLabel(_period, _periodOffset);
+      _heroPointIslandLabel ??
+      (_isCustomRange ? '区间' : _periodPillLabel(_period, _periodOffset));
 
   String get _islandRange =>
-      _isCustomRange ? _customRangePillLabel() : _selectedRangeLabel;
+      _heroPointIslandRange ??
+      (_isCustomRange ? _customRangePillLabel() : _selectedRangeLabel);
 
   Duration _islandDur(int ms) => MediaQuery.disableAnimationsOf(context)
       ? Duration.zero
@@ -29346,7 +29526,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                     if (lighthouseHeroShowsDateStamp &&
                         rangeLabel.isNotEmpty) ...[
                       const SizedBox(width: 8),
-                      Flexible(child: _heroDateStamp(rangeLabel)),
+                      Flexible(
+                        child: _heroDateStamp(heroPointLabel ?? rangeLabel),
+                      ),
                     ],
                     if (showFilters && _activeHeroFilters().isNotEmpty) ...[
                       const SizedBox(width: 10),
@@ -38017,6 +38199,25 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   ///
   /// 返回 null = 该行没有这个口径的数据源，列表上显示「—」而不是 0.00万。
   double? _rowMetricValueOrNull(Map<String, dynamic> r, String key) {
+    final pointAvailability = r['_heroPointMetricAvailability'];
+    if (pointAvailability is List) {
+      final available = pointAvailability.map((value) => '$value').toSet();
+      final required = switch (key) {
+        'costTotal' => const {'totalCost'},
+        'rate' => const {'profit', 'totalCost'},
+        'grossMargin' => {'profit', _rowMarginBasis(r)},
+        'sales' ||
+        'verifiedSales' ||
+        'prepaid' ||
+        'profit' ||
+        'gmv' ||
+        'revenue' ||
+        'netProfit' ||
+        'spread' => {key},
+        _ => null,
+      };
+      if (required != null && !available.containsAll(required)) return null;
+    }
     switch (key) {
       case lighthouseTotalAssetsSortKey:
         return (r[lighthouseTotalAssetsSortKey] as num?)?.toDouble() ??
@@ -42367,7 +42568,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         ),
       );
     }
-    final rows = _ledgerSearchFiltered(_currentRows);
+    final baseRows = _ledgerSearchFiltered(_currentRows);
+    final rows = _rowsAtSelectedHeroPoint(baseRows);
     if (rows.isEmpty) {
       // 空列表要说清楚是「没有数据」还是「筛没了」—— 后者用户自己能修。
       return Padding(

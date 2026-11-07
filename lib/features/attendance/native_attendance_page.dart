@@ -281,6 +281,8 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
   bool _refreshing = false;
   bool _foreground = true;
   Timer? _refreshTimer;
+  Timer? _locationTimer;
+  bool _silentLocationRefreshing = false;
 
   @override
   void initState() {
@@ -292,13 +294,49 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
         unawaited(_load(silent: true, locate: false));
       }
     });
+    _locationTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_foreground &&
+          (ModalRoute.of(context)?.isCurrent ?? true) &&
+          _today?.sites.isNotEmpty == true &&
+          !_loading &&
+          !_refreshing &&
+          !_locating &&
+          !_submitting) {
+        unawaited(_refreshLocationSilently());
+      }
+    });
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _locationTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  Future<void> _refreshLocationSilently() async {
+    if (_silentLocationRefreshing || _locating || _submitting) return;
+    _silentLocationRefreshing = true;
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      final permission = await Geolocator.checkPermission();
+      if (permission != LocationPermission.always &&
+          permission != LocationPermission.whileInUse) {
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 12),
+        ),
+      );
+      if (mounted) setState(() => _position = position);
+    } catch (_) {
+      // Keep the last position on a transient refresh failure; submit rechecks it.
+    } finally {
+      _silentLocationRefreshing = false;
+    }
   }
 
   @override

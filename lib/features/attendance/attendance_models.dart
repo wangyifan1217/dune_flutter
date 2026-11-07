@@ -59,12 +59,16 @@ class AttendanceToday {
   const AttendanceToday({
     required this.date,
     required this.sites,
+    this.startTime = '',
+    this.endTime = '',
     this.checkIn,
     this.checkOut,
   });
 
   final String date;
   final List<AttendanceSite> sites;
+  final String startTime;
+  final String endTime;
   final AttendancePunch? checkIn;
   final AttendancePunch? checkOut;
 
@@ -75,8 +79,11 @@ class AttendanceToday {
     Map<String, dynamic>? map(Object? value) =>
         value is Map ? Map<String, dynamic>.from(value) : null;
     final rawSites = json['sites'];
+    final schedule = map(json['schedule']);
     return AttendanceToday(
       date: '${json['date'] ?? ''}',
+      startTime: '${schedule?['startTime'] ?? ''}',
+      endTime: '${schedule?['endTime'] ?? ''}',
       sites: rawSites is List
           ? rawSites
                 .whereType<Map>()
@@ -94,6 +101,15 @@ class AttendanceToday {
           : AttendancePunch.fromJson(map(json['checkOut'])!),
     );
   }
+
+  AttendanceToday withPunch(AttendancePunch punch) => AttendanceToday(
+    date: date,
+    sites: sites,
+    startTime: startTime,
+    endTime: endTime,
+    checkIn: punch.type == 'check_in' ? punch : checkIn,
+    checkOut: punch.type == 'check_out' ? punch : checkOut,
+  );
 }
 
 int _int(Object? value) =>

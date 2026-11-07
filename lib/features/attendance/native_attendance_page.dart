@@ -51,7 +51,7 @@ class _AttendanceSummaryCardState extends State<AttendanceSummaryCard> {
       final data = await AttendanceService(widget.session).fetchToday();
       if (mounted) setState(() => _today = data);
     } catch (_) {
-      if (mounted) setState(() => _today = null);
+      // Keep the last known state when a background refresh fails.
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -131,7 +131,7 @@ class _AttendanceSummaryCardState extends State<AttendanceSummaryCard> {
                                   ),
                                 ),
                                 const Spacer(),
-                                if (!_loading)
+                                if (!_loading && _today != null)
                                   _StatusPill(
                                     label: done ? '今日已完成' : '待完成',
                                     done: done,
@@ -142,6 +142,8 @@ class _AttendanceSummaryCardState extends State<AttendanceSummaryCard> {
                             Text(
                               _loading
                                   ? '正在同步今日状态'
+                                  : _today == null
+                                  ? '暂时无法获取打卡状态'
                                   : done
                                   ? '上下班，已全部记录'
                                   : '准备好开始今天了吗？',
@@ -212,7 +214,8 @@ class NativeAttendancePage extends StatefulWidget {
   State<NativeAttendancePage> createState() => _NativeAttendancePageState();
 }
 
-class _NativeAttendancePageState extends State<NativeAttendancePage> {
+class _NativeAttendancePageState extends State<NativeAttendancePage>
+    with WidgetsBindingObserver {
   AttendanceToday? _today;
   Position? _position;
   AttendanceWifiInfo _wifi = const AttendanceWifiInfo();
@@ -222,39 +225,72 @@ class _NativeAttendancePageState extends State<NativeAttendancePage> {
   bool _submitting = false;
   String? _message;
   bool _messageIsError = false;
+  bool _refreshing = false;
+  bool _foreground = true;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_load());
+    _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (_foreground && (ModalRoute.of(context)?.isCurrent ?? true)) {
+        unawaited(_load(silent: true, locate: false));
+      }
+    });
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _message = null;
-    });
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground) unawaited(_load(silent: _today != null));
+  }
+
+  Future<void> _load({bool silent = false, bool locate = true}) async {
+    if (_refreshing || _submitting) return;
+    _refreshing = true;
+    if (!silent) {
+      setState(() {
+        _loading = _today == null;
+        _message = null;
+      });
+    }
     try {
       final today = await AttendanceService(widget.session).fetchToday();
       if (!mounted) return;
+      if (_submitting) return;
       final lastPunch = today.checkOut ?? today.checkIn;
       setState(() {
         _today = today;
         _wifiPunchStatus = lastPunch?.wifiStatus;
       });
-      if (today.sites.isNotEmpty && !today.complete) {
+      if (locate && today.sites.isNotEmpty && !today.complete && !_locating) {
         await _locate();
       }
     } catch (error) {
-      if (mounted) _showMessage(_friendlyError(error), error: true);
+      if (mounted && (!silent || _today == null)) {
+        _showMessage(_friendlyError(error), error: true);
+      }
     } finally {
+      _refreshing = false;
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _locate() async {
+    if (_locating) return;
     setState(() {
       _locating = true;
+      _position = null;
+      _wifi = const AttendanceWifiInfo();
       _message = null;
     });
     try {
@@ -277,11 +313,9 @@ class _NativeAttendancePageState extends State<NativeAttendancePage> {
           timeLimit: Duration(seconds: 18),
         ),
       );
-      final wifi = await AttendanceWifiInfo.readCurrent();
       if (!mounted) return;
       setState(() {
         _position = pos;
-        _wifi = wifi;
       });
       if (pos.accuracy > 100) {
         _showMessage('定位精度约 ${pos.accuracy.round()} 米，建议到开阔处重新定位', error: true);
@@ -289,7 +323,16 @@ class _NativeAttendancePageState extends State<NativeAttendancePage> {
     } catch (error) {
       if (mounted) _showMessage(_friendlyError(error), error: true);
     } finally {
-      if (mounted) setState(() => _locating = false);
+      final wifi = await AttendanceWifiInfo.readCurrent().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => const AttendanceWifiInfo(),
+      );
+      if (mounted) {
+        setState(() {
+          _wifi = wifi;
+          _locating = false;
+        });
+      }
     }
   }
 
@@ -357,13 +400,12 @@ class _NativeAttendancePageState extends State<NativeAttendancePage> {
         _locating) {
       return false;
     }
-    if (_position!.accuracy > 100) return false;
+    if (_position!.accuracy <= 0 || _position!.accuracy > 100) return false;
     return _today?.complete != true;
   }
 
   Future<void> _submit() async {
     if (!_canPunch) return;
-    final position = _position!;
     final type = _today?.nextPunchType ?? 'check_in';
     setState(() {
       _submitting = true;
@@ -371,6 +413,19 @@ class _NativeAttendancePageState extends State<NativeAttendancePage> {
     });
     HapticFeedback.mediumImpact();
     try {
+      await _locate();
+      if (!mounted) return;
+      final position = _position;
+      if (position == null) return;
+      if (position.accuracy <= 0 || position.accuracy > 100 || !_insideFence) {
+        _showMessage(
+          position.accuracy <= 0 || position.accuracy > 100
+              ? '定位精度不足，请重新定位'
+              : '当前位置不在可打卡范围内',
+          error: true,
+        );
+        return;
+      }
       final record = await AttendanceService(widget.session).punch(
         type: type,
         latitude: position.latitude,
@@ -386,16 +441,21 @@ class _NativeAttendancePageState extends State<NativeAttendancePage> {
             ? 'android'
             : 'other',
       );
-      final today = await AttendanceService(widget.session).fetchToday();
       if (!mounted) return;
       setState(() {
-        _today = today;
+        _today = _today?.withPunch(record);
         _wifiPunchStatus = record.wifiStatus;
         _message =
             '${type == 'check_in' ? '上班' : '下班'}打卡成功 · ${_clock(record.punchedAt)}';
         _messageIsError = false;
       });
       HapticFeedback.heavyImpact();
+      try {
+        final today = await AttendanceService(widget.session).fetchToday();
+        if (mounted) setState(() => _today = today);
+      } catch (_) {
+        // The punch was already saved; a later silent refresh can reconcile it.
+      }
     } catch (error) {
       if (mounted) _showMessage(_friendlyError(error), error: true);
     } finally {
@@ -469,7 +529,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage> {
         child: _loading && today == null
             ? const Center(child: CircularProgressIndicator())
             : RefreshIndicator(
-                onRefresh: _load,
+                onRefresh: () => _load(),
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(18, 10, 18, 30),
                   children: [
@@ -487,6 +547,8 @@ class _NativeAttendancePageState extends State<NativeAttendancePage> {
                     _TodayTimeline(
                       checkIn: today?.checkIn,
                       checkOut: today?.checkOut,
+                      startTime: today?.startTime ?? '',
+                      endTime: today?.endTime ?? '',
                     ),
                     const SizedBox(height: 14),
                     _LocationPanel(
@@ -755,9 +817,16 @@ class _PulseMark extends StatelessWidget {
 }
 
 class _TodayTimeline extends StatelessWidget {
-  const _TodayTimeline({this.checkIn, this.checkOut});
+  const _TodayTimeline({
+    this.checkIn,
+    this.checkOut,
+    required this.startTime,
+    required this.endTime,
+  });
   final AttendancePunch? checkIn;
   final AttendancePunch? checkOut;
+  final String startTime;
+  final String endTime;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -778,7 +847,9 @@ class _TodayTimeline extends StatelessWidget {
             ),
             const Spacer(),
             Text(
-              '上班 · 下班',
+              startTime.isNotEmpty && endTime.isNotEmpty
+                  ? '标准 $startTime - $endTime'
+                  : '上班 · 下班',
               style: TextStyle(
                 fontSize: 11,
                 color: DunesColors.resolve(context, const Color(0xFF918C9B)),
@@ -984,6 +1055,35 @@ class _LocationPanel extends StatelessWidget {
                 ),
             ],
           ),
+          const SizedBox(height: 10),
+          _AttendanceDiagnosticRow(
+            label: 'GPS（纬度，经度）',
+            value: position == null
+                ? null
+                : '${position!.latitude.toStringAsFixed(6)}, ${position!.longitude.toStringAsFixed(6)}',
+            unavailable: locating ? '正在获取…' : '尚未获取',
+          ),
+          _AttendanceDiagnosticRow(
+            label: 'Wi-Fi 名称（SSID）',
+            value: wifi.ssid,
+            unavailable: locating ? '正在获取…' : '未读取到',
+          ),
+          _AttendanceDiagnosticRow(
+            label: 'Wi-Fi 接入点（BSSID）',
+            value: wifi.bssid,
+            unavailable: locating ? '正在获取…' : '未读取到',
+          ),
+          if (!locating && wifi.bssid == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(
+                '请连接 Wi-Fi 并允许位置权限；部分手机或系统可能不提供 BSSID。',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: DunesColors.resolve(context, const Color(0xFF918C9B)),
+                ),
+              ),
+            ),
           if (position != null || locating) ...[
             const SizedBox(height: 14),
             Container(
@@ -1093,14 +1193,63 @@ class _LocationPanel extends StatelessWidget {
                 ),
               ),
             ),
-          if (position == null && !locating && !noSites)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: onLocate,
-                icon: const Icon(Icons.my_location_rounded, size: 16),
-                label: const Text('重新定位'),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: locating ? null : onLocate,
+              icon: const Icon(Icons.my_location_rounded, size: 16),
+              label: const Text('刷新定位和 Wi-Fi'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttendanceDiagnosticRow extends StatelessWidget {
+  const _AttendanceDiagnosticRow({
+    required this.label,
+    required this.value,
+    required this.unavailable,
+  });
+
+  final String label;
+  final String? value;
+  final String unavailable;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = value?.trim() ?? '';
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Text(
+              '$label：${text.isEmpty ? unavailable : text}',
+              style: TextStyle(
+                fontSize: 11,
+                color: DunesColors.resolve(context, const Color(0xFF777283)),
               ),
+            ),
+          ),
+          if (text.isNotEmpty)
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: text));
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('已复制$label')));
+              },
+              style: TextButton.styleFrom(
+                minimumSize: const Size(42, 30),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('复制', style: TextStyle(fontSize: 11)),
             ),
         ],
       ),
@@ -1227,9 +1376,9 @@ String _dateNow() {
 String _wifiDescription(AttendanceWifiInfo wifi, String? punchStatus) {
   final network = wifi.ssid ?? wifi.bssid;
   if (punchStatus == 'matched') {
-    return network == null ? '上次打卡 Wi-Fi 已匹配' : 'Wi-Fi · $network · 已匹配';
+    return '上次打卡 Wi-Fi 已匹配';
   }
-  if (punchStatus == 'mismatch') return 'Wi-Fi 未匹配，GPS 仍为打卡准入条件';
+  if (punchStatus == 'mismatch') return '上次打卡 Wi-Fi 未匹配，GPS 仍为打卡准入条件';
   if (punchStatus == 'unavailable') return '打卡时未能读取 Wi-Fi，GPS 仍可完成打卡';
   if (punchStatus == 'not_configured') return '此地点未配置 Wi-Fi 校验';
   return network == null ? 'Wi-Fi 信息暂不可用' : 'Wi-Fi · $network';

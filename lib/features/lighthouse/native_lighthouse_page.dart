@@ -9851,19 +9851,31 @@ class _TrendChartState extends State<_TrendChart>
         old.periodScale != widget.periodScale ||
         old.scaleForecast?.forecast != widget.scaleForecast?.forecast ||
         old.periodProfitDeltaPct != widget.periodProfitDeltaPct;
+    final seriesChanged =
+        !listEquals(old.profit, widget.profit) ||
+        !listEquals(old.revenue, widget.revenue) ||
+        !listEquals(old.cost, widget.cost) ||
+        !listEquals(old.costAlt, widget.costAlt) ||
+        !listEquals(old.scale, widget.scale) ||
+        !listEquals(old.scaleAlt, widget.scaleAlt) ||
+        !listEquals(old.stock, widget.stock) ||
+        !listEquals(old.labels, widget.labels);
     if (dataChanged) {
       _recompute();
-      _resetViewport();
-      _applyInitialWindow();
-      if (_selectedIndex != null) {
-        _selectedIndex = null;
-        final notify = widget.onSelectedIndexChanged;
-        // didUpdateWidget 跑在父级 build 期间，直接回调会撞上
-        // 「setState() called during build」；推到下一帧。
-        if (notify != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) notify(null);
-          });
+      // 点历史只换右上角日期和列表。曲线、刻度没变时视窗留在原地。
+      if (seriesChanged) {
+        _resetViewport();
+        _applyInitialWindow();
+        if (_selectedIndex != null) {
+          _selectedIndex = null;
+          final notify = widget.onSelectedIndexChanged;
+          // didUpdateWidget 跑在父级 build 期间，直接回调会撞上
+          // 「setState() called during build」；推到下一帧。
+          if (notify != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) notify(null);
+            });
+          }
         }
       }
     } else if (widget.onSelectedIndexChanged != null &&
@@ -16537,6 +16549,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     _pkQueryCtrl.dispose();
     _clearBackInterceptor();
     _delayNoticeTimer?.cancel();
+    _heroPointPickTimer?.cancel();
     _ddEntry?.remove();
     _detailSkuSearchCtrl.dispose();
     _ledgerSearchCtl.dispose();
@@ -17092,6 +17105,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   Future<void> _load() async {
+    // 换列表、重拉数字都不松开走势。只有右上角改周期时才在 _applyPeriod 里松开。
+    _retainHeroChartForNextLoad = false;
     final requestedPeriod = _period;
     final requestedOffset = _periodOffset;
     // v12.7 · 自定义区间在这里也参与 cache-key + 传给后端 (startDate/endDate).
@@ -17342,8 +17357,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     }
     setState(() {
       _groupFilter = next;
-      // 切分类 = 换了一份数据，之前点住的那一天已经不是同一个口径 —— 直接回本期。
-      _heroPointIndex = null;
       _listLimit = _listPageSize;
       _rowsCacheKey = '';
       _rowsCache = null;
@@ -20834,7 +20847,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     final leavingPeople = _tab == 'people';
     setState(() {
       _tab = key;
-      _heroPointIndex = null;
       _tabBarShowsGroups = true;
       if (_sortField == 'netTa') _sortField = 'profit';
       if (key == 'supply' && !_inTopic) {
@@ -24684,25 +24696,122 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     });
   }
 
-  /// 走势图回传选中点。松手不清；点图例 / 换周期 / 换分类导致数据变化时
-  /// 由图自己回传 null，Hero 跟着回到整期 —— 不必在每个切 tab 的地方补一行。
+  /// 点走势上的某一格，等于在右上角选中那一天 / 那一周 / 那一月。
+  /// 列表、合计都走原来的周期加载，不再按点改写行上的数。
+  Timer? _heroPointPickTimer;
+
   void _onHeroPointSelected(int? i) {
-    if (_heroPointIndex == i) return;
     if (!mounted) return;
-    // 拖动读点只给一次轻触感，读数和日期高亮负责视觉反馈。
-    LighthouseFeedback.instance.play(LighthouseFeedbackKind.select, sound: false);
-    setState(() => _heroPointIndex = i);
+    _heroPointPickTimer?.cancel();
+    if (i == null) {
+      if (_heroPointIndex != null) setState(() => _heroPointIndex = null);
+      return;
+    }
+    if (_heroPointIndex != i) {
+      LighthouseFeedback.instance.play(
+        LighthouseFeedbackKind.select,
+        sound: false,
+      );
+      setState(() => _heroPointIndex = i);
+    }
+    final raw = _heroSeriesMetrics['heroSeriesKeys'];
+    if (raw is! List || i < 0 || i >= raw.length) return;
+    final key = raw[i].toString();
+    if (key.isEmpty) return;
+    _heroPointPickTimer = Timer(const Duration(milliseconds: 160), () {
+      if (!mounted || _heroPointIndex != i) return;
+      _applyHeroPointAsPeriod(key);
+    });
+  }
+
+  void _applyHeroPointAsPeriod(String key) {
+    final period = _isCustomRange ? 'day' : _period;
+    final offset = _periodOffsetForHeroKey(key, period);
+    if (offset == null || offset > 0) return;
+    final leavingRange = _isCustomRange;
+    if (leavingRange) {
+      setState(() {
+        _customStart = null;
+        _customEnd = null;
+      });
+    }
+    if (period == _period && offset == _periodOffset) {
+      if (leavingRange) _load();
+      return;
+    }
+    _applyPeriod(period: period, offset: offset, keepHeroChart: true);
+  }
+
+  /// 走势桶键 → 右上角那一档的 offset。0 是今天 / 本周 / 本月，负数往前。
+  int? _periodOffsetForHeroKey(String key, String period) {
+    final now = _nowCST();
+    final today = DateTime(now.year, now.month, now.day);
+    switch (period) {
+      case 'day':
+      case 'week':
+        final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(key);
+        if (match == null) return null;
+        final day = DateTime(
+          int.parse(match.group(1)!),
+          int.parse(match.group(2)!),
+          int.parse(match.group(3)!),
+        );
+        if (period == 'day') return day.difference(today).inDays;
+        final monday = DateTime(day.year, day.month, day.day);
+        final thisMonday = today.subtract(
+          Duration(days: today.weekday - DateTime.monday),
+        );
+        return monday.difference(thisMonday).inDays ~/ 7;
+      case 'month':
+        final match = RegExp(r'^(\d{4})-(\d{2})$').firstMatch(key);
+        if (match == null) return null;
+        final year = int.parse(match.group(1)!);
+        final month = int.parse(match.group(2)!);
+        return (year - today.year) * 12 + (month - today.month);
+      case 'quarter':
+        final match = RegExp(r'^(\d{4})-Q([1-4])$').firstMatch(key);
+        if (match == null) return null;
+        final year = int.parse(match.group(1)!);
+        final quarter = int.parse(match.group(2)!);
+        final nowQuarter = (today.month - 1) ~/ 3 + 1;
+        return (year * 4 + quarter) - (today.year * 4 + nowQuarter);
+      case 'year':
+        final match = RegExp(r'^(\d{4})$').firstMatch(key);
+        if (match == null) return null;
+        return int.parse(match.group(1)!) - today.year;
+      default:
+        return null;
+    }
   }
 
   /// 点日视图里走势末点就是本期（当天），点它不进点选态。
   bool get _heroLastPointIsPeriod =>
       lighthouseHeroLastPointIsPeriod(_period, isCustomRange: _isCustomRange);
 
-  /// 「回本期」和外层日期胶囊刷新：清掉点选。图通过 selectedIndex 跟着灭高亮。
+  /// 「回本期」：清掉走势上的选中，日期和列表也回到本期。
   void _clearHeroPointSelection() {
-    if (_heroPointIndex == null) return;
+    _heroPointPickTimer?.cancel();
+    final pinned = _heroChartPin != null;
+    final shifted = _periodOffset != 0 || _isCustomRange;
+    if (_heroPointIndex == null && !shifted && !pinned) return;
     LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
+    if (_isCustomRange) {
+      setState(() {
+        _customStart = null;
+        _customEnd = null;
+        _heroPointIndex = null;
+      });
+      _releaseHeroChartPin();
+      _load();
+      return;
+    }
+    if (_periodOffset != 0) {
+      _applyPeriod(offset: 0);
+      return;
+    }
+    _releaseHeroChartPin();
     setState(() => _heroPointIndex = null);
+    if (pinned) _load();
   }
 
   /// 主 Hero 走势图上被点住的那一点（null = 看整期合计）。
@@ -24725,7 +24834,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   double? _heroViewEnd;
 
   List<String> get _heroBaseSeriesKeys {
-    final raw = _bundle?.metrics['heroSeriesKeys'];
+    final raw = (_heroChartPin ?? _bundle?.metrics)?['heroSeriesKeys'];
     if (raw is! List) return const <String>[];
     return [for (final e in raw) e.toString()];
   }
@@ -24740,7 +24849,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       _heroSummaryMatchesGroup &&
       _heroBaseSeriesKeys.length >= 2;
 
-  String get _heroHistoryRequestKey {
+  String get _heroHistoryRequestKey =>
+      _heroChartAnchorKey ?? _heroHistoryRequestKeyNow;
+
+  String get _heroHistoryRequestKeyNow {
     final keys = _heroBaseSeriesKeys;
     return '$_period|$_periodOffset|$_tab|$_groupFilter|${keys.isEmpty ? '' : keys.first}';
   }
@@ -24822,8 +24934,26 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       widget.sharedCard?.historyCount ?? _activeHeroHistory?.length ?? 0;
 
   /// 走势类读数统一走这里：有历史时是「历史 + 本窗口」拼好的 metrics。
+  /// 从走势图点历史时钉住的曲线。右上角日期和列表照常换，图不跟着重锚。
+  Map<String, dynamic>? _heroChartPin;
+  String? _heroChartAnchorKey;
+  bool _retainHeroChartForNextLoad = false;
+
+  void _pinHeroChart() {
+    _heroChartAnchorKey ??= _heroHistoryRequestKeyNow;
+    _heroChartPin ??= Map<String, dynamic>.from(
+      _bundle?.metrics ?? const <String, dynamic>{},
+    );
+  }
+
+  void _releaseHeroChartPin() {
+    _heroChartPin = null;
+    _heroChartAnchorKey = null;
+    _retainHeroChartForNextLoad = false;
+  }
+
   Map<String, dynamic> get _heroSeriesMetrics {
-    final base = _bundle?.metrics ?? const <String, dynamic>{};
+    final base = _heroChartPin ?? _bundle?.metrics ?? const <String, dynamic>{};
     final h = _activeHeroHistory;
     if (h == null || h.length == 0) return base;
     final cacheKey = '${h.requestKey}#${h.version}';
@@ -31714,12 +31844,22 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// v3.9: 用户在 detail 里改 period 时**不关闭 detail** —— 保留 _detailKey,
   /// 让 detail 就地 refetch (via _detailLoadedFor 过期检测). 用户预期是"我
   /// 想看这个产品的日粒度", 不是"帮我关掉页面".
-  void _applyPeriod({String? period, int? offset}) {
+  void _applyPeriod({
+    String? period,
+    int? offset,
+    bool keepHeroChart = false,
+  }) {
     final newPeriod = period ?? _period;
     final newOffset = offset ?? _periodOffset;
     if (newPeriod == _period && newOffset == _periodOffset) {
       setState(() => _periodPickerOpen = false);
       return;
+    }
+    if (keepHeroChart) {
+      _pinHeroChart();
+      _retainHeroChartForNextLoad = true;
+    } else {
+      _releaseHeroChartPin();
     }
     final wasInDetail = _detailKey != null;
     final detailTypeSnapshot = _detailType;
@@ -31728,7 +31868,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       _listLimitKeptForReload = _listLimit;
       _period = newPeriod;
       _periodOffset = newOffset;
-      _heroPointIndex = null;
+      if (!keepHeroChart) _heroPointIndex = null;
       _periodPickerOpen = false;
       _loading = true;
       _loadError = null;
@@ -39802,7 +39942,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               _rowsCacheKey = '';
               _rowsCache = null;
               if (_groupFilter == '全部') _restoreSharedHeroMetrics();
-              if (prevGroup != _groupFilter) _heroPointIndex = null;
             });
             if (prevGroup != _groupFilter) {
               unawaited(_reloadHeroSummary());
@@ -39814,7 +39953,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           final leavingPeople = _tab == 'people';
           setState(() {
             _tab = key;
-            _heroPointIndex = null;
             _tabBarShowsGroups = true; // 切维仍默认展开分类
             if (_sortField == 'netTa') _sortField = 'profit';
             // 标签二默认按总资产排省份；离开供给就回到利润。
@@ -40107,7 +40245,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       isOn: _hunFilter == v,
                       strong: false,
                       onTap: () => setState(() {
-                        _heroPointIndex = null;
                         _hunFilter = _hunFilter == v ? '全部' : v;
                         _listLimit = _listPageSize;
                       }),
@@ -40126,7 +40263,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       isOn: _tradeTypeFilter == value,
                       strong: false,
                       onTap: () => setState(() {
-                        _heroPointIndex = null;
                         _tradeTypeFilter = value;
                         _listLimit = _listPageSize;
                         _rowsCacheKey = '';

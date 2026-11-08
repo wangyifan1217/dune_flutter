@@ -5,6 +5,7 @@ class AttendanceSite {
     required this.latitude,
     required this.longitude,
     required this.radiusMeters,
+    this.maxAccuracyMeters = 0,
   });
 
   final int id;
@@ -12,6 +13,7 @@ class AttendanceSite {
   final double latitude;
   final double longitude;
   final double radiusMeters;
+  final double maxAccuracyMeters;
 
   factory AttendanceSite.fromJson(Map<String, dynamic> json) => AttendanceSite(
     id: _int(json['id']),
@@ -19,6 +21,7 @@ class AttendanceSite {
     latitude: _double(json['latitude']),
     longitude: _double(json['longitude']),
     radiusMeters: _double(json['radiusMeters']),
+    maxAccuracyMeters: _double(json['maxAccuracyMeters']),
   );
 }
 

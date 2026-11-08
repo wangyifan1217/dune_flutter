@@ -374,9 +374,6 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       setState(() {
         _position = pos;
       });
-      if (pos.accuracy > 100) {
-        _showMessage('定位精度约 ${pos.accuracy.round()} 米，建议到开阔处重新定位', error: true);
-      }
     } catch (error) {
       if (mounted) _showMessage(_friendlyError(error), error: true);
     } finally {
@@ -457,7 +454,6 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
         _locating) {
       return false;
     }
-    if (_position!.accuracy <= 0 || _position!.accuracy > 100) return false;
     return true;
   }
 
@@ -504,13 +500,8 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       if (!mounted) return;
       final position = _position;
       if (position == null) return;
-      if (position.accuracy <= 0 || position.accuracy > 100 || !_insideFence) {
-        _showMessage(
-          position.accuracy <= 0 || position.accuracy > 100
-              ? '定位精度不足，请重新定位'
-              : '当前位置不在可打卡范围内',
-          error: true,
-        );
+      if (!_insideFence) {
+        _showMessage('当前位置不在可打卡范围内', error: true);
         return;
       }
       final record = await AttendanceService(widget.session).punch(
@@ -753,6 +744,48 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
   }
 }
 
+class _LiveClock extends StatefulWidget {
+  const _LiveClock();
+
+  @override
+  State<_LiveClock> createState() => _LiveClockState();
+}
+
+class _LiveClockState extends State<_LiveClock> {
+  late final Timer _timer;
+  DateTime _now = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return Text(
+      '${two(_now.hour)}:${two(_now.minute)}:${two(_now.second)}',
+      style: const TextStyle(
+        fontSize: 32,
+        height: 1,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.4,
+        color: _attendanceInk,
+        fontFeatures: [FontFeature.tabularFigures()],
+      ),
+    );
+  }
+}
+
 class _PunchOrb extends StatefulWidget {
   const _PunchOrb({
     required this.enabled,
@@ -803,6 +836,8 @@ class _PunchOrbState extends State<_PunchOrb>
     final fill = enabled ? _attendancePurple : const Color(0xFFD9D3E6);
     return Column(
       children: [
+        const _LiveClock(),
+        const SizedBox(height: 14),
         GestureDetector(
           onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
           onTapCancel: () => setState(() => _pressed = false),
@@ -1347,7 +1382,9 @@ class _LocationPanel extends StatelessWidget {
                   label: '手机定位精度',
                   value: accuracy == null
                       ? null
-                      : '约 ${accuracy!.round()} 米（服务端上限 100 米）',
+                      : site != null && site!.maxAccuracyMeters > 0
+                      ? '约 ${accuracy!.round()} 米（该地点允许 ${site!.maxAccuracyMeters.round()} 米以内）'
+                      : '约 ${accuracy!.round()} 米',
                   unavailable: locating ? '正在获取…' : '尚未获取',
                 ),
                 _AttendanceDiagnosticRow(
@@ -1368,7 +1405,7 @@ class _LocationPanel extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    '围栏半径是地点中心到可打卡边界的距离；当前距离需在半径内。手机定位精度是 GPS 的误差估计，两者含义不同。Wi-Fi 仅作辅助凭据。',
+                    '围栏半径是人离地点中心的距离。定位精度是手机估计自己可能偏了多少米，由后台按地点配置上限，App 不拦截。Wi-Fi 仅作辅助凭据。',
                     style: TextStyle(
                       fontSize: 10,
                       height: 1.45,

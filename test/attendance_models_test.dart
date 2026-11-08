@@ -20,4 +20,24 @@ void main() {
     expect(updated.nextPunchType, 'check_out');
     expect(AttendanceToday.fromJson({'sites': []}).startTime, isEmpty);
   });
+
+  test('history page reports another page when the total is larger', () {
+    final page = AttendanceHistoryBatch.fromJson({
+      'page': 1,
+      'size': 20,
+      'total': 21,
+      'items': [
+        {
+          'id': 3,
+          'localDate': '2026-11-08',
+          'type': 'check_out',
+          'punchedAt': '2026-11-08T10:00:00Z',
+          'siteName': '总部',
+        },
+      ],
+    });
+    expect(page.hasMore, isTrue);
+    expect(page.items.single.isCheckIn, isFalse);
+    expect(page.items.single.siteName, '总部');
+  });
 }

@@ -218,6 +218,8 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
         if (mounted) setState(() => _back = _pan.value);
       });
     _resetVisibility();
+    // 利润 / 资金是两张卡，翻页会新建。选中点在更早的窗口里时，直接停在那一格。
+    _revealSelection();
   }
 
   @override
@@ -253,11 +255,15 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
         widget.labels.last == old.labels.last;
     final grew = widget.labels.length - old.labels.length;
     final prepended = widget.historyCount - old.historyCount;
-    if (!sameTail || (grew != 0 && grew != prepended)) {
+    final jumped = !sameTail || (grew != 0 && grew != prepended);
+    if (jumped) {
       _pan.stop();
       _back = 0;
     }
     if (_back > _maxBack) _back = _maxBack;
+    if (jumped || widget.selectedIndex != old.selectedIndex) {
+      _revealSelection();
+    }
     final sig = widget.lines.map((l) => l.key).join('|');
     if (sig != _lineSig) {
       _resetVisibility();
@@ -437,6 +443,23 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
 
   void _backToLatest() {
     _animateBackTo(0);
+  }
+
+  /// 选中点不在当前视窗里时，把视窗挪到能看见它。
+  /// 已经看得见就不动，避免盖住用户正在拖的位置。
+  void _revealSelection() {
+    final s = widget.onSelectedIndexChanged != null
+        ? widget.selectedIndex
+        : _localSel;
+    if (s == null || _n < 2 || _len < 2) return;
+    if (s < 0 || s >= _len) return;
+    final start = _start;
+    if (s >= start && s < start + _n) return;
+    final maxStart = math.max(0, _len - _n);
+    final nextStart = (s - 1).clamp(0, maxStart);
+    final nextBack = ((_len - _n) - nextStart).toDouble();
+    _pan.stop();
+    _back = nextBack.clamp(0.0, _maxBack);
   }
 
   void _select(int? i) {

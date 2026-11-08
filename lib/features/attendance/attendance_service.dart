@@ -24,6 +24,20 @@ class AttendanceService {
     return AttendanceToday.fromJson(Map<String, dynamic>.from(data));
   }
 
+  Future<AttendanceHistoryBatch> fetchHistory({
+    required int page,
+    int size = 20,
+  }) async {
+    final response = await dunesHttpGet(
+      session,
+      '/attendance/history?page=$page&size=$size',
+      client: _client,
+    );
+    final data = _unwrap(response);
+    if (data is! Map) throw Exception('打卡历史返回格式错误');
+    return AttendanceHistoryBatch.fromJson(Map<String, dynamic>.from(data));
+  }
+
   Future<AttendancePunch> punch({
     required String type,
     required double latitude,

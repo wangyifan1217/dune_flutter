@@ -1413,13 +1413,13 @@ class _NativeMyWorkProfileCenterPageState
                             name: name,
                             subtitle: identityLine,
                           ),
-                          if (widget.session.canUseAttendance)
+                          if (!isDesktopCommOnly &&
+                              widget.session.canUseAttendance)
                             Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: kMinePageGutter,
                               ),
                               child: AttendanceSummaryCard(
-                                key: ValueKey<int>(_attendanceRefreshToken),
                                 session: widget.session,
                                 refreshToken: _attendanceRefreshToken,
                                 onTap: _openAttendance,

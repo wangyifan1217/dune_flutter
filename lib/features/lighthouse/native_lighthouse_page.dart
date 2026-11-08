@@ -24939,18 +24939,27 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   String? _heroChartAnchorKey;
   bool _retainHeroChartForNextLoad = false;
 
+  /// 钉住时「今天还在进行中」也保持点下去之前的画法。
+  /// 日期一换这个标志会翻掉：今天从曲线上的一个点被拆成右侧「今」列，
+  /// 值域也不再算它，整条线的高低就变了。
+  bool? _heroChartPartial;
+
   void _pinHeroChart() {
     _heroChartAnchorKey ??= _heroHistoryRequestKeyNow;
     _heroChartPin ??= Map<String, dynamic>.from(
       _bundle?.metrics ?? const <String, dynamic>{},
     );
+    _heroChartPartial ??= _periodInProgress;
   }
 
   void _releaseHeroChartPin() {
     _heroChartPin = null;
     _heroChartAnchorKey = null;
+    _heroChartPartial = null;
     _retainHeroChartForNextLoad = false;
   }
+
+  bool get _heroChartPartialPeriod => _heroChartPartial ?? _periodInProgress;
 
   Map<String, dynamic> get _heroSeriesMetrics {
     final base = _heroChartPin ?? _bundle?.metrics ?? const <String, dynamic>{};
@@ -26011,7 +26020,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 )
               : null,
           paceDays: _monthPaceDays,
-          partialPeriod: _periodInProgress,
+          partialPeriod: _heroChartPartialPeriod,
           rangeLabel: _heroTrendRangeLabel(labels),
           title: _heroTrendTitle(),
           showHeader: false,
@@ -27720,7 +27729,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       wideVisibleCount: _heroChartWideCount(n),
       selectedIndex: _heroPointIndex,
       onSelectedIndexChanged: _onHeroPointSelected,
-      lastIsPartial: _periodInProgress,
+      lastIsPartial: _heroChartPartialPeriod,
       trailing: _heroTrendKButton(),
       // 图里横拖往前翻历史（10.21 换新卡时漏接了，2026-10-26 补回）。
       historyCount: _heroHistoryCount,
@@ -27903,7 +27912,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       },
       visibleCount: _heroChartVisibleCount(n),
       wideVisibleCount: _heroChartWideCount(n),
-      lastIsPartial: _periodInProgress,
+      lastIsPartial: _heroChartPartialPeriod,
       trailing: seg,
       emptyText: _fundPoolLoading ? '资金池加载中…' : '暂无资金走势',
       historyCount: _heroHistoryCount,

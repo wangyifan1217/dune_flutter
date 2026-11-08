@@ -112,6 +112,70 @@ class AttendanceToday {
   );
 }
 
+class AttendanceHistoryItem {
+  const AttendanceHistoryItem({
+    required this.id,
+    required this.localDate,
+    required this.type,
+    required this.punchedAt,
+    required this.siteName,
+  });
+
+  final int id;
+  final String localDate;
+  final String type;
+  final DateTime punchedAt;
+  final String siteName;
+
+  bool get isCheckIn => type == 'check_in';
+
+  factory AttendanceHistoryItem.fromJson(Map<String, dynamic> json) =>
+      AttendanceHistoryItem(
+        id: _int(json['id']),
+        localDate: '${json['localDate'] ?? ''}',
+        type: '${json['type'] ?? ''}',
+        punchedAt:
+            DateTime.tryParse('${json['punchedAt'] ?? ''}')?.toLocal() ??
+            DateTime.now(),
+        siteName: '${json['siteName'] ?? ''}',
+      );
+}
+
+class AttendanceHistoryBatch {
+  const AttendanceHistoryBatch({
+    required this.items,
+    required this.total,
+    required this.page,
+    required this.size,
+  });
+
+  final List<AttendanceHistoryItem> items;
+  final int total;
+  final int page;
+  final int size;
+
+  bool get hasMore => page * size < total;
+
+  factory AttendanceHistoryBatch.fromJson(Map<String, dynamic> json) {
+    final raw = json['items'];
+    return AttendanceHistoryBatch(
+      items: raw is List
+          ? raw
+                .whereType<Map>()
+                .map(
+                  (item) => AttendanceHistoryItem.fromJson(
+                    Map<String, dynamic>.from(item),
+                  ),
+                )
+                .toList(growable: false)
+          : const [],
+      total: _int(json['total']),
+      page: _int(json['page']),
+      size: _int(json['size']),
+    );
+  }
+}
+
 int _int(Object? value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 double _double(Object? value) =>

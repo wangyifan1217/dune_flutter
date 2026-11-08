@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import 'attendance_history_page.dart';
 import 'attendance_models.dart';
 import 'attendance_service.dart';
 import 'attendance_wifi.dart';
@@ -131,27 +132,39 @@ class _AttendanceSummaryCardState extends State<AttendanceSummaryCard> {
                                   ),
                                 ),
                                 const Spacer(),
-                                if (!_loading && _today != null)
-                                  _StatusPill(
-                                    label: done ? '今日已完成' : '待完成',
-                                    done: done,
-                                  ),
+                                SizedBox(
+                                  height: 22,
+                                  child: _today == null
+                                      ? const SizedBox.shrink()
+                                      : _StatusPill(
+                                          label: done ? '今日已完成' : '待完成',
+                                          done: done,
+                                        ),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
-                            Text(
-                              _loading
-                                  ? '正在同步今日状态'
-                                  : _today == null
-                                  ? '暂时无法获取打卡状态'
-                                  : done
-                                  ? '上下班，已全部记录'
-                                  : '准备好开始今天了吗？',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                height: 1.25,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
+                            SizedBox(
+                              height: 22,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  _loading && _today == null
+                                      ? '正在同步今日状态'
+                                      : _today == null
+                                      ? '暂时无法获取打卡状态'
+                                      : done
+                                      ? '上下班，已全部记录'
+                                      : '准备好开始今天了吗？',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    height: 1.25,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 9),
@@ -176,7 +189,7 @@ class _AttendanceSummaryCardState extends State<AttendanceSummaryCard> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      _PunchCta(onTap: widget.onTap),
+                      const _PunchCta(),
                     ],
                   ),
                 ),
@@ -189,74 +202,27 @@ class _AttendanceSummaryCardState extends State<AttendanceSummaryCard> {
   }
 }
 
-class _PunchCta extends StatefulWidget {
-  const _PunchCta({required this.onTap});
-  final VoidCallback onTap;
+class _PunchCta extends StatelessWidget {
+  const _PunchCta();
 
   @override
-  State<_PunchCta> createState() => _PunchCtaState();
-}
-
-class _PunchCtaState extends State<_PunchCta>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1250),
-  )..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    builder: (context, child) =>
-        Transform.scale(scale: .97 + _controller.value * .04, child: child),
-    child: Material(
-      color: Colors.white.withValues(alpha: .16),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          widget.onTap();
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          width: 72,
-          height: 54,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: .24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.white.withValues(alpha: .08),
-                blurRadius: 14,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: const Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.fingerprint_rounded, color: Colors.white, size: 23),
-              SizedBox(height: 1),
-              Text(
-                '去打卡',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
+  Widget build(BuildContext context) {
+    return Container(
+      width: 54,
+      height: 54,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white.withValues(alpha: .16),
+        border: Border.all(color: Colors.white.withValues(alpha: .28)),
       ),
-    ),
-  );
+      child: const Icon(
+        Icons.fingerprint_rounded,
+        color: Colors.white,
+        size: 26,
+      ),
+    );
+  }
 }
 
 class NativeAttendancePage extends StatefulWidget {
@@ -639,6 +605,18 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
         ),
         actions: [
           IconButton(
+            tooltip: '打卡历史',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      AttendanceHistoryPage(session: widget.session),
+                ),
+              );
+            },
+            icon: const Icon(Icons.history_rounded),
+          ),
+          IconButton(
             tooltip: '刷新状态',
             onPressed: _loading ? null : () => unawaited(_load()),
             icon: const Icon(Icons.refresh_rounded),
@@ -663,6 +641,34 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
                           ? '上下班记录已保存，仍可补充打卡'
                           : '定位确认后即可完成$nextLabel',
                       complete: allDone,
+                    ),
+                    const SizedBox(height: 18),
+                    Center(
+                      child: _PunchOrb(
+                        enabled: _canPunch,
+                        busy: _submitting || _locating,
+                        label: _submitting
+                            ? '正在提交'
+                            : _locating
+                            ? '正在确认位置'
+                            : allDone
+                            ? '再次$nextLabel'
+                            : nextLabel,
+                        onPressed: _canPunch ? _submit : null,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: Text(
+                        '打卡时间以服务器记录为准',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF898395),
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     _TodayTimeline(
@@ -739,66 +745,169 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
                         ),
                       ),
                     ],
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      height: 58,
-                      child: FilledButton.icon(
-                        onPressed: _canPunch ? _submit : null,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _attendancePurple,
-                          disabledBackgroundColor: const Color(0xFFD6D0E5),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(19),
-                          ),
-                          elevation: _canPunch ? 4 : 0,
-                          shadowColor: _attendancePurple.withValues(alpha: .25),
-                        ),
-                        icon: _submitting || _locating
-                            ? const SizedBox(
-                                width: 19,
-                                height: 19,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Icon(Icons.fingerprint_rounded, size: 23),
-                        label: Text(
-                          _submitting
-                              ? '正在提交打卡'
-                              : _locating
-                              ? '正在确认位置'
-                              : allDone
-                              ? '再次$nextLabel'
-                              : nextLabel,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: .3,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Center(
-                      child: Text(
-                        '打卡时间以服务器记录为准',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: DunesColors.resolve(
-                            context,
-                            const Color(0xFF898395),
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
       ),
     );
   }
+}
+
+class _PunchOrb extends StatefulWidget {
+  const _PunchOrb({
+    required this.enabled,
+    required this.busy,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final bool enabled;
+  final bool busy;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  State<_PunchOrb> createState() => _PunchOrbState();
+}
+
+class _PunchOrbState extends State<_PunchOrb>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _spin = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+  bool _pressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.busy) _spin.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PunchOrb oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.busy && !_spin.isAnimating) _spin.repeat();
+    if (!widget.busy && _spin.isAnimating) _spin.stop();
+  }
+
+  @override
+  void dispose() {
+    _spin.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.enabled;
+    final fill = enabled ? _attendancePurple : const Color(0xFFD9D3E6);
+    return Column(
+      children: [
+        GestureDetector(
+          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapCancel: () => setState(() => _pressed = false),
+          onTapUp: enabled
+              ? (_) {
+                  setState(() => _pressed = false);
+                  widget.onPressed?.call();
+                }
+              : null,
+          child: AnimatedScale(
+            scale: _pressed ? .96 : 1,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            child: SizedBox(
+              width: 128,
+              height: 128,
+              child: AnimatedBuilder(
+                animation: _spin,
+                builder: (context, child) {
+                  return CustomPaint(
+                    painter: _PunchRingPainter(
+                      progress: widget.busy ? _spin.value : 0,
+                      active: enabled,
+                    ),
+                    child: child,
+                  );
+                },
+                child: Center(
+                  child: Container(
+                    width: 104,
+                    height: 104,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: fill,
+                      boxShadow: [
+                        if (enabled)
+                          BoxShadow(
+                            color: _attendancePurple.withValues(alpha: .22),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.fingerprint_rounded,
+                      color: Colors.white,
+                      size: 36,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          widget.label,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            letterSpacing: .2,
+            color: enabled
+                ? _attendanceInk
+                : const Color(0xFF9A95A6),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PunchRingPainter extends CustomPainter {
+  _PunchRingPainter({required this.progress, required this.active});
+
+  final double progress;
+  final bool active;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 2;
+    final base = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..color = (active ? _attendancePurple : const Color(0xFFD0CBDA))
+          .withValues(alpha: active ? .28 : 1);
+    canvas.drawCircle(center, radius, base);
+    if (progress <= 0) return;
+    final arc = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round
+      ..color = _attendancePurple;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      progress * 6.28318,
+      1.4,
+      false,
+      arc,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PunchRingPainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.active != active;
 }
 
 class _AttendanceHero extends StatelessWidget {

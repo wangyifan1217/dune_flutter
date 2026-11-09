@@ -7,6 +7,7 @@ void main() {
       'date': '2026-11-07',
       'sites': [],
       'schedule': {'startTime': '09:00', 'endTime': '18:00'},
+      'faceRequired': true,
     });
     final punch = AttendancePunch.fromJson({
       'id': 1,
@@ -16,9 +17,11 @@ void main() {
     final updated = today.withPunch(punch);
     expect(updated.startTime, '09:00');
     expect(updated.endTime, '18:00');
+    expect(updated.faceRequired, isTrue);
     expect(updated.checkIn, punch);
     expect(updated.nextPunchType, 'check_out');
     expect(AttendanceToday.fromJson({'sites': []}).startTime, isEmpty);
+    expect(AttendanceToday.fromJson({'sites': []}).faceRequired, isFalse);
   });
 
   test('history page reports another page when the total is larger', () {

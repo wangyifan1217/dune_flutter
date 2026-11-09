@@ -7,8 +7,11 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import 'attendance_face_capture.dart';
+import 'attendance_face_enrollment_page.dart';
 import 'attendance_history_page.dart';
 import 'attendance_models.dart';
+import 'attendance_punch_flow.dart';
 import 'attendance_service.dart';
 import 'attendance_wifi.dart';
 
@@ -226,8 +229,15 @@ class _PunchCta extends StatelessWidget {
 }
 
 class NativeAttendancePage extends StatefulWidget {
-  const NativeAttendancePage({super.key, required this.session});
+  const NativeAttendancePage({
+    super.key,
+    required this.session,
+    this.service,
+    this.captureFace,
+  });
   final AuthSession session;
+  final AttendanceService? service;
+  final Future<AttendanceFacePhoto?> Function()? captureFace;
 
   @override
   State<NativeAttendancePage> createState() => _NativeAttendancePageState();
@@ -235,6 +245,7 @@ class NativeAttendancePage extends StatefulWidget {
 
 class _NativeAttendancePageState extends State<NativeAttendancePage>
     with WidgetsBindingObserver {
+  late final AttendanceService _service;
   AttendanceToday? _today;
   Position? _position;
   AttendanceWifiInfo _wifi = const AttendanceWifiInfo();
@@ -242,6 +253,8 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
   bool _loading = true;
   bool _locating = false;
   bool _submitting = false;
+  AttendancePunchPhase? _punchPhase;
+  AttendanceFaceStatus? _faceStatus;
   String? _message;
   bool _messageIsError = false;
   bool _refreshing = false;
@@ -253,6 +266,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
   @override
   void initState() {
     super.initState();
+    _service = widget.service ?? AttendanceService(widget.session);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_load());
     _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
@@ -277,6 +291,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
   void dispose() {
     _refreshTimer?.cancel();
     _locationTimer?.cancel();
+    if (widget.service == null) _service.close();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -297,7 +312,9 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
           timeLimit: Duration(seconds: 12),
         ),
       );
-      if (mounted) setState(() => _position = position);
+      if (mounted && !_submitting && !_locating) {
+        setState(() => _position = position);
+      }
     } catch (_) {
       // Keep the last position on a transient refresh failure; submit rechecks it.
     } finally {
@@ -321,14 +338,25 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       });
     }
     try {
-      final today = await AttendanceService(widget.session).fetchToday();
+      final today = await _service.fetchToday();
       if (!mounted) return;
       if (_submitting) return;
       final lastPunch = today.checkOut ?? today.checkIn;
       setState(() {
         _today = today;
         _wifiPunchStatus = lastPunch?.wifiStatus;
+        if (!today.faceRequired) _faceStatus = null;
       });
+      if (today.faceRequired) {
+        try {
+          final status = await _service.fetchFaceStatus();
+          if (mounted && !_submitting) setState(() => _faceStatus = status);
+        } catch (_) {
+          // A fresh check is required before opening the camera or enrolling.
+          if (mounted && !_submitting) setState(() => _faceStatus = null);
+        }
+      }
+      if (!mounted || _submitting) return;
       if (locate && today.sites.isNotEmpty && !_locating) {
         await _locate();
       }
@@ -465,61 +493,138 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
 
   String get _punchLabel => _punchTypeForNow == 'check_in' ? '上班打卡' : '下班打卡';
 
-  Future<void> _submit() async {
-    if (!_canPunch) return;
-    final type = _punchTypeForNow;
-    if (type == 'check_out' && _today?.checkOut == null) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: const Icon(Icons.wb_sunny_outlined, color: _attendancePurple),
-          title: const Text('已进入下班打卡时段'),
-          content: const Text('现在提交的记录将计为下班卡。确认继续吗？确认后仍可再次打卡。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('再想想'),
-            ),
-            FilledButton.icon(
-              onPressed: () => Navigator.of(context).pop(true),
-              icon: const Icon(Icons.fingerprint_rounded),
-              label: const Text('确认打下班卡'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
+  bool get _attemptActive =>
+      mounted && (ModalRoute.of(context)?.isCurrent ?? true);
+
+  String get _submissionLabel => switch (_punchPhase) {
+    AttendancePunchPhase.capturing => '请拍摄本人照片',
+    AttendancePunchPhase.verifying => '正在核验人脸',
+    AttendancePunchPhase.locating => '正在确认位置',
+    AttendancePunchPhase.submitting => '正在提交',
+    null => '正在确认打卡',
+  };
+
+  Future<bool> _ensureFaceEnrolled() async {
+    final status = await _service.fetchFaceStatus();
+    if (!mounted || !_attemptActive) return false;
+    setState(() => _faceStatus = status);
+    if (!status.faceRequired) {
+      throw Exception('人脸打卡配置已变更，请重新点击打卡');
     }
+    if (status.enrolled) return true;
+    final enrolled = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AttendanceFaceEnrollmentPage(
+          service: _service,
+          accountName: widget.session.displayName?.trim().isNotEmpty == true
+              ? widget.session.displayName!
+              : widget.session.phone,
+          capture: widget.captureFace ?? captureAttendanceFace,
+        ),
+      ),
+    );
+    if (!_attemptActive || enrolled != true) return false;
+    setState(
+      () => _faceStatus = const AttendanceFaceStatus(
+        faceRequired: true,
+        enrolled: true,
+      ),
+    );
+    return true;
+  }
+
+  Future<void> _configureFace() async {
+    if (_submitting || _locating) return;
     setState(() {
       _submitting = true;
+      _punchPhase = null;
+      _message = null;
+    });
+    try {
+      if (await _ensureFaceEnrolled() && mounted) {
+        _showMessage('人脸已录入，可以返回打卡', error: false);
+      }
+    } catch (error) {
+      if (mounted) _showMessage(_friendlyError(error), error: true);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    if (!_canPunch) return;
+    setState(() {
+      _submitting = true;
+      _punchPhase = null;
       _message = null;
     });
     HapticFeedback.mediumImpact();
     try {
-      await _locate();
-      if (!mounted) return;
-      final position = _position;
-      if (position == null) return;
-      if (!_insideFence) {
-        _showMessage('当前位置不在可打卡范围内', error: true);
-        return;
-      }
-      final record = await AttendanceService(widget.session).punch(
-        type: type,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        accuracyMeters: position.accuracy,
-        ssid: _wifi.ssid,
-        bssid: _wifi.bssid,
-        platform: kIsWeb
-            ? 'web'
-            : defaultTargetPlatform == TargetPlatform.iOS
-            ? 'ios'
-            : defaultTargetPlatform == TargetPlatform.android
-            ? 'android'
-            : 'other',
+      // Refresh the switch before every attempt; never fall back to stale config.
+      final latest = await _service.fetchToday().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw Exception('获取打卡配置超时，请重试'),
       );
-      if (!mounted) return;
+      if (!mounted || !_attemptActive) return;
+      setState(() => _today = latest);
+      final type = _punchTypeForNow;
+      if (type == 'check_out' && latest.checkOut == null) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            icon: const Icon(Icons.wb_sunny_outlined, color: _attendancePurple),
+            title: const Text('已进入下班打卡时段'),
+            content: const Text('现在提交的记录将计为下班卡。确认继续吗？确认后仍可再次打卡。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('再想想'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(true),
+                icon: const Icon(Icons.fingerprint_rounded),
+                label: const Text('确认打下班卡'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !_attemptActive) return;
+      }
+      if (latest.faceRequired && !await _ensureFaceEnrolled()) return;
+      final record = await AttendancePunchFlow(_service).submit(
+        type: type,
+        faceRequired: latest.faceRequired,
+        capture: widget.captureFace ?? captureAttendanceFace,
+        isActive: () => _attemptActive,
+        onPhase: (phase) {
+          if (mounted) setState(() => _punchPhase = phase);
+        },
+        locate: () async {
+          // Camera may take time; use a new GPS reading after face verification.
+          await _locate();
+          if (!_attemptActive || _position == null) return null;
+          if (!_insideFence) {
+            _showMessage('当前位置不在可打卡范围内', error: true);
+            return null;
+          }
+          final position = _position!;
+          return AttendancePunchLocation(
+            latitude: position.latitude,
+            longitude: position.longitude,
+            accuracyMeters: position.accuracy,
+            ssid: _wifi.ssid,
+            bssid: _wifi.bssid,
+            platform: kIsWeb
+                ? 'web'
+                : defaultTargetPlatform == TargetPlatform.iOS
+                ? 'ios'
+                : defaultTargetPlatform == TargetPlatform.android
+                ? 'android'
+                : 'other',
+          );
+        },
+      );
+      if (!mounted || record == null) return;
       setState(() {
         _today = _today?.withPunch(record);
         _wifiPunchStatus = record.wifiStatus;
@@ -529,7 +634,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       });
       HapticFeedback.heavyImpact();
       try {
-        final today = await AttendanceService(widget.session).fetchToday();
+        final today = await _service.fetchToday();
         if (mounted) setState(() => _today = today);
       } catch (_) {
         // The punch was already saved; a later silent refresh can reconcile it.
@@ -537,7 +642,12 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
     } catch (error) {
       if (mounted) _showMessage(_friendlyError(error), error: true);
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _punchPhase = null;
+        });
+      }
     }
   }
 
@@ -597,19 +707,23 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
         actions: [
           IconButton(
             tooltip: '打卡历史',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      AttendanceHistoryPage(session: widget.session),
-                ),
-              );
-            },
+            onPressed: _submitting
+                ? null
+                : () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            AttendanceHistoryPage(session: widget.session),
+                      ),
+                    );
+                  },
             icon: const Icon(Icons.history_rounded),
           ),
           IconButton(
             tooltip: '刷新状态',
-            onPressed: _loading ? null : () => unawaited(_load()),
+            onPressed: _loading || _submitting
+                ? null
+                : () => unawaited(_load()),
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -630,6 +744,8 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
                           ? '暂未配置可用的打卡地点'
                           : allDone
                           ? '上下班记录已保存，仍可补充打卡'
+                          : today?.faceRequired == true
+                          ? '拍照核验本人并确认位置后完成$nextLabel'
                           : '定位确认后即可完成$nextLabel',
                       complete: allDone,
                     ),
@@ -639,7 +755,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
                         enabled: _canPunch,
                         busy: _submitting || _locating,
                         label: _submitting
-                            ? '正在提交'
+                            ? _submissionLabel
                             : _locating
                             ? '正在确认位置'
                             : allDone
@@ -662,6 +778,32 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
                       ),
                     ),
                     const SizedBox(height: 16),
+                    if (today?.faceRequired == true) ...[
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(
+                          Icons.face_rounded,
+                          color: _attendancePurple,
+                        ),
+                        title: Text(
+                          _faceStatus?.enrolled == true
+                              ? '人脸已录入 · 每次打卡需拍照核验'
+                              : '首次打卡前需录入本人脸',
+                        ),
+                        subtitle: const Text(
+                          '正对镜头并保持光线充足。未录入时会先引导拍照录入，再进行打卡核验。',
+                        ),
+                        trailing: _faceStatus?.enrolled == true
+                            ? null
+                            : TextButton(
+                                onPressed: _submitting || _locating
+                                    ? null
+                                    : _configureFace,
+                                child: const Text('录入人脸'),
+                              ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     _TodayTimeline(
                       checkIn: today?.checkIn,
                       checkOut: today?.checkOut,
@@ -679,7 +821,9 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
                       wifi: _wifi,
                       wifiPunchStatus: _wifiPunchStatus,
                       noSites: noSites,
-                      onLocate: _locate,
+                      onLocate: () {
+                        if (!_submitting) unawaited(_locate());
+                      },
                     ),
                     if (_message != null) ...[
                       const SizedBox(height: 14),
@@ -899,9 +1043,7 @@ class _PunchOrbState extends State<_PunchOrb>
             fontSize: 15,
             fontWeight: FontWeight.w700,
             letterSpacing: .2,
-            color: enabled
-                ? _attendanceInk
-                : const Color(0xFF9A95A6),
+            color: enabled ? _attendanceInk : const Color(0xFF9A95A6),
           ),
         ),
       ],
@@ -1357,72 +1499,63 @@ class _LocationPanel extends StatelessWidget {
           ),
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: EdgeInsets.zero,
-              initiallyExpanded: false,
-              dense: true,
-              visualDensity: VisualDensity.compact,
-              title: Text(
-                '查看定位与 Wi-Fi 明细',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: DunesColors.resolve(context, const Color(0xFF777283)),
-                ),
-              ),
-              children: [
-                _AttendanceDiagnosticRow(
-                  label: 'GPS（纬度，经度）',
-                  value: position == null
-                      ? null
-                      : '${position!.latitude.toStringAsFixed(6)}, ${position!.longitude.toStringAsFixed(6)}',
-                  unavailable: locating ? '正在获取…' : '尚未获取',
-                ),
-                _AttendanceDiagnosticRow(
-                  label: '手机定位精度',
-                  value: accuracy == null
-                      ? null
-                      : site != null && site!.maxAccuracyMeters > 0
-                      ? '约 ${accuracy!.round()} 米（该地点允许 ${site!.maxAccuracyMeters.round()} 米以内）'
-                      : '约 ${accuracy!.round()} 米',
-                  unavailable: locating ? '正在获取…' : '尚未获取',
-                ),
-                _AttendanceDiagnosticRow(
-                  label: 'Wi-Fi 名称（SSID）',
-                  value: wifi.ssid,
-                  unavailable: locating ? '正在获取…' : '未读取到',
-                ),
-                _AttendanceDiagnosticRow(
-                  label: 'Wi-Fi 接入点（BSSID）',
-                  value: wifi.bssid,
-                  unavailable: locating ? '正在获取…' : '未读取到',
-                ),
-                _AttendanceDiagnosticRow(
-                  label: '上次打卡 Wi-Fi',
-                  value: _wifiDescription(wifi, wifiPunchStatus),
-                  unavailable: '暂不可用',
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    '围栏半径是人离地点中心的距离。定位精度是手机估计自己可能偏了多少米，由后台按地点配置上限，App 不拦截。Wi-Fi 仅作辅助凭据。',
-                    style: TextStyle(
-                      fontSize: 10,
-                      height: 1.45,
-                      color: DunesColors.resolve(
-                        context,
-                        const Color(0xFF918C9B),
-                      ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                initiallyExpanded: false,
+                dense: true,
+                visualDensity: VisualDensity.compact,
+                title: Text(
+                  '查看定位与 Wi-Fi 明细',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF777283),
                     ),
                   ),
                 ),
-                if (!locating && wifi.bssid == null)
+                children: [
+                  _AttendanceDiagnosticRow(
+                    label: 'GPS（纬度，经度）',
+                    value: position == null
+                        ? null
+                        : '${position!.latitude.toStringAsFixed(6)}, ${position!.longitude.toStringAsFixed(6)}',
+                    unavailable: locating ? '正在获取…' : '尚未获取',
+                  ),
+                  _AttendanceDiagnosticRow(
+                    label: '手机定位精度',
+                    value: accuracy == null
+                        ? null
+                        : accuracy! <= 0
+                        ? null
+                        : '约 ${accuracy!.round()} 米（仅供参考）',
+                    unavailable: locating ? '正在获取…' : '尚未获取',
+                  ),
+                  _AttendanceDiagnosticRow(
+                    label: 'Wi-Fi 名称（SSID）',
+                    value: wifi.ssid,
+                    unavailable: locating ? '正在获取…' : '未读取到',
+                  ),
+                  _AttendanceDiagnosticRow(
+                    label: 'Wi-Fi 接入点（BSSID）',
+                    value: wifi.bssid,
+                    unavailable: locating ? '正在获取…' : '未读取到',
+                  ),
+                  _AttendanceDiagnosticRow(
+                    label: '上次打卡 Wi-Fi',
+                    value: _wifiDescription(wifi, wifiPunchStatus),
+                    unavailable: '暂不可用',
+                  ),
                   Padding(
-                    padding: const EdgeInsets.only(top: 5),
+                    padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      '连接 Wi-Fi 并允许位置权限后，部分设备可提供接入点信息。',
+                      '围栏半径是人离地点中心的距离。定位精度仅供参考，不限制打卡；系统仍按当前 GPS 坐标校验围栏范围。Wi-Fi 仅作辅助凭据。',
                       style: TextStyle(
                         fontSize: 10,
+                        height: 1.45,
                         color: DunesColors.resolve(
                           context,
                           const Color(0xFF918C9B),
@@ -1430,15 +1563,30 @@ class _LocationPanel extends StatelessWidget {
                       ),
                     ),
                   ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: locating ? null : onLocate,
-                    icon: const Icon(Icons.my_location_rounded, size: 16),
-                    label: const Text('刷新定位和 Wi-Fi'),
+                  if (!locating && wifi.bssid == null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Text(
+                        '连接 Wi-Fi 并允许位置权限后，部分设备可提供接入点信息。',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF918C9B),
+                          ),
+                        ),
+                      ),
+                    ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: locating ? null : onLocate,
+                      icon: const Icon(Icons.my_location_rounded, size: 16),
+                      label: const Text('刷新定位和 Wi-Fi'),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           if (!inside && position != null && !noSites)

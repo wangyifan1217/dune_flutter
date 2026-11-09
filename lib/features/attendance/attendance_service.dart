@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -12,6 +14,70 @@ class AttendanceService {
 
   final AuthSession session;
   final http.Client _client;
+
+  void close() => _client.close();
+
+  Future<AttendanceFaceStatus> fetchFaceStatus() async {
+    final response =
+        await dunesHttpGet(
+          session,
+          '/attendance/face/status',
+          client: _client,
+        ).timeout(
+          const Duration(seconds: 15),
+          onTimeout: () => throw Exception('查询人脸状态超时，请重试'),
+        );
+    final data = _unwrap(response);
+    if (data is! Map ||
+        data['faceRequired'] is! bool ||
+        data['enrolled'] is! bool) {
+      throw Exception('人脸状态返回格式错误');
+    }
+    return AttendanceFaceStatus.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<AttendanceFaceStatus> enrollFace(AttendanceFacePhoto photo) async {
+    final data = await _sendFaceImage('/attendance/face/enroll', photo, '人脸录入');
+    final status = AttendanceFaceStatus.fromJson(data);
+    if (!status.enrolled) throw Exception('人脸录入未完成，请重试');
+    return status;
+  }
+
+  Future<Map<String, dynamic>> _sendFaceImage(
+    String path,
+    AttendanceFacePhoto photo,
+    String operation,
+  ) async {
+    try {
+      final response = await dunesHttpPost(
+        session,
+        path,
+        body: photo.bytes,
+        headers: {'Content-Type': photo.contentType},
+        client: _client,
+      ).timeout(const Duration(seconds: 35));
+      final data = _unwrap(response);
+      if (data is! Map) throw Exception('$operation返回格式错误');
+      return Map<String, dynamic>.from(data);
+    } on TimeoutException {
+      throw Exception('$operation超时，请刷新状态后重试');
+    } on http.ClientException {
+      throw Exception('$operation网络异常，请检查网络后重试');
+    }
+  }
+
+  Future<AttendanceFaceVerification> verifyFace({
+    required String type,
+    required Uint8List image,
+    required String contentType,
+  }) async {
+    final data = await _sendFaceImage(
+      '/attendance/face/verify?type=${Uri.encodeQueryComponent(type)}',
+      AttendanceFacePhoto(image, contentType),
+      '人脸核验',
+    );
+    return AttendanceFaceVerification.fromJson(data);
+  }
 
   Future<AttendanceToday> fetchToday() async {
     final response = await dunesHttpGet(
@@ -45,6 +111,7 @@ class AttendanceService {
     required double accuracyMeters,
     String? ssid,
     String? bssid,
+    String? faceVerificationToken,
     required String platform,
   }) async {
     final response = await dunesHttpPost(
@@ -58,6 +125,8 @@ class AttendanceService {
         'ssid': ssid ?? '',
         'bssid': bssid ?? '',
         'platform': platform,
+        if (faceVerificationToken?.isNotEmpty == true)
+          'faceVerificationToken': faceVerificationToken,
       }),
       client: _client,
     );

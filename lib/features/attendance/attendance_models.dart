@@ -1,3 +1,12 @@
+import 'dart:typed_data';
+
+class AttendanceFacePhoto {
+  const AttendanceFacePhoto(this.bytes, this.contentType);
+
+  final Uint8List bytes;
+  final String contentType;
+}
+
 class AttendanceSite {
   const AttendanceSite({
     required this.id,
@@ -64,6 +73,7 @@ class AttendanceToday {
     required this.sites,
     this.startTime = '',
     this.endTime = '',
+    this.faceRequired = false,
     this.checkIn,
     this.checkOut,
   });
@@ -72,6 +82,7 @@ class AttendanceToday {
   final List<AttendanceSite> sites;
   final String startTime;
   final String endTime;
+  final bool faceRequired;
   final AttendancePunch? checkIn;
   final AttendancePunch? checkOut;
 
@@ -87,6 +98,7 @@ class AttendanceToday {
       date: '${json['date'] ?? ''}',
       startTime: '${schedule?['startTime'] ?? ''}',
       endTime: '${schedule?['endTime'] ?? ''}',
+      faceRequired: json['faceRequired'] == true,
       sites: rawSites is List
           ? rawSites
                 .whereType<Map>()
@@ -110,9 +122,45 @@ class AttendanceToday {
     sites: sites,
     startTime: startTime,
     endTime: endTime,
+    faceRequired: faceRequired,
     checkIn: punch.type == 'check_in' ? punch : checkIn,
     checkOut: punch.type == 'check_out' ? punch : checkOut,
   );
+}
+
+class AttendanceFaceVerification {
+  const AttendanceFaceVerification({
+    required this.matched,
+    required this.token,
+    required this.expiresIn,
+  });
+
+  final bool matched;
+  final String token;
+  final Duration expiresIn;
+
+  factory AttendanceFaceVerification.fromJson(Map<String, dynamic> json) =>
+      AttendanceFaceVerification(
+        matched: json['matched'] == true,
+        token: '${json['verificationToken'] ?? ''}'.trim(),
+        expiresIn: Duration(seconds: _int(json['expiresIn'])),
+      );
+}
+
+class AttendanceFaceStatus {
+  const AttendanceFaceStatus({
+    required this.faceRequired,
+    required this.enrolled,
+  });
+
+  final bool faceRequired;
+  final bool enrolled;
+
+  factory AttendanceFaceStatus.fromJson(Map<String, dynamic> json) =>
+      AttendanceFaceStatus(
+        faceRequired: json['faceRequired'] == true,
+        enrolled: json['enrolled'] == true,
+      );
 }
 
 class AttendanceHistoryItem {

@@ -41,6 +41,7 @@ class MeetingRecordingInterruption {
     switch (reason) {
       case 'routeDeviceLost':
       case 'routeChange':
+      case 'audioFileWriteError':
         return false;
       default:
         return true;
@@ -49,6 +50,8 @@ class MeetingRecordingInterruption {
 
   static String hintForReason(String reason) {
     switch (reason) {
+      case 'audioFileWriteError':
+        return '录音文件写入失败，已暂停；请检查手机剩余空间，并尝试保存已录部分';
       case 'audioFocusLoss':
       case 'audioRecordError':
       case 'audioRecordGone':

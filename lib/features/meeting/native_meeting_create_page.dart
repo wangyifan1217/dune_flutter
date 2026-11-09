@@ -56,6 +56,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   bool _submitting = false;
   bool _picking = false;
   bool _endingLive = false;
+  bool _discardingRecording = false;
   bool _persistingAfterEnd = false;
   bool _keepingLocal = false;
   bool? _persistGenerate;
@@ -98,6 +99,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     }
     _live.active.addListener(_onLiveChanged);
     _live.paused.addListener(_onLiveChanged);
+    _live.saveFailed.addListener(_onLiveChanged);
     _live.elapsed.addListener(_onLiveChanged);
     _live.interruptionHint.addListener(_onLiveInterruptionHint);
     _recordingCtrl.state.addListener(_onLiveChanged);
@@ -138,6 +140,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _pulseController.dispose();
     _live.active.removeListener(_onLiveChanged);
     _live.paused.removeListener(_onLiveChanged);
+    _live.saveFailed.removeListener(_onLiveChanged);
     _live.elapsed.removeListener(_onLiveChanged);
     _live.interruptionHint.removeListener(_onLiveInterruptionHint);
     _recordingCtrl.state.removeListener(_onLiveChanged);
@@ -339,7 +342,12 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   Future<void> _confirmEndLive() async {
-    if (!_live.active.value || _endingLive || _persistingAfterEnd) return;
+    if (!_live.active.value ||
+        _endingLive ||
+        _persistingAfterEnd ||
+        _discardingRecording) {
+      return;
+    }
     _dismissKeyboard();
     final title = _resolvedPersistTitle();
     final confirmed = await showDialog<bool>(
@@ -410,6 +418,37 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       if (mounted && _endingLive) {
         setState(() => _endingLive = false);
       }
+    }
+  }
+
+  Future<void> _discardFailedRecording() async {
+    if (!_live.saveFailed.value || _discardingRecording || _endingLive) return;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('放弃这次录音？'),
+        content: const Text('将删除本次录音的可恢复文件。需要保留录音请返回并重试保存。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('返回'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('确认放弃'),
+          ),
+        ],
+      ),
+    );
+    if (discard != true || !mounted) return;
+    setState(() => _discardingRecording = true);
+    try {
+      await _live.discardFailedRecording();
+      if (mounted) setState(() => _error = null);
+    } catch (e) {
+      if (mounted) setState(() => _error = _mapRecordError(e));
+    } finally {
+      if (mounted) setState(() => _discardingRecording = false);
     }
   }
 
@@ -882,9 +921,17 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         _titleCtrl.text.trim().isNotEmpty &&
         _filePath.isNotEmpty &&
         (_mode != _CreateMode.live || !_live.active.value);
-    final canEndLive = recording && !_endingLive && !_persistingAfterEnd;
+    final canEndLive =
+        recording &&
+        !_endingLive &&
+        !_persistingAfterEnd &&
+        !_discardingRecording;
     final canStartLive =
-        !recording && _hasMeetingTitle && !_endingLive && !_persistingAfterEnd;
+        !recording &&
+        _hasMeetingTitle &&
+        !_endingLive &&
+        !_persistingAfterEnd &&
+        !_discardingRecording;
     final liveRecording = _mode == _CreateMode.live && recording;
     final statusText = switch (state) {
       MeetingRecordingState.recordingForeground => '正在录音（前台）',
@@ -1333,7 +1380,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                             const SizedBox(width: 8),
                             Text(
                               liveWorking
-                                  ? (livePaused ? '录音已暂停' : '录音进行中')
+                                  ? (_live.saveFailed.value
+                                        ? '录音待保存'
+                                        : livePaused
+                                        ? '录音已暂停'
+                                        : '录音进行中')
                                   : statusText,
                               style: DunesTypography.sans(
                                 fontSize: 13,
@@ -1396,15 +1447,27 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                               Expanded(
                                 child: OutlinedButton.icon(
                                   onPressed:
-                                      (_endingLive || _persistingAfterEnd)
+                                      (_endingLive ||
+                                          _persistingAfterEnd ||
+                                          _discardingRecording)
                                       ? null
+                                      : _live.saveFailed.value
+                                      ? _discardFailedRecording
                                       : (livePaused ? _resumeLive : _pauseLive),
                                   icon: Icon(
-                                    livePaused
+                                    _live.saveFailed.value
+                                        ? Icons.delete_outline_rounded
+                                        : livePaused
                                         ? Icons.play_arrow_rounded
                                         : Icons.pause_rounded,
                                   ),
-                                  label: Text(livePaused ? '继续录音' : '暂停录音'),
+                                  label: Text(
+                                    _live.saveFailed.value
+                                        ? '放弃录音'
+                                        : livePaused
+                                        ? '继续录音'
+                                        : '暂停录音',
+                                  ),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: DunesColors.resolve(
                                       context,
@@ -1430,7 +1493,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                               Expanded(
                                 child: FilledButton.icon(
                                   onPressed: canEndLive
-                                      ? _confirmEndLive
+                                      ? (_live.saveFailed.value
+                                            ? _endLive
+                                            : _confirmEndLive)
                                       : null,
                                   icon: (_endingLive || _persistingAfterEnd)
                                       ? SizedBox(
@@ -1448,6 +1513,8 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                                   label: Text(
                                     (_endingLive || _persistingAfterEnd)
                                         ? '保存中...'
+                                        : _live.saveFailed.value
+                                        ? '重试保存'
                                         : '结束并保存',
                                   ),
                                   style: FilledButton.styleFrom(
@@ -1610,6 +1677,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     required MeetingRecordingState recorderState,
   }) {
     final elapsedText = _formatLiveElapsed(elapsed);
+    if (_live.saveFailed.value) {
+      return const Text('录音保存未完成，请点击「重试保存」。可恢复的录音文件会保留；确认放弃后才会删除。');
+    }
     if (!recording) {
       return Text(
         '点击「开始录音」后，这里会显示录音时长与状态。结束后再上传转写并生成纪要。',

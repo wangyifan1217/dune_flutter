@@ -62,9 +62,11 @@ class MeetingRecordingController with WidgetsBindingObserver {
 
   Future<NativeRecordedAudio?> stop() async {
     state.value = MeetingRecordingState.stopping;
-    final audio = await NativeAudioRecorder.instance.stop();
-    state.value = MeetingRecordingState.idle;
-    return audio;
+    try {
+      return await NativeAudioRecorder.instance.stop();
+    } finally {
+      state.value = MeetingRecordingState.idle;
+    }
   }
 
   Future<void> cancel() async {

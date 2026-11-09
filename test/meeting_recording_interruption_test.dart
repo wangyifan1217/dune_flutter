@@ -3,6 +3,23 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('MeetingRecordingInterruption.hintForReason', () {
+    test(
+      'file write failures do not auto-resume or claim the microphone is occupied',
+      () {
+        expect(
+          MeetingRecordingInterruption.allowsAutoResume('audioFileWriteError'),
+          isFalse,
+        );
+        expect(
+          MeetingRecordingInterruption.hintForReason('audioFileWriteError'),
+          contains('文件写入失败'),
+        );
+        expect(
+          MeetingRecordingInterruption.hintForReason('audioFileWriteError'),
+          isNot(contains('麦克风')),
+        );
+      },
+    );
     test('phone interruption tells user audio is saved', () {
       expect(
         MeetingRecordingInterruption.hintForReason('interruption'),
@@ -55,10 +72,7 @@ void main() {
       isRecording: true,
       isPaused: true,
     );
-    const dead = NativeRecorderSnapshot(
-      isRecording: false,
-      isPaused: false,
-    );
+    const dead = NativeRecorderSnapshot(isRecording: false, isPaused: false);
 
     test('native paused while dart still recording is the silent-loss bug', () {
       expect(

@@ -495,6 +495,13 @@ const _kStampFormulas = <ProposalFinanceFormula>[
     kind: ProposalFinanceFormulaKind.scaleRate,
     rate: 0.0006,
   ),
+  ProposalFinanceFormula(
+    code: 'TAX_STAMP_REVENUE',
+    name: '收入 × 0.06%',
+    expression: '收入 × 0.0006',
+    kind: ProposalFinanceFormulaKind.revenueRate,
+    rate: 0.0006,
+  ),
 ];
 
 const _kIncomeTaxFormulas = <ProposalFinanceFormula>[

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../auth/auth_session.dart';
@@ -23,12 +24,16 @@ class MeetingLiveController with WidgetsBindingObserver {
 
   final ValueNotifier<bool> active = ValueNotifier<bool>(false);
   final ValueNotifier<bool> paused = ValueNotifier<bool>(false);
-  final ValueNotifier<List<String>> lines =
-      ValueNotifier<List<String>>(const <String>[]);
+  final ValueNotifier<bool> saveFailed = ValueNotifier<bool>(false);
+  final ValueNotifier<List<String>> lines = ValueNotifier<List<String>>(
+    const <String>[],
+  );
   final ValueNotifier<String> partial = ValueNotifier<String>('');
   final ValueNotifier<String?> recordedFilePath = ValueNotifier<String?>(null);
   final ValueNotifier<String> meetingTitle = ValueNotifier<String>('');
-  final ValueNotifier<Duration> elapsed = ValueNotifier<Duration>(Duration.zero);
+  final ValueNotifier<Duration> elapsed = ValueNotifier<Duration>(
+    Duration.zero,
+  );
   final ValueNotifier<String?> interruptionHint = ValueNotifier<String?>(null);
 
   Timer? _elapsedTicker;
@@ -43,6 +48,7 @@ class MeetingLiveController with WidgetsBindingObserver {
   bool _observingLifecycle = false;
   int _resumeAttempts = 0;
   String _pauseReason = '';
+  Future<String?>? _ending;
 
   bool get isActive => active.value;
 
@@ -58,9 +64,11 @@ class MeetingLiveController with WidgetsBindingObserver {
     _recording.attach();
     _ensureLifecycleObserver();
     await _recording.start(title: meetingTitle.value);
-    _recorderEventSub ??=
-        NativeAudioRecorder.instance.recorderEvents().listen(_onRecorderEvent);
+    _recorderEventSub ??= NativeAudioRecorder.instance.recorderEvents().listen(
+      _onRecorderEvent,
+    );
     paused.value = false;
+    saveFailed.value = false;
     active.value = true;
     _pausedByInterruption = false;
     _pauseReason = '';
@@ -73,11 +81,16 @@ class MeetingLiveController with WidgetsBindingObserver {
     NativeAudioRecorder.isStartBlocked = () => active.value;
   }
 
-  Future<void> pause({bool fromInterruption = false, String reason = ''}) async {
+  Future<void> pause({
+    bool fromInterruption = false,
+    String reason = '',
+  }) async {
+    if (_ending != null || saveFailed.value) return;
     if (!active.value || paused.value) {
       if (active.value && paused.value && fromInterruption) {
-        _pausedByInterruption =
-            MeetingRecordingInterruption.allowsAutoResume(reason);
+        _pausedByInterruption = MeetingRecordingInterruption.allowsAutoResume(
+          reason,
+        );
         _pauseReason = reason;
       }
       return;
@@ -88,6 +101,7 @@ class MeetingLiveController with WidgetsBindingObserver {
   }
 
   Future<void> resume() async {
+    if (_ending != null || saveFailed.value) return;
     if (!active.value || !paused.value) return;
     _cancelAutoResume();
     final ok = await _recording.resume();
@@ -98,7 +112,16 @@ class MeetingLiveController with WidgetsBindingObserver {
   }
 
   /// 结束并保存，返回录音文件路径（可能为空）。
-  Future<String?> end() async {
+  Future<String?> end() {
+    final pending = _ending;
+    if (pending != null) return pending;
+    final operation = _endAndRecover();
+    _ending = operation;
+    return operation.whenComplete(() => _ending = null);
+  }
+
+  Future<String?> _endAndRecover() async {
+    final hadSession = active.value || saveFailed.value;
     _cancelAutoResume();
     _removeLifecycleObserver();
     String? path;
@@ -109,17 +132,39 @@ class MeetingLiveController with WidgetsBindingObserver {
     } catch (e) {
       stopError = e;
     }
+    // Android preserves a recovery index when stopping fails. Try it before
+    // discarding the live UI; iOS keeps its existing stop/return contract.
+    final android =
+        hadSession &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android;
+    if ((path == null || path.isEmpty) && android) {
+      try {
+        final status = await NativeAudioRecorder.instance.readStatus();
+        if (!status.isRecording) {
+          final recovered = await NativeAudioRecorder.instance
+              .recoverAbandonedSession();
+          path = recovered?.path;
+        }
+      } catch (e) {
+        stopError ??= e;
+      }
+    }
     _commitElapsedRun();
     _stopElapsedTicker();
     _elapsedRunStartedAt = null;
-    interruptionHint.value = null;
     _pausedByInterruption = false;
     _pauseReason = '';
     _resumeAttempts = 0;
-    active.value = false;
-    paused.value = false;
-    NativeAudioRecorder.isStartBlocked = null;
-    clearPreview();
+    if ((path == null || path.isEmpty) && android) {
+      saveFailed.value = true;
+      active.value = true;
+      paused.value = true;
+      NativeAudioRecorder.isStartBlocked = () => active.value;
+      interruptionHint.value = '保存未完成，请重试保存；已有录音文件会保留';
+      throw stopError ?? Exception('未取得有效录音，请重试保存或放弃此录音');
+    }
+    _finishLiveSession();
     if (path != null && path.isNotEmpty) {
       recordedFilePath.value = path;
       return path;
@@ -128,6 +173,24 @@ class MeetingLiveController with WidgetsBindingObserver {
       throw stopError;
     }
     return path;
+  }
+
+  Future<void> discardFailedRecording() async {
+    if (!saveFailed.value || _ending != null) return;
+    await _recording.cancel();
+    await NativeAudioRecorder.instance.discardAbandonedSession();
+    _finishLiveSession();
+    consumeRecordedFile();
+  }
+
+  void _finishLiveSession() {
+    saveFailed.value = false;
+    interruptionHint.value = null;
+    active.value = false;
+    paused.value = false;
+    NativeAudioRecorder.isStartBlocked = null;
+    _recording.detach();
+    clearPreview();
   }
 
   /// 清空现场预览缓存（新会话或录音结束后调用）。
@@ -166,7 +229,7 @@ class MeetingLiveController with WidgetsBindingObserver {
   }
 
   Future<void> _onAppForegrounded() async {
-    if (!active.value) return;
+    if (!active.value || _ending != null || saveFailed.value) return;
     await _syncWithNativeStatus();
     if (_pausedByInterruption) {
       _scheduleAutoResume(resetAttempts: true);
@@ -246,12 +309,14 @@ class MeetingLiveController with WidgetsBindingObserver {
   }
 
   void _onRecorderEvent(Map<String, dynamic> event) {
+    if (_ending != null || saveFailed.value) return;
     final kind = (event['kind'] ?? '').toString();
     final reason = (event['reason'] ?? '').toString();
     if (kind == 'paused') {
       if (active.value && !paused.value) {
-        interruptionHint.value =
-            MeetingRecordingInterruption.hintForReason(reason);
+        interruptionHint.value = MeetingRecordingInterruption.hintForReason(
+          reason,
+        );
         unawaited(pause(fromInterruption: true, reason: reason));
       }
       return;
@@ -275,7 +340,8 @@ class MeetingLiveController with WidgetsBindingObserver {
     _commitElapsedRun();
     _stopElapsedTicker();
     _pausedByInterruption =
-        fromInterruption && MeetingRecordingInterruption.allowsAutoResume(reason);
+        fromInterruption &&
+        MeetingRecordingInterruption.allowsAutoResume(reason);
     _pauseReason = reason;
     paused.value = true;
     partial.value = '';
@@ -298,7 +364,8 @@ class MeetingLiveController with WidgetsBindingObserver {
     }
     if (_autoResuming) return;
     if (resetAttempts) _resumeAttempts = 0;
-    if (_resumeAttempts >= MeetingRecordingInterruption.resumeRetryDelays.length) {
+    if (_resumeAttempts >=
+        MeetingRecordingInterruption.resumeRetryDelays.length) {
       interruptionHint.value = '麦克风已可用，自动继续失败，请点击继续录音';
       return;
     }

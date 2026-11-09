@@ -730,159 +730,169 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       ),
       body: SafeArea(
         top: false,
-        child: _loading && today == null
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: () => _load(),
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 30),
-                  children: [
-                    _AttendanceHero(
-                      date: today?.date ?? _dateNow(),
-                      title: allDone ? '今日打卡已完成' : '让每一次到场，都有记录',
-                      subtitle: noSites
-                          ? '暂未配置可用的打卡地点'
-                          : allDone
-                          ? '上下班记录已保存，仍可补充打卡'
-                          : today?.faceRequired == true
-                          ? '拍照核验本人并确认位置后完成$nextLabel'
-                          : '定位确认后即可完成$nextLabel',
-                      complete: allDone,
-                    ),
-                    const SizedBox(height: 18),
-                    Center(
-                      child: _PunchOrb(
-                        enabled: _canPunch,
-                        busy: _submitting || _locating,
-                        label: _submitting
-                            ? _submissionLabel
-                            : _locating
-                            ? '正在确认位置'
-                            : allDone
-                            ? '再次$nextLabel'
-                            : nextLabel,
-                        onPressed: _canPunch ? _submit : null,
+        child: Column(
+          children: [
+            if (_message != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 4),
+                child: Semantics(
+                  liveRegion: true,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: Container(
+                      key: ValueKey(_message),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 15,
+                        vertical: 13,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Text(
-                        '打卡时间以服务器记录为准',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: DunesColors.resolve(
-                            context,
-                            const Color(0xFF898395),
-                          ),
-                        ),
+                      decoration: BoxDecoration(
+                        color: _messageIsError
+                            ? const Color(0xFFFFF0EE)
+                            : const Color(0xFFEBF8F1),
+                        borderRadius: BorderRadius.circular(15),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (today?.faceRequired == true) ...[
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(
-                          Icons.face_rounded,
-                          color: _attendancePurple,
-                        ),
-                        title: Text(
-                          _faceStatus?.enrolled == true
-                              ? '人脸已录入 · 每次打卡需拍照核验'
-                              : '首次打卡前需录入本人脸',
-                        ),
-                        subtitle: const Text(
-                          '正对镜头并保持光线充足。未录入时会先引导拍照录入，再进行打卡核验。',
-                        ),
-                        trailing: _faceStatus?.enrolled == true
-                            ? null
-                            : TextButton(
-                                onPressed: _submitting || _locating
-                                    ? null
-                                    : _configureFace,
-                                child: const Text('录入人脸'),
-                              ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                    _TodayTimeline(
-                      checkIn: today?.checkIn,
-                      checkOut: today?.checkOut,
-                      startTime: today?.startTime ?? '',
-                      endTime: today?.endTime ?? '',
-                    ),
-                    const SizedBox(height: 14),
-                    _LocationPanel(
-                      locating: _locating,
-                      position: _position,
-                      site: site,
-                      distance: distance,
-                      withinFence: _insideFence,
-                      accuracy: _position?.accuracy,
-                      wifi: _wifi,
-                      wifiPunchStatus: _wifiPunchStatus,
-                      noSites: noSites,
-                      onLocate: () {
-                        if (!_submitting) unawaited(_locate());
-                      },
-                    ),
-                    if (_message != null) ...[
-                      const SizedBox(height: 14),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        child: Container(
-                          key: ValueKey(_message),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 15,
-                            vertical: 13,
-                          ),
-                          decoration: BoxDecoration(
+                      child: Row(
+                        children: [
+                          Icon(
+                            _messageIsError
+                                ? Icons.info_outline_rounded
+                                : Icons.check_circle_rounded,
+                            size: 18,
                             color: _messageIsError
-                                ? const Color(0xFFFFF0EE)
-                                : const Color(0xFFEBF8F1),
-                            borderRadius: BorderRadius.circular(15),
+                                ? const Color(0xFFD65C4B)
+                                : const Color(0xFF198A60),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _messageIsError
-                                    ? Icons.info_outline_rounded
-                                    : Icons.check_circle_rounded,
-                                size: 18,
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: Text(
+                              _message!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
                                 color: _messageIsError
-                                    ? const Color(0xFFD65C4B)
-                                    : const Color(0xFF198A60),
+                                    ? const Color(0xFFB54B3D)
+                                    : const Color(0xFF14744F),
                               ),
-                              const SizedBox(width: 9),
-                              Expanded(
-                                child: Text(
-                                  _message!,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: _messageIsError
-                                        ? const Color(0xFFB54B3D)
-                                        : const Color(0xFF14744F),
-                                  ),
-                                ),
-                              ),
-                              if (_message!.contains('前往系统设置'))
-                                TextButton(
-                                  onPressed: Geolocator.openAppSettings,
-                                  child: const Text('去设置'),
-                                ),
-                              if (_message!.contains('打开手机定位服务'))
-                                TextButton(
-                                  onPressed: Geolocator.openLocationSettings,
-                                  child: const Text('去开启'),
-                                ),
-                            ],
+                            ),
                           ),
-                        ),
+                          if (_message!.contains('前往系统设置'))
+                            TextButton(
+                              onPressed: Geolocator.openAppSettings,
+                              child: const Text('去设置'),
+                            ),
+                          if (_message!.contains('打开手机定位服务'))
+                            TextButton(
+                              onPressed: Geolocator.openLocationSettings,
+                              child: const Text('去开启'),
+                            ),
+                        ],
                       ),
-                    ],
-                  ],
+                    ),
+                  ),
                 ),
               ),
+            Expanded(
+              child: _loading && today == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : RefreshIndicator(
+                      onRefresh: () => _load(),
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(18, 10, 18, 30),
+                        children: [
+                          _AttendanceHero(
+                            date: today?.date ?? _dateNow(),
+                            title: allDone ? '今日打卡已完成' : '让每一次到场，都有记录',
+                            subtitle: noSites
+                                ? '暂未配置可用的打卡地点'
+                                : allDone
+                                ? '上下班记录已保存，仍可补充打卡'
+                                : today?.faceRequired == true
+                                ? '拍照核验本人并确认位置后完成$nextLabel'
+                                : '定位确认后即可完成$nextLabel',
+                            complete: allDone,
+                          ),
+                          const SizedBox(height: 18),
+                          Center(
+                            child: _PunchOrb(
+                              enabled: _canPunch,
+                              busy: _submitting || _locating,
+                              label: _submitting
+                                  ? _submissionLabel
+                                  : _locating
+                                  ? '正在确认位置'
+                                  : allDone
+                                  ? '再次$nextLabel'
+                                  : nextLabel,
+                              onPressed: _canPunch ? _submit : null,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Center(
+                            child: Text(
+                              '打卡时间以服务器记录为准',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF898395),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (today?.faceRequired == true) ...[
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(
+                                Icons.face_rounded,
+                                color: _attendancePurple,
+                              ),
+                              title: Text(
+                                _faceStatus?.enrolled == true
+                                    ? '人脸已录入 · 每次打卡需拍照核验'
+                                    : '首次打卡前需录入本人脸',
+                              ),
+                              subtitle: const Text(
+                                '正对镜头并保持光线充足。未录入时会先引导拍照录入，再进行打卡核验。',
+                              ),
+                              trailing: _faceStatus?.enrolled == true
+                                  ? null
+                                  : TextButton(
+                                      onPressed: _submitting || _locating
+                                          ? null
+                                          : _configureFace,
+                                      child: const Text('录入人脸'),
+                                    ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          _TodayTimeline(
+                            checkIn: today?.checkIn,
+                            checkOut: today?.checkOut,
+                            startTime: today?.startTime ?? '',
+                            endTime: today?.endTime ?? '',
+                          ),
+                          const SizedBox(height: 14),
+                          _LocationPanel(
+                            locating: _locating,
+                            position: _position,
+                            site: site,
+                            distance: distance,
+                            withinFence: _insideFence,
+                            accuracy: _position?.accuracy,
+                            wifi: _wifi,
+                            wifiPunchStatus: _wifiPunchStatus,
+                            noSites: noSites,
+                            onLocate: () {
+                              if (!_submitting) unawaited(_locate());
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

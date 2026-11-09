@@ -4,12 +4,11 @@ import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaMuxer
+import android.util.Log
 import java.io.File
-import java.nio.ByteBuffer
+import java.util.concurrent.TimeUnit
 
-/**
- * 边录边编码：PCM 16-bit 实时写入 AAC/m4a，避免停止录音后再整段转码。
- */
+/** PCM 16-bit → AAC/m4a. A successful finish includes output EOS and a finalized muxer. */
 class StreamingAacM4aEncoder(
     private val outputPath: String,
     private val sampleRate: Int,
@@ -24,25 +23,26 @@ class StreamingAacM4aEncoder(
     private var muxerStarted = false
     private var presentationUs = 0L
     private var inputClosed = false
+    private var outputEnded = false
+    private var samplesWritten = 0L
+    private var finishedSuccessfully = false
 
     fun start() {
-        val format = MediaFormat.createAudioFormat(
-            MediaFormat.MIMETYPE_AUDIO_AAC,
-            sampleRate,
-            channels,
-        )
-        format.setInteger(
-            MediaFormat.KEY_AAC_PROFILE,
-            MediaCodecInfo.CodecProfileLevel.AACObjectLC,
-        )
-        format.setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
-        format.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
-
-        val encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
-        encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-        encoder.start()
-        codec = encoder
-        muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        try {
+            val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channels)
+            format.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+            format.setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+            format.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
+            val encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
+            codec = encoder
+            encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            encoder.start()
+            muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            Log.i("DunesRecorder", "AAC encoder=${encoder.name} sampleRate=$sampleRate channels=$channels")
+        } catch (e: Exception) {
+            releaseInternal(deleteOutput = true)
+            throw e
+        }
     }
 
     @Synchronized
@@ -50,122 +50,127 @@ class StreamingAacM4aEncoder(
         if (inputClosed || length <= 0) return
         var index = offset
         val end = offset + length
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
         while (index < end) {
-            drainEncoder(endOfStream = false)
-            val encoder = codec ?: return
+            check(System.nanoTime() < deadline) { "AAC encoder input timed out" }
+            drainEncoder(deadline)
+            val encoder = checkNotNull(codec) { "AAC encoder unavailable" }
             val inIndex = encoder.dequeueInputBuffer(timeoutUs)
             if (inIndex < 0) continue
-
-            val inBuf = encoder.getInputBuffer(inIndex) ?: continue
+            val inBuf = checkNotNull(encoder.getInputBuffer(inIndex)) { "AAC input buffer unavailable" }
             inBuf.clear()
             val chunk = minOf(inBuf.remaining(), end - index)
             val aligned = chunk - (chunk % frameBytes)
-            if (aligned <= 0) {
-                encoder.queueInputBuffer(inIndex, 0, 0, presentationUs, 0)
-                break
-            }
+            check(aligned > 0) { "AAC input buffer cannot hold a PCM frame" }
             inBuf.put(data, index, aligned)
-            val durationUs = aligned * 1_000_000L / (sampleRate * frameBytes)
             encoder.queueInputBuffer(inIndex, 0, aligned, presentationUs, 0)
-            presentationUs += durationUs
+            presentationUs += aligned * 1_000_000L / (sampleRate * frameBytes)
             index += aligned
+            deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
         }
-        drainEncoder(endOfStream = false)
+        drainEncoder(deadline)
     }
 
     @Synchronized
     fun finish(): Boolean {
-        if (inputClosed) return outputLooksValid()
+        if (inputClosed) return finishedSuccessfully && outputLooksValid()
         inputClosed = true
-        return try {
-            val encoder = codec ?: return false
-            var attempts = 0
-            while (attempts < 8) {
-                val inIndex = encoder.dequeueInputBuffer(timeoutUs)
-                if (inIndex >= 0) {
-                    encoder.queueInputBuffer(
-                        inIndex,
-                        0,
-                        0,
-                        presentationUs,
-                        MediaCodec.BUFFER_FLAG_END_OF_STREAM,
-                    )
-                    break
+        var complete = false
+        try {
+            val encoder = checkNotNull(codec) { "AAC encoder unavailable" }
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+            var inputEnded = false
+            while (!outputEnded && System.nanoTime() < deadline) {
+                if (!inputEnded) {
+                    val inIndex = encoder.dequeueInputBuffer(timeoutUs)
+                    if (inIndex >= 0) {
+                        encoder.queueInputBuffer(inIndex, 0, 0, presentationUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                        inputEnded = true
+                    }
                 }
-                drainEncoder(endOfStream = true)
-                attempts++
+                // TRY_AGAIN_LATER is not EOS. Keep draining until EOS or the total deadline.
+                drainEncoder(deadline)
             }
-            drainEncoder(endOfStream = true)
-            releaseInternal(deleteOutput = false)
-            outputLooksValid()
-        } catch (_: Exception) {
-            releaseInternal(deleteOutput = false)
-            outputLooksValid()
+            complete = inputEnded && outputEnded && muxerStarted && samplesWritten > 0
+            if (!complete) Log.w("DunesRecorder", "AAC finish incomplete eos=$outputEnded samples=$samplesWritten")
+        } catch (e: Exception) {
+            Log.w("DunesRecorder", "AAC finish failed", e)
+        } finally {
+            val finalized = releaseInternal(deleteOutput = false)
+            finishedSuccessfully = complete && finalized && outputLooksValid()
         }
+        return finishedSuccessfully
     }
 
     @Synchronized
     fun abort() {
         inputClosed = true
+        finishedSuccessfully = false
         releaseInternal(deleteOutput = true)
     }
 
-    private fun drainEncoder(endOfStream: Boolean) {
+    private fun drainEncoder(deadline: Long) {
         val encoder = codec ?: return
         val info = MediaCodec.BufferInfo()
-        while (true) {
+        while (!outputEnded && System.nanoTime() < deadline) {
             val outIndex = encoder.dequeueOutputBuffer(info, timeoutUs)
             when {
                 outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                    if (muxerStarted) return
-                    val mux = muxer ?: return
+                    check(!muxerStarted) { "AAC output format changed after muxer start" }
+                    val mux = checkNotNull(muxer)
                     muxerTrack = mux.addTrack(encoder.outputFormat)
                     mux.start()
                     muxerStarted = true
                 }
                 outIndex == MediaCodec.INFO_TRY_AGAIN_LATER -> return
                 outIndex >= 0 -> {
-                    val outBuf = encoder.getOutputBuffer(outIndex)
-                    if (outBuf != null && info.size > 0 && muxerStarted) {
-                        outBuf.position(info.offset)
-                        outBuf.limit(info.offset + info.size)
-                        muxer?.writeSampleData(muxerTrack, outBuf, info)
-                    }
-                    encoder.releaseOutputBuffer(outIndex, false)
-                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
-                        return
+                    try {
+                        // Codec initialization belongs in addTrack(outputFormat), not audio samples.
+                        val isConfig = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                        if (!isConfig && info.size > 0) {
+                            check(muxerStarted) { "AAC sample arrived before output format" }
+                            val outBuf = checkNotNull(encoder.getOutputBuffer(outIndex))
+                            outBuf.position(info.offset)
+                            outBuf.limit(info.offset + info.size)
+                            checkNotNull(muxer).writeSampleData(muxerTrack, outBuf, info)
+                            samplesWritten++
+                        }
+                        if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputEnded = true
+                    } finally {
+                        encoder.releaseOutputBuffer(outIndex, false)
                     }
                 }
+                outIndex == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> continue
                 else -> return
             }
-            if (!endOfStream && outIndex == MediaCodec.INFO_TRY_AGAIN_LATER) return
         }
     }
 
-    private fun outputLooksValid(): Boolean {
-        val file = File(outputPath)
-        return file.exists() && file.length() > 0
-    }
+    private fun outputLooksValid(): Boolean = File(outputPath).let { it.exists() && it.length() > 0 }
 
-    private fun releaseInternal(deleteOutput: Boolean) {
-        try {
-            codec?.stop()
-        } catch (_: Exception) {
-        }
-        codec?.release()
+    /** Always release both resources, including when one vendor implementation throws. */
+    private fun releaseInternal(deleteOutput: Boolean): Boolean {
+        val encoder = codec
         codec = null
-        try {
-            if (muxerStarted) muxer?.stop()
-        } catch (_: Exception) {
-        }
-        muxer?.release()
+        try { encoder?.stop() } catch (e: Exception) { Log.w("DunesRecorder", "AAC codec stop failed", e) }
+        try { encoder?.release() } catch (e: Exception) { Log.w("DunesRecorder", "AAC codec release failed", e) }
+        val mux = muxer
         muxer = null
-        muxerStarted = false
-        if (deleteOutput) {
-            try {
-                File(outputPath).delete()
-            } catch (_: Exception) {
+        var finalized = false
+        try {
+            if (muxerStarted && mux != null) {
+                mux.stop()
+                finalized = true
             }
+        } catch (e: Exception) {
+            Log.w("DunesRecorder", "AAC muxer stop failed", e)
+        } finally {
+            try { mux?.release() } catch (e: Exception) { Log.w("DunesRecorder", "AAC muxer release failed", e) }
+            muxerStarted = false
         }
+        if (deleteOutput) {
+            try { File(outputPath).delete() } catch (_: Exception) { }
+        }
+        return finalized
     }
 }

@@ -771,9 +771,14 @@ class ProposalFinanceCostPanel extends StatelessWidget {
   }) {
     final category = config.catalog.category(key)!;
     if (key == kProposalCostCategoryTax) {
-      final bucket =
-          config.evaluation.bucket(key) ??
-          ProposalFinanceBucket(category: category, lines: const []);
+      final measured = config.evaluation.bucket(key);
+      // Formula choices come from the current options, while the amounts remain
+      // authoritative server estimates. A retained estimate can have an older catalog.
+      final bucket = ProposalFinanceBucket(
+        category: category,
+        lines: measured?.lines ?? const [],
+        computedTotal: measured?.total,
+      );
       final editable = !readOnly && config.categoryEditable[key] == true;
       return ProposalFinanceRow(
         key: const ValueKey('finance-proposal-tax'),
@@ -1852,6 +1857,19 @@ class _CostLine extends StatelessWidget {
   final List<ProposalPromotionTierPlan> promotionPlans;
   final ValueChanged<List<ProposalPromotionTierPlan>>? onPromotionPlans;
 
+  static bool _canPickFormula(
+    ProposalCostCategory category,
+    ProposalFinanceLine line,
+    bool enabled,
+  ) {
+    final item = category.resolveItem(line.name);
+    return enabled &&
+        (item.formulas.length > 1 ||
+            (category.key == kProposalCostCategoryTax &&
+                line.name == kProposalStampTaxName &&
+                item.formulas.isNotEmpty));
+  }
+
   /// 只是「项目 + 公式」一行（放进表格）；要换公式、配阶梯、看测算的仍是一张小卡。
   static bool simple(
     ProposalCostCategory category,
@@ -1862,14 +1880,14 @@ class _CostLine extends StatelessWidget {
     final item = category.resolveItem(line.name);
     return !showEstimates &&
         !item.tiered &&
-        !(canChangeFormula && item.formulas.length > 1);
+        !_canPickFormula(category, line, canChangeFormula);
   }
 
   @override
   Widget build(BuildContext context) {
     final item = category.resolveItem(line.name);
     final formula = line.formula;
-    final canChoose = onFormula != null && item.formulas.length > 1;
+    final canChoose = _canPickFormula(category, line, onFormula != null);
     if (!showEstimates && !item.tiered && !canChoose) {
       // 简单行（表格里的一行）：项目名固定宽度一列，公式一列，上下对齐。
       return Padding(
@@ -2038,6 +2056,17 @@ class _CostLine extends StatelessWidget {
               padding: const EdgeInsets.only(top: 2, right: 10),
               child: Text(
                 '公式：${formula.name}',
+                style: _sans(context, size: 11, color: _K.grey),
+              ),
+            ),
+          if (canChoose &&
+              category.key == kProposalCostCategoryTax &&
+              line.name == kProposalStampTaxName &&
+              item.formulaOf('TAX_STAMP_REVENUE') == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, right: 4),
+              child: Text(
+                '当前仅支持按销售规模计算，按收入计算需管理员更新服务。',
                 style: _sans(context, size: 11, color: _K.grey),
               ),
             ),

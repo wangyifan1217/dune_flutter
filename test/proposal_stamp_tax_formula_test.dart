@@ -27,6 +27,39 @@ Map<String, dynamic> _form({String? formula, String ratio = '0.1'}) => {
   },
 };
 
+ProposalFinanceFormulaCatalog _legacyCatalog() {
+  final current = ProposalFinanceFormulaCatalog.fallback;
+  return ProposalFinanceFormulaCatalog(
+    revenueGroups: current.revenueGroups,
+    costCategories: [
+      for (final category in current.costCategories)
+        if (category.key != kProposalCostCategoryTax)
+          category
+        else
+          ProposalCostCategory(
+            key: category.key,
+            name: category.name,
+            namesKey: category.namesKey,
+            amountsKey: category.amountsKey,
+            totalKey: category.totalKey,
+            formulasKey: category.formulasKey,
+            items: [
+              for (final item in category.items)
+                if (item.name != '印花税')
+                  item
+                else
+                  ProposalCostTypeOption(
+                    code: item.code,
+                    name: item.name,
+                    defaultFormula: item.defaultFormula,
+                    formulas: [item.formulaOf('TAX_STAMP_SCALE')!],
+                  ),
+            ],
+          ),
+    ],
+  );
+}
+
 void main() {
   final catalog = ProposalFinanceFormulaCatalog.fallback;
   final tax = catalog.category(kProposalCostCategoryTax)!;
@@ -85,6 +118,7 @@ void main() {
               final evaluation = proposalEvaluateFinance(form);
               return SingleChildScrollView(
                 child: ProposalFinanceCostPanel(
+                  mode: ProposalFinanceCostPanelMode.cost,
                   config: ProposalFinanceBoardConfig(
                     catalog: catalog,
                     evaluation: evaluation,
@@ -126,5 +160,93 @@ void main() {
       tester.widget<ProposalSelectField<String>>(picker).value,
       'TAX_STAMP_REVENUE',
     );
+  });
+
+  for (final updatedOptions in [false, true]) {
+    testWidgets(
+      'desktop stamp picker stays visible with an old estimate, updated options: $updatedOptions',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final oldCatalog = _legacyCatalog();
+        final evaluation = proposalEvaluateFinance(
+          _form(),
+          catalog: oldCatalog,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: ProposalFinanceCostPanel(
+                  mode: ProposalFinanceCostPanelMode.cost,
+                  config: ProposalFinanceBoardConfig(
+                    catalog: updatedOptions ? catalog : oldCatalog,
+                    evaluation: evaluation,
+                    products: evaluation.products,
+                    categoryEditable: const {kProposalCostCategoryTax: true},
+                    focusKeys: const {'taxCost'},
+                    showEstimates: false,
+                    onCostFormula: (_, _, _, _) {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        final picker = find.byWidgetPredicate(
+          (widget) =>
+              widget is ProposalSelectField<String> &&
+              widget.title == '印花税 计算公式',
+        );
+        expect(picker, findsOneWidget);
+        final field = tester.widget<ProposalSelectField<String>>(picker);
+        expect(
+          field.options.map((option) => option.value),
+          updatedOptions
+              ? ['TAX_STAMP_SCALE', 'TAX_STAMP_REVENUE']
+              : ['TAX_STAMP_SCALE'],
+        );
+        expect(
+          find.textContaining('按收入计算需管理员更新服务'),
+          updatedOptions ? findsNothing : findsOneWidget,
+        );
+      },
+    );
+  }
+
+  testWidgets('read-only stamp tax does not expose a formula picker', (
+    tester,
+  ) async {
+    final evaluation = proposalEvaluateFinance(_form());
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ProposalFinanceCostPanel(
+              mode: ProposalFinanceCostPanelMode.result,
+              config: ProposalFinanceBoardConfig(
+                catalog: catalog,
+                evaluation: evaluation,
+                categoryEditable: const {kProposalCostCategoryTax: true},
+                focusKeys: const {'taxCost'},
+                showEstimates: false,
+                onCostFormula: (_, _, _, _) =>
+                    fail('read-only formula changed'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is ProposalSelectField<String> && widget.title == '印花税 计算公式',
+      ),
+      findsNothing,
+    );
+    expect(find.text('销售规模 × 0.06%'), findsOneWidget);
   });
 }

@@ -138,6 +138,7 @@ class WorkProfileKpiMetric {
     this.previous,
     this.note = '',
     this.discountLocked = false,
+    this.paymentLocked = false,
   });
 
   final String key;
@@ -153,6 +154,7 @@ class WorkProfileKpiMetric {
   final double? previous;
   final String note;
   final bool discountLocked;
+  final bool paymentLocked;
 
   factory WorkProfileKpiMetric.fromJson(Map<String, dynamic> json) {
     return WorkProfileKpiMetric(
@@ -169,6 +171,7 @@ class WorkProfileKpiMetric {
       previous: (json['previous'] as num?)?.toDouble(),
       note: '${json['note'] ?? ''}',
       discountLocked: json['discountLocked'] == true,
+      paymentLocked: json['paymentLocked'] == true,
     );
   }
 
@@ -1321,6 +1324,31 @@ class WorkProfileKpiService {
     final resp = await dunesHttpPut(
       session,
       '/kpi/my-discount',
+      body: jsonEncode({
+        'month': month.trim(),
+        'taskId': taskId,
+        if (!clear && points != null) 'points': points,
+        if (clear) 'clear': true,
+      }),
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return WorkProfileKpiScore.fromJson(map);
+  }
+
+  /// 能源回款分数由业务本人填写。[clear] 为 true 时清空，恢复待填。
+  Future<WorkProfileKpiScore> saveMyPayment({
+    required String month,
+    required int taskId,
+    double? points,
+    bool clear = false,
+  }) async {
+    final resp = await dunesHttpPut(
+      session,
+      '/kpi/my-payment',
       body: jsonEncode({
         'month': month.trim(),
         'taskId': taskId,

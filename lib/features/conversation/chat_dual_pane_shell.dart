@@ -140,7 +140,7 @@ class _ChatDualPaneShellState extends State<ChatDualPaneShell> {
         return ColoredBox(
           color: DunesColors.resolve(
             context,
-            DunesColors.bgApp,
+            DunesColors.imSurface,
             role: DunesColorRole.surface,
           ),
           child: Stack(
@@ -327,7 +327,7 @@ class ChatDualPaneEmpty extends StatelessWidget {
     return ColoredBox(
       color: DunesColors.resolve(
         context,
-        DunesColors.bgSoft,
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       child: Center(

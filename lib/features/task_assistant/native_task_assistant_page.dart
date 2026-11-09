@@ -656,7 +656,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       return Scaffold(
         backgroundColor: DunesColors.resolve(
           context,
-          DunesColors.bgApp,
+          DunesColors.imSurface,
           role: DunesColorRole.surface,
         ),
         body: SafeArea(
@@ -675,7 +675,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       return Scaffold(
         backgroundColor: DunesColors.resolve(
           context,
-          DunesColors.bgApp,
+          DunesColors.imSurface,
           role: DunesColorRole.surface,
         ),
         body: SafeArea(
@@ -697,7 +697,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     return Scaffold(
       backgroundColor: DunesColors.resolve(
         context,
-        DunesColors.bgApp,
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       body: SafeArea(

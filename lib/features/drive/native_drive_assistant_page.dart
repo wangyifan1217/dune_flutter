@@ -164,7 +164,7 @@ class _NativeDriveAssistantPageState extends State<NativeDriveAssistantPage> {
     return Scaffold(
       backgroundColor: DunesColors.resolve(
         context,
-        DunesColors.bgApp,
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       body: SafeArea(

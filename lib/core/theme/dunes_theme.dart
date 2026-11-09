@@ -67,6 +67,10 @@ abstract final class DunesColors {
 
   static const bgPage = Color(0xFFF4F1EA);
   static const bgApp = Color(0xFFFBFAF6);
+
+  /// IM 列表、会话内容、标题栏和输入区共用的底面。
+  static const imSurface = Colors.white;
+
   static const bgSoft = Color(0xFFF2EFE7);
   static const bgCard = Color(0xFFEDEAE0);
   static const border = Color(0xFFDAD5C7);

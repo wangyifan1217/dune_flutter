@@ -64,7 +64,7 @@ class ChatConvHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
-          DunesColors.bgApp,
+          DunesColors.imSurface,
           role: DunesColorRole.surface,
         ),
         border: Border(
@@ -651,7 +651,7 @@ class ChatInputBar extends StatelessWidget {
                   backgroundColor ??
                   DunesColors.resolve(
                     context,
-                    DunesColors.bgApp,
+                    DunesColors.imSurface,
                     role: DunesColorRole.surface,
                   ),
               border: showTopBorder

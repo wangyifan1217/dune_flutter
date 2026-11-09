@@ -183,7 +183,7 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
     return ColoredBox(
       color: DunesColors.resolve(
         context,
-        DunesColors.bgApp,
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       child: SafeArea(

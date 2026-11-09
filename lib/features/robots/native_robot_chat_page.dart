@@ -926,7 +926,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
       resizeToAvoidBottomInset: true,
       backgroundColor: DunesColors.resolve(
         context,
-        DunesColors.bgApp,
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       body: SafeArea(

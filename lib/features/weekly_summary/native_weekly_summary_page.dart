@@ -261,7 +261,7 @@ class _NativeWeeklySummaryPageState extends State<NativeWeeklySummaryPage> {
     return Scaffold(
       backgroundColor: DunesColors.resolve(
         context,
-        const Color(0xFFF2F2F7),
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       body: SafeArea(

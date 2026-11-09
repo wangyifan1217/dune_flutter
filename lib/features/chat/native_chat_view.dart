@@ -11126,7 +11126,7 @@ class _NativeChatViewState extends State<NativeChatView>
       return Scaffold(
         backgroundColor: DunesColors.resolve(
           context,
-          DunesColors.bgApp,
+          DunesColors.imSurface,
           role: DunesColorRole.surface,
         ),
         body: Center(child: CircularProgressIndicator(strokeWidth: 2)),
@@ -11136,7 +11136,7 @@ class _NativeChatViewState extends State<NativeChatView>
       return Scaffold(
         backgroundColor: DunesColors.resolve(
           context,
-          DunesColors.bgApp,
+          DunesColors.imSurface,
           role: DunesColorRole.surface,
         ),
         body: Center(
@@ -11162,7 +11162,7 @@ class _NativeChatViewState extends State<NativeChatView>
       return Scaffold(
         backgroundColor: DunesColors.resolve(
           context,
-          DunesColors.bgApp,
+          DunesColors.imSurface,
           role: DunesColorRole.surface,
         ),
         body: Center(child: CircularProgressIndicator(strokeWidth: 2)),
@@ -11201,7 +11201,7 @@ class _NativeChatViewState extends State<NativeChatView>
       resizeToAvoidBottomInset: true,
       backgroundColor: DunesColors.resolve(
         context,
-        DunesColors.bgApp,
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       body: SafeArea(

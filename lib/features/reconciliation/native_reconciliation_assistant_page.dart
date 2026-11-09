@@ -732,7 +732,7 @@ class _NativeReconciliationAssistantPageState
     return Scaffold(
       backgroundColor: DunesColors.resolve(
         context,
-        DunesColors.bgApp,
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       appBar: AppBar(
@@ -1221,7 +1221,7 @@ class _NativeReconciliationAssistantPageState
     return Scaffold(
       backgroundColor: DunesColors.resolve(
         context,
-        DunesColors.bgApp,
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       body: SafeArea(
@@ -1662,7 +1662,7 @@ class _NativeReconciliationAssistantPageState
     return Scaffold(
       backgroundColor: DunesColors.resolve(
         context,
-        DunesColors.bgApp,
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       appBar: AppBar(

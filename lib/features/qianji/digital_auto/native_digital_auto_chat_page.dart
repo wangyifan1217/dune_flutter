@@ -332,7 +332,7 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
       resizeToAvoidBottomInset: true,
       backgroundColor: DunesColors.resolve(
         context,
-        const Color(0xFFF5F6F8),
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       body: SafeArea(

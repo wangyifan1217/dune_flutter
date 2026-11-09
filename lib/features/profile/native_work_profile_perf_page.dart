@@ -43,7 +43,7 @@ DateTime parseKpiMonth(String raw, DateTime fallback) {
 }
 
 /// 绩效发展：按灯塔数据规则查看切片与得分等级。
-/// 能源「折扣（分省）」不自动计分，由业务本人在本页填写。
+/// 能源「回款」「折扣（分省）」由业务本人在本页填写。
 /// 默认上一自然月（与工作台月度绩效考评、灯塔月报一致），可自选月份；
 /// 未注入 [score] 时请求 `/kpi/my-score`。
 class NativeWorkProfilePerfPage extends StatefulWidget {
@@ -59,6 +59,7 @@ class NativeWorkProfilePerfPage extends StatefulWidget {
     this.submitAppeal,
     this.listMyAppeals,
     this.saveDiscount,
+    this.savePayment,
   });
 
   final AuthSession session;
@@ -77,6 +78,13 @@ class NativeWorkProfilePerfPage extends StatefulWidget {
     bool clear,
   })?
   saveDiscount;
+  final Future<WorkProfileKpiScore> Function({
+    required String month,
+    required int taskId,
+    double? points,
+    bool clear,
+  })?
+  savePayment;
 
   @override
   State<NativeWorkProfilePerfPage> createState() =>
@@ -90,7 +98,7 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
   Object? _error;
   int _loadGen = 0;
   List<KpiAppeal> _appeals = const [];
-  int _savingDiscountTaskId = 0;
+  int _savingScoreTaskId = 0;
 
   DateTime get _clock => widget.now ?? DateTime.now();
   DateTime get _currentMonth => kpiMonthStart(_clock);
@@ -254,37 +262,40 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
     }
   }
 
-  Future<void> _saveDiscount(
+  Future<void> _saveSelfScore(
+    String metricKey,
     int taskId,
     double? points, {
     required bool clear,
   }) async {
-    if (_savingDiscountTaskId != 0) return;
-    setState(() => _savingDiscountTaskId = taskId);
+    if (_savingScoreTaskId != 0) return;
+    final month = formatKpiMonth(_month);
+    final gen = _loadGen;
+    final payment = metricKey == 'payment';
+    final label = payment ? '回款分数' : '分省折扣';
+    setState(() => _savingScoreTaskId = taskId);
     try {
-      final month = formatKpiMonth(_month);
-      final score = widget.saveDiscount != null
-          ? await widget.saveDiscount!(
-              month: month,
-              taskId: taskId,
-              points: points,
-              clear: clear,
-            )
-          : await WorkProfileKpiService(session: widget.session).saveMyDiscount(
-              month: month,
-              taskId: taskId,
-              points: points,
-              clear: clear,
-            );
+      final save = payment ? widget.savePayment : widget.saveDiscount;
+      final service = WorkProfileKpiService(session: widget.session);
+      final score =
+          await (save ??
+              (payment ? service.saveMyPayment : service.saveMyDiscount))(
+            month: month,
+            taskId: taskId,
+            points: points,
+            clear: clear,
+          );
       if (!mounted) return;
       setState(() {
-        _score = score;
-        _savingDiscountTaskId = 0;
+        if (formatKpiMonth(_month) == month && gen == _loadGen) {
+          _score = score;
+        }
+        _savingScoreTaskId = 0;
       });
-      showDunesToast(context, clear ? '已清空分省折扣' : '分省折扣已保存');
+      showDunesToast(context, clear ? '已清空$label' : '$label已保存');
     } catch (e) {
       if (!mounted) return;
-      setState(() => _savingDiscountTaskId = 0);
+      setState(() => _savingScoreTaskId = 0);
       showDunesToast(
         context,
         friendlyErrorText(e, fallback: '保存失败'),
@@ -373,9 +384,12 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
                     if (hasScore)
                       for (final cat in person.categories) ...[
                         _CategoryBlock(
+                          key: ValueKey(
+                            '${formatKpiMonth(_month)}-${cat.category}',
+                          ),
                           category: cat,
-                          savingTaskId: _savingDiscountTaskId,
-                          onSaveDiscount: _saveDiscount,
+                          savingTaskId: _savingScoreTaskId,
+                          onSaveScore: _saveSelfScore,
                         ),
                         const SizedBox(height: 14),
                       ],
@@ -718,15 +732,21 @@ class _EmptyCard extends StatelessWidget {
 
 class _CategoryBlock extends StatelessWidget {
   const _CategoryBlock({
+    super.key,
     required this.category,
-    required this.onSaveDiscount,
+    required this.onSaveScore,
     required this.savingTaskId,
   });
 
   final WorkProfileKpiCategory category;
   final int savingTaskId;
-  final Future<void> Function(int taskId, double? points, {required bool clear})
-  onSaveDiscount;
+  final Future<void> Function(
+    String metricKey,
+    int taskId,
+    double? points, {
+    required bool clear,
+  })
+  onSaveScore;
 
   @override
   Widget build(BuildContext context) {
@@ -776,8 +796,8 @@ class _CategoryBlock extends StatelessWidget {
           for (final task in category.tasks)
             _TaskRow(
               task: task,
-              saving: savingTaskId == task.taskId,
-              onSaveDiscount: onSaveDiscount,
+              saving: savingTaskId != 0,
+              onSaveScore: onSaveScore,
             ),
         ],
       ),
@@ -789,20 +809,18 @@ class _TaskRow extends StatelessWidget {
   const _TaskRow({
     required this.task,
     required this.saving,
-    required this.onSaveDiscount,
+    required this.onSaveScore,
   });
 
   final WorkProfileKpiTask task;
   final bool saving;
-  final Future<void> Function(int taskId, double? points, {required bool clear})
-  onSaveDiscount;
-
-  WorkProfileKpiMetric? get _discount {
-    for (final metric in task.metrics) {
-      if (metric.key == 'discount') return metric;
-    }
-    return null;
-  }
+  final Future<void> Function(
+    String metricKey,
+    int taskId,
+    double? points, {
+    required bool clear,
+  })
+  onSaveScore;
 
   @override
   Widget build(BuildContext context) {
@@ -986,16 +1004,23 @@ class _TaskRow extends StatelessWidget {
             const SizedBox(height: 6),
             // 收入/利润/用户的本月上月都在指标明细里，不再单独铺三行文字。
             KpiMetricList(metrics: task.metrics),
-            if (_discount != null && !_discount!.discountLocked) ...[
-              const SizedBox(height: 8),
-              _DiscountFill(
-                taskId: task.taskId,
-                metric: _discount!,
-                busy: saving,
-                onSave: (points, {required clear}) =>
-                    onSaveDiscount(task.taskId, points, clear: clear),
-              ),
-            ],
+            for (final metric in task.metrics)
+              if ((metric.key == 'discount' && !metric.discountLocked) ||
+                  (metric.key == 'payment' && !metric.paymentLocked)) ...[
+                const SizedBox(height: 8),
+                _SelfScoreFill(
+                  key: ValueKey('${task.taskId}-${metric.key}'),
+                  taskId: task.taskId,
+                  metric: metric,
+                  busy: saving,
+                  onSave: (points, {required clear}) => onSaveScore(
+                    metric.key,
+                    task.taskId,
+                    points,
+                    clear: clear,
+                  ),
+                ),
+              ],
           ],
         ),
       ),
@@ -1003,8 +1028,9 @@ class _TaskRow extends StatelessWidget {
   }
 }
 
-class _DiscountFill extends StatefulWidget {
-  const _DiscountFill({
+class _SelfScoreFill extends StatefulWidget {
+  const _SelfScoreFill({
+    super.key,
     required this.taskId,
     required this.metric,
     required this.busy,
@@ -1017,12 +1043,14 @@ class _DiscountFill extends StatefulWidget {
   final Future<void> Function(double? points, {required bool clear}) onSave;
 
   @override
-  State<_DiscountFill> createState() => _DiscountFillState();
+  State<_SelfScoreFill> createState() => _SelfScoreFillState();
 }
 
-class _DiscountFillState extends State<_DiscountFill> {
+class _SelfScoreFillState extends State<_SelfScoreFill> {
   late final TextEditingController _controller;
   String? _error;
+
+  String get _label => widget.metric.key == 'payment' ? '回款分数' : '分省折扣';
 
   double get _cap {
     if (widget.metric.maxPoints > 0) return widget.metric.maxPoints;
@@ -1037,7 +1065,7 @@ class _DiscountFillState extends State<_DiscountFill> {
   }
 
   @override
-  void didUpdateWidget(covariant _DiscountFill oldWidget) {
+  void didUpdateWidget(covariant _SelfScoreFill oldWidget) {
     super.didUpdateWidget(oldWidget);
     final next = _pointsText(widget.metric);
     if (next != _pointsText(oldWidget.metric) && _controller.text != next) {
@@ -1068,7 +1096,7 @@ class _DiscountFillState extends State<_DiscountFill> {
     }
     final raw = _controller.text.trim();
     final parsed = double.tryParse(raw);
-    if (parsed == null) {
+    if (parsed == null || !parsed.isFinite) {
       setState(() => _error = '请填写数字');
       return;
     }
@@ -1090,7 +1118,7 @@ class _DiscountFillState extends State<_DiscountFill> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '分省折扣由本人填写，满分 $capLabel',
+            '$_label由本人填写，满分 $capLabel',
             style: DunesTypography.sans(
               fontSize: 11,
               color: DunesColors.resolve(context, const Color(0xFFB07A2B)),
@@ -1103,7 +1131,9 @@ class _DiscountFillState extends State<_DiscountFill> {
               SizedBox(
                 width: 96,
                 child: TextField(
-                  key: Key('work-profile-perf-discount-${widget.taskId}'),
+                  key: Key(
+                    'work-profile-perf-${widget.metric.key}-${widget.taskId}',
+                  ),
                   controller: _controller,
                   enabled: !widget.busy,
                   keyboardType: const TextInputType.numberWithOptions(
@@ -1132,7 +1162,9 @@ class _DiscountFillState extends State<_DiscountFill> {
               ),
               const SizedBox(width: 8),
               FilledButton(
-                key: Key('work-profile-perf-discount-save-${widget.taskId}'),
+                key: Key(
+                  'work-profile-perf-${widget.metric.key}-save-${widget.taskId}',
+                ),
                 onPressed: widget.busy
                     ? null
                     : () => unawaited(_submit(clear: false)),
@@ -1145,7 +1177,9 @@ class _DiscountFillState extends State<_DiscountFill> {
               if (filled) ...[
                 const SizedBox(width: 4),
                 TextButton(
-                  key: Key('work-profile-perf-discount-clear-${widget.taskId}'),
+                  key: Key(
+                    'work-profile-perf-${widget.metric.key}-clear-${widget.taskId}',
+                  ),
                   onPressed: widget.busy
                       ? null
                       : () => unawaited(_submit(clear: true)),

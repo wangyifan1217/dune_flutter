@@ -162,9 +162,9 @@ void main() {
     );
   });
 
-  for (final updatedOptions in [false, true]) {
+  for (final updatedEstimate in [false, true]) {
     testWidgets(
-      'desktop stamp picker stays visible with an old estimate, updated options: $updatedOptions',
+      'desktop stamp picker uses current estimate despite cached options, updated estimate: $updatedEstimate',
       (tester) async {
         tester.view.physicalSize = const Size(1280, 900);
         tester.view.devicePixelRatio = 1;
@@ -173,7 +173,7 @@ void main() {
         final oldCatalog = _legacyCatalog();
         final evaluation = proposalEvaluateFinance(
           _form(),
-          catalog: oldCatalog,
+          catalog: updatedEstimate ? catalog : oldCatalog,
         );
         await tester.pumpWidget(
           MaterialApp(
@@ -182,7 +182,7 @@ void main() {
                 child: ProposalFinanceCostPanel(
                   mode: ProposalFinanceCostPanelMode.cost,
                   config: ProposalFinanceBoardConfig(
-                    catalog: updatedOptions ? catalog : oldCatalog,
+                    catalog: oldCatalog,
                     evaluation: evaluation,
                     products: evaluation.products,
                     categoryEditable: const {kProposalCostCategoryTax: true},
@@ -204,13 +204,13 @@ void main() {
         final field = tester.widget<ProposalSelectField<String>>(picker);
         expect(
           field.options.map((option) => option.value),
-          updatedOptions
+          updatedEstimate
               ? ['TAX_STAMP_SCALE', 'TAX_STAMP_REVENUE']
               : ['TAX_STAMP_SCALE'],
         );
         expect(
-          find.textContaining('按收入计算需管理员更新服务'),
-          updatedOptions ? findsNothing : findsOneWidget,
+          find.textContaining('暂未获取到按收入计算的公式'),
+          updatedEstimate ? findsNothing : findsOneWidget,
         );
       },
     );

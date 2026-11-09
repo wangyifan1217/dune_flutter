@@ -772,17 +772,18 @@ class ProposalFinanceCostPanel extends StatelessWidget {
     final category = config.catalog.category(key)!;
     if (key == kProposalCostCategoryTax) {
       final measured = config.evaluation.bucket(key);
-      // Formula choices come from the current options, while the amounts remain
-      // authoritative server estimates. A retained estimate can have an older catalog.
+      // The estimate carries the formulas supported by the service that just
+      // calculated these amounts. Page options can predate a service release.
+      final taxCategory = measured?.category ?? category;
       final bucket = ProposalFinanceBucket(
-        category: category,
+        category: taxCategory,
         lines: measured?.lines ?? const [],
         computedTotal: measured?.total,
       );
       final editable = !readOnly && config.categoryEditable[key] == true;
       return ProposalFinanceRow(
         key: const ValueKey('finance-proposal-tax'),
-        title: category.name,
+        title: taxCategory.name,
         forceOpen: config.focusKeys.contains('taxCost'),
         summary: bucket.names.isEmpty
             ? '整份提案统一选择税务成本'
@@ -798,11 +799,11 @@ class ProposalFinanceCostPanel extends StatelessWidget {
               allowItemEdit: editable,
               showEstimates: config.showEstimates,
               onItemsChanged: editable && config.onCostItemsChanged != null
-                  ? (names) => config.onCostItemsChanged!('', category, names)
+                  ? (names) => config.onCostItemsChanged!('', taxCategory, names)
                   : null,
               onFormula: editable && config.onCostFormula != null
                   ? (name, code) =>
-                        config.onCostFormula!('', category, name, code)
+                        config.onCostFormula!('', taxCategory, name, code)
                   : null,
             ),
             if (!readOnly && config.reviewToggle != null)
@@ -2066,7 +2067,7 @@ class _CostLine extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 6, right: 4),
               child: Text(
-                '当前仅支持按销售规模计算，按收入计算需管理员更新服务。',
+                '暂未获取到按收入计算的公式，请重新进入提案刷新。',
                 style: _sans(context, size: 11, color: _K.grey),
               ),
             ),
